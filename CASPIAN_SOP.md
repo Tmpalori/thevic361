@@ -45,11 +45,12 @@ python3 send_digest.py
 
 **Note:** Requires SMTP credentials. Set these in `~/.zshrc` or `~/.bashrc`:
 ```bash
-export SMTP_EMAIL="youremail@gmail.com"
+export SMTP_EMAIL="caspian.assistant@gmail.com"
 export SMTP_PASSWORD="your-app-password"    # Gmail App Password, NOT regular password
 ```
 
-For Gmail App Passwords: https://myaccount.google.com/apppasswords
+To generate the App Password, log into caspian.assistant@gmail.com and go to:
+https://myaccount.google.com/apppasswords
 
 ---
 

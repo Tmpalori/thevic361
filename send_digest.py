@@ -29,6 +29,7 @@ from email.mime.text import MIMEText
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 DEFAULT_TO = "tristen.m.palori@gmail.com"
+DEFAULT_FROM = "caspian.assistant@gmail.com"
 DEFAULT_FROM_NAME = "The Vic 361"
 
 ICON_MAP = {
@@ -158,7 +159,7 @@ def build_email_body(events, by_date):
 
 def send_email(subject, text_body, html_body, to_addr, dry_run=False):
     """Send the digest email via SMTP."""
-    from_email = os.environ.get("SMTP_EMAIL", "")
+    from_email = os.environ.get("SMTP_EMAIL", DEFAULT_FROM)
     password = os.environ.get("SMTP_PASSWORD", "")
     smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
