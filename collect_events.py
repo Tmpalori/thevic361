@@ -583,6 +583,76 @@ def load_extras(yaml_path):
         return {"new_and_notable": [], "sponsor": None}
 
 
+# ─── SOURCE: GOOGLE SHEET (manual submissions) ───────────────────────────────
+
+GOOGLE_SHEET_ID = "1S42hYlrPM516LDTcy3W_8afCkCqc-ZrUfN2J-SmP23I"
+
+
+def fetch_google_sheet_events(days_ahead=7):
+    """Fetch manually submitted events from the Google Sheet."""
+    events = []
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days_ahead)
+
+    try:
+        # Google Sheets public CSV export URL
+        url = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/export?format=csv"
+        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        resp.raise_for_status()
+
+        import csv
+        import io
+        reader = csv.DictReader(io.StringIO(resp.text))
+
+        for row in reader:
+            date_str = row.get("Date", "").strip()
+            name = row.get("Event Name", "").strip()
+            status = row.get("Status", "").strip().lower()
+
+            if not date_str or not name:
+                continue
+
+            # Skip events marked as "done" or "skip"
+            if status in ["done", "skip", "duplicate"]:
+                continue
+
+            # Normalize date — accept YYYY-MM-DD, M/D/YYYY, etc.
+            ev_date = None
+            for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%B %d, %Y", "%b %d, %Y"]:
+                try:
+                    ev_date = datetime.strptime(date_str, fmt).date()
+                    break
+                except ValueError:
+                    continue
+
+            if not ev_date or ev_date < today or ev_date > end_date:
+                continue
+
+            notes = row.get("Notes", "").strip()
+            venue = row.get("Venue", "").strip()
+            address = row.get("Address", "").strip()
+            time_str = row.get("Time", "").strip()
+
+            events.append({
+                "date": ev_date.strftime("%Y-%m-%d"),
+                "name": name,
+                "time": time_str,
+                "venue": venue,
+                "address": address,
+                "description": notes[:150] if notes else "",
+                "icons": classify_icons(name, notes, venue),
+                "free": guess_free(name, notes, venue),
+                "url": "",
+            })
+
+        print(f"  [Google Sheet] {len(events)} events from submissions")
+
+    except Exception as e:
+        print(f"  [Google Sheet] Error: {e}")
+
+    return events
+
+
 # ─── MAIN ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -605,7 +675,11 @@ def main():
     yaml_path = os.path.join(args.local_dir, "local_events.yaml")
     all_events.extend(load_local_events(yaml_path, args.days))
 
-    # 2. Web sources
+    # 2. Google Sheet (manual submissions)
+    print("\n📋 Google Sheet submissions...")
+    all_events.extend(fetch_google_sheet_events(args.days))
+
+    # 3. Web sources
     if not args.skip_web:
         print("\n📡 Web sources...")
         all_events.extend(fetch_city_calendar(args.days))
