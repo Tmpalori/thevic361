@@ -1,57 +1,14 @@
 # ─── The Vic 361 — Local Events ─────────────────────────────────────────────
 # This file contains manually curated events and recurring events.
-# Caspian or Tristen updates this file with events found on Facebook,
-# Instagram, or word-of-mouth that aren't on public calendars.
 #
 # RECURRING events auto-generate for each matching day of the week.
 # ONE-TIME events only show on their specific date.
+#
+# Keep recurring events to genuinely interesting "things to do" —
+# not daily restaurant specials or repeated toddler sessions.
 # ─────────────────────────────────────────────────────────────────────────────
 
 recurring:
-
-  # ── MONDAY ──────────────────────────────────────────────────────────────
-
-  - name: "Munchkin Monday — Kids Eat Free"
-    day: monday
-    time: "All Day"
-    venue: "Froggy's Grub & Pub"
-    address: "5902 N Navarro St."
-    description: "One free kids meal per adult. Ages 10 & under. Great specials on food & drinks all day."
-    icons: [food, family, free]
-    free: false
-    url: "https://froggysgrub.com"
-
-  # ── TUESDAY ─────────────────────────────────────────────────────────────
-
-  - name: "Tex Mex Tuesday"
-    day: tuesday
-    time: "All Day"
-    venue: "Froggy's Grub & Pub"
-    address: "5902 N Navarro St."
-    description: "$7 street tacos, $10 quesadillas & nachos, $5 Mexican martinis, $4 import bottles."
-    icons: [food, drinks]
-    free: false
-    url: "https://froggysgrub.com"
-
-  - name: "Toddler Story Time (Session 1)"
-    day: tuesday
-    time: "9:30 AM – 10:00 AM"
-    venue: "Victoria Public Library"
-    address: "302 N. Main St."
-    description: "High-energy songs & rhymes for toddlers on the go. Building fine motor skills through fun."
-    icons: [family, free]
-    free: true
-    url: ""
-
-  - name: "Toddler Story Time (Session 2)"
-    day: tuesday
-    time: "10:30 AM – 11:00 AM"
-    venue: "Victoria Public Library"
-    address: "302 N. Main St."
-    description: "Second session of toddler story time. Same program, extra availability."
-    icons: [family, free]
-    free: true
-    url: ""
 
   # ── WEDNESDAY ───────────────────────────────────────────────────────────
 
@@ -65,16 +22,6 @@ recurring:
     free: true
     url: ""
 
-  - name: "All Day Happy Hour"
-    day: wednesday
-    time: "All Day"
-    venue: "Froggy's Grub & Pub"
-    address: "5902 N Navarro St."
-    description: "$3 margs, $4 pints, $5 wine, $6 craft cocktails. All day Wednesday."
-    icons: [drinks, food]
-    free: false
-    url: "https://froggysgrub.com"
-
   - name: "VAMA Rock & Blues Open Mic"
     day: wednesday
     time: "7:00 PM – 10:00 PM"
@@ -87,36 +34,6 @@ recurring:
 
   # ── THURSDAY ────────────────────────────────────────────────────────────
 
-  - name: "Toddler Story Time (Session 1)"
-    day: thursday
-    time: "9:30 AM – 10:00 AM"
-    venue: "Victoria Public Library"
-    address: "302 N. Main St."
-    description: "Songs, rhymes, and stories for toddlers. Building a love of reading from day one."
-    icons: [family, free]
-    free: true
-    url: ""
-
-  - name: "Toddler Story Time (Session 2)"
-    day: thursday
-    time: "10:30 AM – 11:00 AM"
-    venue: "Victoria Public Library"
-    address: "302 N. Main St."
-    description: "Second session of Thursday toddler story time."
-    icons: [family, free]
-    free: true
-    url: ""
-
-  - name: "Steak Night"
-    day: thursday
-    time: "All Day"
-    venue: "Froggy's Grub & Pub"
-    address: "5902 N Navarro St."
-    description: "$16 for a 10 oz. sirloin plate. Half-price bottles of wine. All day Thursday."
-    icons: [food, drinks]
-    free: false
-    url: "https://froggysgrub.com"
-
   - name: "Story Strolls — Audiobook Walking Group"
     day: thursday
     time: "5:30 PM – 6:30 PM"
@@ -128,26 +45,6 @@ recurring:
     url: ""
 
   # ── FRIDAY ──────────────────────────────────────────────────────────────
-
-  - name: "Fun Friday at the Library"
-    day: friday
-    time: "10:00 AM – 11:00 AM"
-    venue: "Victoria Public Library"
-    address: "302 N. Main St."
-    description: "A different creative or physical activity every Friday morning. Free and open to all."
-    icons: [family, arts, free]
-    free: true
-    url: ""
-
-  - name: "Well-Come to the Weekend — $4 Wells"
-    day: friday
-    time: "All Day"
-    venue: "Froggy's Grub & Pub"
-    address: "5902 N Navarro St."
-    description: "$4 well drinks all day Friday. Kick off the weekend right."
-    icons: [drinks]
-    free: false
-    url: "https://froggysgrub.com"
 
   - name: "Live Music at Aero Crafters"
     day: friday
@@ -191,46 +88,8 @@ recurring:
     free: false
     url: "https://aerocrafters.pub"
 
-  # ── SUNDAY ──────────────────────────────────────────────────────────────
-
-  - name: "Sunday Brunch Specials"
-    day: sunday
-    time: "10:00 AM – 2:00 PM"
-    venue: "Froggy's Grub & Pub"
-    address: "5902 N Navarro St."
-    description: "Sunday brunch with the family. Great food, cold drinks, and a chill vibe."
-    icons: [food, drinks, family]
-    free: false
-    url: "https://froggysgrub.com"
-
-
-# ─── MONTHLY RECURRING ──────────────────────────────────────────────────────
-# These need manual scheduling each month (add as one-time events below)
-# - Music Bingo @ Aero Crafters — last Wednesday of each month, 7-9 PM
-# - VPL Jams — monthly live music at the Library (varies; check victoriatx.gov)
-# - VPL Talks — monthly speaker series at the Library
-# - VPL Rec Night — monthly game night at the Library
-# - Moonshine Drinkery First Friday Art Show — first Friday, 6-9 PM
-# - True Crime Book Club @ Library — monthly, 6 PM
-# - Tiny Hearts Club: Little Beats @ Library — monthly, 10-11 AM
-# - Book'nic Reading Picnic @ DeLeon Plaza — monthly, 1-3 PM
-# ─────────────────────────────────────────────────────────────────────────────
-
 
 # ─── ONE-TIME EVENTS ─────────────────────────────────────────────────────────
-# Add events here as you find them. Format:
-#
-#   - date: "2026-03-22"
-#     name: "Event Name"
-#     time: "7:00 PM – 10:00 PM"
-#     venue: "Venue Name"
-#     address: "123 Main St."
-#     description: "Short, punchy description."
-#     icons: [music, drinks]
-#     free: false
-#     url: "https://..."
-# ─────────────────────────────────────────────────────────────────────────────
-
 events:
   - date: "2026-03-17"
     name: "VPL Rec Night"
@@ -239,36 +98,6 @@ events:
     address: "302 N. Main St."
     description: "The library transforms into a game room — board games, video games, and activities for all ages."
     icons: [family, free]
-    free: true
-    url: ""
-
-  - date: "2026-03-18"
-    name: "Music Bingo at Aero Crafters"
-    time: "7:00 PM – 9:00 PM"
-    venue: "Aero Crafters"
-    address: "309 E. Crestwood Dr."
-    description: "Test your music knowledge and win prizes. Reserve a table on Eventbrite."
-    icons: [music, drinks]
-    free: false
-    url: "https://www.eventbrite.com/o/aero-crafters-18361431565"
-
-  - date: "2026-03-18"
-    name: "March VPEN Business Meeting"
-    time: "11:15 AM – 1:00 PM"
-    venue: "Victoria Country Club"
-    address: "14 Spring Creek Rd."
-    description: "Victoria Professional & Entrepreneurial Networking monthly meeting. Open to local business owners."
-    icons: [community]
-    free: false
-    url: ""
-
-  - date: "2026-03-20"
-    name: "Fun Friday — DIY Ouch Pouch"
-    time: "10:00 AM – 11:00 AM"
-    venue: "Victoria Public Library"
-    address: "302 N. Main St."
-    description: "Make your own mini first-aid pouch. A creative craft for all ages."
-    icons: [family, arts, free]
     free: true
     url: ""
 
@@ -302,16 +131,6 @@ events:
     free: false
     url: "https://www.eventbrite.com/o/aero-crafters-18361431565"
 
-  - date: "2026-03-28"
-    name: "Planning Developmentally Appropriate Activities Workshop"
-    time: "9:00 AM – 12:00 PM"
-    venue: "WF Solutions Golden Crescent"
-    address: ""
-    description: "Professional development workshop by Kristin Miller. Great for educators and childcare providers."
-    icons: [community]
-    free: false
-    url: ""
-
   - date: "2026-03-30"
     name: "True Crime Book Club"
     time: "6:00 PM – 7:30 PM"
@@ -343,7 +162,7 @@ events:
     url: ""
 
   - date: "2026-05-02"
-    name: "Shine the Light on Mental Health Walk & Resource Fair"
+    name: "Shine the Light on Mental Health Walk"
     time: "8:00 AM – 12:00 PM"
     venue: "Riverside Park"
     address: "405 Memorial Drive"

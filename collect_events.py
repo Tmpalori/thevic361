@@ -756,6 +756,7 @@ def fetch_google_sheet_events(days_ahead=7):
 def main():
     parser = argparse.ArgumentParser(description="The Vic 361 — Event Collector")
     parser.add_argument("--output", default="./events.json", help="Output JSON path")
+    parser.add_argument("--candidates", default="./candidates.json", help="Candidates JSON path (all raw events for screening)")
     parser.add_argument("--days", type=int, default=7, help="Days ahead to collect")
     parser.add_argument("--local-dir", default=".", help="Dir with local_events.yaml + extras.yaml")
     parser.add_argument("--skip-web", action="store_true", help="Local YAML only")
@@ -805,11 +806,21 @@ def main():
         "sponsor": extras["sponsor"],
     }
 
-    # 7. Write
+    # 7. Write events.json (approved / live events)
     out_path = os.path.abspath(args.output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2)
+
+    # 8. Write candidates.json (all events for screening)
+    candidates_path = os.path.abspath(args.candidates)
+    candidates_output = {
+        "last_updated": datetime.now().strftime("%Y-%m-%dT%H:%M:%S-05:00"),
+        "events": merged,
+    }
+    with open(candidates_path, "w") as f:
+        json.dump(candidates_output, f, indent=2)
+    print(f"  Candidates: {candidates_path}")
 
     print(f"\n✅ {out_path}")
     print(f"   {len(merged)} events across {args.days} days")
