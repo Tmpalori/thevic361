@@ -544,6 +544,150 @@ def fetch_library_events(days_ahead=7):
     return events
 
 
+# ─── SOURCE: MOONSHINE DRINKERY ─────────────────────────────────────────────
+
+def fetch_moonshine_events(days_ahead=8):
+    """Scrape upcoming events from Moonshine Drinkery homepage."""
+    events = []
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days_ahead)
+
+    try:
+        url = "https://www.moonshinedrinkery.com"
+        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        text = soup.get_text()
+
+        # Pattern: "March 21 2026: Live Band Karaoke"
+        matches = re.findall(
+            r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})\s+(\d{4})\s*[:\-]\s*(.+)',
+            text
+        )
+        for month, day, year, name in matches:
+            name = name.strip().rstrip('\n').split('\n')[0].strip()
+            if not name or len(name) < 3:
+                continue
+            try:
+                ev_date = datetime.strptime(f"{month} {day} {year}", "%B %d %Y").date()
+                if ev_date < today or ev_date > end_date:
+                    continue
+            except ValueError:
+                continue
+
+            events.append({
+                "date": ev_date.strftime("%Y-%m-%d"),
+                "name": name,
+                "time": "",
+                "venue": "Moonshine Drinkery",
+                "address": "103 W. Santa Rosa St.",
+                "description": "",
+                "icons": classify_icons(name, "", "Moonshine Drinkery"),
+                "free": guess_free(name, "", "Moonshine Drinkery"),
+                "url": url,
+            })
+
+        print(f"  [Moonshine] {len(events)} events")
+
+    except Exception as e:
+        print(f"  [Moonshine] Error: {e}")
+
+    return events
+
+
+# ─── SOURCE: PERPLEXITY EVENT DISCOVERY ─────────────────────────────────────
+
+def fetch_perplexity_events(days_ahead=8):
+    """Use Perplexity sonar to search the web for Victoria TX events.
+    Runs multiple targeted queries — one per major venue/source — to maximize coverage."""
+    api_key = os.environ.get("PERPLEXITY_API_KEY")
+    if not api_key:
+        print("  [Perplexity] No PERPLEXITY_API_KEY — skipping")
+        return []
+
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days_ahead)
+    date_range_str = f"{today.strftime('%B %d')} through {end_date.strftime('%B %d, %Y')}"
+    today_str = today.strftime('%Y-%m-%d')
+    end_str = end_date.strftime('%Y-%m-%d')
+
+    # Targeted queries — each forces Perplexity to dig into a specific source
+    queries = [
+        f'What events are happening at Aero Crafters in Victoria TX from {date_range_str}? Include live music nights, open mics, and any special events.',
+        f'What events are at Moonshine Drinkery, The Hideaway, and Froggy\'s Grub & Pub in Victoria TX from {date_range_str}?',
+        f'Search Eventbrite for events in Victoria Texas 77901 from {date_range_str}.',
+        f'What community events, festivals, fundraisers, and public gatherings are happening in Victoria Texas from {date_range_str}? Check the Victoria Advocate, local news sites, and community Facebook groups.',
+        f'What fitness, sports, outdoor, or recreation events are happening in Victoria TX from {date_range_str}? Include yoga, 5Ks, park events, and recreation center activities.',
+        f'What restaurant specials, trivia nights, happy hours, karaoke, and bar events are happening in Victoria TX from {date_range_str}?',
+    ]
+
+    json_instruction = f"""
+Return ONLY a valid JSON array. No markdown fences, no explanation, just the array.
+Each object:
+{{"date":"YYYY-MM-DD","name":"Event Name","time":"7:00 PM or empty string","venue":"Venue Name or empty string","description":"One sentence or empty string","free":true_or_false,"url":"source URL or empty string"}}
+
+Rules:
+- Only include events with a confirmed specific date between {today_str} and {end_str}
+- Victoria, TX (77901) only — exclude events in other cities
+- If you cannot confirm a date, omit the event
+- Return [] if nothing found"""
+
+    all_raw = []
+    for i, query in enumerate(queries):
+        try:
+            resp = requests.post(
+                "https://api.perplexity.ai/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "sonar-pro",
+                    "messages": [{"role": "user", "content": query + json_instruction}],
+                    "temperature": 0.1,
+                    "max_tokens": 2000,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            content = resp.json()["choices"][0]["message"]["content"].strip()
+            content = re.sub(r'^```\w*\n?', '', content)
+            content = re.sub(r'\n?```$', '', content)
+            arr_match = re.search(r'\[.*\]', content, re.DOTALL)
+            if arr_match:
+                raw = json.loads(arr_match.group(0))
+                all_raw.extend(raw)
+        except Exception as e:
+            pass  # silent — individual query failures shouldn't stop the run
+
+    # Parse and validate
+    events = []
+    for ev in all_raw:
+        if not ev.get("date") or not ev.get("name"):
+            continue
+        try:
+            ev_date = datetime.strptime(ev["date"], "%Y-%m-%d").date()
+            if ev_date < today or ev_date > end_date:
+                continue
+        except ValueError:
+            continue
+
+        events.append({
+            "date": ev["date"],
+            "name": ev.get("name", "").strip(),
+            "time": ev.get("time", "").strip(),
+            "venue": ev.get("venue", "").strip(),
+            "address": "",
+            "description": ev.get("description", "").strip()[:150],
+            "icons": classify_icons(ev.get("name", ""), ev.get("description", ""), ev.get("venue", "")),
+            "free": bool(ev.get("free", False)),
+            "url": ev.get("url", "").strip(),
+        })
+
+    print(f"  [Perplexity] {len(queries)} queries → {len(events)} raw events")
+    return events
+
+
 # ─── AI CLEANUP (optional) ──────────────────────────────────────────────────
 
 def ai_cleanup(events, days_ahead=7):
@@ -784,13 +928,19 @@ def main():
         all_events.extend(fetch_city_calendar(args.days))
         all_events.extend(fetch_chamber_events(args.days))
         all_events.extend(fetch_library_events(args.days))
+        all_events.extend(fetch_moonshine_events(args.days))
 
-    # 3. Merge + deduplicate
+    # 4. Perplexity AI discovery
+    if not args.skip_ai:
+        print("\n🤖 Perplexity event discovery...")
+        all_events.extend(fetch_perplexity_events(args.days))
+
+    # 5. Merge + deduplicate
     print(f"\n🔀 Merging {len(all_events)} raw entries...")
     merged = merge_events(all_events, args.days)
     print(f"   After dedup: {len(merged)} events")
 
-    # 4. AI cleanup (optional)
+    # 6. AI cleanup (optional — OpenAI only, skip if no key)
     if not args.skip_ai and merged:
         print("\n🤖 AI cleanup...")
         merged = ai_cleanup(merged, args.days)

@@ -45,12 +45,22 @@ ICON_MAP = {
 }
 
 
-def load_candidates(path):
-    """Load candidates.json and return events grouped by date."""
+def load_candidates(path, all_days=False):
+    """Load candidates.json and return events grouped by date.
+    By default, only returns events for day 7 (the new day entering the window).
+    Pass all_days=True to return all events."""
+    from datetime import timedelta
+
     with open(path) as f:
         data = json.load(f)
 
     events = data.get("events", [])
+
+    if not all_days:
+        all_dates = sorted(set(ev.get("date", "") for ev in events if ev.get("date")))
+        target = all_dates[-1] if all_dates else None
+        events = [ev for ev in events if ev.get("date", "") == target] if target else []
+
     # Group by date
     by_date = {}
     for ev in events:
@@ -204,13 +214,14 @@ def main():
     parser.add_argument("--candidates", default="./candidates.json", help="Path to candidates.json")
     parser.add_argument("--to", default=DEFAULT_TO, help="Recipient email")
     parser.add_argument("--dry-run", action="store_true", help="Print email without sending")
+    parser.add_argument("--all-days", action="store_true", help="Include all 7 days instead of just day 7")
     args = parser.parse_args()
 
     if not os.path.exists(args.candidates):
         print(f"ERROR: {args.candidates} not found. Run collect_events.py first.")
         sys.exit(1)
 
-    events, by_date = load_candidates(args.candidates)
+    events, by_date = load_candidates(args.candidates, all_days=args.all_days)
     if not events:
         print("No events to screen. Skipping digest.")
         sys.exit(0)

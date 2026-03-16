@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-03-16T19:53:10-05:00",
+  "last_updated": "2026-03-16T16:50:26-05:00",
   "events": [
     {
       "date": "2026-03-16",
@@ -41,6 +41,20 @@
       ],
       "free": false,
       "url": ""
+    },
+    {
+      "date": "2026-03-17",
+      "name": "St Patty's Day Party",
+      "time": "",
+      "venue": "Moonshine Drinkery",
+      "address": "103 W. Santa Rosa St.",
+      "description": "",
+      "icons": [
+        "drinks",
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.moonshinedrinkery.com"
     },
     {
       "date": "2026-03-17",
@@ -127,6 +141,19 @@
       ],
       "free": true,
       "url": ""
+    },
+    {
+      "date": "2026-03-19",
+      "name": "Powerful Voices Open Mic Show - Live Music, Comedy, Poetry+ More!",
+      "time": "",
+      "venue": "Victoria",
+      "address": "",
+      "description": "Join us for great vibes & a fun night of celebrating talented individuals through music, comedy, poetry, and more!",
+      "icons": [
+        "music"
+      ],
+      "free": false,
+      "url": "https://www.eventbrite.com/e/powerful-voices-open-mic-show-live-music-comedy-poetry-more-tickets-1975575856568"
     },
     {
       "date": "2026-03-19",
@@ -259,6 +286,20 @@
     },
     {
       "date": "2026-03-21",
+      "name": "Live Band Karaoke",
+      "time": "",
+      "venue": "Moonshine Drinkery",
+      "address": "103 W. Santa Rosa St.",
+      "description": "",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://www.moonshinedrinkery.com"
+    },
+    {
+      "date": "2026-03-21",
       "name": "Chess Club",
       "time": "12:00 PM \u2013 2:30 PM",
       "venue": "Victoria Public Library",
@@ -270,6 +311,19 @@
       ],
       "free": true,
       "url": ""
+    },
+    {
+      "date": "2026-03-21",
+      "name": "Will Overman",
+      "time": "7:00 PM",
+      "venue": "Weaver House Concert",
+      "address": "",
+      "description": "Live concert featuring Will Overman.",
+      "icons": [
+        "music"
+      ],
+      "free": false,
+      "url": "https://evvntly.com/event/ev-157638da1a452ce976a22bfca"
     },
     {
       "date": "2026-03-21",
@@ -313,6 +367,47 @@
       ],
       "free": false,
       "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-03-24",
+      "name": "Baby Hour: Pages to Play",
+      "time": "10:00 AM \u2013 11:00 AM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main Street",
+      "description": "",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3535"
+    },
+    {
+      "date": "2026-03-24",
+      "name": "Arthritis Seminar",
+      "time": "1:00 PM",
+      "venue": "",
+      "address": "",
+      "description": "",
+      "icons": [
+        "arts",
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.eventbrite.com/d/tx--victoria/events/"
+    },
+    {
+      "date": "2026-03-24",
+      "name": "Victoria TX \"Midgets With Attitude\" @ Midget Mayhem Wrestling (21+)",
+      "time": "8:00 PM",
+      "venue": "The Hideaway",
+      "address": "",
+      "description": "Midget Mayhem Wrestling event featuring Midgets With Attitude.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.eventbrite.com/d/tx--victoria/events--this-month/"
     }
   ]
 }
