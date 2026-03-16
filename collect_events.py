@@ -110,7 +110,7 @@ def load_local_events(yaml_path, days_ahead=7):
         dow = DAY_MAP.get(ev.get("day", "").lower())
         if dow is None:
             continue
-        start = datetime.strptime(ev["start_date"], "%Y-%m-%d").date() if ev.get("start_date") else today
+        start = datetime.strptime(ev["start_date"], "%Y-%m-%d").date() if ev.get("start_date") else today - timedelta(days=1)
         end = datetime.strptime(ev["end_date"], "%Y-%m-%d").date() if ev.get("end_date") else end_date + timedelta(days=365)
 
         d = today
@@ -446,6 +446,104 @@ def fetch_chamber_events(days_ahead=7):
     return events
 
 
+# ─── SOURCE: VICTORIA PUBLIC LIBRARY CALENDAR ────────────────────────────────
+
+def fetch_library_events(days_ahead=7):
+    """Scrape events from the Victoria Public Library calendar."""
+    events = []
+    today = datetime.now()
+    end_date = today + timedelta(days=days_ahead)
+
+    try:
+        # Fetch the list view of the library calendar for the current month
+        url = f"https://victoriapl.librarycalendar.com/events/week/{today.strftime('%Y/%m/%d')}"
+        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # The library calendar uses a structured format with event entries
+        # Look for event links and titles
+        for item in soup.select(".views-row, .calendar-event, [class*='event']"):
+            title_el = item.select_one("a, .field-title, h3, h4")
+            if not title_el:
+                continue
+            title = title_el.get_text(strip=True)
+            if not title or len(title) < 3:
+                continue
+
+            # Skip generic items
+            if title.lower() in ["more details", "view details", "add to calendar"]:
+                continue
+
+            # Try to extract date from nearby text or data attributes
+            page_text = item.get_text()
+            event_date = None
+
+            # Look for date patterns
+            date_match = re.search(
+                r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})',
+                page_text
+            )
+            if date_match:
+                try:
+                    dt = datetime.strptime(
+                        f"{date_match.group(1)} {date_match.group(2)} {date_match.group(3)}",
+                        "%B %d %Y"
+                    )
+                    if today.date() <= dt.date() <= end_date.date():
+                        event_date = dt.strftime("%Y-%m-%d")
+                except ValueError:
+                    pass
+
+            # Look for ISO date in data attributes
+            if not event_date:
+                for attr in ["data-date", "datetime", "content"]:
+                    for el in item.select(f"[{attr}]"):
+                        val = el.get(attr, "")
+                        iso_match = re.search(r'(\d{4}-\d{2}-\d{2})', val)
+                        if iso_match:
+                            try:
+                                dt = datetime.strptime(iso_match.group(1), "%Y-%m-%d")
+                                if today.date() <= dt.date() <= end_date.date():
+                                    event_date = dt.strftime("%Y-%m-%d")
+                                    break
+                            except ValueError:
+                                pass
+                    if event_date:
+                        break
+
+            if not event_date:
+                continue
+
+            # Extract time
+            time_str = ""
+            time_match = re.search(
+                r'(\d{1,2}:\d{2}\s*(?:am|pm|AM|PM))\s*[-–]\s*(\d{1,2}:\d{2}\s*(?:am|pm|AM|PM))',
+                page_text
+            )
+            if time_match:
+                time_str = f"{time_match.group(1).upper()} – {time_match.group(2).upper()}"
+
+            events.append({
+                "date": event_date,
+                "name": title,
+                "time": time_str,
+                "venue": "Victoria Public Library",
+                "address": "302 N. Main St.",
+                "description": "",
+                "icons": classify_icons(title, "", "Victoria Public Library"),
+                "free": True,
+                "url": "",
+            })
+
+        print(f"  [Library] Extracted {len(events)} events")
+
+    except Exception as e:
+        print(f"  [Library] Error: {e}")
+
+    return events
+
+
 # ─── AI CLEANUP (optional) ──────────────────────────────────────────────────
 
 def ai_cleanup(events, days_ahead=7):
@@ -583,11 +681,82 @@ def load_extras(yaml_path):
         return {"new_and_notable": [], "sponsor": None}
 
 
+# ─── SOURCE: GOOGLE SHEET (manual submissions) ───────────────────────────────
+
+GOOGLE_SHEET_ID = "1S42hYlrPM516LDTcy3W_8afCkCqc-ZrUfN2J-SmP23I"
+
+
+def fetch_google_sheet_events(days_ahead=7):
+    """Fetch manually submitted events from the Google Sheet."""
+    events = []
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days_ahead)
+
+    try:
+        # Google Sheets public CSV export URL
+        url = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/export?format=csv"
+        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        resp.raise_for_status()
+
+        import csv
+        import io
+        reader = csv.DictReader(io.StringIO(resp.text))
+
+        for row in reader:
+            date_str = row.get("Date", "").strip()
+            name = row.get("Event Name", "").strip()
+            status = row.get("Status", "").strip().lower()
+
+            if not date_str or not name:
+                continue
+
+            # Skip events marked as "done" or "skip"
+            if status in ["done", "skip", "duplicate"]:
+                continue
+
+            # Normalize date — accept YYYY-MM-DD, M/D/YYYY, etc.
+            ev_date = None
+            for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%B %d, %Y", "%b %d, %Y"]:
+                try:
+                    ev_date = datetime.strptime(date_str, fmt).date()
+                    break
+                except ValueError:
+                    continue
+
+            if not ev_date or ev_date < today or ev_date > end_date:
+                continue
+
+            notes = row.get("Notes", "").strip()
+            venue = row.get("Venue", "").strip()
+            address = row.get("Address", "").strip()
+            time_str = row.get("Time", "").strip()
+
+            events.append({
+                "date": ev_date.strftime("%Y-%m-%d"),
+                "name": name,
+                "time": time_str,
+                "venue": venue,
+                "address": address,
+                "description": notes[:150] if notes else "",
+                "icons": classify_icons(name, notes, venue),
+                "free": guess_free(name, notes, venue),
+                "url": "",
+            })
+
+        print(f"  [Google Sheet] {len(events)} events from submissions")
+
+    except Exception as e:
+        print(f"  [Google Sheet] Error: {e}")
+
+    return events
+
+
 # ─── MAIN ────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="The Vic 361 — Event Collector")
     parser.add_argument("--output", default="./events.json", help="Output JSON path")
+    parser.add_argument("--candidates", default="./candidates.json", help="Candidates JSON path (all raw events for screening)")
     parser.add_argument("--days", type=int, default=7, help="Days ahead to collect")
     parser.add_argument("--local-dir", default=".", help="Dir with local_events.yaml + extras.yaml")
     parser.add_argument("--skip-web", action="store_true", help="Local YAML only")
@@ -605,11 +774,16 @@ def main():
     yaml_path = os.path.join(args.local_dir, "local_events.yaml")
     all_events.extend(load_local_events(yaml_path, args.days))
 
-    # 2. Web sources
+    # 2. Google Sheet (manual submissions)
+    print("\n📋 Google Sheet submissions...")
+    all_events.extend(fetch_google_sheet_events(args.days))
+
+    # 3. Web sources
     if not args.skip_web:
         print("\n📡 Web sources...")
         all_events.extend(fetch_city_calendar(args.days))
         all_events.extend(fetch_chamber_events(args.days))
+        all_events.extend(fetch_library_events(args.days))
 
     # 3. Merge + deduplicate
     print(f"\n🔀 Merging {len(all_events)} raw entries...")
@@ -632,11 +806,21 @@ def main():
         "sponsor": extras["sponsor"],
     }
 
-    # 7. Write
+    # 7. Write events.json (approved / live events)
     out_path = os.path.abspath(args.output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2)
+
+    # 8. Write candidates.json (all events for screening)
+    candidates_path = os.path.abspath(args.candidates)
+    candidates_output = {
+        "last_updated": datetime.now().strftime("%Y-%m-%dT%H:%M:%S-05:00"),
+        "events": merged,
+    }
+    with open(candidates_path, "w") as f:
+        json.dump(candidates_output, f, indent=2)
+    print(f"  Candidates: {candidates_path}")
 
     print(f"\n✅ {out_path}")
     print(f"   {len(merged)} events across {args.days} days")

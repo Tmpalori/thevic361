@@ -1,14 +1,17 @@
 # ─── The Vic 361 — Local Events ─────────────────────────────────────────────
 # This file contains manually curated events and recurring events.
-# Caspian or Tristen updates this file with events found on Facebook,
-# Instagram, or word-of-mouth that aren't on public calendars.
 #
 # RECURRING events auto-generate for each matching day of the week.
 # ONE-TIME events only show on their specific date.
+#
+# Keep recurring events to genuinely interesting "things to do" —
+# not daily restaurant specials or repeated toddler sessions.
 # ─────────────────────────────────────────────────────────────────────────────
 
 recurring:
-  # Victoria Farmers' Market — Wed & Sat
+
+  # ── WEDNESDAY ───────────────────────────────────────────────────────────
+
   - name: "Victoria Farmers' Market"
     day: wednesday
     time: "9:00 AM – 1:00 PM"
@@ -18,6 +21,42 @@ recurring:
     icons: [food, shopping, free]
     free: true
     url: ""
+
+  - name: "VAMA Rock & Blues Open Mic"
+    day: wednesday
+    time: "7:00 PM – 10:00 PM"
+    venue: "Aero Crafters"
+    address: "309 E. Crestwood Dr."
+    description: "Weekly open mic jam hosted by the Victoria Area Musicians Association. All skill levels welcome."
+    icons: [music, drinks, free]
+    free: true
+    url: "https://aerocrafters.pub"
+
+  # ── THURSDAY ────────────────────────────────────────────────────────────
+
+  - name: "Story Strolls — Audiobook Walking Group"
+    day: thursday
+    time: "5:30 PM – 6:30 PM"
+    venue: "Riverside Park"
+    address: "405 Memorial Drive"
+    description: "Listen. Walk. Repeat. Join the audiobook walking group along the Guadalupe River."
+    icons: [outdoors, free]
+    free: true
+    url: ""
+
+  # ── FRIDAY ──────────────────────────────────────────────────────────────
+
+  - name: "Live Music at Aero Crafters"
+    day: friday
+    time: "7:00 PM – 10:00 PM"
+    venue: "Aero Crafters"
+    address: "309 E. Crestwood Dr."
+    description: "Live bands and solo artists every Friday night. Check their Facebook for this week's lineup."
+    icons: [music, drinks]
+    free: false
+    url: "https://aerocrafters.pub"
+
+  # ── SATURDAY ────────────────────────────────────────────────────────────
 
   - name: "Victoria Farmers' Market"
     day: saturday
@@ -29,50 +68,135 @@ recurring:
     free: true
     url: ""
 
-  # Chess Club — Every Saturday at the Library
   - name: "Chess Club"
     day: saturday
     time: "12:00 PM – 2:30 PM"
     venue: "Victoria Public Library"
     address: "302 N. Main St."
-    description: "Casual chess games in the Bronte Room. All levels, all ages."
+    description: "Casual chess games in the Bronte Room. All levels, all ages welcome."
     icons: [family, free]
     free: true
     url: ""
 
-  # Story Strolls — Every Thursday
-  - name: "Story Strolls — Audiobook Walking Group"
-    day: thursday
-    time: "5:30 PM – 6:30 PM"
-    venue: "Riverside Park"
-    address: "405 Memorial Drive"
-    description: "Listen. Walk. Repeat. Join the audiobook walking group along the Guadalupe."
-    icons: [outdoors, free]
+  - name: "Live Music at Aero Crafters"
+    day: saturday
+    time: "7:00 PM – 10:00 PM"
+    venue: "Aero Crafters"
+    address: "309 E. Crestwood Dr."
+    description: "Live bands every Saturday night. Check their Facebook for this week's lineup."
+    icons: [music, drinks]
+    free: false
+    url: "https://aerocrafters.pub"
+
+
+# ─── ONE-TIME EVENTS ─────────────────────────────────────────────────────────
+events:
+  - date: "2026-03-17"
+    name: "VPL Rec Night"
+    time: "6:00 PM – 8:00 PM"
+    venue: "Victoria Public Library"
+    address: "302 N. Main St."
+    description: "The library transforms into a game room — board games, video games, and activities for all ages."
+    icons: [family, free]
     free: true
     url: ""
 
-# ─── ONE-TIME EVENTS ─────────────────────────────────────────────────────────
-# Add events here as you find them. Format:
-#
-#   - date: "2026-03-22"
-#     name: "Event Name"
-#     time: "7:00 PM – 10:00 PM"
-#     venue: "Venue Name"
-#     address: "123 Main St."
-#     description: "Short, punchy description."
-#     icons: [music, drinks]
-#     free: false
-#     url: "https://..."
-# ─────────────────────────────────────────────────────────────────────────────
+  - date: "2026-03-20"
+    name: "K-POP Party at the Library"
+    time: "7:00 PM – 8:30 PM"
+    venue: "Victoria Public Library"
+    address: "302 N. Main St."
+    description: "Celebrate the ever-growing K-POP genre with music, trivia, and fan fun."
+    icons: [music, family, free]
+    free: true
+    url: ""
 
-events:
-  # Example — delete or replace with real events:
-  # - date: "2026-03-22"
-  #   name: "Spring Fling Block Party"
-  #   time: "5:00 PM – 10:00 PM"
-  #   venue: "Downtown Victoria"
-  #   address: "Main Street"
-  #   description: "Live music, food trucks, and family fun in downtown Victoria."
-  #   icons: [music, food, family]
-  #   free: true
-  #   url: ""
+  - date: "2026-03-22"
+    name: "Sundance Head LIVE"
+    time: "7:00 PM – 10:00 PM"
+    venue: "Aero Crafters"
+    address: "309 E. Crestwood Dr."
+    description: "The Voice Season 11 winner brings country soul to Aero Crafters."
+    icons: [music, drinks]
+    free: false
+    url: "https://aerocrafters.pub"
+
+  - date: "2026-03-25"
+    name: "Music Bingo at Aero Crafters"
+    time: "7:00 PM – 9:00 PM"
+    venue: "Aero Crafters"
+    address: "309 E. Crestwood Dr."
+    description: "Last Wednesday of the month — Music Bingo night. Prizes, drinks, and good vibes."
+    icons: [music, drinks]
+    free: false
+    url: "https://www.eventbrite.com/o/aero-crafters-18361431565"
+
+  - date: "2026-03-30"
+    name: "True Crime Book Club"
+    time: "6:00 PM – 7:30 PM"
+    venue: "Victoria Public Library"
+    address: "302 N. Main St."
+    description: "Monthly true crime discussion in the Bronte Room. Grab the book and join the conversation."
+    icons: [community, free]
+    free: true
+    url: ""
+
+  - date: "2026-04-11"
+    name: "Chonda Pierce Comedy Tour"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Victoria Fine Arts Center"
+    address: "1002 Sam Houston Dr."
+    description: "Christian comedian Chonda Pierce brings her nationally touring comedy show to Victoria."
+    icons: [arts]
+    free: false
+    url: ""
+
+  - date: "2026-04-23"
+    name: "Hot Rod Tour of Texas Kick-Off Party"
+    time: "9:00 AM – 5:00 PM"
+    venue: "DeLeon Plaza"
+    address: "101 N. Main St."
+    description: "Classic cars roll into downtown Victoria. Food, music, and horsepower all day."
+    icons: [community, food, music]
+    free: true
+    url: ""
+
+  - date: "2026-05-02"
+    name: "Shine the Light on Mental Health Walk"
+    time: "8:00 AM – 12:00 PM"
+    venue: "Riverside Park"
+    address: "405 Memorial Drive"
+    description: "Gulf Bend's annual walk for mental health awareness. Free resources and community support."
+    icons: [outdoors, community, free]
+    free: true
+    url: ""
+
+  - date: "2026-05-22"
+    name: "Memorial Weekend Bash — Day 1"
+    time: "5:00 PM – 11:00 PM"
+    venue: "Riverside Park"
+    address: "405 Memorial Drive"
+    description: "Biggest lineup ever — La Mafia, Elsa Garcia, and more. Three nights of live music."
+    icons: [music, food, drinks]
+    free: false
+    url: ""
+
+  - date: "2026-05-23"
+    name: "Memorial Weekend Bash — Day 2"
+    time: "5:00 PM – 11:00 PM"
+    venue: "Riverside Park"
+    address: "405 Memorial Drive"
+    description: "Night two of the Memorial Weekend Bash. Live music, food trucks, and fun."
+    icons: [music, food, drinks]
+    free: false
+    url: ""
+
+  - date: "2026-05-24"
+    name: "Memorial Weekend Bash — Day 3"
+    time: "5:00 PM – 11:00 PM"
+    venue: "Riverside Park"
+    address: "405 Memorial Drive"
+    description: "Final night of the Memorial Weekend Bash. Don't miss the closing acts."
+    icons: [music, food, drinks]
+    free: false
+    url: ""

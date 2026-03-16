@@ -314,32 +314,5 @@
       "free": false,
       "url": "https://aerocrafters.pub"
     }
-  ],
-  "new_and_notable": [
-    {
-      "name": "New McDonald's \u2014 Opening This Month",
-      "description": "Victoria's 5th McDonald's location is projected to open in March 2026. Over 4,100 sq ft on the north side.",
-      "tag": "new",
-      "icon": "food"
-    },
-    {
-      "name": "Ellianos Coffee \u2014 Construction Started",
-      "description": "Double drive-thru coffee coming to 605 E. Airline Road. Construction began March 1, targeting October opening.",
-      "tag": "coming",
-      "icon": "food"
-    },
-    {
-      "name": "Five Below, Ulta & Burlington",
-      "description": "Three major retail openings announced for 2026. Locations TBD.",
-      "tag": "coming",
-      "icon": "shopping"
-    }
-  ],
-  "sponsor": {
-    "name": "Fossati's Delicatessen",
-    "text": "Victoria's oldest restaurant, serving handmade sandwiches and cold plates since 1882. Lunch Mon\u2013Sat, 11am\u20132pm.",
-    "address": "302 S. Main St.",
-    "url": "",
-    "cta": "View Menu"
-  }
+  ]
 }
