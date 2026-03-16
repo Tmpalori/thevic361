@@ -198,11 +198,7 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-weight: 500;
-  display: none;
-}
-
-@media (min-width: 640px) {
-  .tagline { display: block; }
+  display: block;
 }
 
 .header-actions {
@@ -275,6 +271,9 @@
   border-bottom: 1px solid var(--color-divider);
   padding-block: var(--space-3);
   overflow-x: auto;
+  position: sticky;
+  top: var(--header-height, 56px);
+  z-index: 40;
 }
 
 .legend-inner {
