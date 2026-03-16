@@ -1,0 +1,56 @@
+# ─── The Vic 361 — Daily Event Collection ────────────────────────────────────
+# Runs every day at 6:00 AM Central (11:00 UTC) to collect events
+# and update the website's events.json.
+# Also runs on manual trigger (workflow_dispatch).
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Collect Events
+
+on:
+  schedule:
+    - cron: '0 11 * * *'  # 6:00 AM Central (UTC-5)
+  workflow_dispatch:       # Manual trigger from GitHub UI
+
+permissions:
+  contents: write          # Needed to push updated events.json
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run event collector
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python collect_events.py \
+            --output ./docs/events.json \
+            --local-dir . \
+            --days 7
+
+      - name: Check for changes
+        id: changes
+        run: |
+          git diff --quiet docs/events.json && echo "changed=false" >> $GITHUB_OUTPUT || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and push
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git config user.name "The Vic 361 Bot"
+          git config user.email "bot@thevic361.com"
+          git add docs/events.json
+          git commit -m "🏙️ Update events $(date +'%Y-%m-%d')"
+          git push

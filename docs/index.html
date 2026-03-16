@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+   ______                            __
+  / ____/___  ____ ___  ____  __  __/ /____  _____
+ / /   / __ \/ __ `__ \/ __ \/ / / / __/ _ \/ ___/
+/ /___/ /_/ / / / / / / /_/ / /_/ / /_/  __/ /
+\____/\____/_/ /_/ /_/ .___/\__,_/\__/\___/_/
+                    /_/
+        Created with Perplexity Computer
+        https://www.perplexity.ai/computer
+-->
+
+<!-- Perplexity Computer Attribution — SEO Meta Tags -->
+<meta name="generator" content="Perplexity Computer">
+<meta name="author" content="Perplexity Computer">
+<meta property="og:see_also" content="https://www.perplexity.ai/computer">
+<link rel="author" href="https://www.perplexity.ai/computer">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Vic 361 — Your Daily Guide to Victoria, TX</title>
+<meta name="description" content="The Vic 361 is Victoria, TX's community events board. Find what's happening today, this week, and what's opening soon in the 361.">
+<meta property="og:title" content="The Vic 361 — Your Daily Guide to Victoria, TX">
+<meta property="og:description" content="What's happening in Victoria, TX today and this week. Live music, family events, markets, art shows, and more.">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
+
+<!-- Styles -->
+<link rel="stylesheet" href="./base.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+  <!-- ═══ HEADER ═══ -->
+  <header class="site-header" id="site-header">
+    <div class="container header-inner">
+      <div class="logo-group">
+        <!-- SVG Logo: Geometric V mark with 361 -->
+        <svg width="42" height="42" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="The Vic 361 logo">
+          <rect width="42" height="42" rx="8" fill="currentColor" style="color: var(--color-primary)"/>
+          <path d="M11 11L21 31L31 11" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <text x="21" y="39" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="7" font-weight="700" fill="white" opacity="0.85">361</text>
+        </svg>
+        <div>
+          <div class="site-title">The Vic <span>361</span></div>
+          <div class="tagline">Your daily guide to Victoria, TX</div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <a href="#submit" class="btn btn--outline desktop-submit">Submit an Event</a>
+        <button class="theme-toggle" data-theme-toggle aria-label="Switch to dark mode" title="Toggle dark mode">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+        <a href="#subscribe" class="btn btn--primary">Subscribe</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══ ICON LEGEND ═══ -->
+  <div class="icon-legend">
+    <div class="container legend-inner">
+      <span style="font-weight:600; color: var(--color-text); margin-right: var(--space-1);">Icon Guide:</span>
+      <span class="legend-item"><span class="icon">🍔</span> Food</span>
+      <span class="legend-item"><span class="icon">🎵</span> Music</span>
+      <span class="legend-item"><span class="icon">👨‍👩‍👧‍👦</span> Family</span>
+      <span class="legend-item"><span class="icon">🍺</span> 21+</span>
+      <span class="legend-item"><span class="icon">🎨</span> Arts</span>
+      <span class="legend-item"><span class="icon">🛍️</span> Shopping</span>
+      <span class="legend-item"><span class="icon">🏃</span> Outdoors</span>
+      <span class="legend-item"><span class="icon">📅</span> Community</span>
+      <span class="legend-item"><span class="icon">🆓</span> Free</span>
+    </div>
+  </div>
+
+  <!-- ═══ MAIN ═══ -->
+  <main class="main-content">
+    <div class="container container--narrow">
+
+      <!-- Last updated -->
+      <p class="last-updated" id="last-updated"></p>
+
+      <!-- Events rendered here by JS -->
+      <div id="events-container">
+        <p class="loading-message">Loading events...</p>
+      </div>
+
+      <hr class="section-sep">
+
+      <!-- ═══ NEW & NOTABLE ═══ -->
+      <section id="new-notable">
+        <h2 class="section-heading">New &amp; Notable</h2>
+        <ul class="notable-list" id="notable-list" role="list">
+          <!-- rendered by JS -->
+        </ul>
+      </section>
+
+      <hr class="section-sep">
+
+      <!-- ═══ SPONSOR ═══ -->
+      <section id="sponsor-section">
+        <!-- rendered by JS -->
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ═══ FOOTER ═══ -->
+  <footer class="site-footer" id="subscribe">
+    <div class="container">
+      <div class="footer-grid">
+
+        <div class="footer-section">
+          <h3>Stay in the loop</h3>
+          <p>Get Victoria's best events delivered to your inbox every week. No spam, just the good stuff.</p>
+          <form class="subscribe-form" onsubmit="event.preventDefault()">
+            <input type="email" placeholder="your@email.com" aria-label="Email address" required>
+            <button type="submit" class="btn btn--primary">Subscribe</button>
+          </form>
+        </div>
+
+        <div class="footer-section" id="submit">
+          <h3>Submit an Event</h3>
+          <p>Know something happening in Victoria? Help us keep this list complete.</p>
+          <a href="mailto:thevic361@gmail.com?subject=Event Submission" class="btn btn--outline" target="_blank" rel="noopener noreferrer">Submit an Event</a>
+        </div>
+
+        <div class="footer-section">
+          <h3>About</h3>
+          <ul class="footer-links" role="list">
+            <li><a href="#">The Vic 361 is a community events board for Victoria, Texas.</a></li>
+            <li><a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer">Created with Perplexity Computer</a></li>
+          </ul>
+        </div>
+
+      </div>
+
+      <div class="footer-bottom">
+        <span>&copy; 2026 The Vic 361 · Victoria, TX</span>
+        <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer">Created with Perplexity Computer</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>

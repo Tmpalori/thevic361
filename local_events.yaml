@@ -1,0 +1,78 @@
+# ─── The Vic 361 — Local Events ─────────────────────────────────────────────
+# This file contains manually curated events and recurring events.
+# Caspian or Tristen updates this file with events found on Facebook,
+# Instagram, or word-of-mouth that aren't on public calendars.
+#
+# RECURRING events auto-generate for each matching day of the week.
+# ONE-TIME events only show on their specific date.
+# ─────────────────────────────────────────────────────────────────────────────
+
+recurring:
+  # Victoria Farmers' Market — Wed & Sat
+  - name: "Victoria Farmers' Market"
+    day: wednesday
+    time: "9:00 AM – 1:00 PM"
+    venue: "Victoria Farmers Market"
+    address: "2805 N. Navarro St."
+    description: "Fresh local produce, pastured meats, honey, baked goods, and more from Victoria's best vendors."
+    icons: [food, shopping, free]
+    free: true
+    url: ""
+
+  - name: "Victoria Farmers' Market"
+    day: saturday
+    time: "9:00 AM – 1:00 PM"
+    venue: "Victoria Farmers Market"
+    address: "2805 N. Navarro St."
+    description: "Fresh local produce, pastured meats, honey, baked goods. Every Wed & Sat."
+    icons: [food, shopping, free]
+    free: true
+    url: ""
+
+  # Chess Club — Every Saturday at the Library
+  - name: "Chess Club"
+    day: saturday
+    time: "12:00 PM – 2:30 PM"
+    venue: "Victoria Public Library"
+    address: "302 N. Main St."
+    description: "Casual chess games in the Bronte Room. All levels, all ages."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  # Story Strolls — Every Thursday
+  - name: "Story Strolls — Audiobook Walking Group"
+    day: thursday
+    time: "5:30 PM – 6:30 PM"
+    venue: "Riverside Park"
+    address: "405 Memorial Drive"
+    description: "Listen. Walk. Repeat. Join the audiobook walking group along the Guadalupe."
+    icons: [outdoors, free]
+    free: true
+    url: ""
+
+# ─── ONE-TIME EVENTS ─────────────────────────────────────────────────────────
+# Add events here as you find them. Format:
+#
+#   - date: "2026-03-22"
+#     name: "Event Name"
+#     time: "7:00 PM – 10:00 PM"
+#     venue: "Venue Name"
+#     address: "123 Main St."
+#     description: "Short, punchy description."
+#     icons: [music, drinks]
+#     free: false
+#     url: "https://..."
+# ─────────────────────────────────────────────────────────────────────────────
+
+events:
+  # Example — delete or replace with real events:
+  # - date: "2026-03-22"
+  #   name: "Spring Fling Block Party"
+  #   time: "5:00 PM – 10:00 PM"
+  #   venue: "Downtown Victoria"
+  #   address: "Main Street"
+  #   description: "Live music, food trucks, and family fun in downtown Victoria."
+  #   icons: [music, food, family]
+  #   free: true
+  #   url: ""

@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+test_events.json
+.DS_Store
+venv/
