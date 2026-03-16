@@ -564,6 +564,8 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-8);
+  width: 100%;
+  overflow-x: hidden;
 }
 
 @media (min-width: 640px) {
@@ -576,6 +578,11 @@
   .footer-grid {
     grid-template-columns: 2fr 1fr 1fr;
   }
+}
+
+.footer-section {
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .footer-section h3 {
