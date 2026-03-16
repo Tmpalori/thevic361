@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-03-16T16:50:26-05:00",
+  "last_updated": "2026-03-16T16:55:54-05:00",
   "events": [
     {
       "date": "2026-03-16",
@@ -7,7 +7,7 @@
       "time": "10:30 AM \u2013 11:30 AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "",
+      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
       "icons": [
         "family",
         "free"
@@ -21,7 +21,7 @@
       "time": "3:30 PM \u2013 4:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "",
+      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
       "icons": [
         "family",
         "free"
@@ -48,7 +48,7 @@
       "time": "",
       "venue": "Moonshine Drinkery",
       "address": "103 W. Santa Rosa St.",
-      "description": "",
+      "description": "Drinks and good times at Moonshine Drinkery.",
       "icons": [
         "drinks",
         "arts"
@@ -62,7 +62,7 @@
       "time": "10:30 AM \u2013 11:30 AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "",
+      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
       "icons": [
         "family",
         "free"
@@ -76,7 +76,7 @@
       "time": "3:30 PM \u2013 4:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "",
+      "description": "Community event open to the public.",
       "icons": [
         "community",
         "free"
@@ -96,7 +96,20 @@
         "free"
       ],
       "free": true,
-      "url": ""
+      "url": "https://www.victoriapubliclibrary.org"
+    },
+    {
+      "date": "2026-03-18",
+      "name": "March VPEN Business Meeting",
+      "time": "11:15 AM",
+      "venue": "Victoria Country Club, 14 Spring Creek Road, Victoria, TX, USA",
+      "address": "",
+      "description": "Business networking meeting for Victoria business professionals.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.eventbrite.com/e/march-vpen-business-meeting-64498360/"
     },
     {
       "date": "2026-03-18",
@@ -140,17 +153,18 @@
         "free"
       ],
       "free": true,
-      "url": ""
+      "url": "https://www.facebook.com/VictoriaFarmersMarket"
     },
     {
       "date": "2026-03-19",
       "name": "Powerful Voices Open Mic Show - Live Music, Comedy, Poetry+ More!",
       "time": "",
-      "venue": "Victoria",
+      "venue": "Victoria, TX 77901",
       "address": "",
-      "description": "Join us for great vibes & a fun night of celebrating talented individuals through music, comedy, poetry, and more!",
+      "description": "A night celebrating talented artists through music, comedy, poetry, and more.",
       "icons": [
-        "music"
+        "music",
+        "arts"
       ],
       "free": false,
       "url": "https://www.eventbrite.com/e/powerful-voices-open-mic-show-live-music-comedy-poetry-more-tickets-1975575856568"
@@ -161,7 +175,7 @@
       "time": "10:30 AM \u2013 11:30 AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "",
+      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
       "icons": [
         "family",
         "free"
@@ -189,7 +203,7 @@
       "time": "4:00 PM \u2013 5:00 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "",
+      "description": "Arts event at Victoria Public Library. Open to the public.",
       "icons": [
         "arts",
         "community",
@@ -210,7 +224,22 @@
         "free"
       ],
       "free": true,
-      "url": ""
+      "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
+    },
+    {
+      "date": "2026-03-20",
+      "name": "Passive Program: Library Scavenger Hunt",
+      "time": "",
+      "venue": "Victoria Public Library",
+      "address": "",
+      "description": "Stroll through the library this week and pick up a scavenger hunt sheet to discover various items in the children's section.",
+      "icons": [
+        "family",
+        "outdoors",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/calendar.aspx"
     },
     {
       "date": "2026-03-20",
@@ -218,7 +247,7 @@
       "time": "10:00 AM \u2013 11:00 AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "",
+      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
       "icons": [
         "family",
         "free"
@@ -232,7 +261,7 @@
       "time": "1:30 PM \u2013 2:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "",
+      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
       "icons": [
         "family",
         "free"
@@ -246,7 +275,7 @@
       "time": "6:00 PM \u2013 7:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "",
+      "description": "Live music in Victoria. Check the venue for lineup details.",
       "icons": [
         "music",
         "community",
@@ -282,7 +311,7 @@
         "free"
       ],
       "free": true,
-      "url": ""
+      "url": "https://www.victoriapubliclibrary.org"
     },
     {
       "date": "2026-03-21",
@@ -290,7 +319,7 @@
       "time": "",
       "venue": "Moonshine Drinkery",
       "address": "103 W. Santa Rosa St.",
-      "description": "",
+      "description": "Live music in Victoria. Check the venue for lineup details.",
       "icons": [
         "music",
         "drinks"
@@ -310,20 +339,7 @@
         "free"
       ],
       "free": true,
-      "url": ""
-    },
-    {
-      "date": "2026-03-21",
-      "name": "Will Overman",
-      "time": "7:00 PM",
-      "venue": "Weaver House Concert",
-      "address": "",
-      "description": "Live concert featuring Will Overman.",
-      "icons": [
-        "music"
-      ],
-      "free": false,
-      "url": "https://evvntly.com/event/ev-157638da1a452ce976a22bfca"
+      "url": "https://www.victoriapubliclibrary.org"
     },
     {
       "date": "2026-03-21",
@@ -352,7 +368,7 @@
         "free"
       ],
       "free": true,
-      "url": ""
+      "url": "https://www.facebook.com/VictoriaFarmersMarket"
     },
     {
       "date": "2026-03-22",
@@ -374,7 +390,7 @@
       "time": "10:00 AM \u2013 11:00 AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "",
+      "description": "Community event open to the public.",
       "icons": [
         "community",
         "free"
@@ -384,13 +400,12 @@
     },
     {
       "date": "2026-03-24",
-      "name": "Arthritis Seminar",
-      "time": "1:00 PM",
-      "venue": "",
+      "name": "March VPEN Business Meeting",
+      "time": "11:15 AM",
+      "venue": "Victoria Country Club",
       "address": "",
-      "description": "",
+      "description": "Community event open to the public.",
       "icons": [
-        "arts",
         "community"
       ],
       "free": false,
@@ -402,7 +417,7 @@
       "time": "8:00 PM",
       "venue": "The Hideaway",
       "address": "",
-      "description": "Midget Mayhem Wrestling event featuring Midgets With Attitude.",
+      "description": "Midget Mayhem Wrestling event.",
       "icons": [
         "community"
       ],

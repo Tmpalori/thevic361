@@ -41,6 +41,37 @@ HEADERS = {
 TIMEOUT = 15
 
 # Icon categories — keywords in event name/desc/venue trigger auto-tagging
+# Known venue URLs — fallback when an event has no specific URL
+VENUE_URLS = {
+    "aero crafters": "https://aerocrafters.pub",
+    "moonshine drinkery": "https://www.moonshinedrinkery.com",
+    "victoria public library": "https://www.victoriapubliclibrary.org",
+    "victoria farmers market": "https://www.facebook.com/VictoriaFarmersMarket",
+    "riverside park": "https://www.victoriatx.gov/government/departments/parks-recreation",
+    "deleon plaza": "https://www.victoriatx.gov",
+    "victoria fine arts center": "https://www.victoriafineartscentre.org",
+    "museum of the coastal bend": "https://museumofthecoastalbend.org",
+    "nave museum": "https://www.navemuseum.com",
+    "leo j. welder center": "https://www.victoriapubliclibrary.org",
+    "the hideaway": "https://www.facebook.com/TheHideawayVictoriaTX",
+    "froggy's grub & pub": "https://froggysgrubandpub.com",
+    "weaver house concert": "https://www.weaverhouseconcerts.com",
+    "detar hospital": "https://www.detar.com",
+    "victoria country club": "https://victoriacc.com",
+}
+
+# Description templates by icon category — used when no description available
+DESC_TEMPLATES = {
+    "music":    "Live music in Victoria. Check the venue for lineup details.",
+    "family":   "Family-friendly event at {venue}. Free and open to all ages.",
+    "food":     "Food and community at {venue}. Come hungry.",
+    "drinks":   "Drinks and good times at {venue}.",
+    "arts":     "Arts event at {venue}. Open to the public.",
+    "outdoors": "Outdoor activity in Victoria. Bring the family.",
+    "community":"Community event open to the public.",
+    "shopping": "Local vendors and shopping at {venue}.",
+}
+
 CATEGORY_KEYWORDS = {
     "music":     ["music", "concert", "band", "live music", "jazz", "acoustic",
                   "dj", "karaoke", "open mic", "k-pop", "symphony"],
@@ -759,6 +790,34 @@ Input events:
         return events
 
 
+# ─── FILL GAPS (description + url) ──────────────────────────────────────────
+
+def fill_gaps(events):
+    """Fill missing descriptions and URLs using venue lookups and templates."""
+    for ev in events:
+        # Fill URL from venue lookup if missing
+        if not ev.get("url"):
+            venue_lower = ev.get("venue", "").lower()
+            for key, url in VENUE_URLS.items():
+                if key in venue_lower:
+                    ev["url"] = url
+                    break
+
+        # Fill description from template if missing
+        if not ev.get("description"):
+            icons = ev.get("icons", [])
+            venue = ev.get("venue", "this venue")
+            # Use first matching template
+            for icon in icons:
+                if icon in DESC_TEMPLATES:
+                    ev["description"] = DESC_TEMPLATES[icon].format(venue=venue)
+                    break
+            if not ev.get("description"):
+                ev["description"] = f"Event at {venue} in Victoria, TX."
+
+    return events
+
+
 # ─── MERGE + DEDUPLICATE ─────────────────────────────────────────────────────
 
 def merge_events(all_events, days_ahead=7):
@@ -940,7 +999,10 @@ def main():
     merged = merge_events(all_events, args.days)
     print(f"   After dedup: {len(merged)} events")
 
-    # 6. AI cleanup (optional — OpenAI only, skip if no key)
+    # 6. Fill missing descriptions + URLs
+    merged = fill_gaps(merged)
+
+    # 7. AI cleanup (optional — OpenAI only, skip if no key)
     if not args.skip_ai and merged:
         print("\n🤖 AI cleanup...")
         merged = ai_cleanup(merged, args.days)
