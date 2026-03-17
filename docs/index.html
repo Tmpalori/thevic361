@@ -83,7 +83,7 @@
       <div class="legend-inner">
         <span class="legend-item"><span class="icon">🍔</span> Food</span>
         <span class="legend-item"><span class="icon">🎵</span> Music</span>
-        <span class="legend-item"><span class="icon">👨👩👧👦</span> Family</span>
+        <span class="legend-item"><span class="icon">🧑‍🧑‍🧒</span> Family</span>
         <span class="legend-item"><span class="icon">🍺</span> 21+</span>
         <span class="legend-item"><span class="icon">🎨</span> Arts</span>
         <span class="legend-item"><span class="icon">🛍️</span> Shopping</span>
@@ -165,5 +165,16 @@
   <script async src="https://subscribe-forms.beehiiv.com/embed.js"></script>
   <script type="text/javascript" async src="https://subscribe-forms.beehiiv.com/attribution.js"></script>
   <script src="./app.js"></script>
+  <script>
+    function setLegendTop() {
+      var header = document.querySelector('.site-header');
+      var legend = document.querySelector('.icon-legend');
+      if (header && legend) {
+        legend.style.top = header.offsetHeight + 'px';
+      }
+    }
+    setLegendTop();
+    window.addEventListener('resize', setLegendTop);
+  </script>
 </body>
 </html>
