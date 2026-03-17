@@ -269,8 +269,7 @@
 .icon-legend {
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-divider);
-  padding-block: var(--space-3);
-  overflow-x: auto;
+  padding-block: var(--space-2);
   position: sticky;
   top: var(--header-height, 56px);
   z-index: 40;
@@ -278,21 +277,22 @@
 
 .legend-inner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-2) var(--space-3);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  white-space: nowrap;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  white-space: nowrap;
 }
 
 .legend-item .icon {
-  font-size: 1rem;
+  font-size: 0.9rem;
   line-height: 1;
 }
 

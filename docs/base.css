@@ -1,6 +1,5 @@
 /* base.css — The Vic 361 */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { overflow-x: hidden; max-width: 100%; }
 
 html {
   -moz-text-size-adjust: none;
