@@ -74,7 +74,7 @@ DESC_TEMPLATES = {
 
 CATEGORY_KEYWORDS = {
     "music":     ["music", "concert", "band", "live music", "jazz", "acoustic",
-                  "dj", "karaoke", "open mic", "k-pop", "symphony"],
+                  "dj", "karaoke", "open mic", "k-pop", "kpop", "symphony", "trivia"],
     "food":      ["food", "restaurant", "bbq", "taco", "dinner", "lunch",
                   "brunch", "cook", "chef", "farmers market", "taste", "delicatessen"],
     "drinks":    ["beer", "wine", "cocktail", "brew", "drinkery", "bar ",
