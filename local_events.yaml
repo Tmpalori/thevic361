@@ -101,15 +101,6 @@ events:
     free: true
     url: ""
 
-  - date: "2026-03-20"
-    name: "K-POP Party at the Library"
-    time: "7:00 PM – 8:30 PM"
-    venue: "Victoria Public Library"
-    address: "302 N. Main St."
-    description: "Celebrate the ever-growing K-POP genre with music, trivia, and fan fun."
-    icons: [music, family, free]
-    free: true
-    url: ""
 
   - date: "2026-03-22"
     name: "Sundance Head LIVE"
