@@ -126,6 +126,20 @@
     var todayBadgeHtml = today ? ' <span class="today-badge">Today</span>' : '';
 
     var eventsForDay = events.filter(function (e) { return e.date === dateStr; });
+    // Sort by time ascending (events without time go last)
+    eventsForDay.sort(function(a, b) {
+      var ta = a.time || 'ZZ', tb = b.time || 'ZZ';
+      // Normalize AM/PM times for comparison
+      function toMins(t) {
+        var m = t.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (!m) return 9999;
+        var h = parseInt(m[1]), min = parseInt(m[2]), ampm = m[3].toUpperCase();
+        if (ampm === 'PM' && h !== 12) h += 12;
+        if (ampm === 'AM' && h === 12) h = 0;
+        return h * 60 + min;
+      }
+      return toMins(ta) - toMins(tb);
+    });
 
     var bodyHtml;
     if (eventsForDay.length === 0) {

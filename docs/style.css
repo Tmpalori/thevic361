@@ -404,7 +404,10 @@
 
 .event-time {
   font-weight: 700;
-  color: var(--color-text);
+  color: var(--color-primary);
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .event-name {
