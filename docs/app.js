@@ -7,7 +7,7 @@
   const ICON_MAP = {
     food:      '🍔',
     music:     '🎵',
-    family:    '👨‍👩‍👧‍👦',
+    family:    '🧑‍🧑‍🧒',
     drinks:    '🍺',
     arts:      '🎨',
     shopping:  '🛍️',
