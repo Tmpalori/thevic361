@@ -260,7 +260,11 @@
             btn.addEventListener('click', function () {
               var sec = document.getElementById('day-' + todayIdx);
               if (sec) {
-                var offset = sec.getBoundingClientRect().top + window.pageYOffset - 80;
+                var stickyHeader = document.getElementById('site-header');
+                var stickyLegend = document.querySelector('.icon-legend');
+                var stickyHeight = (stickyHeader ? stickyHeader.offsetHeight : 0) +
+                                   (stickyLegend ? stickyLegend.offsetHeight : 0) + 8;
+                var offset = sec.getBoundingClientRect().top + window.pageYOffset - stickyHeight;
                 window.scrollTo({ top: offset, behavior: 'smooth' });
               }
             });
