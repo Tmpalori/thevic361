@@ -12,7 +12,7 @@
     arts:      '🎨',
     shopping:  '🛍️',
     outdoors:  '🏃',
-    community: '📅',
+    community: '📣',
     free:      '🆓'
   };
 
