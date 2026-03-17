@@ -1,34 +1,6 @@
 {
-  "last_updated": "2026-03-16T22:30:09-05:00",
+  "last_updated": "2026-03-17T11:44:03-05:00",
   "events": [
-    {
-      "date": "2026-03-16",
-      "name": "Lego Lab: Spring Break",
-      "time": "10:30 AM \u2013 11:30 AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3698"
-    },
-    {
-      "date": "2026-03-16",
-      "name": "Learning Lab: Electrostatic Force",
-      "time": "3:30 PM \u2013 4:30 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3699"
-    },
     {
       "date": "2026-03-17",
       "name": "St Patty's Day Party",
@@ -257,21 +229,6 @@
       "url": "https://aerocrafters.pub"
     },
     {
-      "date": "2026-03-20",
-      "name": "Passive Program: Library Scavenger Hunt",
-      "time": "9:00 AM - 6:00 PM",
-      "venue": "Victoria Public Library",
-      "address": "",
-      "description": "Stroll through the library and pick up a scavenger hunt sheet to discover various items in the children's section.",
-      "icons": [
-        "family",
-        "outdoors",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/calendar.aspx"
-    },
-    {
       "date": "2026-03-21",
       "name": "Live Band Karaoke",
       "time": "",
@@ -298,32 +255,6 @@
       ],
       "free": true,
       "url": "https://www.victoriapubliclibrary.org"
-    },
-    {
-      "date": "2026-03-21",
-      "name": "Will Overman Concert",
-      "time": "7:00 PM",
-      "venue": "Weaver House Concert",
-      "address": "",
-      "description": "Live concert featuring Will Overman.",
-      "icons": [
-        "music"
-      ],
-      "free": false,
-      "url": "https://evvntly.com/event/ev-157638da1a452ce976a22bfca"
-    },
-    {
-      "date": "2026-03-21",
-      "name": "Will Overman",
-      "time": "7:00 PM",
-      "venue": "Weaver House Concert",
-      "address": "",
-      "description": "Live music concert by Will Overman at Weaver House Concert in Victoria, TX.",
-      "icons": [
-        "music"
-      ],
-      "free": false,
-      "url": "https://evvntly.com/event/ev-157638da1a452ce976a22bfca"
     },
     {
       "date": "2026-03-21",
@@ -381,46 +312,6 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3535"
-    },
-    {
-      "date": "2026-03-24",
-      "name": "March VPEN Business Meeting",
-      "time": "11:15 AM",
-      "venue": "Victoria Country Club, 14 Spring Creek Road",
-      "address": "",
-      "description": "Monthly business meeting of VPEN.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.eventbrite.com/d/tx--victoria/events/"
-    },
-    {
-      "date": "2026-03-24",
-      "name": "Arthritis Seminar",
-      "time": "1:00 PM",
-      "venue": "DeTar Hospital Navarro",
-      "address": "",
-      "description": "Seminar providing information on arthritis.",
-      "icons": [
-        "arts",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.eventbrite.com/d/tx--victoria/events/"
-    },
-    {
-      "date": "2026-03-24",
-      "name": "Victoria TX \"Midgets With Attitude\" @ Midget Mayhem Wrestling (21+)",
-      "time": "8:00 PM",
-      "venue": "The Hideaway",
-      "address": "",
-      "description": "Midget Mayhem Wrestling event",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.eventbrite.com/d/tx--victoria/events--this-month/"
     }
   ],
   "new_and_notable": [
