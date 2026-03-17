@@ -679,7 +679,11 @@
 
 @media (max-width: 639px) {
   .header-inner {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+  }
+  .header-actions {
+    margin-left: auto;
+    flex-shrink: 0;
   }
   .desktop-submit {
     display: none;
