@@ -223,13 +223,18 @@
           }) + ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
         }
 
-        // Build 7 days starting from today
+        // Build Mon–Sun of the current week
         var today = new Date();
         today.setHours(0, 0, 0, 0);
+        var dayOfWeek = today.getDay(); // 0=Sun, 1=Mon … 6=Sat
+        var daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        var monday = new Date(today);
+        monday.setDate(today.getDate() - daysFromMonday);
+
         var days = [];
         for (var i = 0; i < 7; i++) {
-          var d = new Date(today);
-          d.setDate(today.getDate() + i);
+          var d = new Date(monday);
+          d.setDate(monday.getDate() + i);
           days.push(d);
         }
 
@@ -238,6 +243,31 @@
         }).join('');
 
         container.innerHTML = html;
+
+        // ─── SKIP TO TODAY BUTTON ───
+        var todayStr = toLocalDateStr(new Date());
+        var todayIdx = -1;
+        days.forEach(function (d, i) {
+          if (toLocalDateStr(d) === todayStr) todayIdx = i;
+        });
+        // Show button whenever today isn't Monday (idx 0)
+        if (todayIdx > 0) {
+          var skipBar = document.getElementById('skip-today-bar');
+          if (skipBar) {
+            var btn = document.createElement('button');
+            btn.className = 'btn btn--primary skip-today-btn';
+            btn.textContent = '↓ Skip to Today';
+            btn.addEventListener('click', function () {
+              var sec = document.getElementById('day-' + todayIdx);
+              if (sec) {
+                var offset = sec.getBoundingClientRect().top + window.pageYOffset - 80;
+                window.scrollTo({ top: offset, behavior: 'smooth' });
+              }
+            });
+            skipBar.appendChild(btn);
+            skipBar.style.display = 'block';
+          }
+        }
 
         // New & Notable
         if (notableList) {
