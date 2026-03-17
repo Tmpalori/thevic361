@@ -98,7 +98,7 @@
       }
     }
 
-    var freeBadge = ev.free ? ' <span class="badge badge--free">FREE</span>' : '';
+    var freeBadge = '';
 
     var descHtml = ev.description
       ? '<div class="event-desc">' + escHtml(ev.description) + '</div>'
