@@ -2,6 +2,34 @@
   "last_updated": "2026-03-17T11:44:03-05:00",
   "events": [
     {
+      "date": "2026-03-16",
+      "name": "Lego Lab: Spring Break",
+      "time": "10:30 AM \u2013 11:30 AM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main Street",
+      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
+      "icons": [
+        "family",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3698"
+    },
+    {
+      "date": "2026-03-16",
+      "name": "Learning Lab: Electrostatic Force",
+      "time": "3:30 PM \u2013 4:30 PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main Street",
+      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
+      "icons": [
+        "family",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3699"
+    },
+    {
       "date": "2026-03-17",
       "name": "St Patty's Day Party",
       "time": "",
