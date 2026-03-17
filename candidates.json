@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-03-16T19:02:30-05:00",
+  "last_updated": "2026-03-16T20:35:11-05:00",
   "events": [
     {
       "date": "2026-03-16",
@@ -86,6 +86,45 @@
       "url": "https://www.victoriapubliclibrary.org"
     },
     {
+      "date": "2026-03-17",
+      "name": "Victoria TX \"Midgets With Attitude\" @ Midget Mayhem Wrestling (21+)",
+      "time": "8:00 PM",
+      "venue": "The Hideaway",
+      "address": "",
+      "description": "Midget Mayhem Wrestling event featuring 'Midgets With Attitude' for ages 21+.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.eventbrite.com/d/tx--victoria/events--this-month/"
+    },
+    {
+      "date": "2026-03-18",
+      "name": "From Idea to Impact: Women Entrepreneurs of the Crossroads",
+      "time": "11:15 AM",
+      "venue": "Victoria Professional Express Network (VPEN)",
+      "address": "Victoria, TX",
+      "description": "Panel of local business owners sharing entrepreneurial journeys. Hosted by VPEN.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": ""
+    },
+    {
+      "date": "2026-03-18",
+      "name": "March VPEN Business Meeting",
+      "time": "11:15 AM",
+      "venue": "Victoria Country Club, 14 Spring Creek Road, Victoria, TX, USA",
+      "address": "",
+      "description": "VPEN business meeting held at Victoria Country Club.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.unation.com/event/march-vpen-business-meeting-64498360/"
+    },
+    {
       "date": "2026-03-18",
       "name": "No Pressure Book Club",
       "time": "6:00 PM \u2013 7:00 PM",
@@ -128,6 +167,19 @@
       ],
       "free": true,
       "url": "https://www.facebook.com/VictoriaFarmersMarket"
+    },
+    {
+      "date": "2026-03-19",
+      "name": "Powerful Voices Open Mic Show - Live Music, Comedy, Poetry+ More!",
+      "time": "",
+      "venue": "Victoria, TX 77901",
+      "address": "",
+      "description": "Join for great vibes and a fun night celebrating talented individuals through music, comedy, poetry, and more.",
+      "icons": [
+        "music"
+      ],
+      "free": false,
+      "url": "https://www.eventbrite.com/e/powerful-voices-open-mic-show-live-music-comedy-poetry-more-tickets-1975575856568"
     },
     {
       "date": "2026-03-19",
@@ -288,6 +340,19 @@
     },
     {
       "date": "2026-03-21",
+      "name": "Will Overman Concert",
+      "time": "7:00 PM",
+      "venue": "Weaver House Concert",
+      "address": "",
+      "description": "Live music performance by Will Overman.",
+      "icons": [
+        "music"
+      ],
+      "free": false,
+      "url": "https://evvntly.com/event/ev-157638da1a452ce976a22bfca"
+    },
+    {
+      "date": "2026-03-21",
       "name": "Live Music at Aero Crafters",
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
@@ -342,19 +407,6 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3535"
-    },
-    {
-      "date": "2026-03-24",
-      "name": "Victoria TX \"Midgets With Attitude\" @ Midget Mayhem Wrestling (21+)",
-      "time": "8:00 PM",
-      "venue": "The Hideaway",
-      "address": "",
-      "description": "Midget Mayhem Wrestling event featuring 'Midgets With Attitude' for ages 21 and over.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/TheHideawayVictoriaTX"
     }
   ]
 }

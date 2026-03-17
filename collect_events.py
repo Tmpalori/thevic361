@@ -575,6 +575,56 @@ def fetch_library_events(days_ahead=7):
     return events
 
 
+# ─── SOURCE: VTX ART WALK ────────────────────────────────────────────────────
+
+def fetch_vtx_artwalk(days_ahead=8):
+    """Scrape next event date from vtxartwalk.com."""
+    events = []
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days_ahead)
+
+    try:
+        url = "https://vtxartwalk.com/"
+        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        resp.raise_for_status()
+        text = resp.text
+
+        # Look for "Next Art Walk Event Month D, YYYY" pattern
+        match = re.search(
+            r'Next Art Walk Event\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})',
+            text, re.IGNORECASE
+        )
+        if match:
+            try:
+                ev_date = datetime.strptime(
+                    f"{match.group(1)} {match.group(2)} {match.group(3)}", "%B %d %Y"
+                ).date()
+                if today <= ev_date <= end_date:
+                    events.append({
+                        "date": ev_date.strftime("%Y-%m-%d"),
+                        "name": "VTX Art & Music Walk",
+                        "time": "4:00 PM – 8:00 PM",
+                        "venue": "Downtown Victoria",
+                        "address": "Main St, Victoria, TX",
+                        "description": "Quarterly art walk through downtown Victoria — local galleries, live music, artists, and food.",
+                        "icons": classify_icons("art music walk", "galleries artists", "downtown"),
+                        "free": True,
+                        "url": url,
+                    })
+                    print(f"  [VTX Art Walk] Next event: {ev_date}")
+                else:
+                    print(f"  [VTX Art Walk] Next event {ev_date} outside window")
+            except ValueError:
+                pass
+        else:
+            print(f"  [VTX Art Walk] No upcoming date found")
+
+    except Exception as e:
+        print(f"  [VTX Art Walk] Error: {e}")
+
+    return events
+
+
 # ─── SOURCE: MOONSHINE DRINKERY ─────────────────────────────────────────────
 
 def fetch_moonshine_events(days_ahead=8):
@@ -988,6 +1038,7 @@ def main():
         all_events.extend(fetch_chamber_events(args.days))
         all_events.extend(fetch_library_events(args.days))
         all_events.extend(fetch_moonshine_events(args.days))
+        all_events.extend(fetch_vtx_artwalk(args.days))
 
     # 4. Perplexity AI discovery
     if not args.skip_ai:
