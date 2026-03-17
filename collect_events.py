@@ -694,12 +694,16 @@ def fetch_perplexity_events(days_ahead=8):
 
     # Targeted queries — each forces Perplexity to dig into a specific source
     queries = [
-        f'What events are happening at Aero Crafters in Victoria TX from {date_range_str}? Include live music nights, open mics, and any special events.',
-        f'What events are at Moonshine Drinkery, The Hideaway, and Froggy\'s Grub & Pub in Victoria TX from {date_range_str}?',
-        f'Search Eventbrite for events in Victoria Texas 77901 from {date_range_str}.',
-        f'What community events, festivals, fundraisers, and public gatherings are happening in Victoria Texas from {date_range_str}? Check the Victoria Advocate, local news sites, and community Facebook groups.',
-        f'What fitness, sports, outdoor, or recreation events are happening in Victoria TX from {date_range_str}? Include yoga, 5Ks, park events, and recreation center activities.',
-        f'What restaurant specials, trivia nights, happy hours, karaoke, and bar events are happening in Victoria TX from {date_range_str}?',
+        f'What events are happening at Aero Crafters (aerocrafters.pub) in Victoria TX from {date_range_str}? Include live music, open mics, special events, and anything posted on their Facebook or Instagram.',
+        f'What events are at Moonshine Drinkery, The Hideaway, and Froggy\'s Grub & Pub in Victoria TX from {date_range_str}? Check their websites, Facebook pages, and Instagram accounts.',
+        f'Search Eventbrite for events in Victoria Texas 77901 from {date_range_str}. Include all categories.',
+        f'What community events, festivals, fundraisers, galas, and public gatherings are happening in Victoria Texas from {date_range_str}? Check the Victoria Advocate (victoriaadvocate.com), local nonprofits, churches, and civic groups.',
+        f'What fitness, sports, outdoor, or recreation events are happening in Victoria TX from {date_range_str}? Include yoga classes, 5K runs, park events, CrossFit competitions, and Victoria Parks & Rec activities.',
+        f'What trivia nights, karaoke nights, open mic nights, and weekly bar events are happening at bars and restaurants in Victoria TX from {date_range_str}? Check Facebook events and venue Instagram pages.',
+        f'What live music concerts and shows are happening in Victoria TX from {date_range_str}? Search Weaver House Concerts, Aero Crafters, local venues, and any ticketed music events.',
+        f'What family events, kids activities, school events, and youth activities are happening in Victoria TX from {date_range_str}? Include VISD events, church activities, and family-friendly outings.',
+        f'What arts, theater, gallery openings, and cultural events are happening in Victoria TX from {date_range_str}? Check Victoria Fine Arts Center, Nave Museum, Museum of the Coastal Bend, and local galleries.',
+        f'What new restaurant openings, food events, pop-up markets, food truck rallies, and local dining specials are happening in Victoria TX from {date_range_str}?',
     ]
 
     json_instruction = f"""
