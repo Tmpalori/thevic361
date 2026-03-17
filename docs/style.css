@@ -362,10 +362,13 @@
 
 .event-icons {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-1);
-  font-size: 1.1rem;
+  font-size: 1rem;
   flex-shrink: 0;
   padding-top: 0.15em;
+  width: 3.5rem;
+  align-content: flex-start;
 }
 
 .event-details {
