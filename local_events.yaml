@@ -43,6 +43,7 @@ recurring:
     icons: [outdoors, free]
     free: true
     url: ""
+    # ⚠️ UNVERIFIED — no source URL. Confirm before Sunday.
 
   # ── FRIDAY ──────────────────────────────────────────────────────────────
 
@@ -55,6 +56,7 @@ recurring:
     icons: [music, drinks]
     free: false
     url: "https://aerocrafters.pub"
+    # ⚠️ UNVERIFIED — assumes every Friday. Confirm weekly via Facebook relay.
 
 
 
@@ -79,6 +81,7 @@ recurring:
     icons: [family, free]
     free: true
     url: ""
+    # ⚠️ UNVERIFIED — no source URL. Confirm with library.
 
   - name: "Live Music at Aero Crafters"
     day: saturday
@@ -89,6 +92,7 @@ recurring:
     icons: [music, drinks]
     free: false
     url: "https://aerocrafters.pub"
+    # ⚠️ UNVERIFIED — assumes every Saturday. Confirm weekly via Facebook relay.
 
 
 
@@ -145,6 +149,7 @@ events:
     icons: [arts]
     free: false
     url: ""
+    # ⚠️ UNVERIFIED — no source URL.
 
   - date: "2026-04-23"
     name: "Hot Rod Tour of Texas Kick-Off Party"
@@ -155,6 +160,7 @@ events:
     icons: [community, food, music]
     free: true
     url: ""
+    # ⚠️ UNVERIFIED — no source URL.
 
   - date: "2026-05-02"
     name: "Shine the Light on Mental Health Walk"
@@ -175,6 +181,7 @@ events:
     icons: [music, food, drinks]
     free: false
     url: ""
+    # ⚠️ UNVERIFIED — no source URL.
 
   - date: "2026-05-23"
     name: "Memorial Weekend Bash — Day 2"
@@ -185,6 +192,7 @@ events:
     icons: [music, food, drinks]
     free: false
     url: ""
+    # ⚠️ UNVERIFIED — no source URL.
 
   - date: "2026-05-24"
     name: "Memorial Weekend Bash — Day 3"
@@ -195,3 +203,4 @@ events:
     icons: [music, food, drinks]
     free: false
     url: ""
+    # ⚠️ UNVERIFIED — no source URL.
