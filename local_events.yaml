@@ -56,6 +56,16 @@ recurring:
     free: false
     url: "https://aerocrafters.pub"
 
+  - name: "Live Music at J Welch Farms"
+    day: friday
+    time: "7:00 PM – 10:00 PM"
+    venue: "J Welch Farms"
+    address: "111 Ripple Rd, Victoria, TX"
+    description: "Live music at J Welch Farms winery and restaurant. Good food, local wine, and great vibes."
+    icons: [music, food, drinks]
+    free: false
+    url: "https://jwelchfarms.com/events/"
+
   # ── SATURDAY ────────────────────────────────────────────────────────────
 
   - name: "Victoria Farmers' Market"
@@ -87,6 +97,16 @@ recurring:
     icons: [music, drinks]
     free: false
     url: "https://aerocrafters.pub"
+
+  - name: "Live Music at J Welch Farms"
+    day: saturday
+    time: "7:00 PM – 10:00 PM"
+    venue: "J Welch Farms"
+    address: "111 Ripple Rd, Victoria, TX"
+    description: "Live music at J Welch Farms winery and restaurant. Good food, local wine, and great vibes."
+    icons: [music, food, drinks]
+    free: false
+    url: "https://jwelchfarms.com/events/"
 
 
 # ─── ONE-TIME EVENTS ─────────────────────────────────────────────────────────

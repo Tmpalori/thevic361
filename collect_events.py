@@ -36,7 +36,7 @@ import yaml
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 HEADERS = {
-    "User-Agent": "TheVic361-EventCollector/1.0 (community events board; Victoria TX)"
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 TIMEOUT = 15
 
@@ -54,6 +54,9 @@ VENUE_URLS = {
     "nave museum": "https://www.navemuseum.com",
     "leo j. welder center": "https://www.victoriapubliclibrary.org",
     "the hideaway": "https://www.facebook.com/TheHideawayVictoriaTX",
+    "j welch farms": "https://jwelchfarms.com/events/",
+    "theatre victoria": "https://theatrevictoria.org",
+    "riverside stadium": "https://victoriagenerals.com",
     "froggy's grub & pub": "https://froggysgrubandpub.com",
     "weaver house concert": "https://www.weaverhouseconcerts.com",
     "detar hospital": "https://www.detar.com",
@@ -1008,6 +1011,279 @@ def fetch_google_sheet_events(days_ahead=7):
     return events
 
 
+# ─── SOURCE: J WELCH FARMS ───────────────────────────────────────────────────
+
+def fetch_jwelch_events(days_ahead=7):
+    """Scrape events from J Welch Farms WordPress event calendar.
+    Their CMS publishes recurring events with stale base dates but correct
+    recurrence, so we check each week in the window via tribe-bar-date param.
+    """
+    events = []
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days_ahead)
+    seen_keys = set()
+
+    # Check multiple week windows to catch all events in range
+    check_dates = []
+    cur = today
+    while cur <= end_date:
+        check_dates.append(cur.strftime("%Y-%m-%d"))
+        cur += timedelta(days=7)
+
+    for check_date in check_dates:
+        try:
+            url = f"https://jwelchfarms.com/events/list/?tribe-bar-date={check_date}"
+            resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            for article in soup.select(".tribe-events-calendar-list__event"):
+                title_el = article.select_one(".tribe-events-calendar-list__event-title a, h2 a, h3 a")
+                if not title_el:
+                    continue
+                title = title_el.get_text(strip=True)
+                event_url = title_el.get("href", "https://jwelchfarms.com/events/")
+
+                time_el = article.select_one("time[datetime]")
+                if not time_el:
+                    continue
+                raw_date = time_el.get("datetime", "")
+                if not raw_date:
+                    continue
+                try:
+                    dt = datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
+                except ValueError:
+                    continue
+
+                if not (today <= dt <= end_date):
+                    continue
+
+                event_date = dt.strftime("%Y-%m-%d")
+                key = (title, event_date)
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+
+                # Time string
+                start_el = article.select_one(".tribe-event-date-start")
+                end_el = article.select_one(".tribe-event-time")
+                time_str = ""
+                if start_el:
+                    m = re.search(r'(\d{1,2}:\d{2}\s*(?:am|pm))', start_el.get_text(), re.I)
+                    if m:
+                        time_str = m.group(1).upper()
+                if end_el and time_str:
+                    m2 = re.search(r'(\d{1,2}:\d{2}\s*(?:am|pm))', end_el.get_text(), re.I)
+                    if m2:
+                        time_str += " – " + m2.group(1).upper()
+
+                desc_el = article.select_one(".tribe-events-calendar-list__event-description, .tribe-excerpt")
+                desc = desc_el.get_text(strip=True)[:150] if desc_el else "Live music, food, and good times at J Welch Farms."
+
+                events.append({
+                    "date": event_date,
+                    "name": title,
+                    "time": time_str,
+                    "venue": "J Welch Farms",
+                    "address": "111 Ripple Rd, Victoria, TX",
+                    "description": desc,
+                    "icons": classify_icons(title, desc, "J Welch Farms"),
+                    "free": guess_free(title, desc, ""),
+                    "url": event_url,
+                })
+
+        except Exception as e:
+            print(f"  [J Welch Farms] Error on {check_date}: {e}")
+
+    print(f"  [J Welch Farms] {len(events)} events")
+    return events
+
+
+# ─── SOURCE: THEATRE VICTORIA ─────────────────────────────────────────────────
+
+def fetch_theatre_victoria_events(days_ahead=7):
+    """Scrape show listings from Theatre Victoria."""
+    events = []
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days_ahead)
+
+    try:
+        url = "https://theatrevictoria.org"
+        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        page_text = soup.get_text(" ", strip=True)
+
+        # Find all date ranges like "April 23-26, 2026" or "July 24-26, ..."
+        pattern = re.compile(
+            r'(January|February|March|April|May|June|July|August|September|October|November|December)'
+            r'\s+(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?,?\s+(\d{4})'
+        )
+
+        # Also grab show titles nearby
+        show_blocks = soup.select("section, article, .show, .production, [class*='season'], h2, h3, h4, p")
+
+        text_blocks = soup.get_text("\n").split("\n")
+        text_blocks = [b.strip() for b in text_blocks if b.strip()]
+
+        skip_words = ["season", "directed", "screenplay", "songs by", "based on",
+                      "by william", "betty", "nacio", "arthur", "newsletter", "donate",
+                      "volunteer", "contact", "tickets", "audition", "about", "box office"]
+
+        i = 0
+        while i < len(text_blocks):
+            block = text_blocks[i]
+            m = pattern.search(block)
+            if m:
+                month, day_start, day_end, year = m.group(1), m.group(2), m.group(3), m.group(4)
+                # Look backwards for title — skip author/credit lines, find a clean show name
+                title = ""
+                for j in range(max(0, i-8), i):
+                    candidate = text_blocks[j]
+                    if (candidate and len(candidate) > 3
+                            and not re.search(r'\d{4}', candidate)
+                            and not any(w in candidate.lower() for w in skip_words)
+                            and not candidate.startswith("By ")
+                            and not candidate.startswith("Directed")
+                            and not candidate.startswith("Screenplay")
+                            and not candidate.startswith("Songs")):
+                        title = candidate
+
+                # Also check lines immediately after the date for the title
+                if not title or any(w in title.lower() for w in ["sign up", "newsletter", "our"]):
+                    for j in range(i+1, min(len(text_blocks), i+5)):
+                        candidate = text_blocks[j]
+                        if (candidate and len(candidate) > 3
+                                and not re.search(r'\d{4}', candidate)
+                                and not any(w in candidate.lower() for w in skip_words)
+                                and not candidate.startswith("By ")
+                                and not candidate.startswith("Directed")):
+                            title = candidate
+                            break
+
+                if not title or len(title) < 3:
+                    i += 1
+                    continue
+
+                # Expand date range — add each date in range
+                try:
+                    start_dt = datetime.strptime(f"{month} {day_start} {year}", "%B %d %Y").date()
+                    end_dt = datetime.strptime(f"{month} {day_end or day_start} {year}", "%B %d %Y").date()
+                    cur = start_dt
+                    while cur <= end_dt:
+                        if today <= cur <= end_date:
+                            events.append({
+                                "date": cur.strftime("%Y-%m-%d"),
+                                "name": title,
+                                "time": "7:30 PM",
+                                "venue": "Theatre Victoria",
+                                "address": "203 E. Constitution St, Victoria, TX",
+                                "description": f"Live theatre performance. {title} — presented by Theatre Victoria.",
+                                "icons": classify_icons(title, "", "Theatre Victoria"),
+                                "free": False,
+                                "url": "https://theatrevictoria.org",
+                            })
+                        cur += timedelta(days=1)
+                except ValueError:
+                    pass
+            i += 1
+
+        # Deduplicate by name+date
+        seen = {}
+        for ev in events:
+            k = (ev["name"], ev["date"])
+            if k not in seen:
+                seen[k] = ev
+        events = list(seen.values())
+        print(f"  [Theatre Victoria] {len(events)} events")
+
+    except Exception as e:
+        print(f"  [Theatre Victoria] Error: {e}")
+
+    return events
+
+
+# ─── SOURCE: VICTORIA GENERALS ────────────────────────────────────────────────
+
+def fetch_generals_events(days_ahead=7):
+    """Scrape home game schedule from Victoria Generals website."""
+    events = []
+    today = datetime.now().date()
+    end_date = today + timedelta(days=days_ahead)
+
+    try:
+        url = "https://victoriagenerals.com/schedule/games/"
+        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        page_text = soup.get_text(" ", strip=True)
+
+        # Look for date patterns + home game indicator
+        # Schedule page uses patterns like "June 3" with team names
+        month_pattern = re.compile(
+            r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})'
+        )
+        year = today.year
+
+        lines = soup.get_text("\n").split("\n")
+        lines = [l.strip() for l in lines if l.strip()]
+
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            m = month_pattern.search(line)
+            if m:
+                month, day = m.group(1), m.group(2)
+                try:
+                    dt = datetime.strptime(f"{month} {day} {year}", "%B %d %Y").date()
+                    if dt < today:
+                        dt = datetime.strptime(f"{month} {day} {year+1}", "%B %d %Y").date()
+
+                    if today <= dt <= end_date:
+                        # Check if it's a home game (no "@" before team name)
+                        context = " ".join(lines[max(0,i-1):i+3])
+                        is_home = "@ " not in context[:20] and "@\n" not in context[:20]
+                        # Extract opponent
+                        opponent = ""
+                        for l in lines[i:i+3]:
+                            if any(team in l for team in ["Bombers","Cane Cutters","Rougarou","Ducks","Generals","Oilers","Bats","Lizards"]):
+                                opponent = l.strip()
+                                break
+                        # Time
+                        time_m = re.search(r'(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))', context)
+                        time_str = time_m.group(1) if time_m else "7:05 PM"
+
+                        if is_home or not opponent:
+                            events.append({
+                                "date": dt.strftime("%Y-%m-%d"),
+                                "name": f"Victoria Generals Baseball" + (f" vs {opponent}" if opponent else " — Home Game"),
+                                "time": time_str,
+                                "venue": "Riverside Stadium",
+                                "address": "1307 E. Rio Grande St, Victoria, TX",
+                                "description": "Summer collegiate baseball. Family-friendly, affordable tickets. Theme nights and giveaways.",
+                                "icons": classify_icons("baseball game family", "", "Riverside Stadium"),
+                                "free": False,
+                                "url": "https://victoriagenerals.com",
+                            })
+                except ValueError:
+                    pass
+            i += 1
+
+        # Deduplicate
+        seen = {}
+        for ev in events:
+            k = (ev["date"], ev["name"])
+            if k not in seen:
+                seen[k] = ev
+        events = list(seen.values())
+        print(f"  [Victoria Generals] {len(events)} home games")
+
+    except Exception as e:
+        print(f"  [Victoria Generals] Error: {e}")
+
+    return events
+
+
 # ─── MAIN ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -1043,6 +1319,9 @@ def main():
         all_events.extend(fetch_library_events(args.days))
         all_events.extend(fetch_moonshine_events(args.days))
         all_events.extend(fetch_vtx_artwalk(args.days))
+        all_events.extend(fetch_jwelch_events(args.days))
+        all_events.extend(fetch_theatre_victoria_events(args.days))
+        all_events.extend(fetch_generals_events(args.days))
 
     # 4. Perplexity AI discovery
     if not args.skip_ai:
