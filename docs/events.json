@@ -1,105 +1,48 @@
 {
-  "last_updated": "2026-03-19T11:37:10-05:00",
+  "last_updated": "2026-03-20T11:32:55-05:00",
   "events": [
-    {
-      "date": "2026-03-19",
-      "name": "Family Story Time: Spring Break & Water",
-      "time": "10:30 AM \u2013 11:30 AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St",
-      "description": "DescriptionJoin us for our Family Story Time for all of our friends from New Born to School Age. This is a great way to get the whole family to join i",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://business.victoriachamber.org/events/details/family-story-time-spring-break-water-4368"
-    },
-    {
-      "date": "2026-03-19",
-      "name": "Midcoast: Spring Break Safety",
-      "time": "2:00 PM \u2013 3:00 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St",
-      "description": "DescriptionLearn tips and tricks for Spring Break Safety for all ages. We will talk about essential tips for parents,  reminders to check the weather,",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://business.victoriachamber.org/events/details/midcoast-spring-break-safety-4369"
-    },
-    {
-      "date": "2026-03-19",
-      "name": "Yarn Craft Club",
-      "time": "4:00 PM \u2013 5:00 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Arts event at Victoria Public Library. Open to the public.",
-      "icons": [
-        "arts",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3713"
-    },
-    {
-      "date": "2026-03-19",
-      "name": "Story Strolls \u2014 Audiobook Walking Group",
-      "time": "5:30 PM \u2013 6:30 PM",
-      "venue": "Riverside Park",
-      "address": "405 Memorial Drive",
-      "description": "Listen. Walk. Repeat. Join the audiobook walking group along the Guadalupe River.",
-      "icons": [
-        "outdoors",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
-    },
     {
       "date": "2026-03-20",
       "name": "Fun Friday - DIY Ouch Pouch",
       "time": "10:00 AM \u2013 11:00 AM",
       "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
+      "address": "302 N. Main St",
+      "description": "DescriptionJoin us for a fun creative or physical activity every Friday morning from 10 to 11am. We'll be offering a different activity each week, fro",
       "icons": [
         "family",
         "free"
       ],
       "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3714"
+      "url": "https://business.victoriachamber.org/events/details/fun-friday-diy-ouch-pouch-4372"
     },
     {
       "date": "2026-03-20",
       "name": "DiscoverU: Teen Tech - DIY Balloon Dog",
       "time": "1:30 PM \u2013 2:30 PM",
       "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
+      "address": "302 N. Main St",
+      "description": "DescriptionJoin us for a delightful and creative session where you can make your very own balloon dog keychain!",
       "icons": [
         "family",
         "free"
       ],
       "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3704"
+      "url": "https://business.victoriachamber.org/events/details/discoveru-teen-tech-diy-balloon-dog-4373"
     },
     {
       "date": "2026-03-20",
       "name": "K-Pop Social",
       "time": "6:00 PM \u2013 7:30 PM",
       "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Live music in Victoria. Check the venue for lineup details.",
+      "address": "302 N. Main St",
+      "description": "DescriptionJoin us as we celebrate the ever growing popular genre K-POP! We will be listening to all your favorite groups, decorating photocards, phon",
       "icons": [
         "music",
         "community",
         "free"
       ],
       "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3715"
+      "url": "https://business.victoriachamber.org/events/details/k-pop-social-03-20-2026-4374"
     },
     {
       "date": "2026-03-20",
@@ -191,14 +134,14 @@
       "name": "Baby Hour: Pages to Play",
       "time": "10:00 AM \u2013 11:00 AM",
       "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Community event open to the public.",
+      "address": "302 N. Main St",
+      "description": "DescriptionDesigned for babies aged 18 months and under, this program is a wonderful way to ignite your child's passion for reading! Following the rea",
       "icons": [
         "community",
         "free"
       ],
       "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3535"
+      "url": "https://business.victoriachamber.org/events/details/baby-hour-pages-to-play-03-24-2026-4376"
     },
     {
       "date": "2026-03-25",
@@ -263,14 +206,57 @@
       "name": "Toddler Story Time",
       "time": "9:30 AM \u2013 10:00 AM",
       "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
+      "address": "302 N. Main St",
+      "description": "DescriptionToddler Time is for our Toddlers on the go! Your Toddler will enjoy high paced songs & rhymes to help gain use of various fine motor skills",
       "icons": [
         "family",
         "free"
       ],
       "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3577"
+      "url": "https://business.victoriachamber.org/events/details/toddler-story-time-03-26-2026-4377"
+    },
+    {
+      "date": "2026-03-27",
+      "name": "Fun Friday - Sock Bunny",
+      "time": "10:00 AM \u2013 11:00 AM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St",
+      "description": "DescriptionJoin us for a fun creative or physical activity every Friday morning from 10 to 11am. We'll be offering a different activity each week, fro",
+      "icons": [
+        "family",
+        "free"
+      ],
+      "free": true,
+      "url": "https://business.victoriachamber.org/events/details/fun-friday-sock-bunny-4379"
+    },
+    {
+      "date": "2026-03-27",
+      "name": "Adult-ish Book Club",
+      "time": "6:00 PM \u2013 7:00 PM",
+      "venue": "Gardenhouse Coffee and Espresso Bar",
+      "address": "1908 N Laurent St",
+      "description": "Gardenhouse Coffee and Espresso Bar",
+      "icons": [
+        "drinks",
+        "outdoors",
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3718"
+    },
+    {
+      "date": "2026-03-27",
+      "name": "Live Music at Aero Crafters",
+      "time": "7:00 PM \u2013 10:00 PM",
+      "venue": "Aero Crafters",
+      "address": "309 E. Crestwood Dr.",
+      "description": "Live bands and solo artists every Friday night. Check their Facebook for this week's lineup.",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://aerocrafters.pub"
     }
   ],
   "new_and_notable": [
