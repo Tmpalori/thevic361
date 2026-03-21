@@ -1,63 +1,6 @@
 {
-  "last_updated": "2026-03-20T11:32:55-05:00",
+  "last_updated": "2026-03-21T11:24:42-05:00",
   "events": [
-    {
-      "date": "2026-03-20",
-      "name": "Fun Friday - DIY Ouch Pouch",
-      "time": "10:00 AM \u2013 11:00 AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St",
-      "description": "DescriptionJoin us for a fun creative or physical activity every Friday morning from 10 to 11am. We'll be offering a different activity each week, fro",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://business.victoriachamber.org/events/details/fun-friday-diy-ouch-pouch-4372"
-    },
-    {
-      "date": "2026-03-20",
-      "name": "DiscoverU: Teen Tech - DIY Balloon Dog",
-      "time": "1:30 PM \u2013 2:30 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St",
-      "description": "DescriptionJoin us for a delightful and creative session where you can make your very own balloon dog keychain!",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://business.victoriachamber.org/events/details/discoveru-teen-tech-diy-balloon-dog-4373"
-    },
-    {
-      "date": "2026-03-20",
-      "name": "K-Pop Social",
-      "time": "6:00 PM \u2013 7:30 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St",
-      "description": "DescriptionJoin us as we celebrate the ever growing popular genre K-POP! We will be listening to all your favorite groups, decorating photocards, phon",
-      "icons": [
-        "music",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://business.victoriachamber.org/events/details/k-pop-social-03-20-2026-4374"
-    },
-    {
-      "date": "2026-03-20",
-      "name": "Live Music at Aero Crafters",
-      "time": "7:00 PM \u2013 10:00 PM",
-      "venue": "Aero Crafters",
-      "address": "309 E. Crestwood Dr.",
-      "description": "Live bands and solo artists every Friday night. Check their Facebook for this week's lineup.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://aerocrafters.pub"
-    },
     {
       "date": "2026-03-21",
       "name": "Live Band Karaoke",
@@ -231,6 +174,20 @@
     },
     {
       "date": "2026-03-27",
+      "name": "Prickly Pear Affair",
+      "time": "6:00 PM \u2013 11:00 PM",
+      "venue": "A&M - Victoria University Northwest",
+      "address": "1604 E. Airline Road",
+      "description": "DescriptionThis South Texas Chic evening offers guests a lively experience with regional cuisine, an open bar, live music, and interactive activities.",
+      "icons": [
+        "music",
+        "shopping"
+      ],
+      "free": false,
+      "url": "https://business.victoriachamber.org/events/details/prickly-pear-affair-4247"
+    },
+    {
+      "date": "2026-03-27",
       "name": "Adult-ish Book Club",
       "time": "6:00 PM \u2013 7:00 PM",
       "venue": "Gardenhouse Coffee and Espresso Bar",
@@ -257,6 +214,49 @@
       ],
       "free": false,
       "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-03-28",
+      "name": "Chess Club",
+      "time": "12:00 PM \u2013 2:30 PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St.",
+      "description": "Casual chess games in the Bronte Room. All levels, all ages welcome.",
+      "icons": [
+        "family",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriapubliclibrary.org"
+    },
+    {
+      "date": "2026-03-28",
+      "name": "Live Music at Aero Crafters",
+      "time": "7:00 PM \u2013 10:00 PM",
+      "venue": "Aero Crafters",
+      "address": "309 E. Crestwood Dr.",
+      "description": "Live bands every Saturday night. Check their Facebook for this week's lineup.",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-03-28",
+      "name": "Victoria Farmers' Market",
+      "time": "9:00 AM \u2013 1:00 PM",
+      "venue": "Victoria Farmers Market",
+      "address": "2805 N. Navarro St.",
+      "description": "Fresh local produce, pastured meats, honey, baked goods. Every Wed & Sat.",
+      "icons": [
+        "food",
+        "shopping",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/VictoriaFarmersMarket"
     }
   ],
   "new_and_notable": [
