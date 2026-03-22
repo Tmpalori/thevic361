@@ -1,63 +1,6 @@
 {
-  "last_updated": "2026-03-21T11:24:42-05:00",
+  "last_updated": "2026-03-22T11:25:13-05:00",
   "events": [
-    {
-      "date": "2026-03-21",
-      "name": "Live Band Karaoke",
-      "time": "",
-      "venue": "Moonshine Drinkery",
-      "address": "103 W. Santa Rosa St.",
-      "description": "Live music in Victoria. Check the venue for lineup details.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.moonshinedrinkery.com"
-    },
-    {
-      "date": "2026-03-21",
-      "name": "Chess Club",
-      "time": "12:00 PM \u2013 2:30 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
-      "description": "Casual chess games in the Bronte Room. All levels, all ages welcome.",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriapubliclibrary.org"
-    },
-    {
-      "date": "2026-03-21",
-      "name": "Live Music at Aero Crafters",
-      "time": "7:00 PM \u2013 10:00 PM",
-      "venue": "Aero Crafters",
-      "address": "309 E. Crestwood Dr.",
-      "description": "Live bands every Saturday night. Check their Facebook for this week's lineup.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://aerocrafters.pub"
-    },
-    {
-      "date": "2026-03-21",
-      "name": "Victoria Farmers' Market",
-      "time": "9:00 AM \u2013 1:00 PM",
-      "venue": "Victoria Farmers Market",
-      "address": "2805 N. Navarro St.",
-      "description": "Fresh local produce, pastured meats, honey, baked goods. Every Wed & Sat.",
-      "icons": [
-        "food",
-        "shopping",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket"
-    },
     {
       "date": "2026-03-22",
       "name": "Sundance Head LIVE",
@@ -71,6 +14,20 @@
       ],
       "free": false,
       "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-03-22",
+      "name": "Skip to main content",
+      "time": "9:00AM \u2013 7:00PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St.",
+      "description": "Community event open to the public.",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriapubliclibrary.org"
     },
     {
       "date": "2026-03-24",
