@@ -1,47 +1,19 @@
 {
-  "last_updated": "2026-03-22T11:25:13-05:00",
+  "last_updated": "2026-03-23T11:44:05-05:00",
   "events": [
     {
-      "date": "2026-03-22",
-      "name": "Sundance Head LIVE",
-      "time": "7:00 PM \u2013 10:00 PM",
-      "venue": "Aero Crafters",
-      "address": "309 E. Crestwood Dr.",
-      "description": "The Voice Season 11 winner brings country soul to Aero Crafters.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://aerocrafters.pub"
-    },
-    {
-      "date": "2026-03-22",
-      "name": "Skip to main content",
-      "time": "9:00AM \u2013 7:00PM",
+      "date": "2026-03-24",
+      "name": "Baby Hour: Pages to Play",
+      "time": "10:00 AM \u2013 11:00 AM",
       "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
+      "address": "302 N. Main Street",
       "description": "Community event open to the public.",
       "icons": [
         "community",
         "free"
       ],
       "free": true,
-      "url": "https://www.victoriapubliclibrary.org"
-    },
-    {
-      "date": "2026-03-24",
-      "name": "Baby Hour: Pages to Play",
-      "time": "10:00 AM \u2013 11:00 AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St",
-      "description": "DescriptionDesigned for babies aged 18 months and under, this program is a wonderful way to ignite your child's passion for reading! Following the rea",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://business.victoriachamber.org/events/details/baby-hour-pages-to-play-03-24-2026-4376"
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3535"
     },
     {
       "date": "2026-03-25",
@@ -106,42 +78,28 @@
       "name": "Toddler Story Time",
       "time": "9:30 AM \u2013 10:00 AM",
       "venue": "Victoria Public Library",
-      "address": "302 N. Main St",
-      "description": "DescriptionToddler Time is for our Toddlers on the go! Your Toddler will enjoy high paced songs & rhymes to help gain use of various fine motor skills",
+      "address": "302 N. Main Street",
+      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
       "icons": [
         "family",
         "free"
       ],
       "free": true,
-      "url": "https://business.victoriachamber.org/events/details/toddler-story-time-03-26-2026-4377"
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3577"
     },
     {
       "date": "2026-03-27",
       "name": "Fun Friday - Sock Bunny",
       "time": "10:00 AM \u2013 11:00 AM",
       "venue": "Victoria Public Library",
-      "address": "302 N. Main St",
-      "description": "DescriptionJoin us for a fun creative or physical activity every Friday morning from 10 to 11am. We'll be offering a different activity each week, fro",
+      "address": "302 N. Main Street",
+      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
       "icons": [
         "family",
         "free"
       ],
       "free": true,
-      "url": "https://business.victoriachamber.org/events/details/fun-friday-sock-bunny-4379"
-    },
-    {
-      "date": "2026-03-27",
-      "name": "Prickly Pear Affair",
-      "time": "6:00 PM \u2013 11:00 PM",
-      "venue": "A&M - Victoria University Northwest",
-      "address": "1604 E. Airline Road",
-      "description": "DescriptionThis South Texas Chic evening offers guests a lively experience with regional cuisine, an open bar, live music, and interactive activities.",
-      "icons": [
-        "music",
-        "shopping"
-      ],
-      "free": false,
-      "url": "https://business.victoriachamber.org/events/details/prickly-pear-affair-4247"
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3717"
     },
     {
       "date": "2026-03-27",
@@ -214,6 +172,20 @@
       ],
       "free": true,
       "url": "https://www.facebook.com/VictoriaFarmersMarket"
+    },
+    {
+      "date": "2026-03-30",
+      "name": "True Crime Book Club",
+      "time": "6:00 PM \u2013 7:30 PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St.",
+      "description": "Monthly true crime discussion in the Bronte Room. Grab the book and join the conversation.",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriapubliclibrary.org"
     }
   ],
   "new_and_notable": [
