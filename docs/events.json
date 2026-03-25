@@ -1,20 +1,6 @@
 {
-  "last_updated": "2026-03-24T11:46:41-05:00",
+  "last_updated": "2026-03-25T11:42:45-05:00",
   "events": [
-    {
-      "date": "2026-03-24",
-      "name": "Baby Hour: Pages to Play",
-      "time": "10:00 AM \u2013 11:00 AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St",
-      "description": "DescriptionDesigned for babies aged 18 months and under, this program is a wonderful way to ignite your child's passion for reading! Following the rea",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://business.victoriachamber.org/events/details/baby-hour-pages-to-play-03-24-2026-4376"
-    },
     {
       "date": "2026-03-25",
       "name": "VAMA Rock & Blues Open Mic",
@@ -228,6 +214,36 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3705"
+    },
+    {
+      "date": "2026-04-01",
+      "name": "VAMA Rock & Blues Open Mic",
+      "time": "7:00 PM \u2013 10:00 PM",
+      "venue": "Aero Crafters",
+      "address": "309 E. Crestwood Dr.",
+      "description": "Weekly open mic jam hosted by the Victoria Area Musicians Association. All skill levels welcome.",
+      "icons": [
+        "music",
+        "drinks",
+        "free"
+      ],
+      "free": true,
+      "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-04-01",
+      "name": "Victoria Farmers' Market",
+      "time": "9:00 AM \u2013 1:00 PM",
+      "venue": "Victoria Farmers Market",
+      "address": "2805 N. Navarro St.",
+      "description": "Fresh local produce, pastured meats, honey, baked goods, and more from Victoria's best vendors.",
+      "icons": [
+        "food",
+        "shopping",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/VictoriaFarmersMarket"
     }
   ],
   "new_and_notable": [
