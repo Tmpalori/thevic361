@@ -1,34 +1,6 @@
 {
-  "last_updated": "2026-03-26T11:51:30-05:00",
+  "last_updated": "2026-03-27T11:42:36-05:00",
   "events": [
-    {
-      "date": "2026-03-26",
-      "name": "Story Strolls \u2014 Audiobook Walking Group",
-      "time": "5:30 PM \u2013 6:30 PM",
-      "venue": "Riverside Park",
-      "address": "405 Memorial Drive",
-      "description": "Listen. Walk. Repeat. Join the audiobook walking group along the Guadalupe River.",
-      "icons": [
-        "outdoors",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
-    },
-    {
-      "date": "2026-03-26",
-      "name": "Toddler Story Time",
-      "time": "9:30 AM \u2013 10:00 AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St",
-      "description": "DescriptionToddler Time is for our Toddlers on the go! Your Toddler will enjoy high paced songs & rhymes to help gain use of various fine motor skills",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://business.victoriachamber.org/events/details/toddler-story-time-03-26-2026-4377"
-    },
     {
       "date": "2026-03-27",
       "name": "Fun Friday - Sock Bunny",
@@ -214,6 +186,20 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
+    },
+    {
+      "date": "2026-04-03",
+      "name": "Live Music at Aero Crafters",
+      "time": "7:00 PM \u2013 10:00 PM",
+      "venue": "Aero Crafters",
+      "address": "309 E. Crestwood Dr.",
+      "description": "Live bands and solo artists every Friday night. Check their Facebook for this week's lineup.",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://aerocrafters.pub"
     }
   ],
   "new_and_notable": [
