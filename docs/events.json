@@ -1,63 +1,6 @@
 {
-  "last_updated": "2026-03-27T11:42:36-05:00",
+  "last_updated": "2026-03-28T11:29:33-05:00",
   "events": [
-    {
-      "date": "2026-03-27",
-      "name": "Fun Friday - Sock Bunny",
-      "time": "10:00 AM \u2013 11:00 AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St",
-      "description": "DescriptionJoin us for a fun creative or physical activity every Friday morning from 10 to 11am. We'll be offering a different activity each week, fro",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://business.victoriachamber.org/events/details/fun-friday-sock-bunny-4379"
-    },
-    {
-      "date": "2026-03-27",
-      "name": "Prickly Pear Affair",
-      "time": "6:00 PM \u2013 11:00 PM",
-      "venue": "A&M - Victoria University Northwest",
-      "address": "1604 E. Airline Road",
-      "description": "DescriptionThis South Texas Chic evening offers guests a lively experience with regional cuisine, an open bar, live music, and interactive activities.",
-      "icons": [
-        "music",
-        "shopping"
-      ],
-      "free": false,
-      "url": "https://business.victoriachamber.org/events/details/prickly-pear-affair-4247"
-    },
-    {
-      "date": "2026-03-27",
-      "name": "Adult-ish Book Club",
-      "time": "6:00 PM \u2013 7:00 PM",
-      "venue": "Gardenhouse Coffee and Espresso Bar",
-      "address": "1908 N Laurent St",
-      "description": "Gardenhouse Coffee and Espresso Bar",
-      "icons": [
-        "drinks",
-        "outdoors",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3718"
-    },
-    {
-      "date": "2026-03-27",
-      "name": "Live Music at Aero Crafters",
-      "time": "7:00 PM \u2013 10:00 PM",
-      "venue": "Aero Crafters",
-      "address": "309 E. Crestwood Dr.",
-      "description": "Live bands and solo artists every Friday night. Check their Facebook for this week's lineup.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://aerocrafters.pub"
-    },
     {
       "date": "2026-03-28",
       "name": "Chess Club",
@@ -188,6 +131,34 @@
       "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
     },
     {
+      "date": "2026-04-02",
+      "name": "VPL Talks with Sarah Foerster",
+      "time": "6:00 PM \u2013 7:00 PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main Street",
+      "description": "Community event open to the public.",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3723"
+    },
+    {
+      "date": "2026-04-02",
+      "name": "Sensory Come and Go Event",
+      "time": "9:30 AM \u2013 11:30 AM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main Street",
+      "description": "Community event open to the public.",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3722"
+    },
+    {
       "date": "2026-04-03",
       "name": "Live Music at Aero Crafters",
       "time": "7:00 PM \u2013 10:00 PM",
@@ -200,6 +171,62 @@
       ],
       "free": false,
       "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-04-04",
+      "name": "Delphine\u2019s Dream",
+      "time": "",
+      "venue": "Moonshine Drinkery",
+      "address": "103 W. Santa Rosa St.",
+      "description": "Drinks and good times at Moonshine Drinkery.",
+      "icons": [
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://www.moonshinedrinkery.com"
+    },
+    {
+      "date": "2026-04-04",
+      "name": "Chess Club",
+      "time": "12:00 PM \u2013 2:30 PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St.",
+      "description": "Casual chess games in the Bronte Room. All levels, all ages welcome.",
+      "icons": [
+        "family",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriapubliclibrary.org"
+    },
+    {
+      "date": "2026-04-04",
+      "name": "Live Music at Aero Crafters",
+      "time": "7:00 PM \u2013 10:00 PM",
+      "venue": "Aero Crafters",
+      "address": "309 E. Crestwood Dr.",
+      "description": "Live bands every Saturday night. Check their Facebook for this week's lineup.",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-04-04",
+      "name": "Victoria Farmers' Market",
+      "time": "9:00 AM \u2013 1:00 PM",
+      "venue": "Victoria Farmers Market",
+      "address": "2805 N. Navarro St.",
+      "description": "Fresh local produce, pastured meats, honey, baked goods. Every Wed & Sat.",
+      "icons": [
+        "food",
+        "shopping",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/VictoriaFarmersMarket"
     }
   ],
   "new_and_notable": [
