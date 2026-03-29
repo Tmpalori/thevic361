@@ -1,48 +1,19 @@
 {
-  "last_updated": "2026-03-28T11:29:33-05:00",
+  "last_updated": "2026-03-29T11:30:21-05:00",
   "events": [
     {
-      "date": "2026-03-28",
-      "name": "Chess Club",
-      "time": "12:00 PM \u2013 2:30 PM",
+      "date": "2026-03-29",
+      "name": "Skip to main content",
+      "time": "9:00AM \u2013 7:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Casual chess games in the Bronte Room. All levels, all ages welcome.",
+      "description": "Community event open to the public.",
       "icons": [
-        "family",
+        "community",
         "free"
       ],
       "free": true,
       "url": "https://www.victoriapubliclibrary.org"
-    },
-    {
-      "date": "2026-03-28",
-      "name": "Live Music at Aero Crafters",
-      "time": "7:00 PM \u2013 10:00 PM",
-      "venue": "Aero Crafters",
-      "address": "309 E. Crestwood Dr.",
-      "description": "Live bands every Saturday night. Check their Facebook for this week's lineup.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://aerocrafters.pub"
-    },
-    {
-      "date": "2026-03-28",
-      "name": "Victoria Farmers' Market",
-      "time": "9:00 AM \u2013 1:00 PM",
-      "venue": "Victoria Farmers Market",
-      "address": "2805 N. Navarro St.",
-      "description": "Fresh local produce, pastured meats, honey, baked goods. Every Wed & Sat.",
-      "icons": [
-        "food",
-        "shopping",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket"
     },
     {
       "date": "2026-03-30",
