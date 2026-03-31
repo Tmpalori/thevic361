@@ -1,20 +1,6 @@
 {
-  "last_updated": "2026-03-30T11:54:52-05:00",
+  "last_updated": "2026-03-31T11:51:16-05:00",
   "events": [
-    {
-      "date": "2026-03-30",
-      "name": "True Crime Book Club",
-      "time": "6:00 PM \u2013 7:30 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
-      "description": "Monthly true crime discussion in the Bronte Room. Grab the book and join the conversation.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriapubliclibrary.org"
-    },
     {
       "date": "2026-03-31",
       "name": "Baby Hour: Pages to Play",
@@ -184,6 +170,19 @@
       ],
       "free": true,
       "url": "https://www.facebook.com/VictoriaFarmersMarket"
+    },
+    {
+      "date": "2026-04-07",
+      "name": "Bookish Society Monthly meetup",
+      "time": "6:00 PM \u2013 7:00 PM",
+      "venue": "Vida Cafe",
+      "address": "105 Spring Green Blvd",
+      "description": "Community event open to the public.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3726"
     }
   ],
   "new_and_notable": [
