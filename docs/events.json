@@ -1,48 +1,6 @@
 {
-  "last_updated": "2026-04-02T11:47:00-05:00",
+  "last_updated": "2026-04-03T11:39:23-05:00",
   "events": [
-    {
-      "date": "2026-04-02",
-      "name": "Story Strolls \u2014 Audiobook Walking Group",
-      "time": "5:30 PM \u2013 6:30 PM",
-      "venue": "Riverside Park",
-      "address": "405 Memorial Drive",
-      "description": "Listen. Walk. Repeat. Join the audiobook walking group along the Guadalupe River.",
-      "icons": [
-        "outdoors",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
-    },
-    {
-      "date": "2026-04-02",
-      "name": "VPL Talks with Sarah Foerster",
-      "time": "6:00 PM \u2013 7:00 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Community event open to the public.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3723"
-    },
-    {
-      "date": "2026-04-02",
-      "name": "Sensory Come and Go Event",
-      "time": "9:30 AM \u2013 11:30 AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Community event open to the public.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3722"
-    },
     {
       "date": "2026-04-03",
       "name": "Live Music at Aero Crafters",
@@ -253,6 +211,34 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3579"
+    },
+    {
+      "date": "2026-04-10",
+      "name": "Fun Friday \u2013 Chair Yoga",
+      "time": "10:00 AM \u2013 11:00 AM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main Street",
+      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
+      "icons": [
+        "family",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3729"
+    },
+    {
+      "date": "2026-04-10",
+      "name": "Live Music at Aero Crafters",
+      "time": "7:00 PM \u2013 10:00 PM",
+      "venue": "Aero Crafters",
+      "address": "309 E. Crestwood Dr.",
+      "description": "Live bands and solo artists every Friday night. Check their Facebook for this week's lineup.",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://aerocrafters.pub"
     }
   ],
   "new_and_notable": [
