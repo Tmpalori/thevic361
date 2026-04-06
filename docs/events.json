@@ -1,20 +1,6 @@
 {
-  "last_updated": "2026-04-05T11:31:26-05:00",
+  "last_updated": "2026-04-06T11:50:03-05:00",
   "events": [
-    {
-      "date": "2026-04-05",
-      "name": "Skip to main content",
-      "time": "9:00AM \u2013 7:00PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
-      "description": "Community event open to the public.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriapubliclibrary.org"
-    },
     {
       "date": "2026-04-06",
       "name": "Tiny Hearts Club: Little Beats",
@@ -253,6 +239,20 @@
       ],
       "free": false,
       "url": "https://business.victoriachamber.org/events/details/goliad-market-days-2022-04-11-2026-1770"
+    },
+    {
+      "date": "2026-04-13",
+      "name": "Spring Craft Swap",
+      "time": "5:00 PM \u2013 7:00 PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main Street",
+      "description": "Community event open to the public.",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3730"
     }
   ],
   "new_and_notable": [
