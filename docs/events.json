@@ -1,21 +1,6 @@
 {
-  "last_updated": "2026-04-06T11:50:03-05:00",
+  "last_updated": "2026-04-07T11:55:11-05:00",
   "events": [
-    {
-      "date": "2026-04-06",
-      "name": "Tiny Hearts Club: Little Beats",
-      "time": "10:00 AM \u2013 11:00 AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Arts event at Victoria Public Library. Open to the public.",
-      "icons": [
-        "arts",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3724"
-    },
     {
       "date": "2026-04-07",
       "name": "Baby Hour: Pages to Play",
@@ -253,6 +238,34 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3730"
+    },
+    {
+      "date": "2026-04-14",
+      "name": "Baby Hour: Pages to Play",
+      "time": "10:00 AM \u2013 11:00 AM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main Street",
+      "description": "Community event open to the public.",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3538"
+    },
+    {
+      "date": "2026-04-14",
+      "name": "You Ought to Know: Tea with the Tea House Company",
+      "time": "5:30 PM \u2013 6:30 PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main Street",
+      "description": "Community event open to the public.",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3731"
     }
   ],
   "new_and_notable": [
