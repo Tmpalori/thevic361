@@ -1,20 +1,6 @@
 {
-  "last_updated": "2026-04-12T11:34:57-05:00",
+  "last_updated": "2026-04-13T12:04:08-05:00",
   "events": [
-    {
-      "date": "2026-04-12",
-      "name": "Skip to main content",
-      "time": "9:00AM \u2013 7:00PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
-      "description": "Community event open to the public.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriapubliclibrary.org"
-    },
     {
       "date": "2026-04-13",
       "name": "Spring Craft Swap",
