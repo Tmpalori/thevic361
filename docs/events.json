@@ -1,63 +1,6 @@
 {
-  "last_updated": "2026-04-16T11:59:15-05:00",
+  "last_updated": "2026-04-17T11:53:16-05:00",
   "events": [
-    {
-      "date": "2026-04-16",
-      "name": "Yarn Craft Club",
-      "time": "4:00 PM \u2013 5:45 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Arts event at Victoria Public Library. Open to the public.",
-      "icons": [
-        "arts",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3734"
-    },
-    {
-      "date": "2026-04-16",
-      "name": "DiscoverU: Teen Tech - Worry Stones",
-      "time": "5:00 PM \u2013 6:00 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3735"
-    },
-    {
-      "date": "2026-04-16",
-      "name": "Story Strolls \u2014 Audiobook Walking Group",
-      "time": "5:30 PM \u2013 6:30 PM",
-      "venue": "Riverside Park",
-      "address": "405 Memorial Drive",
-      "description": "Listen. Walk. Repeat. Join the audiobook walking group along the Guadalupe River.",
-      "icons": [
-        "outdoors",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
-    },
-    {
-      "date": "2026-04-16",
-      "name": "Toddler Story Time",
-      "time": "9:30 AM \u2013 10:00 AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3580"
-    },
     {
       "date": "2026-04-17",
       "name": "Fun Friday: Paper Airplanes",
@@ -284,6 +227,62 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3581"
+    },
+    {
+      "date": "2026-04-24",
+      "name": "Fun Friday - Mini Peep Houses",
+      "time": "10:00 AM \u2013 11:00 AM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main Street",
+      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
+      "icons": [
+        "family",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3740"
+    },
+    {
+      "date": "2026-04-24",
+      "name": "Adult-ish Book Club",
+      "time": "6:00 PM \u2013 7:00 PM",
+      "venue": "Gardenhouse Coffee and Espresso Bar",
+      "address": "1908 N Laurent St",
+      "description": "Gardenhouse Coffee and Espresso Bar",
+      "icons": [
+        "drinks",
+        "outdoors",
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3741"
+    },
+    {
+      "date": "2026-04-24",
+      "name": "Live Music at Aero Crafters",
+      "time": "7:00 PM \u2013 10:00 PM",
+      "venue": "Aero Crafters",
+      "address": "309 E. Crestwood Dr.",
+      "description": "Live bands and solo artists every Friday night. Check their Facebook for this week's lineup.",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-04-24",
+      "name": "Misery",
+      "time": "7:30 PM",
+      "venue": "Theatre Victoria",
+      "address": "203 E. Constitution St, Victoria, TX",
+      "description": "Live theatre performance. Misery \u2014 presented by Theatre Victoria.",
+      "icons": [
+        "arts"
+      ],
+      "free": false,
+      "url": "https://theatrevictoria.org"
     }
   ],
   "new_and_notable": [
