@@ -1,20 +1,6 @@
 {
-  "last_updated": "2026-04-19T11:35:56-05:00",
+  "last_updated": "2026-04-20T12:05:20-05:00",
   "events": [
-    {
-      "date": "2026-04-19",
-      "name": "Skip to main content",
-      "time": "9:00AM \u2013 7:00PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
-      "description": "Community event open to the public.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriapubliclibrary.org"
-    },
     {
       "date": "2026-04-21",
       "name": "Baby Hour: Pages to Play",
@@ -322,6 +308,20 @@
       ],
       "free": false,
       "url": "https://theatrevictoria.org"
+    },
+    {
+      "date": "2026-04-27",
+      "name": "True Crime Book Club",
+      "time": "6:00 PM \u2013 7:00 PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main Street",
+      "description": "Community event open to the public.",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3744"
     }
   ],
   "new_and_notable": [
