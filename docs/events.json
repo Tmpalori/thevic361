@@ -1,77 +1,6 @@
 {
-  "last_updated": "2026-04-23T11:59:11-05:00",
+  "last_updated": "2026-04-24T11:57:47-05:00",
   "events": [
-    {
-      "date": "2026-04-23",
-      "name": "Maker's Meetup: Recycled Windsock",
-      "time": "4:00 PM \u2013 5:00 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Community event open to the public.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3739"
-    },
-    {
-      "date": "2026-04-23",
-      "name": "Story Strolls \u2014 Audiobook Walking Group",
-      "time": "5:30 PM \u2013 6:30 PM",
-      "venue": "Riverside Park",
-      "address": "405 Memorial Drive",
-      "description": "Listen. Walk. Repeat. Join the audiobook walking group along the Guadalupe River.",
-      "icons": [
-        "outdoors",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
-    },
-    {
-      "date": "2026-04-23",
-      "name": "Misery",
-      "time": "7:30 PM",
-      "venue": "Theatre Victoria",
-      "address": "203 E. Constitution St, Victoria, TX",
-      "description": "Live theatre performance. Misery \u2014 presented by Theatre Victoria.",
-      "icons": [
-        "arts"
-      ],
-      "free": false,
-      "url": "https://theatrevictoria.org"
-    },
-    {
-      "date": "2026-04-23",
-      "name": "Hot Rod Tour of Texas Kick-Off Party",
-      "time": "9:00 AM \u2013 5:00 PM",
-      "venue": "DeLeon Plaza",
-      "address": "101 N. Main St.",
-      "description": "Classic cars roll into downtown Victoria. Food, music, and horsepower all day.",
-      "icons": [
-        "community",
-        "food",
-        "music",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov"
-    },
-    {
-      "date": "2026-04-23",
-      "name": "Toddler Story Time",
-      "time": "9:30 AM \u2013 10:00 AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3581"
-    },
     {
       "date": "2026-04-24",
       "name": "Fun Friday - Mini Peep Houses",
@@ -365,6 +294,46 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3582"
+    },
+    {
+      "date": "2026-05-01",
+      "name": "Derby to Remember 2nd Annual Hats Off to Habitat",
+      "time": "",
+      "venue": "Club Westerner",
+      "address": "",
+      "description": "DescriptionProsperity Bank invites you to our 2nd Annual Derby to Remember, Hats off to Habitat Derby Event Gala benefitting Golden Crescent Habitat f",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://business.victoriachamber.org/events/details/derby-to-remember-2nd-annual-hats-off-to-habitat-3862"
+    },
+    {
+      "date": "2026-05-01",
+      "name": "All Request Piano",
+      "time": "",
+      "venue": "Moonshine Drinkery",
+      "address": "103 W. Santa Rosa St.",
+      "description": "Drinks and good times at Moonshine Drinkery.",
+      "icons": [
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://www.moonshinedrinkery.com"
+    },
+    {
+      "date": "2026-05-01",
+      "name": "Live Music at Aero Crafters",
+      "time": "7:00 PM \u2013 10:00 PM",
+      "venue": "Aero Crafters",
+      "address": "309 E. Crestwood Dr.",
+      "description": "Live bands and solo artists every Friday night. Check their Facebook for this week's lineup.",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://aerocrafters.pub"
     }
   ],
   "new_and_notable": [
