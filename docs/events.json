@@ -1,62 +1,6 @@
 {
-  "last_updated": "2026-04-24T11:57:47-05:00",
+  "last_updated": "2026-04-25T11:39:05-05:00",
   "events": [
-    {
-      "date": "2026-04-24",
-      "name": "Fun Friday - Mini Peep Houses",
-      "time": "10:00 AM \u2013 11:00 AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main Street",
-      "description": "Family-friendly event at Victoria Public Library. Free and open to all ages.",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3740"
-    },
-    {
-      "date": "2026-04-24",
-      "name": "Adult-ish Book Club",
-      "time": "6:00 PM \u2013 7:00 PM",
-      "venue": "Gardenhouse Coffee and Espresso Bar",
-      "address": "1908 N Laurent St",
-      "description": "Gardenhouse Coffee and Espresso Bar",
-      "icons": [
-        "drinks",
-        "outdoors",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3741"
-    },
-    {
-      "date": "2026-04-24",
-      "name": "Live Music at Aero Crafters",
-      "time": "7:00 PM \u2013 10:00 PM",
-      "venue": "Aero Crafters",
-      "address": "309 E. Crestwood Dr.",
-      "description": "Live bands and solo artists every Friday night. Check their Facebook for this week's lineup.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://aerocrafters.pub"
-    },
-    {
-      "date": "2026-04-24",
-      "name": "Misery",
-      "time": "7:30 PM",
-      "venue": "Theatre Victoria",
-      "address": "203 E. Constitution St, Victoria, TX",
-      "description": "Live theatre performance. Misery \u2014 presented by Theatre Victoria.",
-      "icons": [
-        "arts"
-      ],
-      "free": false,
-      "url": "https://theatrevictoria.org"
-    },
     {
       "date": "2026-04-25",
       "name": "The Well Diggers",
@@ -334,6 +278,64 @@
       ],
       "free": false,
       "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-05-02",
+      "name": "Chess Club",
+      "time": "12:00 PM \u2013 2:30 PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St.",
+      "description": "Casual chess games in the Bronte Room. All levels, all ages welcome.",
+      "icons": [
+        "family",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriapubliclibrary.org"
+    },
+    {
+      "date": "2026-05-02",
+      "name": "Live Music at Aero Crafters",
+      "time": "7:00 PM \u2013 10:00 PM",
+      "venue": "Aero Crafters",
+      "address": "309 E. Crestwood Dr.",
+      "description": "Live bands every Saturday night. Check their Facebook for this week's lineup.",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-05-02",
+      "name": "Shine the Light on Mental Health Walk",
+      "time": "8:00 AM \u2013 12:00 PM",
+      "venue": "Riverside Park",
+      "address": "405 Memorial Drive",
+      "description": "Gulf Bend's annual walk for mental health awareness. Free resources and community support.",
+      "icons": [
+        "outdoors",
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
+    },
+    {
+      "date": "2026-05-02",
+      "name": "Victoria Farmers' Market",
+      "time": "9:00 AM \u2013 1:00 PM",
+      "venue": "Victoria Farmers Market",
+      "address": "2805 N. Navarro St.",
+      "description": "Fresh local produce, pastured meats, honey, baked goods. Every Wed & Sat.",
+      "icons": [
+        "food",
+        "shopping",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/VictoriaFarmersMarket"
     }
   ],
   "new_and_notable": [
