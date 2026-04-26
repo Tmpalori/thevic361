@@ -166,6 +166,31 @@ was last good.
 
 ---
 
+## Sonar Event Discovery (Venue-Grounded)
+
+The collector now runs **8 venue-grounded Sonar queries** instead of the
+old 10 generic ones. Each bucket pulls real HIGH-tier venue names from
+`venues.json` so Sonar searches by actual venue, not by city:
+
+1. **Live music this week** at HIGH music venues (Aero Crafters, Moonshine,
+   The Hideaway, Theatre Victoria, etc.)
+2. **Trivia / karaoke / open mic** at HIGH bars
+3. **Family events** at HIGH family venues (The Playback, Theatre Victoria,
+   The Nave Museum, etc.)
+4. **Restaurant specials / pop-ups / food trucks** at HIGH restaurants
+5. **Cultural events** at HIGH cultural venues
+6. **Community / civic** (churches, civic clubs, library) — no venue list
+7. **Markets / fairs / festivals** — no venue list
+8. **Eventbrite / AllEvents.in catch-all** for Victoria, TX (77901)
+
+Each bucket caps named venues at 6 (HIGH first) so prompts stay short. If
+`venues.json` lacks HIGH venues for a category, that bucket falls back to
+category-only phrasing — the collector still runs. Anything you want named
+in these prompts should land in `venues.json` as a HIGH-confidence venue
+(via Google Maps discovery merge or a manual seed entry).
+
+---
+
 ## Social Posts → Events (Opt-in)
 
 Two optional pipelines pull recent posts from venue social pages and use
