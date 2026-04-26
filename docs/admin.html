@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin — The Vic 361</title>
+
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="./base.css">
+<link rel="stylesheet" href="./admin.css">
+</head>
+<body>
+
+  <!-- ═══ AUTH GATE ═══ -->
+  <section id="auth-gate" class="auth-gate" hidden>
+    <div class="auth-card">
+      <h1>The Vic 361 — Admin</h1>
+      <p class="auth-help">
+        Enter a GitHub Personal Access Token with <code>contents:write</code>
+        access to <code>Tmpalori/thevic361</code>. The token is stored only in
+        your browser's <code>localStorage</code>.
+      </p>
+      <form id="auth-form" class="auth-form">
+        <label for="auth-pat">GitHub PAT</label>
+        <input type="password" id="auth-pat" name="pat" autocomplete="off"
+               placeholder="ghp_..." required>
+        <button type="submit" class="btn btn--primary">Unlock</button>
+      </form>
+      <p id="auth-error" class="auth-error" hidden></p>
+    </div>
+  </section>
+
+  <!-- ═══ APP SHELL ═══ -->
+  <main id="app" class="app" hidden>
+    <header class="admin-header">
+      <div class="admin-header__brand">
+        <strong>The Vic 361</strong>
+        <span class="admin-header__tag">Admin</span>
+      </div>
+      <nav class="admin-tabs" role="tablist">
+        <button class="tab-btn is-active" data-tab="picker" role="tab">Pick events</button>
+        <button class="tab-btn" data-tab="preview" role="tab">Preview</button>
+        <button class="tab-btn" data-tab="newsletter" role="tab">Newsletter</button>
+      </nav>
+      <div class="admin-header__actions">
+        <button id="signout-btn" type="button" class="btn btn--outline">Sign out</button>
+      </div>
+    </header>
+
+    <!-- Status / counts bar -->
+    <div class="status-bar">
+      <span id="count-summary" class="count-summary" aria-live="polite">
+        0 selected
+      </span>
+      <span id="count-guidance" class="count-guidance">
+        Target: 4–8 weekday · 8–12 weekend
+      </span>
+      <span id="status-message" class="status-message" role="status" aria-live="polite"></span>
+    </div>
+
+    <!-- ─── PICKER TAB ─── -->
+    <section id="tab-picker" class="tab-panel is-active" role="tabpanel">
+      <div class="filters">
+        <label class="filter">
+          <span>Search</span>
+          <input type="search" id="filter-search" placeholder="Search name or description...">
+        </label>
+        <label class="filter">
+          <span>Category</span>
+          <select id="filter-category">
+            <option value="">All categories</option>
+          </select>
+        </label>
+        <label class="filter">
+          <span>Venue</span>
+          <select id="filter-venue">
+            <option value="">All venues</option>
+          </select>
+        </label>
+        <div class="filter-actions">
+          <button id="reload-btn" type="button" class="btn btn--outline">
+            Reload candidates
+          </button>
+          <button id="publish-btn" type="button" class="btn btn--primary">
+            Save &amp; Publish
+          </button>
+        </div>
+      </div>
+
+      <div id="picker-loading" class="empty-state">Loading candidates…</div>
+      <div id="picker-empty" class="empty-state" hidden>No events match.</div>
+      <div id="picker-error" class="empty-state empty-state--error" hidden></div>
+      <div id="picker-list" class="picker-list" aria-live="polite"></div>
+    </section>
+
+    <!-- ─── PREVIEW TAB ─── -->
+    <section id="tab-preview" class="tab-panel" role="tabpanel" hidden>
+      <div class="preview-actions">
+        <button id="preview-refresh" type="button" class="btn btn--outline">
+          Refresh preview
+        </button>
+        <span class="preview-help">
+          Renders <code>index.html</code> with current picks via
+          <code>?preview=&lt;json&gt;</code>.
+        </span>
+      </div>
+      <iframe id="preview-frame" class="preview-frame" title="Site preview"></iframe>
+    </section>
+
+    <!-- ─── NEWSLETTER TAB ─── -->
+    <section id="tab-newsletter" class="tab-panel" role="tabpanel" hidden>
+      <div class="newsletter-actions">
+        <button id="newsletter-refresh" type="button" class="btn btn--outline">
+          Regenerate
+        </button>
+        <button id="newsletter-copy" type="button" class="btn btn--primary">
+          Copy to clipboard
+        </button>
+        <span id="newsletter-copied" class="newsletter-copied" hidden>Copied!</span>
+      </div>
+      <textarea id="newsletter-html" class="newsletter-textarea"
+                spellcheck="false" readonly></textarea>
+    </section>
+  </main>
+
+  <script src="./admin.js"></script>
+</body>
+</html>
