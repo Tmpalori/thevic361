@@ -37,7 +37,6 @@ python collect_events.py --output ./docs/events.json --local-dir . --skip-web
 | `extras.yaml` | "New & Notable" section + sponsor |
 | `docs/` | Website files (served by GitHub Pages) |
 | `docs/events.json` | Event data powering the site |
-| `CASPIAN_SOP.md` | Daily operations guide for Caspian |
 | `.github/workflows/` | GitHub Actions for daily automation |
 
 ## Adding Events

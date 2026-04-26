@@ -63,7 +63,7 @@ That's it. The collector script picks up new rows automatically during the daily
 ## Monthly Tasks (First Monday of Each Month — 5 min)
 
 ### Update "New & Notable"
-Edit the **extras.yaml** section (or tell Caspian to do it). Swap in fresh items:
+Edit the **extras.yaml** file directly in the repo. Swap in fresh items:
 - New restaurant/bar openings
 - Construction updates (what's coming)
 - Closings or relocations
@@ -115,7 +115,11 @@ Add these to the Google Sheet as one-time events.
 ## Troubleshooting
 
 **"The site doesn't show my event"**
-→ Events are pulled from the Google Sheet during the daily 6 AM run. If you add something after 6 AM, it'll show up the next morning. For urgent same-day additions, tell Caspian to re-run the collector.
+→ Events are pulled from the Google Sheet during the daily 6 AM run. If you add something after 6 AM, it'll show up the next morning. For urgent same-day additions, manually trigger the **Collect Events** workflow:
+
+```bash
+gh workflow run "Collect Events"
+```
 
 **"There are duplicate events"**
 → The system deduplicates automatically. If you see a duplicate, it may have slightly different names from two sources. It'll usually resolve on the next run with AI cleanup.

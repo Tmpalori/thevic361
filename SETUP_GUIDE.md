@@ -69,11 +69,6 @@ The AI cleanup step polishes event descriptions and deduplicates more intelligen
    - Click **New repository secret**
    - Name: `OPENAI_API_KEY`
    - Value: your API key
-3. Also set it locally for Caspian:
-   ```bash
-   echo 'export OPENAI_API_KEY=sk-...' >> ~/.zshrc
-   source ~/.zshrc
-   ```
 
 ---
 
@@ -87,21 +82,16 @@ The AI cleanup step polishes event descriptions and deduplicates more intelligen
 
 ---
 
-## 6. Set Up Caspian (Daily Operations)
+## 6. Set Up the Email Sender
 
-1. Clone the repo on your Mac mini:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/thevic361.git ~/vic361-collector
-   cd ~/vic361-collector
-   pip install -r requirements.txt
-   ```
+The Sunday digest emails are sent via Gmail SMTP using an [App Password](https://myaccount.google.com/apppasswords).
 
-2. Read `CASPIAN_SOP.md` — this is Caspian's daily playbook
-3. Caspian's daily routine:
-   - Run the collector script
-   - Quick Facebook scan for events (3 min)
-   - Add any new events to `local_events.yaml`
-   - Push to GitHub
+1. Generate a Gmail App Password for `tristen.m.palori@gmail.com`
+2. Add as GitHub Secrets:
+   - `SMTP_EMAIL` = `tristen.m.palori@gmail.com`
+   - `SMTP_PASSWORD` = the App Password (16-char string, no spaces)
+
+The weekly digest workflow uses these to email you the candidates each Sunday.
 
 ---
 
@@ -141,7 +131,6 @@ Daily at 6 AM Central:
 ┌─────────────────────┐
 │  GitHub Actions      │
 │  runs collector      │──→ events.json updated
-│  (or Caspian does)   │
 └─────────────────────┘
          │
          ▼
