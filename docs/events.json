@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-04-26T11:41:30-05:00",
+  "last_updated": "2026-04-26T11:51:49-05:00",
   "events": [
     {
       "date": "2026-04-20",
@@ -354,6 +354,21 @@
     },
     {
       "date": "2026-04-26",
+      "name": "2026 Heritage Day Celebration",
+      "time": "3:30 PM",
+      "venue": "516 N Main St., Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "10:30am Worship Service\n11-1pm BBQ Served Dine In or Drive Thru\n11am Activities Begin (Cake Walk, Bucket Raffle, Country Store, Kids Activities)\n12:45pm Live Auction Begins\nBucket Raffle drawn at conclusion of Live Auction",
+      "icons": [
+        "food",
+        "family",
+        "outdoors"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/794320897061909/"
+    },
+    {
+      "date": "2026-04-26",
       "name": "GriefShare",
       "time": "4:00 PM",
       "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
@@ -364,19 +379,6 @@
       ],
       "free": false,
       "url": "https://www.facebook.com/events/4197419067254402/"
-    },
-    {
-      "date": "2026-04-26",
-      "name": "Pastor Jeff Williams 1st Anniversary Celebration",
-      "time": "4:00 PM",
-      "venue": "608 East Convent, Victoria, TX, United States, Texas 77901",
-      "address": "",
-      "description": "Looking forward to celebrating God on tomorrow.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1460447281815744/"
     },
     {
       "date": "2026-04-26",
@@ -394,20 +396,6 @@
     },
     {
       "date": "2026-04-26",
-      "name": "\"Ann\u2019s Gift: 10 Years of Art and Art Cars at Five Points Museum of Contemporary Art\"",
-      "time": "5:00 PM",
-      "venue": "1201 N Moody St, Victoria, TX, United States, Texas 77901",
-      "address": "",
-      "description": "Stop by Five Points Museum of Contemporary Art and see our 10th anniversary exhibition, \"Ann\u2019s Gift: 10 Years of Art and Art Cars at Five Points Museum of Contemporary Art\". \n\nThis exhibition features works by many artists that have been exhibited throughout the years between its",
-      "icons": [
-        "arts",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/events/1811464603571994/"
-    },
-    {
-      "date": "2026-04-26",
       "name": "Misery",
       "time": "7:30 PM",
       "venue": "Theatre Victoria",
@@ -418,6 +406,19 @@
       ],
       "free": false,
       "url": "https://theatrevictoria.org"
+    },
+    {
+      "date": "2026-04-27",
+      "name": "weekly Hour of Prayer",
+      "time": "11:00 PM",
+      "venue": "402 E North St, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "Beginning Monday, January 5, we will be holding a weekly Hour of Prayer from 6:00 p.m. to 7:00 p.m. We are calling this special time \u201cHour of Power.\u201d\n\nWe invite you to come for prayer and quiet reflection in the sanctuary. The Bible tells us that \u201cthe effectual fervent prayer of",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1404134427773534/"
     },
     {
       "date": "2026-04-27",
@@ -487,30 +488,17 @@
       "url": "https://www.facebook.com/events/1470924917754235/"
     },
     {
-      "date": "2026-04-29",
-      "name": "GroupLink at Parkway",
-      "time": "11:30 PM",
-      "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
+      "date": "2026-04-28",
+      "name": "Townsquare Talk: Meet the Newly Promoted Police Chief Fetters",
+      "time": "4:15 PM",
+      "venue": "107 North Star Drive, Victoria, TX, United States, Texas 77904",
       "address": "",
-      "description": "GroupLink is the place where adults of every age and life-stage find their place in a group.  \n\nGroupLink meets at Parkway Victoria, Parkway Port Lavaca and Lone Tree on Wednesdays from 6:30 PM to 8:00 PM.",
+      "description": "Join us & VCS Victoria Communication Services on April 28th at 11:15 AM for a special Townsquare Talk Luncheon you won\u2019t want to miss! \n\nWe are excited to welcome Police Chief Fetters and Deputy Chief Moya for a lively, engaging conversation you\u2019ll only get here. Get to know the",
       "icons": [
-        "outdoors"
+        "food"
       ],
       "free": false,
-      "url": "https://www.facebook.com/events/4508337449387634/"
-    },
-    {
-      "date": "2026-04-29",
-      "name": "Weekly Zoom Prayer",
-      "time": "5:00 PM",
-      "venue": "1604 E Crestwood Dr, Victoria, TX, United States, Texas 77901",
-      "address": "",
-      "description": "Wanna pray with us?\n\nGo to this link at NOON and try out our brand new Zoom Prayer format!\nhttps://min.link/Z89\n\nMeeting ID: 821 3585 6005\nPasscode: 0PkEUR",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/878263871681485/"
+      "url": "https://www.facebook.com/events/839396005838181/"
     },
     {
       "date": "2026-04-29",
@@ -626,6 +614,19 @@
       ],
       "free": true,
       "url": "https://business.victoriachamber.org/events/details/museum-crawl-4384"
+    },
+    {
+      "date": "2026-04-30",
+      "name": "Powerful Voices Open Mic Show - Live Music, Comedy, Poetry+ More!",
+      "time": "7:00 PM",
+      "venue": "",
+      "address": "",
+      "description": "Open mic show featuring live music, comedy, poetry, and more.",
+      "icons": [
+        "music"
+      ],
+      "free": false,
+      "url": "https://www.eventbrite.com/e/powerful-voices-open-mic-show-live-music-comedy-poetry-more-tickets-1975575859577"
     },
     {
       "date": "2026-04-30",
@@ -832,16 +833,30 @@
     },
     {
       "date": "2026-05-02",
-      "name": "Challenging the Church: Commit Your Ways",
-      "time": "7:00 PM",
-      "venue": "5901 N Main St, Victoria, TX",
-      "address": "",
-      "description": "You are invited!",
+      "name": "Josiah\u2019s 1st Birthday \ud83c\udf89",
+      "time": "6:00 PM",
+      "venue": "Ted B Reed park",
+      "address": "2101 Salem Rd",
+      "description": "Join us to celebrate Josiah\u2019s 1st birthday\ud83c\udf89\n\n\ud83d\udc55Clothes: 12-18 months\n\ud83d\udc5f Shoes: 5\n\ud83c\udf7cDiapers: 5\n\nJosiah loves:\nBalls \u26bd\ufe0f\ud83c\udfc0\ud83c\udfc8\nHot wheels \ud83d\ude97\nBooks \ud83d\udcda",
       "icons": [
-        "community"
+        "outdoors"
       ],
       "free": false,
-      "url": "https://web.facebook.com/events/1605907480672255/"
+      "url": "https://www.facebook.com/events/2106312576829117/"
+    },
+    {
+      "date": "2026-05-02",
+      "name": "Spring Youth Art Show - Victoria Art League",
+      "time": "6:00 PM",
+      "venue": "905 S Bridge St, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "\ud83c\udf38\ud83c\udf3cVictoria Art League Spring Youth Art Show!!!\ud83c\udf3c\ud83c\udf38\n\nIt's time to bring out your children's best artwork from the year!!  Anything they've made since May 2025 will do!! \n\nDrop off with be April 25th-26th from 1-4pm at \nThe Victoria Art League\n905 South Bridge St.\nVictoria, TX 77901",
+      "icons": [
+        "family",
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1014806734554659/"
     },
     {
       "date": "2026-05-02",
@@ -1055,6 +1070,20 @@
     },
     {
       "date": "2026-05-05",
+      "name": "Rhythm, Ritual, and Reflection: A Collaboration Concert",
+      "time": "12:00 AM",
+      "venue": "214 N Main St, Victoria, TX 77901-6503, United States",
+      "address": "",
+      "description": "This concert brings together Crossroads Strings, the Victoria Civic Chorus, and the Victoria College Choir in a program that explores music through rhythm, ritual, and reflection. From energetic dance-inspired works to expressions of praise and moments of quiet introspection, the",
+      "icons": [
+        "music",
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1279254236940324/"
+    },
+    {
+      "date": "2026-05-05",
       "name": "Maker's Meetup: Pasta Coral Craft",
       "time": "4:00PM \u2013 5:00PM",
       "venue": "Victoria Public Library",
@@ -1128,6 +1157,19 @@
       ],
       "free": true,
       "url": "https://victoriapl.librarycalendar.com/event/mid-coast-self-care-7724"
+    },
+    {
+      "date": "2026-05-06",
+      "name": "Pet Supplies Plus Adoption Event",
+      "time": "6:00 PM",
+      "venue": "Pet Supplies Plus - Victoria, TX",
+      "address": "",
+      "description": "\ud83d\udc3e\ud83d\udc36DOCPAC will have shelter dogs available for on-site adoption at Pet Supplies Plus on May 6th from 1:00pm-5:00pm! \n\nAll adoption fees during this event will be discounted!\ud83d\ude42\n\n\u2b50\ufe0fPet Supplies Plus is located at: 5217 N Navarro St Suite B, Victoria, TX 77904.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1494060695836723/"
     },
     {
       "date": "2026-05-06",
@@ -1255,6 +1297,19 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
+    },
+    {
+      "date": "2026-05-07",
+      "name": "Shields Elementary Career Day",
+      "time": "6:00 PM",
+      "venue": "Shields\u0001Elementary\u0003Magnet School",
+      "address": "3400 Bluebonnet St",
+      "description": "DOCPAC is a presenter at Shields Elementary's Career Day!",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1755358515430424/"
     },
     {
       "date": "2026-05-07",
@@ -1440,19 +1495,6 @@
       "url": "https://business.victoriachamber.org/events/details/goliad-market-days-2022-05-09-2026-1771"
     },
     {
-      "date": "2026-05-09",
-      "name": "Conoce tu Mente Recupera el Control",
-      "time": "9:00 PM",
-      "venue": "Victoria, Texas",
-      "address": "",
-      "description": "\u00bfYa quieres recuperar tu paz?\n\nSi sigues intentando \u201cpensar positivo\u201d\nsin entender tu mente\u2026\n\nte vas a seguir frustrando.\n\nNo necesitas m\u00e1s fuerza de voluntad.\nNecesitas conocimiento.\n\n\ufffd Eso es lo que hace este curso.\n\n\ufffd SABER ES PODER \ufffd \n\nComenta: Mente\nSi est\u00e1s listo para saber",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1503518127991718/"
-    },
-    {
       "date": "2026-05-10",
       "name": "Mother's Day",
       "time": "09:00 AM",
@@ -1478,20 +1520,6 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3640"
-    },
-    {
-      "date": "2026-05-10",
-      "name": "Baby Dedication",
-      "time": "2:30 PM",
-      "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
-      "address": "",
-      "description": "We\u2019re celebrating Baby Dedication on Sunday, May 10 at all Parkway campuses. During this special service, parents commit to raising their children to know and follow Jesus, and our church family commits to supporting them along the way. Invite family and friends to join you for t",
-      "icons": [
-        "family",
-        "outdoors"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1953195845287872/"
     }
   ],
   "new_and_notable": [
