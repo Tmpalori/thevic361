@@ -39,6 +39,7 @@ jobs:
           APIFY_TOKEN:        ${{ secrets.APIFY_TOKEN }}
           SENTRY_DSN:         ${{ secrets.SENTRY_DSN }}
           SENTRY_ENVIRONMENT: production
+          FB_POSTS_ENABLED:   ${{ vars.FB_POSTS_ENABLED }}
         run: |
           python collect_events.py \
             --output ./docs/events.json \

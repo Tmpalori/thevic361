@@ -39,6 +39,11 @@ jobs:
           APIFY_TOKEN:        ${{ secrets.APIFY_TOKEN }}
           SENTRY_DSN:         ${{ secrets.SENTRY_DSN }}
           SENTRY_ENVIRONMENT: production
+          # Toggle the FB-posts → sonar pipeline. Off until the Apify monthly
+          # cap resets and we've verified post-volume cost. Set repository
+          # variable FB_POSTS_ENABLED=1 (Settings → Variables → Actions) to
+          # turn on without editing this file.
+          FB_POSTS_ENABLED:   ${{ vars.FB_POSTS_ENABLED }}
         run: |
           python collect_events.py \
             --output ./docs/events.json \

@@ -1922,22 +1922,54 @@ def fetch_allevents_events(days_ahead=14):
     return events
 
 
-# ─── SOURCE: APIFY (Facebook events) ────────────────────────────────────────────────
+# ─── SOURCE: APIFY (Facebook events + posts) ────────────────────────────────────────
+#
+# We hit two Apify actors:
+#
+#   1. apify/facebook-events-scraper  → formal Event pages (Theatre Victoria,
+#      Nave Museum, big festivals). Reliable when venues bother to create them.
+#
+#   2. apify/facebook-posts-scraper   → posts from our high-confidence venue
+#      list. This is the gap-filler for bars/restaurants that announce events
+#      as posts ("Live music tonight 7pm") rather than formal Events. Posts
+#      are funneled through a sonar prompt that extracts dated events.
+#
+# Both actors share APIFY_TOKEN and the same hard-limit detection. If the
+# monthly cap is hit, we set a tombstone in the workspace so subsequent calls
+# in the same run skip immediately rather than wasting 30s per actor.
 
 APIFY_FB_ACTOR = "apify~facebook-events-scraper"
+APIFY_FB_POSTS_ACTOR = "apify~facebook-posts-scraper"
 APIFY_RUN_TIMEOUT = 240  # seconds we'll wait for the run to finish
+
+# Process-local tombstone: once we see a 403 hard-limit, all later Apify calls
+# in this run skip immediately. Reset on each main() invocation.
+_APIFY_LIMIT_TRIPPED = False
+
+
+def _apify_hard_limit_tripped(resp_text):
+    """Detect Apify's monthly hard-limit response so we can short-circuit."""
+    if not resp_text:
+        return False
+    t = resp_text.lower()
+    return "monthly usage hard limit" in t or "usage hard limit exceeded" in t
 
 def fetch_apify_facebook_events(days_ahead=14):
     """Run the Apify Facebook Events Scraper actor against our high-value venue
     list (facebook_venues.json) and parse the dataset.
 
     Requires APIFY_TOKEN env var. Skips silently if not set so local runs
-    without the secret still succeed.
+    without the secret still succeed. Also skips if a previous Apify call in
+    this run hit the monthly hard limit — no point burning the timeout.
     """
+    global _APIFY_LIMIT_TRIPPED
     events = []
     token = os.environ.get("APIFY_TOKEN", "").strip()
     if not token:
         print("  [Apify FB] No APIFY_TOKEN — skipping")
+        return events
+    if _APIFY_LIMIT_TRIPPED:
+        print("  [Apify FB] Monthly hard limit already tripped this run — skipping")
         return events
 
     venues_path = os.path.join(os.path.dirname(__file__) or ".", "facebook_venues.json")
@@ -1962,7 +1994,9 @@ def fetch_apify_facebook_events(days_ahead=14):
     actor_run_url = f"https://api.apify.com/v2/acts/{APIFY_FB_ACTOR}/run-sync-get-dataset-items?token={token}"
     payload = {
         "searchQueries": ["Victoria Texas"],
-        "maxEvents": 60,
+        # 25 is plenty after the Victoria locality post-filter; 60 was burning
+        # ~2x credits for the same final event count.
+        "maxEvents": 25,
     }
     try:
         resp = requests.post(
@@ -1973,6 +2007,13 @@ def fetch_apify_facebook_events(days_ahead=14):
         )
         if resp.status_code >= 400:
             print(f"  [Apify FB] HTTP {resp.status_code}: {resp.text[:300]}")
+            if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
+                _APIFY_LIMIT_TRIPPED = True
+                _sentry_warn(
+                    "Apify monthly hard limit tripped",
+                    actor=APIFY_FB_ACTOR,
+                    status=403,
+                )
             return events
         items = resp.json()
     except Exception as e:
@@ -2075,6 +2116,276 @@ def fetch_apify_facebook_events(days_ahead=14):
     return events
 
 
+# ─── SOURCE: APIFY (Facebook posts → sonar event extraction) ────────────────
+#
+# Why this exists: many Victoria bars/restaurants announce events as Facebook
+# *posts* ("Live music tonight 8pm with Donny Edwards") rather than formal
+# Event pages. The events-scraper actor never sees those, so weeknight density
+# at venues like Aero Crafters / Moonshine / The Hideaway / Lone Star is
+# systematically thin. This scraper pulls recent posts from each
+# high-confidence venue, then asks Perplexity sonar to extract any
+# specific-dated events from the post text.
+#
+# Cost shape (rough): Apify $2/1000 posts × ~9 venues × 25 posts each
+#   ≈ 225 posts ≈ $0.45 per run. Plus 1 sonar call per venue with posts
+#   (≈10 calls, ~$0.005 each) ≈ $0.05. Total ≤ $0.50/run, ~$15/mo daily.
+#
+# Toggle with FB_POSTS_ENABLED=1 (default off until Apify cap resets).
+
+
+_POSTS_PER_VENUE = 25  # Apify resultsLimit per venue page
+_POSTS_LOOKBACK_DAYS = 14  # only fetch posts from the last N days
+
+
+def _venue_high_confidence(venues):
+    """Return venues marked confidence=high in facebook_venues.json."""
+    return [v for v in venues if (v.get("confidence") or "").lower() == "high"]
+
+
+def _extract_events_from_posts_via_sonar(venue_name, posts):
+    """Send a venue's recent posts to Perplexity sonar and parse out events.
+
+    Returns a list of event dicts (date/name/time/description/url) — venue is
+    filled in by the caller.
+    """
+    api_key = os.environ.get("PERPLEXITY_API_KEY")
+    if not api_key or not posts:
+        return []
+
+    today = _WINDOW_START
+    end_date = _WINDOW_END
+    today_str = today.strftime("%Y-%m-%d")
+    end_str = end_date.strftime("%Y-%m-%d")
+
+    # Build a compact post digest — trimming each post to ~400 chars to keep
+    # the prompt under 4k tokens even with 25 posts.
+    lines = []
+    for i, p in enumerate(posts, start=1):
+        text = (p.get("text") or p.get("caption") or "").strip()
+        if not text:
+            continue
+        text = re.sub(r"\s+", " ", text)[:400]
+        post_date = (p.get("time") or p.get("timestamp") or p.get("date") or "")[:10]
+        lines.append(f"[{i}] (posted {post_date}) {text}")
+    if not lines:
+        return []
+    posts_blob = "\n".join(lines)
+
+    prompt = f"""You are extracting future events from recent Facebook posts by {venue_name} in Victoria, TX.
+
+Posts:
+{posts_blob}
+
+Return ONLY a JSON array of upcoming events mentioned in these posts. Each object:
+{{"date":"YYYY-MM-DD","name":"Event Name","time":"7:00 PM or empty string","description":"One short sentence or empty string","free":true_or_false,"source_post_index":N}}
+
+Rules:
+- Only include events with a confirmed specific date between {today_str} and {end_str}.
+- If the post says "this Friday" without a year, infer the date from the post date.
+- Recurring events ("every Wednesday") count — emit one entry for each upcoming occurrence in the window.
+- If a post is just promo/photos with no specific dated event, skip it.
+- Return [] if no events found. No prose, no markdown fences."""
+
+    try:
+        resp = requests.post(
+            "https://api.perplexity.ai/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "sonar",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+                "max_tokens": 2000,
+            },
+            timeout=45,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"].strip()
+        content = re.sub(r"^```\w*\s*", "", content)
+        content = re.sub(r"\s*```\s*$", "", content)
+        raw = _parse_sonar_json(content)
+        if raw is None:
+            _sentry_warn(
+                "FB posts sonar parse failed",
+                venue=venue_name,
+                sample=content[:200],
+            )
+            return []
+        return raw
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response else "?"
+        _sentry_warn("FB posts sonar HTTP error", venue=venue_name, status=str(status))
+        return []
+    except Exception as e:
+        _sentry_warn("FB posts sonar exception", venue=venue_name, error=str(e)[:200])
+        return []
+
+
+def fetch_apify_facebook_posts(days_ahead=14):
+    """Pull recent posts from each high-confidence venue page and ask sonar to
+    extract dated events. Off by default — set FB_POSTS_ENABLED=1 to turn on.
+
+    Pipeline per venue:
+      Apify posts-scraper → last 25 posts (≤ 14 days old) → sonar event
+      extraction → normalized event dicts.
+    """
+    global _APIFY_LIMIT_TRIPPED
+    events = []
+
+    if os.environ.get("FB_POSTS_ENABLED", "").strip() not in ("1", "true", "yes"):
+        print("  [Apify FB Posts] Disabled (set FB_POSTS_ENABLED=1 to enable)")
+        return events
+
+    token = os.environ.get("APIFY_TOKEN", "").strip()
+    if not token:
+        print("  [Apify FB Posts] No APIFY_TOKEN — skipping")
+        return events
+    if _APIFY_LIMIT_TRIPPED:
+        print("  [Apify FB Posts] Monthly hard limit already tripped this run — skipping")
+        return events
+    if not os.environ.get("PERPLEXITY_API_KEY"):
+        print("  [Apify FB Posts] No PERPLEXITY_API_KEY — cannot extract events from posts")
+        return events
+
+    venues_path = os.path.join(os.path.dirname(__file__) or ".", "facebook_venues.json")
+    if not os.path.exists(venues_path):
+        print(f"  [Apify FB Posts] No facebook_venues.json at {venues_path}")
+        return events
+    try:
+        with open(venues_path, "r") as f:
+            all_venues = json.load(f)
+    except Exception as e:
+        print(f"  [Apify FB Posts] Failed to load venues: {e}")
+        return events
+
+    high_conf = _venue_high_confidence(all_venues)
+    if not high_conf:
+        print("  [Apify FB Posts] No high-confidence venues to scrape")
+        return events
+
+    newer_than = (datetime.now().date() - timedelta(days=_POSTS_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+    print(f"  [Apify FB Posts] Pulling posts from {len(high_conf)} venues (since {newer_than})")
+
+    actor_run_url = (
+        f"https://api.apify.com/v2/acts/{APIFY_FB_POSTS_ACTOR}"
+        f"/run-sync-get-dataset-items?token={token}"
+    )
+
+    venue_stats = []
+    for venue in high_conf:
+        if _APIFY_LIMIT_TRIPPED:
+            venue_stats.append(f"{venue.get('name','?')}: SKIP (limit tripped)")
+            break
+
+        venue_name = venue.get("name", "?")
+        page_url = venue.get("facebook_page")
+        if not page_url:
+            venue_stats.append(f"{venue_name}: SKIP (no facebook_page)")
+            continue
+
+        payload = {
+            "startUrls": [{"url": page_url}],
+            "resultsLimit": _POSTS_PER_VENUE,
+            "onlyPostsNewerThan": newer_than,
+            "captionText": False,
+        }
+
+        try:
+            resp = requests.post(
+                actor_run_url,
+                json=payload,
+                timeout=APIFY_RUN_TIMEOUT,
+                headers={"Content-Type": "application/json"},
+            )
+        except Exception as e:
+            venue_stats.append(f"{venue_name}: ERROR ({type(e).__name__})")
+            _sentry_warn("FB posts actor exception", venue=venue_name, error=str(e)[:200])
+            continue
+
+        if resp.status_code >= 400:
+            venue_stats.append(f"{venue_name}: HTTP {resp.status_code}")
+            if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
+                _APIFY_LIMIT_TRIPPED = True
+                _sentry_warn(
+                    "Apify monthly hard limit tripped",
+                    actor=APIFY_FB_POSTS_ACTOR,
+                    status=403,
+                )
+            else:
+                _sentry_warn(
+                    "FB posts actor HTTP error",
+                    venue=venue_name,
+                    status=resp.status_code,
+                    body=resp.text[:200],
+                )
+            continue
+
+        try:
+            posts = resp.json()
+        except Exception:
+            venue_stats.append(f"{venue_name}: bad JSON")
+            continue
+        if not isinstance(posts, list):
+            venue_stats.append(f"{venue_name}: unexpected type {type(posts).__name__}")
+            continue
+
+        # Hand the posts to sonar for event extraction
+        raw = _extract_events_from_posts_via_sonar(venue_name, posts)
+        kept = 0
+        for r in raw:
+            if not isinstance(r, dict):
+                continue
+            date_str = (r.get("date") or "").strip()
+            name = (r.get("name") or "").strip()
+            if not date_str or not name:
+                continue
+            try:
+                d_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if not in_window(d_obj):
+                continue
+
+            # Try to attach a source URL: prefer the post's URL when sonar
+            # tagged source_post_index, otherwise fall back to the venue page.
+            source_url = page_url
+            idx = r.get("source_post_index")
+            if isinstance(idx, int) and 1 <= idx <= len(posts):
+                post = posts[idx - 1]
+                if isinstance(post, dict):
+                    source_url = (
+                        post.get("url")
+                        or post.get("postUrl")
+                        or post.get("link")
+                        or page_url
+                    )
+
+            description = (r.get("description") or "").strip()[:280]
+            time_str = (r.get("time") or "").strip()
+            address = (venue.get("address") or "").strip()
+
+            events.append({
+                "date": d_obj.strftime("%Y-%m-%d"),
+                "name": name,
+                "time": time_str,
+                "venue": venue_name,
+                "address": address,
+                "description": description,
+                "icons": classify_icons(name, description, venue_name),
+                "free": bool(r.get("free", False)) or guess_free(name, description, venue_name),
+                "url": source_url,
+            })
+            kept += 1
+        venue_stats.append(f"{venue_name}: {len(posts)} posts → {kept} events")
+
+    print(f"  [Apify FB Posts] Extracted {len(events)} events across {len(high_conf)} venues")
+    for s in venue_stats:
+        print(f"    • {s}")
+    return events
+
+
 # ─── MAIN ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -2088,6 +2399,13 @@ def main():
     parser.add_argument("--no-backfill", action="store_true",
                         help="Don't backfill to Monday of this week (default backfills)")
     args = parser.parse_args()
+
+    # Reset the per-run Apify tombstone so a successful run after a 403 day
+    # actually retries instead of inheriting the previous in-process state.
+    # (No-op for the daily workflow since each run is a fresh process, but
+    # matters for tests / local repeated runs.)
+    global _APIFY_LIMIT_TRIPPED
+    _APIFY_LIMIT_TRIPPED = False
 
     # Set the global collection window. Every scraper reads _WINDOW_START/_END.
     global _WINDOW_START, _WINDOW_END
@@ -2135,6 +2453,13 @@ def main():
 
         # Apify Facebook events — only runs if APIFY_TOKEN is set
         all_events.extend(safe_fetch("apify_facebook", fetch_apify_facebook_events,
+                                     args=(args.days,), expect_events=False))
+
+        # Apify Facebook *posts* → sonar event extraction. Off by default;
+        # set FB_POSTS_ENABLED=1 to enable. Pulls from each high-confidence
+        # venue page so we catch events announced as posts ("live music
+        # tonight 7pm") that never become formal Event pages.
+        all_events.extend(safe_fetch("apify_facebook_posts", fetch_apify_facebook_posts,
                                      args=(args.days,), expect_events=False))
 
     # 4. Perplexity AI discovery
