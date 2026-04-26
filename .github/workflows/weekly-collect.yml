@@ -1,14 +1,14 @@
-# ─── The Vic 361 — Daily Event Collection ────────────────────────────────────
-# Runs every day at 6:00 AM Central (11:00 UTC) to collect events
+# ─── The Vic 361 — Weekly Event Collection ───────────────────────────────────
+# Runs every Sunday at 6:00 PM Central (23:00 UTC during CDT) to collect events
 # and update the website's events.json.
 # Also runs on manual trigger (workflow_dispatch).
 # ─────────────────────────────────────────────────────────────────────────────
 
-name: Collect Events
+name: Weekly Collect
 
 on:
   schedule:
-    - cron: '0 11 * * *'  # 6:00 AM Central (UTC-5)
+    - cron: '0 23 * * 0'  # 6:00 PM Central, Sunday (UTC-5 during CDT)
   workflow_dispatch:       # Manual trigger from GitHub UI
 
 permissions:

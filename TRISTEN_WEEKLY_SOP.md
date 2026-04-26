@@ -3,16 +3,29 @@
 ## What's Already Automated
 The system handles ~70% of event collection automatically:
 - **Recurring weekly events** (20+ events/week) — Froggy's specials, Farmers' Market, Aero Crafters live music, Library story times, Chess Club, Story Strolls, etc.
-- **City of Victoria calendar** — scraped daily (library programs, city events, meetings)
-- **Chamber of Commerce events** — scraped daily (business events, community gatherings)
+- **City of Victoria calendar** — scraped weekly (library programs, city events, meetings)
+- **Chamber of Commerce events** — scraped weekly (business events, community gatherings)
 - **Google Sheet submissions** — anything you add to the sheet gets pulled in automatically
 - **Deduplication** — the system merges everything and removes duplicates
 
-**Your job: Fill in what the bots can't find.** That's mainly bar/restaurant live music, Facebook-only events, and one-time community stuff. Takes ~10 minutes per week.
+**Your job: Fill in what the bots can't find, then pick which events to publish.** That's mainly bar/restaurant live music, Facebook-only events, and one-time community stuff, plus the Sunday night admin review. Takes ~15 minutes per week.
 
 ---
 
-## Weekly Checklist (Every Sunday or Monday — 10 min)
+## Weekly Cadence (Sunday → Monday)
+
+| Time (Central) | What happens | Who does it |
+|---|---|---|
+| Sun 6 PM | `weekly-collect.yml` runs the collector and updates `candidates.json` / `docs/events.json` | Automated |
+| Sun 9 PM | `weekly-digest.yml` emails an **informational** summary of what was collected, with a link to the admin review page | Automated |
+| Sun 10 PM | Open `/admin.html`, pick the events you want to publish, save your selection. Admin commits go directly to `main`. | **You** |
+| Mon morning | Send the Beehiiv newsletter manually | **You** |
+
+The Sunday digest email is for awareness only — there is **no reply-to-email approval anymore**. Picking events happens on `/admin.html` (landing in a follow-up PR; until then publish via direct edits to `docs/events.json`).
+
+---
+
+## Weekly Checklist (Every Sunday — 15 min)
 
 ### Step 1: Quick Facebook Scan (5 min)
 Open these two groups and scroll through this week's posts:
@@ -56,7 +69,7 @@ For each new event, add a row:
 | **Added By** | Your name | Tristen |
 | **Status** | Leave blank or "new" | new |
 
-That's it. The collector script picks up new rows automatically during the daily 6 AM run.
+That's it. The collector script picks up new rows automatically during the Sunday 6 PM run. Add new rows by Sunday 5:45 PM Central so they're included in that week's collection.
 
 ---
 
@@ -115,10 +128,10 @@ Add these to the Google Sheet as one-time events.
 ## Troubleshooting
 
 **"The site doesn't show my event"**
-→ Events are pulled from the Google Sheet during the daily 6 AM run. If you add something after 6 AM, it'll show up the next morning. For urgent same-day additions, manually trigger the **Collect Events** workflow:
+→ Events are pulled from the Google Sheet during the Sunday 6 PM run. If you add something later in the week, it won't show up until the next Sunday's run unless you manually trigger the **Weekly Collect** workflow:
 
 ```bash
-gh workflow run "Collect Events"
+gh workflow run "Weekly Collect"
 ```
 
 **"There are duplicate events"**

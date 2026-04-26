@@ -73,28 +73,26 @@ def load_candidates(path, all_days=False):
 
 
 def build_email_body(events, by_date):
-    """Build a clean plain-text + HTML email body with numbered events."""
+    """Build a clean plain-text + HTML email body summarizing what was collected.
+    Informational only — Tristen picks events via /admin.html, not by replying."""
     today = datetime.now()
-    # Stable token "[VIC361-DIGEST YYYY-MM-DD]" lets the approval-watcher reliably
-    # find the right thread when scanning replies via IMAP.
+    # Subject line preserved (including digest tag) so existing inbox filters keep working.
     digest_tag = f"[VIC361-DIGEST {today.strftime('%Y-%m-%d')}]"
     subject = f"The Vic 361 — Events to Screen ({today.strftime('%a %b %d')}) {digest_tag}"
 
+    admin_url = "https://thevic361.com/admin.html"
+
     # ── Plain text version ──
     text_lines = [
-        f"THE VIC 361 — EVENT CANDIDATES",
+        f"THE VIC 361 — WEEKLY EVENT DIGEST",
         f"Collected {today.strftime('%A, %B %d at %I:%M %p')}",
         f"{len(events)} events found across {len(by_date)} days",
         "",
-        "Reply with the numbers you want to KEEP.",
-        "Examples:",
-        "   1, 3, 5, 8, 11      — just those events",
-        "   1-10                 — a range",
-        "   ALL except 7, 12     — everything except some",
-        "   ALL                  — keep everything",
-        "   NONE                 — publish nothing",
+        "This is an informational summary of what was collected this evening.",
+        f"Open the admin review page to pick the events you want to publish:",
+        f"   {admin_url}",
         "",
-        "If no reply by 8 PM Central, ALL events will be published automatically.",
+        "Then send the Beehiiv newsletter Monday morning.",
         "",
         "=" * 50,
     ]
@@ -104,13 +102,13 @@ def build_email_body(events, by_date):
         "<html><body style='font-family: -apple-system, system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #28251D;'>",
         "<div style='text-align: center; margin-bottom: 20px;'>",
         "<h1 style='color: #1A7A7E; font-size: 24px; margin: 0;'>The Vic 361</h1>",
-        f"<p style='color: #666; margin: 5px 0;'>Event Candidates &mdash; {today.strftime('%A, %B %d')}</p>",
-        f"<p style='color: #666; margin: 5px 0;'>{len(events)} events found</p>",
+        f"<p style='color: #666; margin: 5px 0;'>Weekly Digest &mdash; {today.strftime('%A, %B %d')}</p>",
+        f"<p style='color: #666; margin: 5px 0;'>{len(events)} events collected across {len(by_date)} days</p>",
         "</div>",
         "<div style='background: #F7F6F2; padding: 15px; border-radius: 8px; margin-bottom: 20px;'>",
-        "<p style='margin: 0;'><strong>Reply to this email with the numbers you want to KEEP.</strong></p>",
-        "<p style='margin: 8px 0 0 0; color: #666; font-size: 13px;'>Examples: <code>1, 3, 5, 8</code> &nbsp;·&nbsp; <code>1-10</code> &nbsp;·&nbsp; <code>ALL except 7, 12</code> &nbsp;·&nbsp; <code>ALL</code> &nbsp;·&nbsp; <code>NONE</code></p>",
-        "<p style='margin: 8px 0 0 0; color: #888; font-size: 12px;'>If no reply by 8 PM Central, ALL events will be published automatically.</p>",
+        "<p style='margin: 0;'><strong>This is an informational summary of what was collected this evening.</strong></p>",
+        f"<p style='margin: 8px 0 0 0; color: #666; font-size: 13px;'>Pick the events you want to publish on the admin review page: <a href='{admin_url}'>{admin_url}</a></p>",
+        "<p style='margin: 8px 0 0 0; color: #888; font-size: 12px;'>Then send the Beehiiv newsletter Monday morning.</p>",
         "</div>",
     ]
 
@@ -163,14 +161,13 @@ def build_email_body(events, by_date):
             """)
 
     text_lines.append(f"\n{'=' * 50}")
-    text_lines.append("Reply with picks: e.g. '1, 3, 5, 8' or '1-10' or 'ALL except 7'")
-    text_lines.append("No reply by 8 PM Central = ALL gets published.")
+    text_lines.append(f"Pick events at {admin_url}, then send the Beehiiv newsletter Monday morning.")
 
-    html_parts.append("""
+    html_parts.append(f"""
     <div style='background: #F7F6F2; padding: 15px; border-radius: 8px; margin-top: 25px; text-align: center;'>
-        <p style='margin: 0;'><strong>Reply to this email with your picks.</strong></p>
-        <p style='margin: 8px 0 0 0; color: #666; font-size: 13px;'><code>1, 3, 5, 8</code> &nbsp;·&nbsp; <code>1-10</code> &nbsp;·&nbsp; <code>ALL except 7</code> &nbsp;·&nbsp; <code>ALL</code> &nbsp;·&nbsp; <code>NONE</code></p>
-        <p style='margin: 8px 0 0 0; color: #888; font-size: 12px;'>No reply by 8 PM Central → ALL events get published.</p>
+        <p style='margin: 0;'><strong>Pick events on the admin review page.</strong></p>
+        <p style='margin: 8px 0 0 0; color: #666; font-size: 13px;'><a href='{admin_url}'>{admin_url}</a></p>
+        <p style='margin: 8px 0 0 0; color: #888; font-size: 12px;'>Then send the Beehiiv newsletter Monday morning.</p>
     </div>
     </body></html>
     """)
