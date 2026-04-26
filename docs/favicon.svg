@@ -1,5 +1,19 @@
-<svg width="32" height="32" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="42" height="42" rx="8" fill="#1A7A7E"/>
-  <path d="M12 12 L21 32 L30 12" stroke="white" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <text x="21" y="39" text-anchor="middle" font-family="sans-serif" font-size="7" font-weight="700" fill="white" opacity="0.85">361</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-label="The Vic 361">
+  <!-- Hexagon badge -->
+  <path d="M32 4 L56 18 L56 46 L32 60 L8 46 L8 18 Z"
+        fill="#FAF5E4" stroke="#4E47B8" stroke-width="4" stroke-linejoin="round"/>
+  <!-- Bluebonnet stalk - simplified petals -->
+  <g fill="#4E47B8">
+    <ellipse cx="32" cy="20" rx="3.5" ry="3"/>
+    <ellipse cx="28" cy="24" rx="3" ry="2.5"/>
+    <ellipse cx="36" cy="24" rx="3" ry="2.5"/>
+    <ellipse cx="29" cy="29" rx="3.5" ry="2.8"/>
+    <ellipse cx="35" cy="29" rx="3.5" ry="2.8"/>
+    <ellipse cx="32" cy="33" rx="4" ry="3"/>
+  </g>
+  <!-- Stem -->
+  <line x1="32" y1="36" x2="32" y2="48" stroke="#7A9E63" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Leaves -->
+  <path d="M32 42 Q24 41 22 45" stroke="#7A9E63" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M32 42 Q40 41 42 45" stroke="#7A9E63" stroke-width="2.5" fill="none" stroke-linecap="round"/>
 </svg>
