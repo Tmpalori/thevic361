@@ -186,6 +186,17 @@
   object-fit: contain;
 }
 
+/* Logo theme variants — show light by default, dark when theme is dark.
+   Use !important to win specificity battles with .logo-group .site-logo. */
+.site-logo--dark { display: none !important; }
+.site-logo--light { display: inline-block !important; }
+[data-theme="dark"] .site-logo--light { display: none !important; }
+[data-theme="dark"] .site-logo--dark { display: inline-block !important; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .site-logo--light { display: none !important; }
+  :root:not([data-theme]) .site-logo--dark { display: inline-block !important; }
+}
+
 .site-title {
   font-family: 'Fraunces', 'Playfair Display', Georgia, serif;
   font-size: var(--text-xl);
