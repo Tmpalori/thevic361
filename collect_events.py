@@ -246,6 +246,71 @@ def guess_free(name, description="", venue=""):
     return False
 
 
+# ─── ADDRESS-LIKE-VENUE NORMALIZATION ─────────────────────────────────────
+#
+# Some sources (notably AllEvents.in, when the FB organizer leaves the venue
+# blank) use the street address itself as the `location.name`. The site then
+# renders "5:00 PM Pretty Pretty Princess — 2002 E Mockingbird Ln, Victoria,
+# TX, ..., 2002 E Mockingbird Ln" (address echoed twice). _is_address_like()
+# detects this; _clean_address_like_venue() normalizes (venue, address) so
+# the address is shown once and the venue field stays empty ("") rather than
+# duplicating data.
+#
+# Pattern matched: leading 1–6 digits + optional letter + space + word, e.g.
+#   "1301 Tristan St", "2002 E Mockingbird Ln", "7608 NE Zac Lentz Pkwy"
+# We also catch the AllEvents 'with parenthetical city' form:
+#   "Tropical Smoothie Cafe parking lot in Victoria, TX" — left alone (no
+#   leading digits), as that's a real venue name.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ADDRESS_LEAD_RE = re.compile(r"^\s*\d{1,6}[A-Za-z]?\s+[A-Za-z]")
+
+
+def _is_address_like(s):
+    """Return True if the string looks like a street address rather than a venue name."""
+    if not s:
+        return False
+    s = s.strip()
+    # Leading digits + word (street number + name) is the strongest signal.
+    if not _ADDRESS_LEAD_RE.match(s):
+        return False
+    # Must contain a comma OR a state/zip/street-suffix to be confident.
+    suffixes = (
+        " st", " st.", " street", " rd", " rd.", " road",
+        " ave", " ave.", " avenue", " blvd", " blvd.", " boulevard",
+        " dr", " dr.", " drive", " ln", " ln.", " lane",
+        " pkwy", " parkway", " hwy", " highway", " pl", " plaza",
+        " ct", " court", " way", " cir", " circle", " trl", " trail",
+    )
+    low = s.lower()
+    if "," in s:
+        return True
+    if any(low.endswith(sfx) or sfx + " " in (low + " ") for sfx in suffixes):
+        return True
+    return False
+
+
+def _clean_address_like_venue(venue, address):
+    """If `venue` is actually an address string, demote it.
+
+    Returns (clean_venue, clean_address). The clean_venue is "" when the
+    source-supplied venue is just an address — the site renderer falls back
+    gracefully to address-only when venue is empty. clean_address keeps the
+    first comma-separated piece (e.g. '1301 Tristan St'), matching how the
+    AllEvents scraper already trims streetAddress.
+    """
+    venue = (venue or "").strip()
+    address = (address or "").strip()
+    if not _is_address_like(venue):
+        return venue, address
+    # Promote the address-like venue text to the address slot if no address
+    # is set, taking only the first comma-separated piece (street + number).
+    venue_first = venue.split(",")[0].strip()
+    if not address:
+        address = venue_first
+    return "", address
+
+
 # ─── SOURCE: LOCAL YAML (backbone) ──────────────────────────────────────────
 
 def load_local_events(yaml_path, days_ahead=7):
@@ -1287,14 +1352,27 @@ def merge_events(all_events, days_ahead=7):
         except ValueError:
             continue
 
-        # Normalize key — strip punctuation differences for fuzzy dedup
+        # Normalize key — strip punctuation differences for fuzzy dedup.
+        # Also drop generic trailing words that vary across sources for the
+        # same event (e.g. "Story Strolls Audiobook Walking Group" vs
+        # "... Walking series" — the last word is the only difference).
         name_norm = re.sub(r'[\s\-\u2013\u2014:,]+', ' ', ev.get("name", "").lower()).strip()
-        # Also build a "prefix" key from the first 6 significant words to catch
-        # variants like "Foo with Bar" vs "Foo with Bar, Title" (same event, longer name).
         words = [w for w in name_norm.split() if len(w) > 1]
-        prefix_norm = " ".join(words[:6])
+        # Trailing generics that get tacked onto the same recurring event by
+        # different sources. Stripped only when there's enough context
+        # (≥3 preceding significant words) so we don't collapse short names.
+        _GENERIC_TRAIL = {"group", "series", "club", "meetup", "event", "events",
+                          "program", "workshop", "session", "sessions", "night"}
+        trimmed = list(words)
+        while len(trimmed) > 3 and trimmed[-1] in _GENERIC_TRAIL:
+            trimmed.pop()
+        # Two prefix keys: a 6-word for ordinary cases, and a tighter 4-word
+        # for cases where the trailing words differ (e.g. group vs series).
+        prefix_norm = " ".join(trimmed[:6])
+        prefix_norm_short = " ".join(trimmed[:4]) if len(trimmed) >= 4 else ""
         key = (name_norm, date_str)
         prefix_key = (prefix_norm, date_str)
+        prefix_key_short = (prefix_norm_short, date_str) if prefix_norm_short else None
 
         # Auto-tag if needed
         if not ev.get("icons"):
@@ -1318,11 +1396,23 @@ def merge_events(all_events, days_ahead=7):
             "url": ev.get("url", "").strip(),
         }
 
-        # Resolve dupe via exact key OR prefix key (catches "X with Y" vs "X with Y, Z").
+        # Apply the same address-like-venue cleanup here too — belt-and-
+        # suspenders for sources other than AllEvents (e.g. Perplexity sonar
+        # sometimes returns a street-address string in the venue slot).
+        new_entry["venue"], new_entry["address"] = _clean_address_like_venue(
+            new_entry["venue"], new_entry["address"]
+        )
+
+        # Resolve dupe via exact key, then 6-word prefix, then 4-word prefix
+        # (the last catches "... Walking Group" vs "... Walking series").
         existing_key = key if key in seen else prefix_index.get(prefix_key)
+        if existing_key is None and prefix_key_short is not None:
+            existing_key = prefix_index.get(prefix_key_short)
         if existing_key is None:
             seen[key] = new_entry
             prefix_index[prefix_key] = key
+            if prefix_key_short is not None and prefix_key_short not in prefix_index:
+                prefix_index[prefix_key_short] = key
         else:
             old = seen[existing_key]
             # Pick the more complete entry, but always keep the shorter, cleaner name
@@ -1901,6 +1991,12 @@ def fetch_allevents_events(days_ahead=14):
 
             import html as _html
             name = _html.unescape(name)
+
+            # AllEvents often uses the street address itself as `location.name`
+            # when the FB organizer left the venue blank (e.g. Loko Wrestling →
+            # "1301 Tristan St, Victoria, TX 77901"). Demote it so the site
+            # doesn't render the address twice.
+            venue, address = _clean_address_like_venue(venue, address)
 
             description = ""
             free = guess_free(name, description, venue)

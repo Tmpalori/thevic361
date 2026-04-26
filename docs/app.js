@@ -88,6 +88,8 @@
       ? '<a href="' + ev.url + '" target="_blank" rel="noopener noreferrer">' + escHtml(ev.name) + '</a>'
       : escHtml(ev.name);
 
+    // Build the location string. If `venue` is empty (e.g. AllEvents.in feeds
+    // where the only location data is a street address), fall back to address.
     var venuePart = '';
     if (ev.venue) {
       venuePart = ev.url
@@ -96,6 +98,10 @@
       if (ev.address) {
         venuePart += ', ' + escHtml(ev.address);
       }
+    } else if (ev.address) {
+      venuePart = ev.url
+        ? '<a href="' + ev.url + '" target="_blank" rel="noopener noreferrer">' + escHtml(ev.address) + '</a>'
+        : escHtml(ev.address);
     }
 
     var freeBadge = '';

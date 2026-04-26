@@ -256,7 +256,8 @@
       "icons": [
         "outdoors",
         "food",
-        "music"
+        "music",
+        "free"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov"
@@ -420,7 +421,7 @@
       "date": "2026-04-26",
       "name": "Loko Wrestling /Lucha Pro Presents No Me Queda Mas",
       "time": "04:00 PM",
-      "venue": "1301 Tristan St, Victoria, TX 77901",
+      "venue": "",
       "address": "1301 Tristan St",
       "description": "High-energy wrestling matches open to all ages.",
       "icons": [
@@ -434,7 +435,7 @@
       "date": "2026-04-26",
       "name": "Pretty Pretty Princess",
       "time": "05:00 PM",
-      "venue": "2002 E Mockingbird Ln, Victoria, TX, United States, Texas 77904",
+      "venue": "",
       "address": "2002 E Mockingbird Ln",
       "description": "Fun, family-friendly community gathering.",
       "icons": [
@@ -504,7 +505,7 @@
       "date": "2026-04-28",
       "name": "VC Info Night",
       "time": "05:00 PM",
-      "venue": "2200 E Red River St, Victoria, TX, United States, Texas 77901",
+      "venue": "",
       "address": "2200 E Red River St",
       "description": "Community information session open to the public.",
       "icons": [
@@ -595,7 +596,8 @@
       "icons": [
         "music",
         "drinks",
-        "food"
+        "food",
+        "free"
       ],
       "free": true,
       "url": "https://www.instagram.com/lacantinavictoria/"
@@ -658,21 +660,6 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
-    },
-    {
-      "date": "2026-04-30",
-      "name": "Story Strolls \u2013 Audiobook Walking series",
-      "time": "5:30PM \u2013 6:30PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
-      "description": "Join the audiobook walking group for health and wellness.",
-      "icons": [
-        "outdoors",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://victoriapl.librarycalendar.com/event/story-strolls-audiobook-walking-series-8024"
     },
     {
       "date": "2026-04-30",
@@ -829,7 +816,8 @@
       "icons": [
         "community",
         "shopping",
-        "outdoors"
+        "outdoors",
+        "free"
       ],
       "free": true,
       "url": "https://allevents.in/victoria/gulf-bends-shine-the-light-on-mental-health-and-suicide-walk-and-resource-fair/100001979777301202"
@@ -853,7 +841,7 @@
       "date": "2026-05-02",
       "name": "Paint a Keepsake",
       "time": "10:00 AM",
-      "venue": "5803 NE Zac Lentz Parkway, Victoria, TX 77904",
+      "venue": "",
       "address": "5803 NE Zac Lentz Pkwy",
       "description": "Family-friendly outdoor painting activity to create a personal keepsake.",
       "icons": [
@@ -931,7 +919,8 @@
       "icons": [
         "outdoors",
         "community",
-        "family"
+        "family",
+        "free"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
@@ -1229,7 +1218,7 @@
       "date": "2026-05-07",
       "name": "Petals & Prosecco: Mother's Day",
       "time": "06:00 PM",
-      "venue": "402 E Power Ave, Victoria, TX, United States, Texas 77901",
+      "venue": "",
       "address": "402 E Power Ave",
       "description": "Flower-arranging workshop paired with prosecco for Mother's Day fun.",
       "icons": [
@@ -1243,7 +1232,7 @@
       "date": "2026-05-07",
       "name": "Spring Artisan Market",
       "time": "11:00 AM",
-      "venue": "2200 East Red River St., Victoria, TX, United States, Texas 77901",
+      "venue": "",
       "address": "2200 E Red River St",
       "description": "Shop unique handmade goods from local artisans.",
       "icons": [
@@ -1430,7 +1419,7 @@
       "date": "2026-05-10",
       "name": "Mother's Day",
       "time": "09:00 AM",
-      "venue": "2002 E Mockingbird Ln, Victoria, TX, United States, Texas 77904",
+      "venue": "",
       "address": "2002 E Mockingbird Ln",
       "description": "Community celebration open to the public.",
       "icons": [
