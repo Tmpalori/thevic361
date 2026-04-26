@@ -1,19 +1,6 @@
 {
-  "last_updated": "2026-04-26T21:39:28.315Z",
+  "last_updated": "2026-04-26T21:55:33.283Z",
   "events": [
-    {
-      "date": "2026-04-20",
-      "name": "Palace Bingo — Monday",
-      "time": "5:30 PM – 10:30 PM",
-      "venue": "Palace Bingo",
-      "address": "5306 Houston Hwy",
-      "description": "Evening session with cash prizes. Cards available at the door.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://palacebingo.org"
-    },
     {
       "date": "2026-04-20",
       "name": "VARRA Monday Night Run",
