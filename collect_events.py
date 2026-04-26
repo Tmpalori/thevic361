@@ -1606,23 +1606,17 @@ def fetch_apify_facebook_events(days_ahead=14):
         print(f"  [Apify FB] Failed to load venues: {e}")
         return events
 
-    # Use only high-confidence pages — they actually have current events
-    start_urls = [
-        {"url": v["facebook_events"]}
-        for v in venues
-        if v.get("confidence") == "high" and v.get("facebook_events")
-    ]
-    if not start_urls:
-        print("  [Apify FB] No high-confidence start URLs")
-        return events
-
-    print(f"  [Apify FB] Triggering actor for {len(start_urls)} venues...")
+    # Apify's facebook-events-scraper does NOT support page-tab URLs like
+    # /aerocrafters/events (returns "Invalid events page response"). It DOES
+    # support search queries — which is more useful for us anyway since it
+    # discovers events from venues we haven't even cataloged yet. We post-filter
+    # for Victoria-area events using the address/location text.
+    print(f"  [Apify FB] Searching Facebook events for Victoria TX...")
 
     actor_run_url = f"https://api.apify.com/v2/acts/{APIFY_FB_ACTOR}/run-sync-get-dataset-items?token={token}"
     payload = {
-        "startUrls": start_urls,
-        "maxEvents": 30,        # per-page cap
-        "timeFrame": "upcoming",
+        "searchQueries": ["Victoria Texas"],
+        "maxEvents": 60,
     }
     try:
         resp = requests.post(
@@ -1643,56 +1637,74 @@ def fetch_apify_facebook_events(days_ahead=14):
         print(f"  [Apify FB] Unexpected response type: {type(items).__name__}")
         return events
 
-    # Build a quick venue lookup by FB page URL
-    page_to_venue = {}
-    for v in venues:
-        page = (v.get("facebook_page") or "").rstrip("/")
-        if page:
-            page_to_venue[page.lower()] = v
+    skipped_off_window = 0
+    skipped_off_locality = 0
+    skipped_no_data = 0
 
     for item in items:
         if not isinstance(item, dict):
             continue
-        name = (item.get("name") or item.get("title") or "").strip()
-        start_iso = item.get("startTime") or item.get("startDate") or item.get("start_time") or ""
-        if not name or not start_iso:
+        # Some search results come back as error stubs — skip those
+        if item.get("error"):
             continue
+
+        name = (item.get("name") or item.get("title") or "").strip()
+        start_iso = (
+            item.get("utcStartDate")
+            or item.get("startDate")
+            or item.get("startTime")
+            or item.get("start_time")
+            or ""
+        )
+        if not name or not start_iso:
+            skipped_no_data += 1
+            continue
+
         # Parse start date
         try:
-            d_obj = datetime.fromisoformat(str(start_iso).replace("Z", "+00:00")).date()
+            dt = datetime.fromisoformat(str(start_iso).replace("Z", "+00:00"))
+            d_obj = dt.date()
         except Exception:
             try:
                 d_obj = datetime.strptime(str(start_iso)[:10], "%Y-%m-%d").date()
+                dt = None
             except Exception:
+                skipped_no_data += 1
                 continue
+
         if not in_window(d_obj):
+            skipped_off_window += 1
             continue
 
-        # Time
-        time_str = ""
-        try:
-            dt = datetime.fromisoformat(str(start_iso).replace("Z", "+00:00"))
-            time_str = dt.strftime("%-I:%M %p")
-        except Exception:
-            pass
+        # Location object: {city, streetAddress, name, contextualName, ...}
+        loc = item.get("location") or {}
+        if not isinstance(loc, dict):
+            loc = {}
+        venue = (loc.get("name") or loc.get("contextualName") or "").strip()
+        address = (loc.get("streetAddress") or "").strip()
+        city = (loc.get("city") or "").strip()
 
-        # Venue from host page
-        host_page = (
-            item.get("hostPage") or item.get("page") or item.get("organizer") or {}
-        )
-        if isinstance(host_page, dict):
-            host_url = (host_page.get("url") or host_page.get("link") or "").rstrip("/")
-        else:
-            host_url = str(host_page or "").rstrip("/")
-        venue_info = page_to_venue.get(host_url.lower(), {})
-        venue = venue_info.get("name") or item.get("location") or ""
-        if isinstance(venue, dict):
-            venue = venue.get("name") or ""
-        venue = str(venue or "").strip()
-        address = item.get("address") or ""
-        if isinstance(address, dict):
-            address = address.get("streetAddress") or address.get("name") or ""
-        address = str(address or "").strip()
+        # Locality filter — only keep events that are clearly in Victoria, TX.
+        # Search returns events from anywhere matching the keyword, so we have
+        # to gate on city / address / venue text.
+        haystack = " ".join([venue, address, city]).lower()
+        if "victoria" not in haystack:
+            skipped_off_locality += 1
+            continue
+        # Reject "Victoria, BC" and other non-TX Victorias
+        if "victoria" in haystack and "tx" not in haystack and "texas" not in haystack and "77" not in haystack:
+            skipped_off_locality += 1
+            continue
+
+        # Time string
+        time_str = ""
+        if dt is not None:
+            try:
+                time_str = dt.strftime("%-I:%M %p")
+            except Exception:
+                pass
+        if not time_str:
+            time_str = (item.get("startTime") or "").split(" at ")[-1].strip()
 
         description = (item.get("description") or "").strip()[:280]
         ev_url = item.get("url") or item.get("eventUrl") or ""
@@ -1709,7 +1721,11 @@ def fetch_apify_facebook_events(days_ahead=14):
             "url": ev_url,
         })
 
-    print(f"  [Apify FB] Extracted {len(events)} events from {len(items)} dataset items")
+    print(
+        f"  [Apify FB] Extracted {len(events)} Victoria events "
+        f"({len(items)} raw, {skipped_off_locality} non-Victoria, "
+        f"{skipped_off_window} out-of-window, {skipped_no_data} missing data)"
+    )
     return events
 
 
