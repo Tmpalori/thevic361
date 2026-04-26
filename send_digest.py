@@ -29,7 +29,7 @@ from email.mime.text import MIMEText
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 DEFAULT_TO = "tristen.m.palori@gmail.com"
-DEFAULT_FROM = "caspian.assistant@gmail.com"
+DEFAULT_FROM = "tristen.m.palori@gmail.com"
 DEFAULT_FROM_NAME = "The Vic 361"
 
 ICON_MAP = {
