@@ -187,12 +187,13 @@
 }
 
 .site-title {
-  font-family: var(--font-display);
+  font-family: 'Fraunces', 'Playfair Display', Georgia, serif;
   font-size: var(--text-xl);
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1;
   color: var(--color-text);
+  font-variation-settings: "opsz" 96, "SOFT" 100;
 }
 
 .site-title span {
