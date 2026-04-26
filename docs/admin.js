@@ -405,12 +405,41 @@
   }
 
   // ─── PREVIEW TAB ───
+  // Write the payload to sessionStorage under a short key, then point the
+  // iframe at index.html?previewKey=<key>. Keeps the URL short regardless of
+  // how many events are selected (the old ?preview=<json-blob> form blew past
+  // browser URI limits once the picks list got large).
+  const PREVIEW_STORAGE_PREFIX = 'vic361_preview_';
+
+  function generatePreviewKey() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function writePreviewToStorage(payload) {
+    const key = generatePreviewKey();
+    const storageKey = PREVIEW_STORAGE_PREFIX + key;
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch (err) {
+      console.error('Failed to write preview to sessionStorage:', err);
+      return null;
+    }
+    return key;
+  }
+
+  function buildPreviewSrc(payload) {
+    const key = writePreviewToStorage(payload);
+    if (key) {
+      return 'index.html?previewKey=' + encodeURIComponent(key);
+    }
+    const blob = encodeURIComponent(JSON.stringify(payload));
+    return 'index.html?preview=' + blob;
+  }
+
   function refreshPreview() {
     const frame = document.getElementById('preview-frame');
     if (!frame) return;
-    const payload = buildEventsPayload();
-    const blob = encodeURIComponent(JSON.stringify(payload));
-    frame.src = 'index.html?preview=' + blob;
+    frame.src = buildPreviewSrc(buildEventsPayload());
   }
 
   // ─── NEWSLETTER TAB ───
@@ -624,11 +653,13 @@
     eventKey, isWeekend, formatDateHeading, escapeHtml,
     applyFilters, groupByDate, buildNewsletterHtml,
     utf8ToBase64,
+    buildEventsPayload, buildPreviewSrc, writePreviewToStorage,
     _state: state,
     _constants: {
       WEEKDAY_TARGET_MIN, WEEKDAY_TARGET_MAX,
       WEEKEND_TARGET_MIN, WEEKEND_TARGET_MAX,
-      PAT_KEY, PICKS_KEY, REPO_OWNER, REPO_NAME, BRANCH
+      PAT_KEY, PICKS_KEY, REPO_OWNER, REPO_NAME, BRANCH,
+      PREVIEW_STORAGE_PREFIX
     }
   };
   if (typeof module !== 'undefined' && module.exports) {

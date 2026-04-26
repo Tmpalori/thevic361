@@ -205,10 +205,66 @@
     return div.innerHTML;
   }
 
+  // ─── PREVIEW MODE ───
+  // Admin's Preview tab loads this page in an iframe. Two preview transports
+  // are supported:
+  //   1. ?previewKey=<key>  — events stored in sessionStorage under
+  //      'vic361_preview_<key>'. Preferred: keeps the URL short even with
+  //      many picks.
+  //   2. ?preview=<json>     — legacy inline JSON blob. Kept for backwards
+  //      compatibility, but admin no longer generates these URLs.
+  var PREVIEW_STORAGE_PREFIX = 'vic361_preview_';
+
+  function readPreviewData() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var key = params.get('previewKey');
+      if (key) {
+        var storageKey = PREVIEW_STORAGE_PREFIX + key;
+        var raw = null;
+        try { raw = sessionStorage.getItem(storageKey); } catch (e) {}
+        if (!raw) {
+          try { raw = localStorage.getItem(storageKey); } catch (e) {}
+        }
+        if (raw) return JSON.parse(raw);
+      }
+      var inline = params.get('preview');
+      if (inline) return JSON.parse(decodeURIComponent(inline));
+    } catch (err) {
+      console.error('Failed to read preview data:', err);
+    }
+    return null;
+  }
+
+  function showPreviewIndicator() {
+    if (document.getElementById('vic361-preview-banner')) return;
+    var banner = document.createElement('div');
+    banner.id = 'vic361-preview-banner';
+    banner.textContent = 'Preview mode — showing unpublished admin picks';
+    banner.setAttribute('role', 'status');
+    banner.style.cssText = [
+      'position:fixed', 'top:0', 'left:0', 'right:0',
+      'background:#2d5b8a', 'color:#fff',
+      'font:600 12px/1.4 system-ui, sans-serif',
+      'text-align:center', 'padding:6px 12px',
+      'z-index:9999', 'letter-spacing:0.02em',
+      'box-shadow:0 1px 4px rgba(0,0,0,0.2)'
+    ].join(';');
+    document.body.appendChild(banner);
+    document.body.style.paddingTop = (banner.offsetHeight || 28) + 'px';
+  }
+
   // ─── MAIN LOAD ───
   function loadAndRender() {
-    fetch('./events.json')
-      .then(function (res) { return res.json(); })
+    var previewData = readPreviewData();
+    var dataPromise;
+    if (previewData) {
+      showPreviewIndicator();
+      dataPromise = Promise.resolve(previewData);
+    } else {
+      dataPromise = fetch('./events.json').then(function (res) { return res.json(); });
+    }
+    dataPromise
       .then(function (data) {
         var container = document.getElementById('events-container');
         var notableList = document.getElementById('notable-list');
@@ -288,6 +344,15 @@
         document.getElementById('events-container').innerHTML =
           '<p class="empty-state">Could not load events. Please try again later.</p>';
       });
+  }
+
+  // Expose a small surface for tests.
+  if (typeof window !== 'undefined') {
+    window.__vic361App = {
+      readPreviewData: readPreviewData,
+      showPreviewIndicator: showPreviewIndicator,
+      PREVIEW_STORAGE_PREFIX: PREVIEW_STORAGE_PREFIX
+    };
   }
 
   // Run on DOM ready

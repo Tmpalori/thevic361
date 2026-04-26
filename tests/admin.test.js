@@ -177,5 +177,59 @@ describe('admin pure helpers', () => {
     expect(api._constants.WEEKDAY_TARGET_MAX).toBe(8);
     expect(api._constants.WEEKEND_TARGET_MIN).toBe(8);
     expect(api._constants.WEEKEND_TARGET_MAX).toBe(12);
+    expect(api._constants.PREVIEW_STORAGE_PREFIX).toBe('vic361_preview_');
+  });
+});
+
+describe('admin preview mode (PR #20)', () => {
+  let api;
+  beforeEach(() => {
+    api = bootDom();
+    window.sessionStorage.clear();
+  });
+  afterEach(() => {
+    window.sessionStorage.clear();
+    delete window.__vic361Admin;
+  });
+
+  // Generate a large picks list — the kind that broke ?preview=<json> URLs.
+  function manyEvents(n) {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      out.push({
+        date: '2026-04-' + String(20 + (i % 7)).padStart(2, '0'),
+        name: 'Event number ' + i + ' with a moderately long name',
+        time: '7 PM',
+        venue: 'Venue ' + (i % 10) + ' with descriptive label',
+        icons: ['music', 'food'],
+        description: 'Lorem ipsum dolor sit amet, '.repeat(8) + ' #' + i
+      });
+    }
+    return out;
+  }
+
+  it('writePreviewToStorage stores the payload under the short key prefix', () => {
+    const payload = { last_updated: '2026-04-26T00:00:00Z', events: manyEvents(3) };
+    const key = api.writePreviewToStorage(payload);
+    expect(typeof key).toBe('string');
+    expect(key.length).toBeGreaterThan(0);
+    const stored = window.sessionStorage.getItem('vic361_preview_' + key);
+    expect(stored).not.toBeNull();
+    expect(JSON.parse(stored).events.length).toBe(3);
+  });
+
+  it('buildPreviewSrc returns a SHORT URL even with 100+ events', () => {
+    const payload = { last_updated: '2026-04-26T00:00:00Z', events: manyEvents(150) };
+    const src = api.buildPreviewSrc(payload);
+    // Old ?preview=<json-blob> approach produced URLs in the tens-of-thousands
+    // of chars range. The new ?previewKey=<key> form must stay tiny.
+    expect(src.startsWith('index.html?previewKey=')).toBe(true);
+    expect(src.length).toBeLessThan(200);
+  });
+
+  it('buildPreviewSrc with empty picks is also short', () => {
+    const src = api.buildPreviewSrc({ last_updated: 'x', events: [] });
+    expect(src.startsWith('index.html?previewKey=')).toBe(true);
+    expect(src.length).toBeLessThan(200);
   });
 });
