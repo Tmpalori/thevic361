@@ -69,6 +69,32 @@ deleted. If `APIFY_TOKEN` is missing or the actor errors out, discovery is
 a no-op — the existing venue files are left untouched and the collector
 runs as normal.
 
+## Sonar Event Discovery (Venue-Grounded Prompts)
+
+`fetch_perplexity_events` runs **8 venue-grounded query buckets** against
+Perplexity Sonar each Sunday. Buckets are seeded from the current
+`venues.json`, so each prompt names the actual HIGH-tier venues we care
+about instead of asking generically about Victoria, TX:
+
+| # | Bucket | Seeded from |
+|---|---|---|
+| q1 | Live music this week | HIGH music venues (Bar / Live Music, Theatre, etc.) |
+| q2 | Trivia / karaoke / open mic | HIGH bars |
+| q3 | Family events | HIGH family venues (museum, theatre, arcade, zoo, attraction) |
+| q4 | Restaurant specials, pop-ups, food trucks | HIGH/MEDIUM restaurants |
+| q5 | Cultural events | HIGH cultural venues (Arts, Museum, Theatre) |
+| q6 | Community / civic | Churches, civic clubs, library (no venue list) |
+| q7 | Markets / fairs / festivals | Farmers Market + city-wide |
+| q8 | Eventbrite / AllEvents.in catch-all | n/a |
+
+Each bucket caps named venues at 6 (HIGH first) so prompts stay concise. If
+`venues.json` is missing or has no HIGH match for a category, the bucket
+falls back to category-only phrasing — the collector keeps running.
+
+This replaces the old 10-query generic set; four of those queries
+(`q1 aero`, `q6 trivia`, `q7 music`, `q10 food`) had been silently returning
+zero events for weeks because Sonar had nothing concrete to ground on.
+
 ## Social Posts → Events (Optional)
 
 Two opt-in pipelines pull recent social posts and ask Perplexity Sonar to

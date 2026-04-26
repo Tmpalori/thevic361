@@ -900,9 +900,204 @@ def _parse_sonar_json(content):
     return None
 
 
+# ─── SONAR QUERY BUILDER (venue-grounded, PR #18) ────────────────────────────
+#
+# We replaced the original 10 generic queries (e.g. "what live music is in
+# Victoria TX") with 8 venue-grounded buckets that name actual venues from
+# ``venues.json``. The four worst offenders from the old set — q1 aero,
+# q6 trivia, q7 music, q10 food — were silently failing to return events for
+# weeks because Sonar had nothing concrete to ground on. Naming HIGH-tier
+# venues directly turns each query into a venue-roll-up instead of a prayer.
+#
+# Bucket map (label → categories matched in venues.json):
+#   q1 music             → "Bar / Live Music", "Bar / Music", "Theatre",
+#                          "Entertainment" venues with music keywords
+#   q2 bar weekly        → all "Bar*" venues (trivia / karaoke / open mic)
+#   q3 family            → family-friendly venues (museum, theatre, arcade,
+#                          attraction, zoo)
+#   q4 restaurant        → "Restaurant*" venues (specials / pop-ups / trucks)
+#   q5 cultural          → "Arts*", "Museum*", "Theatre" venues
+#   q6 community / civic → no venue list (churches, civic clubs, library)
+#   q7 markets           → "Market", "Farm / Venue", festivals (no venue list)
+#   q8 catch-all         → Eventbrite / AllEvents.in (no venue list)
+#
+# We cap each bucket's named venues at 6, preferring HIGH-confidence venues so
+# the prompt stays short and Sonar isn't drowned by 47 names. If a category
+# has no matching venues, the prompt falls back to a category-wide phrasing
+# rather than producing an empty bucket.
+
+# Cap how many venue names we paste into a single prompt. 6 is enough to
+# anchor Sonar without bloating the token count or pushing the JSON instruction
+# out of attention.
+_SONAR_VENUES_PER_BUCKET = 6
+
+# Confidence ordering — HIGH first, then MEDIUM, then LOW. Anything else
+# (missing field, "unknown") sorts last.
+_CONFIDENCE_RANK = {"high": 0, "medium": 1, "low": 2}
+
+
+def _confidence_key(venue):
+    return _CONFIDENCE_RANK.get((venue.get("confidence") or "").lower(), 99)
+
+
+def _category_lc(venue):
+    return (venue.get("category") or "").lower()
+
+
+def _matches_any(venue, keywords):
+    """True if the venue's category or event_potential mentions any keyword."""
+    haystack = (_category_lc(venue) + " " + (venue.get("event_potential") or "").lower())
+    return any(k in haystack for k in keywords)
+
+
+def _select_venues(venues, predicate, prefer_high_only=False, limit=_SONAR_VENUES_PER_BUCKET):
+    """Filter ``venues`` by ``predicate``, sort HIGH→MEDIUM→LOW, then truncate.
+
+    If ``prefer_high_only`` is True we drop the bucket back to category-only
+    fallback (returning []) when there are zero HIGH-confidence matches —
+    the bucket spec asks for HIGH venues, so a list of LOW-tier bars is worse
+    than no list at all.
+    """
+    matches = [v for v in venues if predicate(v) and v.get("name")]
+    matches.sort(key=_confidence_key)
+    if prefer_high_only and not any(_confidence_key(v) == 0 for v in matches):
+        return []
+    return matches[:limit]
+
+
+def _format_venue_names(venues):
+    """Comma-joined venue names, oxford-style, suitable for inline prompt use."""
+    names = [v["name"] for v in venues]
+    if len(names) <= 1:
+        return names[0] if names else ""
+    return ", ".join(names[:-1]) + ", and " + names[-1]
+
+
+def _build_sonar_queries(venues, date_range_str):
+    """Build the 8 venue-grounded Sonar query buckets.
+
+    Returns a list of (label, query_text) tuples. ``venues`` may be empty —
+    each bucket falls back to category-wide phrasing rather than crashing.
+    """
+    music_venues = _select_venues(
+        venues,
+        lambda v: ("live music" in _category_lc(v)
+                   or "music" in _category_lc(v)
+                   or "theatre" in _category_lc(v)
+                   or _matches_any(v, ["live music", "open mic", "concert"])),
+        prefer_high_only=True,
+    )
+    bar_venues = _select_venues(
+        venues,
+        lambda v: _category_lc(v).startswith("bar") or "bar" in _category_lc(v).split("/")[0],
+        prefer_high_only=True,
+    )
+    family_venues = _select_venues(
+        venues,
+        lambda v: _matches_any(v, [
+            "museum", "theatre", "arcade", "zoo", "attraction",
+            "family", "kids", "bowling",
+        ]) or _category_lc(v) in ("museum / arts", "theatre", "attraction", "entertainment"),
+        prefer_high_only=True,
+    )
+    restaurant_venues = _select_venues(
+        venues,
+        lambda v: _category_lc(v).startswith("restaurant"),
+        prefer_high_only=False,  # there are no HIGH restaurants today; allow MEDIUM
+    )
+    cultural_venues = _select_venues(
+        venues,
+        lambda v: _matches_any(v, ["arts", "museum", "theatre", "gallery", "ballet"])
+                  or _category_lc(v) in ("arts", "arts / performance", "museum / arts", "theatre"),
+        prefer_high_only=True,
+    )
+
+    def _q(label, fallback_phrasing, named_phrasing, named):
+        # named_phrasing(named_str) is called only when ``named`` is non-empty.
+        if named:
+            return (label, named_phrasing(_format_venue_names(named)))
+        return (label, fallback_phrasing)
+
+    queries = [
+        _q(
+            "music (HIGH venues)",
+            f"What live music shows are happening at music venues in Victoria, TX from {date_range_str}? "
+            f"List specific concerts, bands, and artist names with dates.",
+            lambda names: (
+                f"What live music is happening this week at {names} in Victoria, TX from {date_range_str}? "
+                f"For each show, give the date, artist or band name, and start time. "
+                f"Check each venue's Facebook events page and website."
+            ),
+            music_venues,
+        ),
+        _q(
+            "bar weekly (HIGH bars)",
+            f"What trivia, karaoke, and open mic nights are happening at bars in Victoria, TX from {date_range_str}? "
+            f"Include weekly recurring bar events.",
+            lambda names: (
+                f"What trivia nights, karaoke, and open mic nights are happening this week at {names} "
+                f"in Victoria, TX from {date_range_str}? Check each bar's Facebook events page."
+            ),
+            bar_venues,
+        ),
+        _q(
+            "family (HIGH family venues)",
+            f"What family-friendly events and kids activities are happening in Victoria, TX from {date_range_str}? "
+            f"Check museums, theaters, arcades, and family attractions.",
+            lambda names: (
+                f"What family events and kids activities are happening this week at {names} "
+                f"in Victoria, TX from {date_range_str}? Include story times, kids workshops, and "
+                f"all-ages shows."
+            ),
+            family_venues,
+        ),
+        _q(
+            "restaurant specials (HIGH restaurants)",
+            f"What restaurant specials, pop-ups, and food truck rallies are happening in Victoria, TX "
+            f"from {date_range_str}? Include themed dinners and chef collaborations.",
+            lambda names: (
+                f"What restaurant specials, pop-ups, themed dinners, or food truck visits are happening "
+                f"this week at {names} in Victoria, TX from {date_range_str}? Check each restaurant's "
+                f"Facebook page and website."
+            ),
+            restaurant_venues,
+        ),
+        _q(
+            "cultural (HIGH cultural venues)",
+            f"What arts, theater, and museum events are happening in Victoria, TX from {date_range_str}? "
+            f"Include gallery openings, exhibits, and stage performances.",
+            lambda names: (
+                f"What cultural events — gallery openings, exhibits, plays, ballets, classes — are "
+                f"happening this week at {names} in Victoria, TX from {date_range_str}?"
+            ),
+            cultural_venues,
+        ),
+        ("community / civic", (
+            f"What community and civic events are happening in Victoria, TX from {date_range_str}? "
+            f"Include church events, civic clubs (Rotary, Lions, Kiwanis), Victoria Public Library "
+            f"programs, fundraisers, galas, and nonprofit gatherings."
+        )),
+        ("markets / fairs / festivals", (
+            f"What markets, fairs, and festivals are happening this week in Victoria, TX from "
+            f"{date_range_str}? Include Victoria Farmers Market, craft fairs, vendor markets, "
+            f"holiday festivals, and outdoor pop-up markets."
+        )),
+        ("eventbrite / allevents catch-all", (
+            f"List events in Victoria, Texas (77901) from {date_range_str} that are posted on "
+            f"Eventbrite (eventbrite.com) or AllEvents.in (allevents.in/victoria-tx). Include all "
+            f"categories. For each event, give the date, name, venue, and source URL."
+        )),
+    ]
+    return queries
+
+
 def fetch_perplexity_events(days_ahead=8):
     """Use Perplexity sonar to search the web for Victoria TX events.
-    Runs multiple targeted queries — one per major venue/source — to maximize coverage."""
+
+    Runs 8 venue-grounded query buckets (see ``_build_sonar_queries``) seeded
+    from ``venues.json`` so each prompt names actual HIGH-tier venues instead
+    of asking generically about the city.
+    """
     api_key = os.environ.get("PERPLEXITY_API_KEY")
     if not api_key:
         print("  [Perplexity] No PERPLEXITY_API_KEY — skipping")
@@ -914,19 +1109,12 @@ def fetch_perplexity_events(days_ahead=8):
     today_str = today.strftime('%Y-%m-%d')
     end_str = end_date.strftime('%Y-%m-%d')
 
-    # Targeted queries — each forces Perplexity to dig into a specific source
-    queries = [
-        f'What events are happening at Aero Crafters (aerocrafters.pub) in Victoria TX from {date_range_str}? Include live music, open mics, special events, and anything posted on their Facebook or Instagram.',
-        f'What events are at Moonshine Drinkery, The Hideaway, and Froggy\'s Grub & Pub in Victoria TX from {date_range_str}? Check their websites, Facebook pages, and Instagram accounts.',
-        f'Search Eventbrite for events in Victoria Texas 77901 from {date_range_str}. Include all categories.',
-        f'What community events, festivals, fundraisers, galas, and public gatherings are happening in Victoria Texas from {date_range_str}? Check the Victoria Advocate (victoriaadvocate.com), local nonprofits, churches, and civic groups.',
-        f'What fitness, sports, outdoor, or recreation events are happening in Victoria TX from {date_range_str}? Include yoga classes, 5K runs, park events, CrossFit competitions, and Victoria Parks & Rec activities.',
-        f'What trivia nights, karaoke nights, open mic nights, and weekly bar events are happening at bars and restaurants in Victoria TX from {date_range_str}? Check Facebook events and venue Instagram pages.',
-        f'What live music concerts and shows are happening in Victoria TX from {date_range_str}? Search Weaver House Concerts, Aero Crafters, local venues, and any ticketed music events.',
-        f'What family events, kids activities, school events, and youth activities are happening in Victoria TX from {date_range_str}? Include VISD events, church activities, and family-friendly outings.',
-        f'What arts, theater, gallery openings, and cultural events are happening in Victoria TX from {date_range_str}? Check Victoria Fine Arts Center, Nave Museum, Museum of the Coastal Bend, and local galleries.',
-        f'What new restaurant openings, food events, pop-up markets, food truck rallies, and local dining specials are happening in Victoria TX from {date_range_str}?',
-    ]
+    venues, venues_path = _load_venue_list()
+    if not venues:
+        print("  [Perplexity] venues.json missing/empty — using category-only fallback prompts")
+    query_pairs = _build_sonar_queries(venues, date_range_str)
+    queries = [text for _, text in query_pairs]
+    query_labels = [label for label, _ in query_pairs]
 
     json_instruction = f"""
 Return ONLY a valid JSON array. No markdown fences, no explanation, just the array.
@@ -938,13 +1126,6 @@ Rules:
 - Victoria, TX (77901) only — exclude events in other cities
 - If you cannot confirm a date, omit the event
 - Return [] if nothing found"""
-
-    # Per-query topics for log clarity
-    query_labels = [
-        "aero crafters", "bars (moonshine/hideaway/froggy)", "eventbrite",
-        "community/civic", "fitness/sports", "trivia/karaoke/open mic",
-        "live music", "family/kids", "arts/theater/galleries", "food/restaurants",
-    ]
 
     all_raw = []
     query_stats = []  # for the summary log
