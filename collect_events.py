@@ -1940,6 +1940,7 @@ def fetch_allevents_events(days_ahead=14):
 
 APIFY_FB_ACTOR = "apify~facebook-events-scraper"
 APIFY_FB_POSTS_ACTOR = "apify~facebook-posts-scraper"
+APIFY_IG_POSTS_ACTOR = "apify~instagram-post-scraper"
 APIFY_RUN_TIMEOUT = 240  # seconds we'll wait for the run to finish
 
 # Process-local tombstone: once we see a 403 hard-limit, all later Apify calls
@@ -2410,6 +2411,316 @@ def fetch_apify_facebook_posts(days_ahead=14):
     return events
 
 
+# ─── INSTAGRAM POSTS → SONAR ─────────────────────────────────────────────────
+#
+# Mirror of fetch_apify_facebook_posts but against Instagram. Same Sonar prompt
+# is reused (captions and FB post text look similar enough — many Victoria
+# venues just cross-post). Tier-aware so we burn fewer credits on lower-tier
+# discoveries:
+#
+#   HIGH   tier → 25 posts each, 14-day lookback
+#   MEDIUM tier → 15 posts each, 14-day lookback
+#
+# Cost shape (rough): Apify $2/1000 posts × ~9 HIGH × 25 + ~10 MEDIUM × 15
+#   ≈ 375 posts ≈ $0.75 per run. Plus ~1 Sonar call per venue with posts
+#   (≈15 calls, ~$0.005 each) ≈ $0.08. Total ≤ $0.85/run.
+#
+# Toggle with IG_POSTS_ENABLED=1 (default off until production-validated).
+
+_IG_POSTS_PER_HIGH = 25
+_IG_POSTS_PER_MEDIUM = 15
+_IG_POSTS_LOOKBACK_DAYS = 14
+
+
+def _venue_tier(venue):
+    """Best-effort tier classification for a venue dict.
+
+    Discovered venues from PR #16 carry an explicit ``tier`` field
+    (``HIGH``/``MEDIUM``). Legacy seed venues only carry ``confidence``
+    (``high``/``medium``/``low``). We bridge so the IG scraper can tier
+    either source without redesign:
+
+      tier=HIGH   or confidence=high   → "HIGH"
+      tier=MEDIUM or confidence=medium → "MEDIUM"
+      everything else                  → "LOW" (skipped)
+    """
+    if not isinstance(venue, dict):
+        return "LOW"
+    tier = (venue.get("tier") or "").strip().upper()
+    if tier in ("HIGH", "MEDIUM"):
+        return tier
+    conf = (venue.get("confidence") or "").strip().lower()
+    if conf == "high":
+        return "HIGH"
+    if conf == "medium":
+        return "MEDIUM"
+    return "LOW"
+
+
+def _normalize_ig_username(value):
+    """Normalize one Instagram identifier to a bare username.
+
+    Accepts URLs (``https://www.instagram.com/aerocrafters/``), @handles
+    (``@aerocrafters``), or plain usernames. Returns ``None`` if nothing
+    usable can be recovered. The Apify ``instagram-post-scraper`` actor
+    expects bare usernames in its ``username`` array.
+    """
+    if not value or not isinstance(value, str):
+        return None
+    s = value.strip()
+    if not s:
+        return None
+    # Drop a leading @
+    if s.startswith("@"):
+        s = s[1:]
+    # If it looks like a URL, pull the first path segment after /
+    if "instagram.com" in s.lower() or s.startswith("http"):
+        # Strip protocol + query/fragment
+        s = re.sub(r"^https?://", "", s, flags=re.I)
+        s = s.split("?", 1)[0].split("#", 1)[0]
+        # Drop host
+        parts = s.split("/")
+        # Find the segment after the host
+        host_seen = False
+        username = None
+        for seg in parts:
+            if not seg:
+                continue
+            if not host_seen:
+                # First non-empty segment is the host (instagram.com / www…)
+                host_seen = True
+                if "instagram.com" not in seg.lower():
+                    # Not an instagram URL — give up
+                    return None
+                continue
+            username = seg
+            break
+        if not username:
+            return None
+        s = username
+    # Strip any trailing slash, querystring, or whitespace just in case
+    s = s.rstrip("/").strip()
+    # Reject obvious junk: only allow IG-legal chars (letters, digits, ., _)
+    if not s or not re.match(r"^[A-Za-z0-9._]+$", s):
+        return None
+    return s
+
+
+def _venue_instagram_username(venue):
+    """Extract a single Instagram username from a venue dict, or None.
+
+    Tries ``instagrams[]`` first (PR #16 schema), then ``instagram`` /
+    ``instagram_url`` for backwards compatibility. Returns the first
+    candidate that normalizes successfully.
+    """
+    if not isinstance(venue, dict):
+        return None
+    candidates = []
+    igs = venue.get("instagrams")
+    if isinstance(igs, list):
+        candidates.extend(igs)
+    elif isinstance(igs, str):
+        candidates.append(igs)
+    for k in ("instagram", "instagram_url", "instagramUrl"):
+        v = venue.get(k)
+        if v:
+            candidates.append(v)
+    for c in candidates:
+        u = _normalize_ig_username(c)
+        if u:
+            return u
+    return None
+
+
+def fetch_apify_instagram_posts(days_ahead=14):
+    """Pull recent Instagram posts from each tiered venue and ask sonar to
+    extract dated events. Off by default — set IG_POSTS_ENABLED=1 to turn on.
+
+    Tier-aware:
+      HIGH   → 25 posts, 14-day lookback
+      MEDIUM → 15 posts, 14-day lookback
+
+    Pipeline per venue:
+      Apify instagram-post-scraper → recent posts → sonar event extraction →
+      normalized event dicts. The Sonar prompt is shared with the Facebook
+      pipeline (``_extract_events_from_posts_via_sonar``); IG captions are
+      close enough to FB post text that the same prompt extracts cleanly.
+    """
+    global _APIFY_LIMIT_TRIPPED
+    events = []
+
+    if os.environ.get("IG_POSTS_ENABLED", "").strip() not in ("1", "true", "yes"):
+        print("  [Apify IG Posts] Disabled (set IG_POSTS_ENABLED=1 to enable)")
+        return events
+
+    token = os.environ.get("APIFY_TOKEN", "").strip()
+    if not token:
+        print("  [Apify IG Posts] No APIFY_TOKEN — skipping")
+        return events
+    if _APIFY_LIMIT_TRIPPED:
+        print("  [Apify IG Posts] Monthly hard limit already tripped this run — skipping")
+        return events
+    if not os.environ.get("PERPLEXITY_API_KEY"):
+        print("  [Apify IG Posts] No PERPLEXITY_API_KEY — cannot extract events from posts")
+        return events
+
+    all_venues, venues_path = _load_venue_list()
+    if not all_venues:
+        print("  [Apify IG Posts] No venue list found (venues.json / facebook_venues.json)")
+        return events
+    print(f"  [Apify IG Posts] Using venue list: {os.path.basename(venues_path)}")
+
+    # Build (venue, username, tier, posts_limit) tuples for everything we'll
+    # actually scrape, dropping LOW tier and venues without usable IG handles.
+    targets = []
+    skipped_no_ig = 0
+    skipped_low_tier = 0
+    for v in all_venues:
+        tier = _venue_tier(v)
+        if tier == "LOW":
+            skipped_low_tier += 1
+            continue
+        username = _venue_instagram_username(v)
+        if not username:
+            skipped_no_ig += 1
+            continue
+        limit = _IG_POSTS_PER_HIGH if tier == "HIGH" else _IG_POSTS_PER_MEDIUM
+        targets.append((v, username, tier, limit))
+
+    if not targets:
+        print(f"  [Apify IG Posts] No tiered venues with IG handles (low_tier={skipped_low_tier}, no_ig={skipped_no_ig})")
+        return events
+
+    newer_than = (datetime.now().date() - timedelta(days=_IG_POSTS_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+    n_high = sum(1 for t in targets if t[2] == "HIGH")
+    n_med = sum(1 for t in targets if t[2] == "MEDIUM")
+    print(
+        f"  [Apify IG Posts] Pulling posts from {len(targets)} venues "
+        f"(HIGH={n_high}, MEDIUM={n_med}, since {newer_than})"
+    )
+
+    actor_run_url = (
+        f"https://api.apify.com/v2/acts/{APIFY_IG_POSTS_ACTOR}"
+        f"/run-sync-get-dataset-items?token={token}"
+    )
+
+    venue_stats = []
+    for venue, username, tier, posts_limit in targets:
+        if _APIFY_LIMIT_TRIPPED:
+            venue_stats.append(f"{venue.get('name','?')}: SKIP (limit tripped)")
+            break
+
+        venue_name = venue.get("name", "?")
+
+        # Defensive actor input shape. The instagram-post-scraper actor
+        # documents ``username`` (array), ``resultsLimit`` (int), and
+        # ``onlyPostsNewerThan`` (YYYY-MM-DD). Keep it explicit so a future
+        # actor schema bump fails loudly rather than silently mis-scraping.
+        payload = {
+            "username": [username],
+            "resultsLimit": posts_limit,
+            "onlyPostsNewerThan": newer_than,
+        }
+
+        try:
+            resp = requests.post(
+                actor_run_url,
+                json=payload,
+                timeout=APIFY_RUN_TIMEOUT,
+                headers={"Content-Type": "application/json"},
+            )
+        except Exception as e:
+            venue_stats.append(f"{venue_name}: ERROR ({type(e).__name__})")
+            _sentry_warn("IG posts actor exception", venue=venue_name, error=str(e)[:200])
+            continue
+
+        if resp.status_code >= 400:
+            venue_stats.append(f"{venue_name}: HTTP {resp.status_code}")
+            if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
+                _APIFY_LIMIT_TRIPPED = True
+                _sentry_warn(
+                    "Apify monthly hard limit tripped",
+                    actor=APIFY_IG_POSTS_ACTOR,
+                    status=403,
+                )
+            else:
+                _sentry_warn(
+                    "IG posts actor HTTP error",
+                    venue=venue_name,
+                    status=resp.status_code,
+                    body=resp.text[:200],
+                )
+            continue
+
+        try:
+            posts = resp.json()
+        except Exception:
+            venue_stats.append(f"{venue_name}: bad JSON")
+            continue
+        if not isinstance(posts, list):
+            venue_stats.append(f"{venue_name}: unexpected type {type(posts).__name__}")
+            continue
+
+        # IG actor field names: caption, url, timestamp. Normalize into the
+        # shape the shared Sonar helper expects (text/url/time).
+        normalized = []
+        for p in posts:
+            if not isinstance(p, dict):
+                continue
+            normalized.append({
+                "text": p.get("caption") or p.get("text") or "",
+                "url": p.get("url") or p.get("postUrl") or p.get("link") or "",
+                "time": p.get("timestamp") or p.get("time") or p.get("date") or "",
+            })
+
+        raw = _extract_events_from_posts_via_sonar(venue_name, normalized)
+        kept = 0
+        ig_profile_url = f"https://www.instagram.com/{username}/"
+        for r in raw:
+            if not isinstance(r, dict):
+                continue
+            date_str = (r.get("date") or "").strip()
+            name = (r.get("name") or "").strip()
+            if not date_str or not name:
+                continue
+            try:
+                d_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if not in_window(d_obj):
+                continue
+
+            source_url = ig_profile_url
+            idx = r.get("source_post_index")
+            if isinstance(idx, int) and 1 <= idx <= len(normalized):
+                post = normalized[idx - 1]
+                if post.get("url"):
+                    source_url = post["url"]
+
+            description = (r.get("description") or "").strip()[:280]
+            time_str = (r.get("time") or "").strip()
+            address = (venue.get("address") or "").strip()
+
+            events.append({
+                "date": d_obj.strftime("%Y-%m-%d"),
+                "name": name,
+                "time": time_str,
+                "venue": venue_name,
+                "address": address,
+                "description": description,
+                "icons": classify_icons(name, description, venue_name),
+                "free": bool(r.get("free", False)) or guess_free(name, description, venue_name),
+                "url": source_url,
+            })
+            kept += 1
+        venue_stats.append(f"{venue_name} [{tier}]: {len(normalized)} posts → {kept} events")
+
+    print(f"  [Apify IG Posts] Extracted {len(events)} events across {len(targets)} venues")
+    for s in venue_stats:
+        print(f"    • {s}")
+    return events
+
+
 # ─── MAIN ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -2484,6 +2795,13 @@ def main():
         # venue page so we catch events announced as posts ("live music
         # tonight 7pm") that never become formal Event pages.
         all_events.extend(safe_fetch("apify_facebook_posts", fetch_apify_facebook_posts,
+                                     args=(args.days,), expect_events=False))
+
+        # Apify Instagram *posts* → sonar event extraction. Off by default;
+        # set IG_POSTS_ENABLED=1 to enable. Mirrors the FB-posts pipeline but
+        # tier-aware (HIGH=25 posts, MEDIUM=15 posts) and pulls from each
+        # tiered venue's Instagram handle when one is known.
+        all_events.extend(safe_fetch("apify_instagram_posts", fetch_apify_instagram_posts,
                                      args=(args.days,), expect_events=False))
 
     # 4. Perplexity AI discovery

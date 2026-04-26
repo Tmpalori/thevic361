@@ -163,3 +163,25 @@ a safety floor — venues already in it are never dropped, even if Google
 Maps disagrees. If the Apify monthly cap is hit or the token is missing,
 discovery quietly skips and the collector keeps using whatever venue list
 was last good.
+
+---
+
+## Social Posts → Events (Opt-in)
+
+Two optional pipelines pull recent posts from venue social pages and use
+Perplexity Sonar to extract dated events from the post text. Both are
+**off by default** and toggled by repo variables (Settings → Variables →
+Actions):
+
+- `FB_POSTS_ENABLED=1` — Facebook posts (50 posts × HIGH-confidence venues,
+  30-day lookback). Apify actor: `apify/facebook-posts-scraper`.
+- `IG_POSTS_ENABLED=1` — Instagram posts (25 × HIGH, 15 × MEDIUM venues,
+  14-day lookback). Apify actor: `apify/instagram-post-scraper`. Uses
+  `instagrams[]` from `venues.json` (or legacy `instagram` field) and
+  normalizes URLs/`@handles`/plain usernames before scraping.
+
+Both share the same Apify monthly-cap tombstone — if one trips the hard
+limit, the rest of that run skips remaining Apify calls. Costs: ≤ $0.50/run
+(FB), ≤ $0.85/run (IG) at current tier sizes. The Sonar extraction prompt
+is shared between the two; IG captions and FB post text are similar enough
+that one prompt covers both without redesign.

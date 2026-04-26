@@ -52,6 +52,10 @@ jobs:
           # variable FB_POSTS_ENABLED=1 (Settings → Variables → Actions) to
           # turn on without editing this file.
           FB_POSTS_ENABLED:   ${{ vars.FB_POSTS_ENABLED }}
+          # Toggle the IG-posts → sonar pipeline (mirrors FB_POSTS_ENABLED).
+          # Off until production-validated. Set repository variable
+          # IG_POSTS_ENABLED=1 (Settings → Variables → Actions) to enable.
+          IG_POSTS_ENABLED:   ${{ vars.IG_POSTS_ENABLED }}
         run: |
           python collect_events.py \
             --output ./docs/events.json \
