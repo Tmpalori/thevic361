@@ -943,75 +943,224 @@ Rules:
     return events
 
 
-# ─── AI CLEANUP (optional) ──────────────────────────────────────────────────
+# ─── AI REVIEW (description + icons polish) ─────────────────────────────────
+#
+# What this does:
+#   For every collected event, ask Perplexity sonar to:
+#     1. Rewrite the description as ≤160 chars, max 2 short sentences,
+#        no emojis, no venue/date repetition, neutral local-newsletter tone.
+#     2. Pick 1–3 icons from the canonical set, ranked by relevance.
+#     3. Re-evaluate the `free` flag (true / false).
+#
+# It does NOT change name, date, time, venue, address, or url — those come
+# from the source of truth (yaml/scrapers) and shouldn't be invented by AI.
+#
+# Calls are batched (default 8 events per request) so we only make ~10–15
+# API calls per daily run instead of one giant prompt or one-call-per-event.
+#
+# Degrades gracefully:
+#   - No PERPLEXITY_API_KEY → skip, return events untouched.
+#   - Sonar returns malformed JSON for a batch → keep that batch's originals.
+#   - Per-event response missing fields → keep that event's original values.
 
-def ai_cleanup(events, days_ahead=7):
-    """Use OpenAI to deduplicate, clean descriptions, and fill gaps."""
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        print("  [AI] No OPENAI_API_KEY — skipping AI cleanup")
-        return events
+VALID_ICONS = {"food", "music", "family", "drinks", "arts",
+               "shopping", "outdoors", "community", "free"}
 
-    today = datetime.now()
-    date_range = [
-        (today + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days_ahead)
+_AI_REVIEW_SYSTEM_PROMPT = """You are an editor for The Vic 361, a weekly community events website for Victoria, TX. Your job is to polish event descriptions and assign icons so the site reads consistently and professionally.
+
+For each event you receive, return:
+  - description: ≤160 characters, max 2 short sentences. Neutral, friendly local-newsletter tone. NO emojis. Do NOT repeat the event name, venue name, address, date, or time (the site already shows those). If the input description has no useful info beyond what's already in the name/venue, write a brief 1-line description of what attendees can expect based on the event type.
+  - icons: 1–3 strings from this exact set: food, music, family, drinks, arts, shopping, outdoors, community, free. Order by relevance (most representative first). Use "free" only when the event is genuinely free to attend.
+  - free: boolean, true if the event is free to attend.
+
+Icon guidance:
+  - food: meals, food trucks, tastings, farmers markets, BBQ, restaurants
+  - music: live music, concerts, DJs, open mics, karaoke
+  - family: kid-friendly, story time, baby/toddler events, all-ages
+  - drinks: bars, breweries, wineries, beer/wine/cocktail events (21+)
+  - arts: art shows, theatre, gallery, crafts, dance, painting
+  - shopping: markets with vendors, pop-ups, retail events, craft fairs
+  - outdoors: parks, hiking, sports, festivals held outside, gardening
+  - community: meetings, fundraisers, civic, volunteer, library programs
+  - free: zero cost to attend (also set free=true)
+
+Return ONLY a JSON array, one object per input event in the same order, each: {"description": "...", "icons": [...], "free": true|false}. No prose, no markdown fences."""
+
+
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001F5FF"   # symbols & pictographs
+    "\U0001F600-\U0001F64F"   # emoticons
+    "\U0001F680-\U0001F6FF"   # transport & map symbols
+    "\U0001F700-\U0001F77F"   # alchemical symbols
+    "\U0001F780-\U0001F7FF"   # geometric shapes extended
+    "\U0001F800-\U0001F8FF"   # supplemental arrows-c
+    "\U0001F900-\U0001F9FF"   # supplemental symbols & pictographs
+    "\U0001FA00-\U0001FA6F"   # chess symbols
+    "\U0001FA70-\U0001FAFF"   # symbols & pictographs extended-a
+    "\U00002600-\U000027BF"   # miscellaneous symbols + dingbats
+    "\U0001F000-\U0001F2FF"   # mahjong, domino, playing cards, enclosed alphanumeric
+    "\U0001F100-\U0001F1FF"   # enclosed alphanumeric supplement (regional flags)
+    "\U0001F200-\U0001F2FF"   # enclosed ideographic supplement
+    "\U0001F300-\U0001F3FF"   # weather, plants, food, sports
+    "]",
+    flags=re.UNICODE,
+)
+
+
+def _strip_emojis(text):
+    """Remove emoji + symbol characters from a string."""
+    if not text:
+        return text
+    return _EMOJI_RE.sub("", text).strip()
+
+
+def _ai_review_batch(api_key, batch):
+    """Send a single batch of events to sonar; return list of {description, icons, free} dicts (same length as batch) or None on failure."""
+    # Build a slim payload — only the fields the AI needs to make decisions.
+    payload = [
+        {
+            "name": ev.get("name", ""),
+            "venue": ev.get("venue", ""),
+            "raw_description": ev.get("description", "")[:600],
+            "current_icons": ev.get("icons", []),
+        }
+        for ev in batch
     ]
 
-    prompt = f"""You are editing events data for The Vic 361, a community events board for Victoria, TX.
-
-Today is {today.strftime('%A, %B %d, %Y')}.
-Date range: {date_range[0]} to {date_range[-1]}
-
-Below is a JSON array of events collected from multiple sources. Your job:
-
-1. DEDUPLICATE: If the same event appears twice (same name + same date), keep the one with more complete info.
-2. CLEAN NAMES: Title case. Remove venue names appended to event names. Remove date text mixed into names.
-3. CLEAN DESCRIPTIONS: Rewrite each as one punchy sentence, under 120 chars, casual/local tone.
-4. FILL TIME: If time is missing, leave as "" (don't guess).
-5. FILL VENUE: If venue is missing but you know it from the event name, fill it in.
-6. VICTORIA ADDRESSES: Fill in known Victoria, TX addresses where you can. Otherwise leave "".
-7. VALIDATE ICONS: Ensure icons array makes sense. Valid values: food, music, family, drinks, arts, shopping, outdoors, community, free.
-8. FREE TAG: If event is free, ensure "free" is in the icons array AND free=true.
-9. REMOVE events outside {date_range[0]} to {date_range[-1]}.
-
-Return ONLY a valid JSON array of event objects. No markdown, no commentary.
-
-Each event object:
-{{"date":"YYYY-MM-DD","name":"...","time":"...","venue":"...","address":"...","description":"...","icons":[...],"free":true/false,"url":"..."}}
-
-Input events:
-{json.dumps(events, indent=2)[:14000]}"""
+    user_msg = (
+        f"Review and polish these {len(batch)} events. "
+        f"Return a JSON array of {len(batch)} objects in the same order.\n\n"
+        f"{json.dumps(payload, ensure_ascii=False)}"
+    )
 
     try:
         resp = requests.post(
-            "https://api.openai.com/v1/chat/completions",
+            "https://api.perplexity.ai/chat/completions",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": "gpt-4o-mini",
-                "messages": [{"role": "user", "content": prompt}],
+                "model": "sonar",
+                "messages": [
+                    {"role": "system", "content": _AI_REVIEW_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_msg},
+                ],
                 "temperature": 0.2,
-                "max_tokens": 6000,
+                "max_tokens": 2000,
             },
-            timeout=45,
+            timeout=60,
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"].strip()
-
-        # Strip markdown fences
-        if content.startswith("```"):
-            content = re.sub(r'^```\w*\n?', '', content)
-            content = re.sub(r'\n?```$', '', content)
-
-        cleaned = json.loads(content)
-        print(f"  [AI] Cleaned to {len(cleaned)} events")
-        return cleaned
-
     except Exception as e:
-        print(f"  [AI] Error: {e}")
+        print(f"  [AI Review] Batch request failed: {e}")
+        _sentry_warn("ai_review_request_failed", error=str(e)[:200])
+        return None
+
+    # Strip markdown fences if the model added them.
+    if content.startswith("```"):
+        content = re.sub(r"^```\w*\n?", "", content)
+        content = re.sub(r"\n?```$", "", content)
+
+    # Some sonar responses include reasoning before the JSON — extract array.
+    match = re.search(r"\[\s*\{.*\}\s*\]", content, re.DOTALL)
+    if match:
+        content = match.group(0)
+
+    try:
+        parsed = json.loads(content)
+    except Exception as e:
+        print(f"  [AI Review] JSON parse failed: {e}")
+        _sentry_warn("ai_review_parse_failed", error=str(e)[:200])
+        return None
+
+    if not isinstance(parsed, list) or len(parsed) != len(batch):
+        print(f"  [AI Review] Bad shape: got {type(parsed).__name__} "
+              f"len={len(parsed) if isinstance(parsed, list) else 'n/a'}, "
+              f"expected list len={len(batch)}")
+        return None
+
+    return parsed
+
+
+def ai_review(events, batch_size=8):
+    """Polish descriptions + reassign icons via Perplexity sonar.
+
+    Mutates events in place AND returns the list. Each event:
+      - description: rewritten to ≤160 chars, no emojis
+      - icons: filtered to 1–3 valid values, ordered by relevance
+      - free: re-evaluated boolean
+
+    Falls back to the original event values when AI is unavailable or
+    a batch fails.
+    """
+    api_key = os.environ.get("PERPLEXITY_API_KEY")
+    if not api_key:
+        print("  [AI Review] No PERPLEXITY_API_KEY — skipping")
         return events
+    if not events:
+        return events
+
+    print(f"  [AI Review] Reviewing {len(events)} events in batches of {batch_size}…")
+    polished = 0
+    failed_batches = 0
+
+    for i in range(0, len(events), batch_size):
+        batch = events[i:i + batch_size]
+        result = _ai_review_batch(api_key, batch)
+        if result is None:
+            failed_batches += 1
+            continue
+
+        for ev, ai in zip(batch, result):
+            if not isinstance(ai, dict):
+                continue
+
+            # Description: trust AI; clamp + strip emojis as belt-and-suspenders.
+            new_desc = ai.get("description")
+            if isinstance(new_desc, str) and new_desc.strip():
+                cleaned = _strip_emojis(new_desc).strip()
+                if len(cleaned) > 200:  # hard ceiling, AI was told 160
+                    cleaned = cleaned[:197].rstrip() + "…"
+                ev["description"] = cleaned
+
+            # Icons: keep only valid values, dedupe, cap at 3.
+            new_icons = ai.get("icons")
+            if isinstance(new_icons, list):
+                seen = set()
+                cleaned_icons = []
+                for ic in new_icons:
+                    if not isinstance(ic, str):
+                        continue
+                    ic = ic.strip().lower()
+                    if ic in VALID_ICONS and ic not in seen:
+                        seen.add(ic)
+                        cleaned_icons.append(ic)
+                    if len(cleaned_icons) == 3:
+                        break
+                if cleaned_icons:
+                    ev["icons"] = cleaned_icons
+
+            # Free flag: trust AI bool, keep `free` icon in sync.
+            new_free = ai.get("free")
+            if isinstance(new_free, bool):
+                ev["free"] = new_free
+                if new_free and "free" not in ev.get("icons", []):
+                    if len(ev.get("icons", [])) < 3:
+                        ev["icons"] = ev.get("icons", []) + ["free"]
+                elif not new_free and "free" in ev.get("icons", []):
+                    ev["icons"] = [ic for ic in ev["icons"] if ic != "free"]
+
+            polished += 1
+
+    print(f"  [AI Review] Polished {polished}/{len(events)} events "
+          f"({failed_batches} batches fell back to originals)")
+    if failed_batches:
+        _sentry_warn("ai_review_partial_failure",
+                     failed_batches=failed_batches, total_events=len(events))
+    return events
 
 
 # ─── FILL GAPS (description + url) ──────────────────────────────────────────
@@ -1805,10 +1954,10 @@ def main():
     # 6. Fill missing descriptions + URLs
     merged = fill_gaps(merged)
 
-    # 7. AI cleanup (optional — OpenAI only, skip if no key)
+    # 7. AI review — polish descriptions + assign icons via Perplexity sonar
     if not args.skip_ai and merged:
-        print("\n🤖 AI cleanup...")
-        merged = ai_cleanup(merged, args.days)
+        print("\n🤖 AI review (descriptions + icons)…")
+        merged = ai_review(merged)
 
     # 5. Load extras
     extras = load_extras(os.path.join(args.local_dir, "extras.yaml"))
