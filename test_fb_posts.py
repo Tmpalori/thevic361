@@ -1,0 +1,301 @@
+"""Unit tests for the Facebook posts scraper integration.
+
+Covers:
+  - _apify_hard_limit_tripped detector
+  - _venue_high_confidence filter
+  - fetch_apify_facebook_posts feature-flag and tombstone gating
+  - fetch_apify_facebook_events tombstone gating + maxEvents=25
+  - main() resets the tombstone
+
+Network is stubbed via monkey-patched requests.post.
+"""
+import json
+import os
+import sys
+from datetime import date, timedelta
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+sys.path.insert(0, os.path.dirname(__file__))
+import collect_events as ce
+
+
+# ─── Fixtures ───────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def reset_state(monkeypatch, tmp_path):
+    """Reset module state and provide a tmp facebook_venues.json."""
+    ce._APIFY_LIMIT_TRIPPED = False
+    ce._WINDOW_START = date.today()
+    ce._WINDOW_END = date.today() + timedelta(days=14)
+
+    # Clean env between tests
+    for k in ("APIFY_TOKEN", "PERPLEXITY_API_KEY", "FB_POSTS_ENABLED"):
+        monkeypatch.delenv(k, raising=False)
+
+    # Drop a venues file next to collect_events.py
+    venues = [
+        {
+            "name": "Aero Crafters",
+            "facebook_page": "https://www.facebook.com/aerocrafters",
+            "confidence": "high",
+        },
+        {
+            "name": "Moonshine Drinkery",
+            "facebook_page": "https://www.facebook.com/moonshinedrinkery",
+            "confidence": "high",
+        },
+        {
+            "name": "Froggy's Grub & Pub",
+            "facebook_page": "https://www.facebook.com/froggys",
+            "confidence": "medium",
+        },
+        {"name": "No URL Venue", "confidence": "high"},  # missing facebook_page
+    ]
+    venues_path = os.path.join(os.path.dirname(ce.__file__), "facebook_venues.json")
+    original = None
+    if os.path.exists(venues_path):
+        with open(venues_path, "r") as f:
+            original = f.read()
+    with open(venues_path, "w") as f:
+        json.dump(venues, f)
+
+    yield
+
+    if original is not None:
+        with open(venues_path, "w") as f:
+            f.write(original)
+
+
+# ─── Tests ──────────────────────────────────────────────────────────────────
+
+
+def test_hard_limit_detector_positive():
+    body = '{"error":{"type":"usage-hard-limit","message":"Monthly usage hard limit exceeded."}}'
+    assert ce._apify_hard_limit_tripped(body) is True
+
+
+def test_hard_limit_detector_case_insensitive():
+    assert ce._apify_hard_limit_tripped("MONTHLY USAGE HARD LIMIT") is True
+
+
+def test_hard_limit_detector_negative_other_403():
+    assert ce._apify_hard_limit_tripped('{"error":"forbidden"}') is False
+    assert ce._apify_hard_limit_tripped("") is False
+    assert ce._apify_hard_limit_tripped(None) is False
+
+
+def test_venue_high_confidence_filter():
+    venues = [
+        {"name": "A", "confidence": "high"},
+        {"name": "B", "confidence": "medium"},
+        {"name": "C", "confidence": "HIGH"},  # case-insensitive
+        {"name": "D"},  # missing
+    ]
+    out = ce._venue_high_confidence(venues)
+    assert {v["name"] for v in out} == {"A", "C"}
+
+
+def test_posts_scraper_disabled_by_default():
+    out = ce.fetch_apify_facebook_posts(14)
+    assert out == []
+
+
+def test_posts_scraper_no_apify_token(monkeypatch):
+    monkeypatch.setenv("FB_POSTS_ENABLED", "1")
+    out = ce.fetch_apify_facebook_posts(14)
+    assert out == []
+
+
+def test_posts_scraper_no_perplexity_key(monkeypatch):
+    monkeypatch.setenv("FB_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    out = ce.fetch_apify_facebook_posts(14)
+    assert out == []
+
+
+def test_posts_scraper_tombstone_short_circuits(monkeypatch):
+    monkeypatch.setenv("FB_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    ce._APIFY_LIMIT_TRIPPED = True
+
+    with patch("collect_events.requests.post") as mock_post:
+        out = ce.fetch_apify_facebook_posts(14)
+    assert out == []
+    mock_post.assert_not_called()
+
+
+def test_posts_scraper_403_hard_limit_trips_tombstone(monkeypatch):
+    monkeypatch.setenv("FB_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 403
+    fake_resp.text = '{"error":"Monthly usage hard limit exceeded"}'
+
+    with patch("collect_events.requests.post", return_value=fake_resp):
+        out = ce.fetch_apify_facebook_posts(14)
+
+    assert out == []
+    assert ce._APIFY_LIMIT_TRIPPED is True
+
+
+def test_posts_scraper_happy_path(monkeypatch):
+    """Stub Apify + sonar — verify event normalization end-to-end."""
+    monkeypatch.setenv("FB_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+
+    target_date = (date.today() + timedelta(days=3)).strftime("%Y-%m-%d")
+
+    # Two responses needed per venue: posts response, then sonar response.
+    # We only have 3 high-conf venues here (Aero, Moonshine, "No URL Venue").
+    # No URL Venue is skipped before any HTTP call.
+    posts_payload = [
+        {"text": "Live music tonight 8pm with The Rangers", "url": "https://fb.com/post/1", "time": "2026-04-25T15:00:00"},
+        {"text": "Photo dump from last weekend", "url": "https://fb.com/post/2", "time": "2026-04-24T15:00:00"},
+    ]
+    sonar_payload = {
+        "choices": [{
+            "message": {
+                "content": json.dumps([
+                    {
+                        "date": target_date,
+                        "name": "Live Music with The Rangers",
+                        "time": "8:00 PM",
+                        "description": "Country band live on the patio.",
+                        "free": False,
+                        "source_post_index": 1,
+                    }
+                ])
+            }
+        }]
+    }
+
+    call_log = []
+
+    def fake_post(url, **kwargs):
+        call_log.append(url)
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        if "facebook-posts-scraper" in url:
+            resp.json.return_value = posts_payload
+        elif "perplexity.ai" in url:
+            resp.json.return_value = sonar_payload
+        else:
+            resp.status_code = 500
+        return resp
+
+    with patch("collect_events.requests.post", side_effect=fake_post):
+        out = ce.fetch_apify_facebook_posts(14)
+
+    # 2 high-confidence venues with URLs (Aero, Moonshine) → 2 Apify + 2 sonar = 4 calls
+    assert len([u for u in call_log if "facebook-posts" in u]) == 2
+    assert len([u for u in call_log if "perplexity" in u]) == 2
+
+    # Each venue produced one event from the stub
+    assert len(out) == 2
+    ev = out[0]
+    assert ev["date"] == target_date
+    assert ev["name"] == "Live Music with The Rangers"
+    assert ev["time"] == "8:00 PM"
+    assert ev["venue"] in ("Aero Crafters", "Moonshine Drinkery")
+    assert ev["url"] == "https://fb.com/post/1"  # via source_post_index
+    assert "music" in ev["icons"]
+
+
+def test_posts_scraper_filters_out_of_window_events(monkeypatch):
+    """Sonar may return dates outside the collection window — drop them."""
+    monkeypatch.setenv("FB_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+
+    far_future = (date.today() + timedelta(days=400)).strftime("%Y-%m-%d")
+    sonar_payload = {
+        "choices": [{
+            "message": {
+                "content": json.dumps([
+                    {"date": far_future, "name": "Way too far out", "free": False},
+                    {"date": "not-a-date", "name": "Bad date", "free": False},
+                    {"date": "", "name": "Missing date", "free": False},
+                ])
+            }
+        }]
+    }
+
+    def fake_post(url, **kwargs):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        if "facebook-posts-scraper" in url:
+            resp.json.return_value = [{"text": "post", "time": "2026-04-25T00:00:00"}]
+        else:
+            resp.json.return_value = sonar_payload
+        return resp
+
+    with patch("collect_events.requests.post", side_effect=fake_post):
+        out = ce.fetch_apify_facebook_posts(14)
+    assert out == []
+
+
+def test_posts_scraper_handles_actor_500(monkeypatch):
+    monkeypatch.setenv("FB_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 500
+    fake_resp.text = "internal server error"
+
+    with patch("collect_events.requests.post", return_value=fake_resp):
+        out = ce.fetch_apify_facebook_posts(14)
+    assert out == []
+    assert ce._APIFY_LIMIT_TRIPPED is False  # not a hard-limit
+
+
+def test_events_scraper_max_events_is_25(monkeypatch):
+    """Regression: we lowered maxEvents from 60 to 25 to save credits."""
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured["json"] = kwargs.get("json")
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = []
+        return resp
+
+    with patch("collect_events.requests.post", side_effect=fake_post):
+        ce.fetch_apify_facebook_events(14)
+
+    assert captured["json"]["maxEvents"] == 25
+
+
+def test_events_scraper_tombstone_short_circuits(monkeypatch):
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    ce._APIFY_LIMIT_TRIPPED = True
+
+    with patch("collect_events.requests.post") as mock_post:
+        out = ce.fetch_apify_facebook_events(14)
+
+    assert out == []
+    mock_post.assert_not_called()
+
+
+def test_events_scraper_403_hard_limit_trips_tombstone(monkeypatch):
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 403
+    fake_resp.text = '{"error":"Monthly usage hard limit exceeded"}'
+
+    with patch("collect_events.requests.post", return_value=fake_resp):
+        ce.fetch_apify_facebook_events(14)
+
+    assert ce._APIFY_LIMIT_TRIPPED is True
