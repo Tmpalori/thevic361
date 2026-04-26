@@ -1,0 +1,59 @@
+# ─── The Vic 361 — Weekly Event Digest Email ────────────────────────────────
+# Every Sunday morning, run the collector and email Tristen the candidates
+# for the upcoming week. He reviews and replies (or runs the approve workflow)
+# with the numbers he wants to publish.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Weekly Digest
+
+on:
+  schedule:
+    - cron: '0 13 * * 0'   # 8:00 AM Central, Sunday (UTC-5)
+  workflow_dispatch:        # Manual trigger from GitHub UI
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Refresh candidates
+        env:
+          OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          APIFY_TOKEN:        ${{ secrets.APIFY_TOKEN }}
+          SENTRY_DSN:         ${{ secrets.SENTRY_DSN }}
+          SENTRY_ENVIRONMENT: production
+        run: |
+          python collect_events.py \
+            --output ./docs/events.json \
+            --candidates ./candidates.json \
+            --local-dir . \
+            --days 14
+
+      - name: Send digest email
+        env:
+          SMTP_EMAIL:    ${{ secrets.SMTP_EMAIL }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_HOST:     smtp.gmail.com
+          SMTP_PORT:     '587'
+        run: |
+          python send_digest.py \
+            --candidates ./candidates.json \
+            --to tristen.m.palori@gmail.com \
+            --all-days

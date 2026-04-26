@@ -34,23 +34,32 @@ jobs:
 
       - name: Run event collector
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          APIFY_TOKEN:        ${{ secrets.APIFY_TOKEN }}
+          SENTRY_DSN:         ${{ secrets.SENTRY_DSN }}
+          SENTRY_ENVIRONMENT: production
         run: |
           python collect_events.py \
             --output ./docs/events.json \
+            --candidates ./candidates.json \
             --local-dir . \
-            --days 7
+            --days 14
 
       - name: Check for changes
         id: changes
         run: |
-          git diff --quiet docs/events.json && echo "changed=false" >> $GITHUB_OUTPUT || echo "changed=true" >> $GITHUB_OUTPUT
+          if git diff --quiet docs/events.json candidates.json; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Commit and push
         if: steps.changes.outputs.changed == 'true'
         run: |
           git config user.name "The Vic 361 Bot"
           git config user.email "bot@thevic361.com"
-          git add docs/events.json
+          git add docs/events.json candidates.json
           git commit -m "🏙️ Update events $(date +'%Y-%m-%d')"
           git push

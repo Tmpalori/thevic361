@@ -33,12 +33,139 @@ from bs4 import BeautifulSoup
 import yaml
 
 
+# ─── SENTRY (silent failure observability) ──────────────────────────────────
+# We instrument scrapers for two failure modes:
+#   1. Hard exceptions (network errors, parse crashes) → capture_exception
+#   2. Silent zero-event returns when we'd normally expect events →
+#      capture_message at warning level
+# Sentry stays disabled gracefully if SENTRY_DSN is not set or the SDK
+# isn't installed.
+
+_SENTRY_ENABLED = False
+try:
+    import sentry_sdk  # type: ignore
+    _dsn = os.environ.get("SENTRY_DSN", "").strip()
+    if _dsn:
+        sentry_sdk.init(
+            dsn=_dsn,
+            traces_sample_rate=0.0,
+            environment=os.environ.get("SENTRY_ENVIRONMENT", "thevic361-collector"),
+            release=os.environ.get("GITHUB_SHA", "local")[:12],
+        )
+        _SENTRY_ENABLED = True
+except Exception:
+    _SENTRY_ENABLED = False
+
+
+def _sentry_warn(message, **tags):
+    if _SENTRY_ENABLED:
+        try:
+            with sentry_sdk.push_scope() as scope:
+                for k, v in tags.items():
+                    scope.set_tag(k, v)
+                sentry_sdk.capture_message(message, level="warning")
+        except Exception:
+            pass
+
+
+def _sentry_exception(scraper):
+    if _SENTRY_ENABLED:
+        try:
+            with sentry_sdk.push_scope() as scope:
+                scope.set_tag("scraper", scraper)
+                sentry_sdk.capture_exception()
+        except Exception:
+            pass
+
+
+def safe_fetch(name, fn, args=(), expect_events=True):
+    """Wrap a scraper call so exceptions are captured + zero-event runs reported.
+
+    `name` is a short scraper id (e.g. 'library', 'chamber').
+    `fn` is the fetch function. `args` is a tuple of positional args.
+    If `expect_events` and the scraper returns 0 results, we send a Sentry
+    warning so we know about silent breakage without crashing the run.
+    Always returns a list (empty on failure).
+    """
+    try:
+        result = fn(*args)
+        if not isinstance(result, list):
+            result = list(result or [])
+        if expect_events and len(result) == 0:
+            _sentry_warn(
+                f"[scraper] {name} returned 0 events",
+                scraper=name,
+            )
+        return result
+    except Exception:
+        _sentry_exception(name)
+        import traceback
+        print(f"  [{name}] CRASHED: ", end="")
+        traceback.print_exc()
+        return []
+
+
+# ─── DATE WINDOW HELPERS ─────────────────────────────────────────────────────
+# The site renders Mon–Sun of the current week + lookahead. We must collect
+# events starting from THIS Monday, not just "today", or earlier days of the
+# week render as "Nothing listed yet."
+
+def week_start_date(today=None):
+    """Return the Monday of the current calendar week (in local time)."""
+    today = today or datetime.now().date()
+    return today - timedelta(days=today.weekday())  # weekday(): Mon=0
+
+
+def date_window(days_ahead=14, backfill_to_monday=True):
+    """Return (start_date, end_date) for collection.
+
+    If backfill_to_monday is True, start = Monday of this week (so the site's
+    Mon–Sun grid never shows empty days). Otherwise start = today.
+    """
+    today = datetime.now().date()
+    start = week_start_date(today) if backfill_to_monday else today
+    end = today + timedelta(days=days_ahead)
+    return start, end
+
+
+# Module-level window — set once in main() and read by every scraper.
+# Defaults handle ad-hoc invocations (tests, --list, etc).
+_WINDOW_START, _WINDOW_END = date_window(14, True)
+
+
+def in_window(d):
+    """Check if a date object is inside the active collection window."""
+    return _WINDOW_START <= d <= _WINDOW_END
+
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+# Some sites (Cloudflare-protected) reject the standard Chrome UA. Use Safari
+# as a fallback — lower bot-detection score on most CDNs.
+HEADERS_SAFARI = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
 }
 TIMEOUT = 15
+
+
+def http_get(url, headers=None, timeout=TIMEOUT, fallback_safari=True):
+    """GET with the standard browser UA. If we hit a 403 (Cloudflare-style
+    challenge) and fallback_safari is True, retry with Safari UA.
+    Returns the requests.Response (already raise_for_status()-ed)."""
+    h = dict(headers) if headers else dict(HEADERS)
+    resp = requests.get(url, headers=h, timeout=timeout)
+    if resp.status_code == 403 and fallback_safari:
+        resp = requests.get(url, headers=HEADERS_SAFARI, timeout=timeout)
+    resp.raise_for_status()
+    return resp
 
 # Icon categories — keywords in event name/desc/venue trigger auto-tagging
 # Known venue URLs — fallback when an event has no specific URL
@@ -124,8 +251,8 @@ def guess_free(name, description="", venue=""):
 def load_local_events(yaml_path, days_ahead=7):
     """Load recurring + one-time events from the YAML file."""
     events = []
-    today = datetime.now().date()
-    end_date = today + timedelta(days=days_ahead)
+    today = _WINDOW_START
+    end_date = _WINDOW_END
 
     if not os.path.exists(yaml_path):
         print(f"  [Local] File not found: {yaml_path}")
@@ -193,8 +320,8 @@ def load_local_events(yaml_path, days_ahead=7):
 def fetch_city_calendar(days_ahead=7):
     """Scrape event detail pages from victoriatx.gov CivicPlus calendar."""
     events = []
-    today = datetime.now()
-    end_date = today + timedelta(days=days_ahead)
+    today = datetime.combine(_WINDOW_START, datetime.min.time())
+    end_date = datetime.combine(_WINDOW_END, datetime.min.time())
 
     try:
         # Get the calendar page to find event detail links
@@ -352,8 +479,8 @@ def fetch_city_calendar(days_ahead=7):
 def fetch_chamber_events(days_ahead=7):
     """Scrape events from Victoria Chamber of Commerce."""
     events = []
-    today = datetime.now()
-    end_date = today + timedelta(days=days_ahead)
+    today = datetime.combine(_WINDOW_START, datetime.min.time())
+    end_date = datetime.combine(_WINDOW_END, datetime.min.time())
 
     try:
         url = "https://business.victoriachamber.org/events"
@@ -483,80 +610,122 @@ def fetch_chamber_events(days_ahead=7):
 # ─── SOURCE: VICTORIA PUBLIC LIBRARY CALENDAR ────────────────────────────────
 
 def fetch_library_events(days_ahead=7):
-    """Scrape events from the Victoria Public Library calendar."""
-    events = []
-    today = datetime.now()
-    end_date = today + timedelta(days=days_ahead)
+    """Scrape events from the Victoria Public Library calendar.
 
-    try:
-        # Fetch the list view of the library calendar for the current month
-        url = f"https://victoriapl.librarycalendar.com/events/week/{today.strftime('%Y/%m/%d')}"
-        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-        resp.raise_for_status()
+    Site uses LibraryCalendar (Drupal). Each event is an <article class="event-card">
+    containing:
+      - <h3 class="lc-event__title"><a aria-label="View Details - 'TITLE' on DAY, MONTH D, YYYY @ TIME" href="/event/...">TITLE</a></h3>
+      - <div class="lc-event-info-item--time">9:30am–10:00am</div>
+      - <div class="lc-date-icon">
+          <span class="lc-date-icon__item--month">Apr</span>
+          <span class="lc-date-icon__item--day">23</span>
+          <span class="lc-date-icon__item--year">2026</span>
+        </div>
+
+    We iterate week-by-week across the collection window so we don't miss
+    events past the first visible page.
+    """
+    events = []
+    seen = set()  # de-dupe by (date, title, time)
+
+    MONTH_MAP = {
+        "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+        "jul": 7, "aug": 8, "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12,
+    }
+
+    def fmt_time(t):
+        # Normalize "9:30am–10:00am" -> "9:30 AM – 10:00 AM"
+        if not t:
+            return ""
+        t = t.strip().replace("\u2013", "–").replace("-", "–")
+        m = re.search(r'(\d{1,2}(?::\d{2})?\s*(?:am|pm))\s*–\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm))', t, re.IGNORECASE)
+        if m:
+            return f"{m.group(1).upper()} – {m.group(2).upper()}"
+        m = re.search(r'(\d{1,2}(?::\d{2})?\s*(?:am|pm))', t, re.IGNORECASE)
+        return m.group(1).upper() if m else ""
+
+    # Walk forward one week at a time so we cover the full window.
+    cur = _WINDOW_START
+    week_count = 0
+    while cur <= _WINDOW_END and week_count < 4:  # safety cap
+        week_count += 1
+        url = f"https://victoriapl.librarycalendar.com/events/week/{cur.strftime('%Y/%m/%d')}"
+        try:
+            resp = http_get(url)
+            resp.raise_for_status()
+        except Exception as e:
+            print(f"  [Library] Week {cur} fetch error: {e}")
+            cur = cur + timedelta(days=7)
+            continue
+
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        # The library calendar uses a structured format with event entries
-        # Look for event links and titles
-        for item in soup.select(".views-row, .calendar-event, [class*='event']"):
-            title_el = item.select_one("a, .field-title, h3, h4")
-            if not title_el:
+        for art in soup.select("article.event-card, article.node--type-lc-event"):
+            # Title + URL
+            link_el = art.select_one("h3.lc-event__title a, a.lc-event__link")
+            if not link_el:
                 continue
-            title = title_el.get_text(strip=True)
+            title = link_el.get_text(strip=True)
             if not title or len(title) < 3:
                 continue
+            href = link_el.get("href", "")
+            event_url = urljoin("https://victoriapl.librarycalendar.com", href) if href else ""
 
-            # Skip generic items
-            if title.lower() in ["more details", "view details", "add to calendar"]:
-                continue
-
-            # Try to extract date from nearby text or data attributes
-            page_text = item.get_text()
+            # Date — prefer the lc-date-icon (canonical, with year)
             event_date = None
-
-            # Look for date patterns
-            date_match = re.search(
-                r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})',
-                page_text
-            )
-            if date_match:
+            month_el = art.select_one(".lc-date-icon__item--month")
+            day_el = art.select_one(".lc-date-icon__item--day")
+            year_el = art.select_one(".lc-date-icon__item--year")
+            if month_el and day_el and year_el:
                 try:
-                    dt = datetime.strptime(
-                        f"{date_match.group(1)} {date_match.group(2)} {date_match.group(3)}",
-                        "%B %d %Y"
-                    )
-                    if today.date() <= dt.date() <= end_date.date():
-                        event_date = dt.strftime("%Y-%m-%d")
-                except ValueError:
+                    mon = MONTH_MAP.get(month_el.get_text(strip=True).lower()[:4].rstrip("."))
+                    if mon is None:
+                        mon = MONTH_MAP.get(month_el.get_text(strip=True).lower()[:3])
+                    day = int(day_el.get_text(strip=True))
+                    year = int(year_el.get_text(strip=True))
+                    dt = datetime(year, mon, day).date()
+                    event_date = dt.strftime("%Y-%m-%d")
+                except (ValueError, TypeError, AttributeError):
                     pass
 
-            # Look for ISO date in data attributes
+            # Fallback: parse aria-label like 'View Details - "X" on Thursday, April 23, 2026 @ 9:30am'
             if not event_date:
-                for attr in ["data-date", "datetime", "content"]:
-                    for el in item.select(f"[{attr}]"):
-                        val = el.get(attr, "")
-                        iso_match = re.search(r'(\d{4}-\d{2}-\d{2})', val)
-                        if iso_match:
-                            try:
-                                dt = datetime.strptime(iso_match.group(1), "%Y-%m-%d")
-                                if today.date() <= dt.date() <= end_date.date():
-                                    event_date = dt.strftime("%Y-%m-%d")
-                                    break
-                            except ValueError:
-                                pass
-                    if event_date:
-                        break
+                aria = link_el.get("aria-label", "") or ""
+                m = re.search(
+                    r'on\s+\w+,\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(\d{4})',
+                    aria
+                )
+                if m:
+                    try:
+                        dt = datetime.strptime(f"{m.group(1)} {m.group(2)} {m.group(3)}", "%B %d %Y").date()
+                        event_date = dt.strftime("%Y-%m-%d")
+                    except ValueError:
+                        pass
 
             if not event_date:
                 continue
 
-            # Extract time
-            time_str = ""
-            time_match = re.search(
-                r'(\d{1,2}:\d{2}\s*(?:am|pm|AM|PM))\s*[-–]\s*(\d{1,2}:\d{2}\s*(?:am|pm|AM|PM))',
-                page_text
-            )
-            if time_match:
-                time_str = f"{time_match.group(1).upper()} – {time_match.group(2).upper()}"
+            # Filter to our window
+            try:
+                d_obj = datetime.strptime(event_date, "%Y-%m-%d").date()
+                if not in_window(d_obj):
+                    continue
+            except ValueError:
+                continue
+
+            # Time
+            time_el = art.select_one(".lc-event-info-item--time, .lc-event__date .lc-event-info-item--time")
+            time_raw = time_el.get_text(strip=True) if time_el else ""
+            time_str = fmt_time(time_raw)
+
+            # Categories → description hint
+            cat_el = art.select_one(".lc-event-info__item--categories")
+            description = cat_el.get_text(" ", strip=True) if cat_el else ""
+
+            key = (event_date, title.lower(), time_str)
+            if key in seen:
+                continue
+            seen.add(key)
 
             events.append({
                 "date": event_date,
@@ -564,17 +733,15 @@ def fetch_library_events(days_ahead=7):
                 "time": time_str,
                 "venue": "Victoria Public Library",
                 "address": "302 N. Main St.",
-                "description": "",
-                "icons": classify_icons(title, "", "Victoria Public Library"),
+                "description": description,
+                "icons": classify_icons(title, description, "Victoria Public Library"),
                 "free": True,
-                "url": "",
+                "url": event_url,
             })
 
-        print(f"  [Library] Extracted {len(events)} events")
+        cur = cur + timedelta(days=7)
 
-    except Exception as e:
-        print(f"  [Library] Error: {e}")
-
+    print(f"  [Library] Extracted {len(events)} events")
     return events
 
 
@@ -583,13 +750,13 @@ def fetch_library_events(days_ahead=7):
 def fetch_vtx_artwalk(days_ahead=8):
     """Scrape next event date from vtxartwalk.com."""
     events = []
-    today = datetime.now().date()
-    end_date = today + timedelta(days=days_ahead)
+    today = _WINDOW_START
+    end_date = _WINDOW_END
 
     try:
         url = "https://vtxartwalk.com/"
-        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-        resp.raise_for_status()
+        # Cloudflare-fronted — needs Safari UA fallback
+        resp = http_get(url)
         text = resp.text
 
         # Look for "Next Art Walk Event Month D, YYYY" pattern
@@ -633,8 +800,8 @@ def fetch_vtx_artwalk(days_ahead=8):
 def fetch_moonshine_events(days_ahead=8):
     """Scrape upcoming events from Moonshine Drinkery homepage."""
     events = []
-    today = datetime.now().date()
-    end_date = today + timedelta(days=days_ahead)
+    today = _WINDOW_START
+    end_date = _WINDOW_END
 
     try:
         url = "https://www.moonshinedrinkery.com"
@@ -689,8 +856,8 @@ def fetch_perplexity_events(days_ahead=8):
         print("  [Perplexity] No PERPLEXITY_API_KEY — skipping")
         return []
 
-    today = datetime.now().date()
-    end_date = today + timedelta(days=days_ahead)
+    today = _WINDOW_START
+    end_date = _WINDOW_END
     date_range_str = f"{today.strftime('%B %d')} through {end_date.strftime('%B %d, %Y')}"
     today_str = today.strftime('%Y-%m-%d')
     end_str = end_date.strftime('%Y-%m-%d')
@@ -879,8 +1046,8 @@ def fill_gaps(events):
 
 def merge_events(all_events, days_ahead=7):
     """Merge, deduplicate, auto-tag, sort."""
-    today = datetime.now().date()
-    end_date = today + timedelta(days=days_ahead)
+    today = _WINDOW_START
+    end_date = _WINDOW_END
 
     seen = {}  # key → event (keep the one with more info)
     for ev in all_events:
@@ -949,8 +1116,8 @@ GOOGLE_SHEET_ID = "1S42hYlrPM516LDTcy3W_8afCkCqc-ZrUfN2J-SmP23I"
 def fetch_google_sheet_events(days_ahead=7):
     """Fetch manually submitted events from the Google Sheet."""
     events = []
-    today = datetime.now().date()
-    end_date = today + timedelta(days=days_ahead)
+    today = _WINDOW_START
+    end_date = _WINDOW_END
 
     try:
         # Google Sheets public CSV export URL
@@ -1019,8 +1186,8 @@ def fetch_jwelch_events(days_ahead=7):
     recurrence, so we check each week in the window via tribe-bar-date param.
     """
     events = []
-    today = datetime.now().date()
-    end_date = today + timedelta(days=days_ahead)
+    today = _WINDOW_START
+    end_date = _WINDOW_END
     seen_keys = set()
 
     # Check multiple week windows to catch all events in range
@@ -1104,8 +1271,8 @@ def fetch_jwelch_events(days_ahead=7):
 def fetch_theatre_victoria_events(days_ahead=7):
     """Scrape show listings from Theatre Victoria."""
     events = []
-    today = datetime.now().date()
-    end_date = today + timedelta(days=days_ahead)
+    today = _WINDOW_START
+    end_date = _WINDOW_END
 
     try:
         url = "https://theatrevictoria.org"
@@ -1208,13 +1375,13 @@ def fetch_theatre_victoria_events(days_ahead=7):
 def fetch_generals_events(days_ahead=7):
     """Scrape home game schedule from Victoria Generals website."""
     events = []
-    today = datetime.now().date()
-    end_date = today + timedelta(days=days_ahead)
+    today = _WINDOW_START
+    end_date = _WINDOW_END
 
     try:
-        url = "https://victoriagenerals.com/schedule/games/"
-        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-        resp.raise_for_status()
+        # Schedule moved from /schedule/games/ → /game-schedule/ in 2026.
+        url = "https://victoriagenerals.com/game-schedule/"
+        resp = http_get(url)
         soup = BeautifulSoup(resp.text, "html.parser")
         page_text = soup.get_text(" ", strip=True)
 
@@ -1284,17 +1451,290 @@ def fetch_generals_events(days_ahead=7):
     return events
 
 
+# ─── SOURCE: ALLEVENTS.IN (Victoria, TX aggregator) ──────────────────────────────
+
+def fetch_allevents_events(days_ahead=14):
+    """Pull events from allevents.in/victoria-tx.
+
+    The page exposes structured Event objects via JSON-LD <script> blocks
+    (date, name, url, location). Times appear in the HTML cards (`.date`).
+    We index time by event id, then merge into the JSON-LD entries.
+    """
+    events = []
+    url = "https://allevents.in/victoria-tx/all"
+
+    try:
+        resp = http_get(url)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"  [AllEvents] Fetch error: {e}")
+        return events
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    # Build eid → time map from HTML cards
+    eid_to_time = {}
+    for card in soup.select("li.event-card[data-eid]"):
+        eid = card.get("data-eid", "")
+        date_el = card.select_one(".date")
+        if not eid or not date_el:
+            continue
+        date_text = date_el.get_text(" ", strip=True)
+        m = re.search(r'-\s*(\d{1,2}:\d{2}\s*[AP]M)', date_text, re.IGNORECASE)
+        if m:
+            eid_to_time[eid] = m.group(1).upper()
+
+    seen_urls = set()
+    spam_terms = (
+        "certification training", "classroom training",
+        "agile training", "scrum training",
+        "project management techniques training",
+        "conflict management certification",
+        "business case writing",
+    )
+
+    for blk in soup.find_all("script", type="application/ld+json"):
+        if not blk.string:
+            continue
+        try:
+            data = json.loads(blk.string)
+        except Exception:
+            continue
+        candidates = []
+        if isinstance(data, list):
+            candidates = data
+        elif isinstance(data, dict):
+            if data.get("@type") == "Event":
+                candidates = [data]
+            elif isinstance(data.get("@graph"), list):
+                candidates = data["@graph"]
+        for ev in candidates:
+            if not isinstance(ev, dict) or ev.get("@type") != "Event":
+                continue
+            name = (ev.get("name") or "").strip()
+            start = ev.get("startDate") or ""
+            ev_url = (ev.get("url") or "").strip()
+            if not name or not start or ev_url in seen_urls:
+                continue
+            try:
+                d_obj = datetime.strptime(start[:10], "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if not in_window(d_obj):
+                continue
+            if any(t in name.lower() for t in spam_terms):
+                continue
+
+            loc = ev.get("location") or {}
+            if isinstance(loc, list):
+                loc = loc[0] if loc else {}
+            locality = venue = address = ""
+            if isinstance(loc, dict):
+                venue = (loc.get("name") or "").strip()
+                addr = loc.get("address") or {}
+                if isinstance(addr, dict):
+                    locality = (addr.get("addressLocality") or "").strip()
+                    address = (addr.get("streetAddress") or "").strip()
+                    if address and "," in address:
+                        address = address.split(",")[0].strip()
+                elif isinstance(addr, str):
+                    address = addr
+            # Only Victoria-area events
+            if locality and locality.lower() not in ("victoria", ""):
+                continue
+
+            time_str = ""
+            eid_match = re.search(r'/(\d{10,})(?:/|$)', ev_url)
+            if eid_match:
+                eid = eid_match.group(1)
+                if eid in eid_to_time:
+                    time_str = eid_to_time[eid]
+                    # Drop midnight-area placeholder times (12–04 AM → "unknown")
+                    if re.match(r'^(12|01|02|03|04):\d{2}\s*AM$', time_str):
+                        time_str = ""
+
+            import html as _html
+            name = _html.unescape(name)
+
+            description = ""
+            free = guess_free(name, description, venue)
+
+            events.append({
+                "date": d_obj.strftime("%Y-%m-%d"),
+                "name": name,
+                "time": time_str,
+                "venue": venue,
+                "address": address,
+                "description": description,
+                "icons": classify_icons(name, description, venue),
+                "free": free,
+                "url": ev_url,
+            })
+            seen_urls.add(ev_url)
+
+    print(f"  [AllEvents] Extracted {len(events)} events")
+    return events
+
+
+# ─── SOURCE: APIFY (Facebook events) ────────────────────────────────────────────────
+
+APIFY_FB_ACTOR = "apify~facebook-events-scraper"
+APIFY_RUN_TIMEOUT = 240  # seconds we'll wait for the run to finish
+
+def fetch_apify_facebook_events(days_ahead=14):
+    """Run the Apify Facebook Events Scraper actor against our high-value venue
+    list (facebook_venues.json) and parse the dataset.
+
+    Requires APIFY_TOKEN env var. Skips silently if not set so local runs
+    without the secret still succeed.
+    """
+    events = []
+    token = os.environ.get("APIFY_TOKEN", "").strip()
+    if not token:
+        print("  [Apify FB] No APIFY_TOKEN — skipping")
+        return events
+
+    venues_path = os.path.join(os.path.dirname(__file__) or ".", "facebook_venues.json")
+    if not os.path.exists(venues_path):
+        print(f"  [Apify FB] No facebook_venues.json at {venues_path}")
+        return events
+
+    try:
+        with open(venues_path, "r") as f:
+            venues = json.load(f)
+    except Exception as e:
+        print(f"  [Apify FB] Failed to load venues: {e}")
+        return events
+
+    # Use only high-confidence pages — they actually have current events
+    start_urls = [
+        {"url": v["facebook_events"]}
+        for v in venues
+        if v.get("confidence") == "high" and v.get("facebook_events")
+    ]
+    if not start_urls:
+        print("  [Apify FB] No high-confidence start URLs")
+        return events
+
+    print(f"  [Apify FB] Triggering actor for {len(start_urls)} venues...")
+
+    actor_run_url = f"https://api.apify.com/v2/acts/{APIFY_FB_ACTOR}/run-sync-get-dataset-items?token={token}"
+    payload = {
+        "startUrls": start_urls,
+        "maxEvents": 30,        # per-page cap
+        "timeFrame": "upcoming",
+    }
+    try:
+        resp = requests.post(
+            actor_run_url,
+            json=payload,
+            timeout=APIFY_RUN_TIMEOUT,
+            headers={"Content-Type": "application/json"},
+        )
+        if resp.status_code >= 400:
+            print(f"  [Apify FB] HTTP {resp.status_code}: {resp.text[:300]}")
+            return events
+        items = resp.json()
+    except Exception as e:
+        print(f"  [Apify FB] Run failed: {e}")
+        return events
+
+    if not isinstance(items, list):
+        print(f"  [Apify FB] Unexpected response type: {type(items).__name__}")
+        return events
+
+    # Build a quick venue lookup by FB page URL
+    page_to_venue = {}
+    for v in venues:
+        page = (v.get("facebook_page") or "").rstrip("/")
+        if page:
+            page_to_venue[page.lower()] = v
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = (item.get("name") or item.get("title") or "").strip()
+        start_iso = item.get("startTime") or item.get("startDate") or item.get("start_time") or ""
+        if not name or not start_iso:
+            continue
+        # Parse start date
+        try:
+            d_obj = datetime.fromisoformat(str(start_iso).replace("Z", "+00:00")).date()
+        except Exception:
+            try:
+                d_obj = datetime.strptime(str(start_iso)[:10], "%Y-%m-%d").date()
+            except Exception:
+                continue
+        if not in_window(d_obj):
+            continue
+
+        # Time
+        time_str = ""
+        try:
+            dt = datetime.fromisoformat(str(start_iso).replace("Z", "+00:00"))
+            time_str = dt.strftime("%-I:%M %p")
+        except Exception:
+            pass
+
+        # Venue from host page
+        host_page = (
+            item.get("hostPage") or item.get("page") or item.get("organizer") or {}
+        )
+        if isinstance(host_page, dict):
+            host_url = (host_page.get("url") or host_page.get("link") or "").rstrip("/")
+        else:
+            host_url = str(host_page or "").rstrip("/")
+        venue_info = page_to_venue.get(host_url.lower(), {})
+        venue = venue_info.get("name") or item.get("location") or ""
+        if isinstance(venue, dict):
+            venue = venue.get("name") or ""
+        venue = str(venue or "").strip()
+        address = item.get("address") or ""
+        if isinstance(address, dict):
+            address = address.get("streetAddress") or address.get("name") or ""
+        address = str(address or "").strip()
+
+        description = (item.get("description") or "").strip()[:280]
+        ev_url = item.get("url") or item.get("eventUrl") or ""
+
+        events.append({
+            "date": d_obj.strftime("%Y-%m-%d"),
+            "name": name,
+            "time": time_str,
+            "venue": venue,
+            "address": address,
+            "description": description,
+            "icons": classify_icons(name, description, venue),
+            "free": guess_free(name, description, venue),
+            "url": ev_url,
+        })
+
+    print(f"  [Apify FB] Extracted {len(events)} events from {len(items)} dataset items")
+    return events
+
+
 # ─── MAIN ────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="The Vic 361 — Event Collector")
     parser.add_argument("--output", default="./events.json", help="Output JSON path")
     parser.add_argument("--candidates", default="./candidates.json", help="Candidates JSON path (all raw events for screening)")
-    parser.add_argument("--days", type=int, default=7, help="Days ahead to collect")
+    parser.add_argument("--days", type=int, default=14, help="Days ahead to collect (default 14)")
     parser.add_argument("--local-dir", default=".", help="Dir with local_events.yaml + extras.yaml")
     parser.add_argument("--skip-web", action="store_true", help="Local YAML only")
     parser.add_argument("--skip-ai", action="store_true", help="Skip AI cleanup")
+    parser.add_argument("--no-backfill", action="store_true",
+                        help="Don't backfill to Monday of this week (default backfills)")
     args = parser.parse_args()
+
+    # Set the global collection window. Every scraper reads _WINDOW_START/_END.
+    global _WINDOW_START, _WINDOW_END
+    _WINDOW_START, _WINDOW_END = date_window(
+        days_ahead=args.days,
+        backfill_to_monday=not args.no_backfill,
+    )
+    print(f"   Window: {_WINDOW_START} → {_WINDOW_END} "
+          f"({(_WINDOW_END - _WINDOW_START).days + 1} days)")
 
     print(f"\n🏙️  The Vic 361 — Event Collector")
     print(f"   {datetime.now().strftime('%A, %B %d %Y at %I:%M %p')}")
@@ -1307,26 +1747,39 @@ def main():
     yaml_path = os.path.join(args.local_dir, "local_events.yaml")
     all_events.extend(load_local_events(yaml_path, args.days))
 
-    # 2. Google Sheet (manual submissions)
+    # 2. Google Sheet (manual submissions) — zero is normal here, don't alert
     print("\n📋 Google Sheet submissions...")
-    all_events.extend(fetch_google_sheet_events(args.days))
+    all_events.extend(safe_fetch("google_sheet", fetch_google_sheet_events,
+                                 args=(args.days,), expect_events=False))
 
-    # 3. Web sources
+    # 3. Web sources — each wrapped so a crash or zero-return doesn't kill the run
     if not args.skip_web:
         print("\n📡 Web sources...")
-        all_events.extend(fetch_city_calendar(args.days))
-        all_events.extend(fetch_chamber_events(args.days))
-        all_events.extend(fetch_library_events(args.days))
-        all_events.extend(fetch_moonshine_events(args.days))
-        all_events.extend(fetch_vtx_artwalk(args.days))
-        all_events.extend(fetch_jwelch_events(args.days))
-        all_events.extend(fetch_theatre_victoria_events(args.days))
-        all_events.extend(fetch_generals_events(args.days))
+        all_events.extend(safe_fetch("city_calendar", fetch_city_calendar, args=(args.days,)))
+        all_events.extend(safe_fetch("chamber", fetch_chamber_events, args=(args.days,)))
+        all_events.extend(safe_fetch("library", fetch_library_events, args=(args.days,)))
+        all_events.extend(safe_fetch("moonshine", fetch_moonshine_events, args=(args.days,)))
+        # VTX Art Walk and Generals can legitimately have 0 (between events / off-season)
+        all_events.extend(safe_fetch("vtx_artwalk", fetch_vtx_artwalk,
+                                     args=(args.days,), expect_events=False))
+        all_events.extend(safe_fetch("jwelch", fetch_jwelch_events,
+                                     args=(args.days,), expect_events=False))
+        all_events.extend(safe_fetch("theatre_victoria", fetch_theatre_victoria_events,
+                                     args=(args.days,)))
+        all_events.extend(safe_fetch("generals", fetch_generals_events,
+                                     args=(args.days,), expect_events=False))
+        all_events.extend(safe_fetch("allevents", fetch_allevents_events,
+                                     args=(args.days,)))
+
+        # Apify Facebook events — only runs if APIFY_TOKEN is set
+        all_events.extend(safe_fetch("apify_facebook", fetch_apify_facebook_events,
+                                     args=(args.days,), expect_events=False))
 
     # 4. Perplexity AI discovery
     if not args.skip_ai:
         print("\n🤖 Perplexity event discovery...")
-        all_events.extend(fetch_perplexity_events(args.days))
+        all_events.extend(safe_fetch("perplexity", fetch_perplexity_events,
+                                     args=(args.days,), expect_events=False))
 
     # 5. Merge + deduplicate
     print(f"\n🔀 Merging {len(all_events)} raw entries...")
