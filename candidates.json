@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-04-26T12:08:14-05:00",
+  "last_updated": "2026-04-26T14:01:33-05:00",
   "events": [
     {
       "date": "2026-04-20",
@@ -7,7 +7,7 @@
       "time": "12:00 PM",
       "venue": "Dr. Pattie Dodson Public Health Center",
       "address": "2805 N Navarro St",
-      "description": "Strong schools = strong community.\n\nVote \"For\" The VISD Bond!",
+      "description": "Vote on the VISD Bond to support strong schools and community.",
       "icons": [
         "community",
         "free"
@@ -21,9 +21,9 @@
       "time": "10:00AM \u2013 11:00AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Baby Time",
+      "description": "Interactive playtime for babies and caregivers featuring books, songs, and activities.",
       "icons": [
-        "community",
+        "family",
         "free"
       ],
       "free": true,
@@ -35,10 +35,10 @@
       "time": "5:30PM \u2013 6:30PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Community Partner, \n                      Speaker",
+      "description": "Learn about family services and resources from Mid-Coast Family Services representatives.",
       "icons": [
+        "community",
         "family",
-        "arts",
         "free"
       ],
       "free": true,
@@ -53,7 +53,6 @@
       "description": "Weekly open mic jam hosted by the Victoria Area Musicians Association. All skill levels welcome.",
       "icons": [
         "music",
-        "drinks",
         "free"
       ],
       "free": true,
@@ -80,9 +79,10 @@
       "time": "4:00PM \u2013 5:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Arts & Crafts",
+      "description": "Create a colorful recycled windsock craft. Perfect for all ages and skill levels.",
       "icons": [
         "arts",
+        "family",
         "free"
       ],
       "free": true,
@@ -94,7 +94,7 @@
       "time": "5:30 PM \u2013 6:30 PM",
       "venue": "Riverside Park",
       "address": "405 Memorial Drive",
-      "description": "Listen. Walk. Repeat. Join the audiobook walking group along the Guadalupe River.",
+      "description": "Listen to audiobooks while walking along the scenic Guadalupe River with fellow book lovers.",
       "icons": [
         "outdoors",
         "free"
@@ -108,9 +108,8 @@
       "time": "5:30PM \u2013 7:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Community Partner, \n                      Other, \n                      Speaker",
+      "description": "Learn essential steps to homeownership from Woolson Real Estate experts.",
       "icons": [
-        "arts",
         "community",
         "free"
       ],
@@ -123,7 +122,7 @@
       "time": "7:30 PM",
       "venue": "Theatre Victoria",
       "address": "203 E. Constitution St, Victoria, TX",
-      "description": "Live theatre performance. Misery \u2014 presented by Theatre Victoria.",
+      "description": "Live theatre performance of Stephen King's gripping tale of obsession and survival.",
       "icons": [
         "arts"
       ],
@@ -136,12 +135,11 @@
       "time": "9:00 AM \u2013 5:00 PM",
       "venue": "DeLeon Plaza",
       "address": "101 N. Main St.",
-      "description": "Classic cars roll into downtown Victoria. Food, music, and horsepower all day.",
+      "description": "Classic cars on display with food trucks and live music all day.",
       "icons": [
-        "community",
         "food",
         "music",
-        "free"
+        "community"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov"
@@ -152,7 +150,7 @@
       "time": "9:30AM \u2013 10:00AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Toddler Time",
+      "description": "Stories, songs, and activities designed for toddlers and caregivers.",
       "icons": [
         "family",
         "free"
@@ -166,7 +164,7 @@
       "time": "10:00AM \u2013 11:00AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Arts & Crafts",
+      "description": "Kids craft mini houses using Peeps candy in a fun session.",
       "icons": [
         "family",
         "arts",
@@ -181,7 +179,7 @@
       "time": "6:00PM \u2013 7:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Book Club",
+      "description": "Casual discussion of books with a fun, lighthearted group.",
       "icons": [
         "community",
         "free"
@@ -195,7 +193,7 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Live bands and solo artists every Friday night. Check their Facebook for this week's lineup.",
+      "description": "Enjoy live bands and solo artists every Friday night.",
       "icons": [
         "music",
         "drinks"
@@ -209,7 +207,7 @@
       "time": "7:30 PM",
       "venue": "Theatre Victoria",
       "address": "203 E. Constitution St, Victoria, TX",
-      "description": "Live theatre performance. Misery \u2014 presented by Theatre Victoria.",
+      "description": "Live theatre performance of Stephen King's gripping tale of obsession and survival.",
       "icons": [
         "arts"
       ],
@@ -222,8 +220,9 @@
       "time": "",
       "venue": "Moonshine Drinkery",
       "address": "103 W. Santa Rosa St.",
-      "description": "Drinks and good times at Moonshine Drinkery.",
+      "description": "Live music paired with drinks and good times.",
       "icons": [
+        "music",
         "drinks"
       ],
       "free": false,
@@ -235,9 +234,10 @@
       "time": "11:00AM \u2013 1:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Arts & Crafts, \n                      Community Partner",
+      "description": "Celebrate with arts and crafts activities alongside community partners.",
       "icons": [
         "arts",
+        "community",
         "free"
       ],
       "free": true,
@@ -249,9 +249,10 @@
       "time": "12:00 PM \u2013 2:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Casual chess games in the Bronte Room. All levels, all ages welcome.",
+      "description": "Enjoy casual chess games for all levels and ages.",
       "icons": [
         "family",
+        "community",
         "free"
       ],
       "free": true,
@@ -263,8 +264,9 @@
       "time": "3:30PM \u2013 5:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Movie, \n                      Other",
+      "description": "Watch experimental films in a relaxed club setting.",
       "icons": [
+        "arts",
         "community",
         "free"
       ],
@@ -277,7 +279,7 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Live bands every Saturday night. Check their Facebook for this week's lineup.",
+      "description": "Catch live bands performing every Saturday night.",
       "icons": [
         "music",
         "drinks"
@@ -291,7 +293,7 @@
       "time": "7:30 PM",
       "venue": "Theatre Victoria",
       "address": "203 E. Constitution St, Victoria, TX",
-      "description": "Live theatre performance. Misery \u2014 presented by Theatre Victoria.",
+      "description": "Experience a gripping live theatre performance.",
       "icons": [
         "arts"
       ],
@@ -304,7 +306,7 @@
       "time": "9:00 AM \u2013 1:00 PM",
       "venue": "Victoria Farmers Market",
       "address": "2805 N. Navarro St.",
-      "description": "Fresh local produce, pastured meats, honey, baked goods. Every Wed & Sat.",
+      "description": "Shop fresh local produce, meats, honey, and baked goods.",
       "icons": [
         "food",
         "shopping",
@@ -319,7 +321,7 @@
       "time": "04:00 PM",
       "venue": "1301 Tristan St, Victoria, TX 77901",
       "address": "1301 Tristan St",
-      "description": "Community event open to the public.",
+      "description": "Watch thrilling professional wrestling matches.",
       "icons": [
         "community"
       ],
@@ -332,7 +334,7 @@
       "time": "05:00 PM",
       "venue": "2002 E Mockingbird Ln, Victoria, TX, United States, Texas 77904",
       "address": "2002 E Mockingbird Ln",
-      "description": "Community event open to the public.",
+      "description": "Join a fun community gathering open to all.",
       "icons": [
         "community"
       ],
@@ -341,24 +343,11 @@
     },
     {
       "date": "2026-04-26",
-      "name": "\"BLUE SUNDAY\" at C3 Victory",
-      "time": "3:00 PM",
-      "venue": "1604 E Crestwood Dr, Victoria, TX, United States, Texas 77901",
-      "address": "",
-      "description": "Sunday, April 26th is BLUE Sunday at C3 Victory. \nLet's all wear blue for National Child Abuse Awareness & Prevention month. \nWe will have some ladies in church talking about specific ways we can support foster care families in our community!\nYou can also help by donating car sea",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/2104812210062550/"
-    },
-    {
-      "date": "2026-04-26",
       "name": "Pastor Jeff Williams 1st Anniversary Celebration",
       "time": "4:00 PM",
       "venue": "608 East Convent, Victoria, TX, United States, Texas 77901",
       "address": "",
-      "description": "Looking forward to celebrating God on tomorrow.",
+      "description": "Celebrate the pastor's 1st anniversary with a joyful gathering honoring faith and community.",
       "icons": [
         "community"
       ],
@@ -367,27 +356,13 @@
     },
     {
       "date": "2026-04-26",
-      "name": "GriefShare",
-      "time": "4:00 PM",
-      "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
-      "address": "",
-      "description": "Struggling with the loss of a loved one?  You aren't alone.  Join us at Grief Share on Sunday, January 25. Through this 13-week group, you\u2019ll discover what to expect in the days ahead and what\u2019s \u201cnormal\u201d in grief. Since there are no neat, orderly stages of grief, you\u2019ll learn hel",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/4197419067254402/"
-    },
-    {
-      "date": "2026-04-26",
       "name": "Dine-In with us @ Herb \u2018n\u2019 Caf\u00e9",
       "time": "4:30 PM",
       "venue": "9701C N. Navarro St., Victoria, TX",
       "address": "",
-      "description": "We\u2019ve got something exciting cooking \ud83d\udd25\n\nStarting now, we are serving fresh, warm food EVERYDAY from 11:30 AM \u2013 2:00 PM \ud83d\ude4c\ud83c\udffd\n\nCome by for your lunch break and enjoy a fresh, made-to-order meal instead of the usual grab & go. Whether you\u2019re dining in or taking it to go, we\u2019ve got you",
+      "description": "Enjoy fresh, made-to-order lunches daily, perfect for dining in or taking to go.",
       "icons": [
-        "food",
-        "arts"
+        "food"
       ],
       "free": false,
       "url": "https://www.facebook.com/events/824062884083442/"
@@ -398,7 +373,7 @@
       "time": "7:30 PM",
       "venue": "Theatre Victoria",
       "address": "203 E. Constitution St, Victoria, TX",
-      "description": "Live theatre performance. Misery \u2014 presented by Theatre Victoria.",
+      "description": "Experience a gripping live theatre production of the thrilling story Misery.",
       "icons": [
         "arts"
       ],
@@ -407,17 +382,30 @@
     },
     {
       "date": "2026-04-27",
+      "name": "Pathway at Parkway",
+      "time": "11:30 PM",
+      "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
+      "address": "",
+      "description": "Join supportive Pathway groups to navigate life's challenges with encouragement and practical tools.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1553377575708290/"
+    },
+    {
+      "date": "2026-04-27",
       "name": "True Crime Book Club",
       "time": "6:00PM \u2013 7:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Book Club, \n                      True Crime Book Club",
+      "description": "Discuss gripping true crime stories with fellow book lovers in a relaxed setting.",
       "icons": [
         "community",
         "free"
       ],
       "free": true,
-      "url": "https://victoriapl.librarycalendar.com/event/true-crime-book-club-6082"
+      "url": "https://victoriapl.librarycalendar.com/index.php/event/true-crime-book-club-6082"
     },
     {
       "date": "2026-04-28",
@@ -425,11 +413,12 @@
       "time": "05:00 PM",
       "venue": "2200 E Red River St, Victoria, TX, United States, Texas 77901",
       "address": "2200 E Red River St",
-      "description": "Community event open to the public.",
+      "description": "Learn about Victoria College in an open session welcoming all community members.",
       "icons": [
-        "community"
+        "community",
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://allevents.in/victoria/vc-info-night/200029887617420"
     },
     {
@@ -438,8 +427,9 @@
       "time": "10:00AM \u2013 11:00AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Baby Time",
+      "description": "Engage little ones with playful stories, songs, and interactive activities for babies and toddlers.",
       "icons": [
+        "family",
         "community",
         "free"
       ],
@@ -447,18 +437,61 @@
       "url": "https://victoriapl.librarycalendar.com/event/baby-story-time-7161"
     },
     {
+      "date": "2026-04-28",
+      "name": "Townsquare Talk: Meet the Newly Promoted Police Chief Fetters",
+      "time": "4:15 PM",
+      "venue": "107 North Star Drive, Victoria, TX, United States, Texas 77904",
+      "address": "",
+      "description": "Enjoy a luncheon and engaging conversation with the newly promoted Police Chief Fetters and Deputy Chief Moya.",
+      "icons": [
+        "community",
+        "food"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/839396005838181/"
+    },
+    {
+      "date": "2026-04-29",
+      "name": "GroupLink at Parkway",
+      "time": "11:30 PM",
+      "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
+      "address": "",
+      "description": "Adults of every age and life stage connect and find their group.",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/events/4508337449387634/"
+    },
+    {
       "date": "2026-04-29",
       "name": "Wellness Wednesday - 12 oils everyone should try",
       "time": "3:00 PM",
       "venue": "106 N De Leon St, Victoria, TX, United States, Texas 77901",
       "address": "",
-      "description": "We will learn from Dr. Brannick Riggs what top 12 essential oils and blends would benefit any family.  Among them are frankincense, lavender, lemon, tea tree and many others.  Come and learn with us.  Enter through the red chapel doors at 402 East Constitution.",
+      "description": "Learn from Dr. Brannick Riggs about the top 12 essential oils and blends to benefit any family.",
       "icons": [
         "family",
-        "community"
+        "community",
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://www.facebook.com/events/4501139066878974/"
+    },
+    {
+      "date": "2026-04-29",
+      "name": "Weekly Zoom Prayer",
+      "time": "5:00 PM",
+      "venue": "1604 E Crestwood Dr, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "Join a brand new Zoom prayer format at noon.",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/events/878263871681485/"
     },
     {
       "date": "2026-04-29",
@@ -466,10 +499,9 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Weekly open mic jam hosted by the Victoria Area Musicians Association. All skill levels welcome.",
+      "description": "Weekly open mic jam welcoming all skill levels.",
       "icons": [
         "music",
-        "drinks",
         "free"
       ],
       "free": true,
@@ -481,7 +513,7 @@
       "time": "9:00 AM \u2013 1:00 PM",
       "venue": "Victoria Farmers Market",
       "address": "2805 N. Navarro St.",
-      "description": "Fresh local produce, pastured meats, honey, baked goods, and more from Victoria's best vendors.",
+      "description": "Fresh local produce, pastured meats, honey, baked goods and more from top vendors.",
       "icons": [
         "food",
         "shopping",
@@ -496,12 +528,13 @@
       "time": "12:00 AM",
       "venue": "2200 East Red River, Victoria, TX, United States, Texas 77901",
       "address": "",
-      "description": "An evening of music featuring student performers from the Victoria College Music Department. This recital highlights the work of our student musicians across a variety of styles and instruments. Come support our students as they share the results of their dedication and artistry",
+      "description": "Evening of music featuring student performers across various styles and instruments.",
       "icons": [
         "music",
-        "arts"
+        "arts",
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://www.facebook.com/events/924672693886668/"
     },
     {
@@ -510,7 +543,7 @@
       "time": "4:00PM \u2013 5:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Arts & Crafts",
+      "description": "Create colorful art by painting on ice.",
       "icons": [
         "family",
         "arts",
@@ -525,9 +558,10 @@
       "time": "5:30 PM \u2013 6:30 PM",
       "venue": "Riverside Park",
       "address": "405 Memorial Drive",
-      "description": "Listen. Walk. Repeat. Join the audiobook walking group along the Guadalupe River.",
+      "description": "Listen to audiobooks while walking along the Guadalupe River.",
       "icons": [
         "outdoors",
+        "family",
         "free"
       ],
       "free": true,
@@ -539,9 +573,10 @@
       "time": "5:30PM \u2013 6:30PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Health & Wellness, \n                      Other",
+      "description": "Join fellow audiobook enthusiasts for a relaxing walk through Riverside Park while listening or chatting about your current reads.",
       "icons": [
         "outdoors",
+        "community",
         "free"
       ],
       "free": true,
@@ -553,7 +588,7 @@
       "time": "6:30 PM \u2013 9:00 PM",
       "venue": "Featured Victoria College Stops: Museum of the Coastal Bend Fine Arts Gallery Johnson Symposium Health Sciences Center",
       "address": "",
-      "description": "DescriptionFeatured Victoria College Stops: Museum of the Coastal Bend - \"Where Texas Ranching Began\" Exhibit Fine Arts Gallery - Student Juried Show",
+      "description": "Explore Victoria College's campus galleries featuring ranching history exhibits and student artwork across multiple locations.",
       "icons": [
         "arts",
         "free"
@@ -563,24 +598,11 @@
     },
     {
       "date": "2026-04-30",
-      "name": "Powerful Voices Open Mic Show - Live Music, Comedy, Poetry+ More!",
-      "time": "7:00 PM",
-      "venue": "Victoria",
-      "address": "",
-      "description": "Open mic show featuring live music, comedy, poetry and more",
-      "icons": [
-        "music"
-      ],
-      "free": false,
-      "url": "https://www.eventbrite.com/e/powerful-voices-open-mic-show-live-music-comedy-poetry-more-tickets-1975575859577"
-    },
-    {
-      "date": "2026-04-30",
       "name": "Toddler Story Time",
       "time": "9:30AM \u2013 10:00AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Toddler Time",
+      "description": "Interactive story time designed for toddlers with engaging books and activities.",
       "icons": [
         "family",
         "free"
@@ -594,7 +616,7 @@
       "time": "",
       "venue": "Club Westerner",
       "address": "",
-      "description": "DescriptionProsperity Bank invites you to our 2nd Annual Derby to Remember, Hats off to Habitat Derby Event Gala benefitting Golden Crescent Habitat f",
+      "description": "Gala fundraiser benefitting Golden Crescent Habitat for Humanity, hosted by Prosperity Bank.",
       "icons": [
         "community"
       ],
@@ -607,10 +629,11 @@
       "time": "06:00 PM",
       "venue": "Club Westerner",
       "address": "1005 West Constitution Street",
-      "description": "Outdoor activity in Victoria. Bring the family.",
+      "description": "Family-friendly outdoor Derby Day celebration supporting Habitat for Humanity.",
       "icons": [
         "outdoors",
-        "community"
+        "community",
+        "family"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/a-derby-to-remember-habitats-run-for-the-roses/100001900426590089"
@@ -621,8 +644,9 @@
       "time": "09:00 PM",
       "venue": "Moonshine Drinkery",
       "address": "103 W Santa Rosa St",
-      "description": "Drinks and good times at Moonshine Drinkery.",
+      "description": "Live piano performance featuring audience requests at this local drinkery.",
       "icons": [
+        "music",
         "drinks"
       ],
       "free": false,
@@ -634,10 +658,10 @@
       "time": "10:00AM \u2013 11:00AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Arts & Crafts",
+      "description": "Create your own cereal-themed artwork in this fun hands-on painting session.",
       "icons": [
-        "family",
         "arts",
+        "family",
         "free"
       ],
       "free": true,
@@ -645,16 +669,16 @@
     },
     {
       "date": "2026-05-01",
-      "name": "17th Annual Cinco de Mayo Pachanga",
-      "time": "5:00 PM",
-      "venue": "Central Park",
+      "name": "CELEBRATING HER - A two Week Mother's Day Shopping Event",
+      "time": "3:00 PM",
+      "venue": "3001 E. Red River, Victoria, TX, United States, Texas 77901",
       "address": "",
-      "description": "Annual Cinco de Mayo celebration and community gathering",
+      "description": "Two-weekend Mother's Day shopping event with curated gifts and special in-store experiences.",
       "icons": [
-        "outdoors"
+        "shopping"
       ],
       "free": false,
-      "url": ""
+      "url": "https://www.facebook.com/events/1625975308679245/"
     },
     {
       "date": "2026-05-01",
@@ -662,7 +686,7 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Live bands and solo artists every Friday night. Check their Facebook for this week's lineup.",
+      "description": "Enjoy live bands and solo artists. Check their Facebook for this week's lineup.",
       "icons": [
         "music",
         "drinks"
@@ -676,11 +700,13 @@
       "time": "",
       "venue": "DeLeon Plaza",
       "address": "101 N Main St",
-      "description": "Community event open to the public.",
+      "description": "Celebrate with festive community activities at this Cinco de Mayo gathering.",
       "icons": [
-        "community"
+        "community",
+        "outdoors",
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://allevents.in/victoria/fiesta-cinco-de-mayo/200029919383417"
     },
     {
@@ -689,12 +715,13 @@
       "time": "01:00 PM",
       "venue": "Victoria Art League Gallery Venue",
       "address": "905 S Bridge St",
-      "description": "Family-friendly event at Victoria Art League Gallery Venue. Free and open to all ages.",
+      "description": "View youth-created artwork in a welcoming gallery setting.",
       "icons": [
+        "arts",
         "family",
-        "arts"
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://allevents.in/victoria/spring-youth-art-show/200029936952201"
     },
     {
@@ -703,12 +730,13 @@
       "time": "08:00 AM",
       "venue": "Riverside Park - Special Events Area",
       "address": "405 Memorial Dr.",
-      "description": "Local vendors and shopping at Riverside Park - Special Events Area.",
+      "description": "Join the walk to raise awareness, explore resources, and browse local vendors.",
       "icons": [
-        "shopping",
-        "outdoors"
+        "community",
+        "outdoors",
+        "shopping"
       ],
-      "free": false,
+      "free": true,
       "url": "https://allevents.in/victoria/gulf-bends-shine-the-light-on-mental-health-and-suicide-walk-and-resource-fair/100001979777301202"
     },
     {
@@ -717,11 +745,13 @@
       "time": "08:00 AM",
       "venue": "Target Store Victoria (7608 NE Zac Lentz Pkwy, Victoria, TX)",
       "address": "7608 NE Zac Lentz Pkwy",
-      "description": "Community event open to the public.",
+      "description": "Help clean up the community in this spring trash collection drive.",
       "icons": [
-        "community"
+        "community",
+        "outdoors",
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://allevents.in/victoria/2026-spring-trash-off/200029846656208"
     },
     {
@@ -730,9 +760,11 @@
       "time": "10:00 AM",
       "venue": "5803 NE Zac Lentz Parkway, Victoria, TX 77904",
       "address": "5803 NE Zac Lentz Pkwy",
-      "description": "Outdoor activity in Victoria. Bring the family.",
+      "description": "Create a painted keepsake with the family in an outdoor setting.",
       "icons": [
-        "outdoors"
+        "family",
+        "outdoors",
+        "arts"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/paint-a-keepsake/200029980299230"
@@ -743,11 +775,13 @@
       "time": "12:00 PM",
       "venue": "Northgate Church of God",
       "address": "206 Broadmoor St",
-      "description": "Community event open to the public.",
+      "description": "Unplug and connect through games and fellowship.",
       "icons": [
-        "community"
+        "community",
+        "family",
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://allevents.in/victoria/presence-over-pixels-game-day/200029764716919"
     },
     {
@@ -756,9 +790,10 @@
       "time": "12:00 PM \u2013 2:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Casual chess games in the Bronte Room. All levels, all ages welcome.",
+      "description": "Play casual chess games with players of all levels and ages.",
       "icons": [
         "family",
+        "community",
         "free"
       ],
       "free": true,
@@ -770,25 +805,29 @@
       "time": "2:00 PM",
       "venue": "2805 N. Navarro, Victoria, TX, United States, Texas 77901",
       "address": "",
-      "description": "\ud835\udc0c\ud835\udc28\ud835\udc2d\ud835\udc21\ud835\udc1e\ud835\udc2b'\ud835\udc2c \ud835\udc03\ud835\udc1a\ud835\udc32 \ud835\udc0c\ud835\udc1a\ud835\udc2b\ud835\udc24\ud835\udc1e\ud835\udc2d\n\nShop early for Mom with \ud835\udc2e\ud835\udc27\ud835\udc22\ud835\udc2a\ud835\udc2e\ud835\udc1e \ud835\udc21\ud835\udc1a\ud835\udc27\ud835\udc1d\ud835\udc26\ud835\udc1a\ud835\udc1d\ud835\udc1e \ud835\udc20\ud835\udc22\ud835\udc1f\ud835\udc2d\ud835\udc2c and extra craft vendors, plus fresh, local ingredients for the perfect meal.\n\nShop local\nFind the perfect gift\nCelebrate Mom",
+      "description": "Shop unique handmade gifts and extra craft vendors, plus fresh local ingredients for the perfect meal.",
       "icons": [
-        "shopping"
+        "shopping",
+        "food",
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://www.facebook.com/events/2741329749593142/"
     },
     {
       "date": "2026-05-02",
-      "name": "Challenging the Church: Commit Your Ways",
-      "time": "7:00 PM",
-      "venue": "5901 N Main St, Victoria, TX",
+      "name": "Spring Youth Art Show - Victoria Art League",
+      "time": "6:00 PM",
+      "venue": "905 S Bridge St, Victoria, TX, United States, Texas 77901",
       "address": "",
-      "description": "You are invited!",
+      "description": "Display your children's best artwork from the past year in this youth art showcase.",
       "icons": [
-        "community"
+        "arts",
+        "family",
+        "free"
       ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1605907480672255/"
+      "free": true,
+      "url": "https://www.facebook.com/events/1014806734554659/"
     },
     {
       "date": "2026-05-02",
@@ -796,7 +835,7 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Live bands every Saturday night. Check their Facebook for this week's lineup.",
+      "description": "Enjoy live bands every Saturday night. Check their Facebook for this week's lineup.",
       "icons": [
         "music",
         "drinks"
@@ -810,10 +849,10 @@
       "time": "8:00 AM \u2013 12:00 PM",
       "venue": "Riverside Park",
       "address": "405 Memorial Drive",
-      "description": "Gulf Bend's annual walk for mental health awareness. Free resources and community support.",
+      "description": "Join the annual walk for mental health awareness with free resources and community support.",
       "icons": [
-        "outdoors",
         "community",
+        "outdoors",
         "free"
       ],
       "free": true,
@@ -825,7 +864,7 @@
       "time": "9:00 AM \u2013 1:00 PM",
       "venue": "Victoria Farmers Market",
       "address": "2805 N. Navarro St.",
-      "description": "Fresh local produce, pastured meats, honey, baked goods. Every Wed & Sat.",
+      "description": "Discover fresh local produce, pastured meats, honey and baked goods.",
       "icons": [
         "food",
         "shopping",
@@ -840,9 +879,10 @@
       "time": "01:00 PM",
       "venue": "Blume &amp; Flour",
       "address": "206 N Liberty Street",
-      "description": "Arts event at Blume &amp; Flour. Open to the public.",
+      "description": "Enjoy a special tea party for moms and kids.",
       "icons": [
-        "arts"
+        "family",
+        "food"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/mommy-and-me-tea-party/200029961005211"
@@ -853,10 +893,11 @@
       "time": "10:00 AM",
       "venue": "Tropical Smoothie Cafe parking lot in Victoria, TX",
       "address": "3202 N Navarro St",
-      "description": "Outdoor activity in Victoria. Bring the family.",
+      "description": "Support cancer research with family-friendly lemonade sales.",
       "icons": [
-        "outdoors",
-        "community"
+        "community",
+        "family",
+        "outdoors"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/5th-annual-lemonade-for-cancer-fundraiser/200029888909532"
@@ -867,11 +908,13 @@
       "time": "11:00 AM",
       "venue": "Our Saviour's Lutheran Church",
       "address": "4102 N Ben Jordan St",
-      "description": "Community event open to the public.",
+      "description": "Join in on family-friendly fun and community activities.",
       "icons": [
-        "community"
+        "community",
+        "family",
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://allevents.in/victoria/springfest-2026/200029477185404"
     },
     {
@@ -880,8 +923,9 @@
       "time": "12:30 AM",
       "venue": "214 N Main St, Victoria, TX, United States, Texas 77901",
       "address": "",
-      "description": "International Elvis tribute artist Donny Edwards will bring his acclaimed show \u201cAn Elite Tribute to Elvis\u201d to Victoria College\u2019s Leo J. Welder Center for the Performing Arts on Saturday, May 2. \n\nEdwards is known worldwide for masterfully recreating each era of Presley's career,",
+      "description": "Internationally acclaimed Elvis tribute artist recreates iconic eras of Presley's career with authentic energy and live band.",
       "icons": [
+        "music",
         "arts"
       ],
       "free": false,
@@ -889,30 +933,32 @@
     },
     {
       "date": "2026-05-03",
-      "name": "Graduate Recognition",
-      "time": "2:30 PM",
-      "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
-      "address": "",
-      "description": "On Sunday, May 3, we will celebrate recent graduates.  Whether you have graduated from high school, college, or graduate school, we\u2019d love to honor your work and pray for you.  Graduate Recognition will be during all services.  There is no need to sign up. Just show up and let us",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1415334216926815/"
-    },
-    {
-      "date": "2026-05-03",
       "name": "SPARK Fine Arts Pre-School ASK & LEARN Events",
       "time": "6:00 PM",
       "venue": "204 N. Main St., Victoria, TX, United States, Texas 77901",
       "address": "",
-      "description": "SPARK is an arts-integrated preschool for ages 3-4 \nat the Ballet Academy of South Texas now enrolling for Fall 2026. Please attend one of our ASK & LEARN events to discover more about this unique program and meet the team.",
+      "description": "Discover this arts-integrated preschool program for ages 3-4 and meet the team at enrollment info sessions.",
       "icons": [
         "arts",
-        "outdoors"
+        "family",
+        "community"
       ],
-      "free": false,
+      "free": true,
       "url": "https://www.facebook.com/events/1236025495223806/"
+    },
+    {
+      "date": "2026-05-03",
+      "name": "Organ Plus Concert at FUMC Victoria",
+      "time": "8:00 PM",
+      "venue": "407 N Bridge St, Victoria, TX 77901-6516, United States",
+      "address": "",
+      "description": "Enjoy organ music plus additional instrumental selections performed by the local American Guild of Organists chapter.",
+      "icons": [
+        "music",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/events/1109501471389360/"
     },
     {
       "date": "2026-05-04",
@@ -920,8 +966,9 @@
       "time": "05:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N Main St",
-      "description": "Community event open to the public.",
+      "description": "Learn essential styling tips in this hands-on class presented by Skulls & Wildflowers.",
       "icons": [
+        "arts",
         "community",
         "free"
       ],
@@ -934,9 +981,10 @@
       "time": "4:00PM \u2013 5:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Lego Lab",
+      "description": "Build Lego camping scenes and other creative structures in this family drop-in session.",
       "icons": [
         "family",
+        "arts",
         "free"
       ],
       "free": true,
@@ -948,8 +996,9 @@
       "time": "5:30 PM \u2013 7:00 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "Community event open to the public.",
+      "description": "Get practical tips on hair styling techniques from expert Angie Knix.",
       "icons": [
+        "arts",
         "community",
         "free"
       ],
@@ -962,9 +1011,10 @@
       "time": "5:30PM \u2013 6:30PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Arts & Crafts",
+      "description": "Create 3D clay art pieces in this mixed media workshop.",
       "icons": [
         "arts",
+        "family",
         "free"
       ],
       "free": true,
@@ -976,10 +1026,9 @@
       "time": "5:30PM \u2013 7:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Community Partner, \n                      Other, \n                      Workshop",
+      "description": "Master hair styling techniques with professional artist Angie Knix.",
       "icons": [
         "arts",
-        "shopping",
         "community",
         "free"
       ],
@@ -992,8 +1041,9 @@
       "time": "10:00AM \u2013 11:00AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Baby Time",
+      "description": "Stories, songs, and rhymes for babies 18 months and under to spark a love of reading.",
       "icons": [
+        "family",
         "community",
         "free"
       ],
@@ -1006,12 +1056,12 @@
       "time": "11:30 PM",
       "venue": "2906 E North St, Victoria, TX 77901-8632, United States",
       "address": "",
-      "description": "You're Invited!\nJoin us on May 5th at 6:30 PM at the VLS Hall for the Victoria West FFA Banquet!\n* Meal Provided by: Victoria West FFA Booster Club\n* Tickets: $10 per person\n* FFA Students and Advisors: meal will be provided for free\nCome celebrate the hard work and achievements",
+      "description": "Celebrate FFA achievements with dinner and community. Tickets $10; free for FFA students and advisors.",
       "icons": [
-        "community",
-        "free"
+        "food",
+        "community"
       ],
-      "free": true,
+      "free": false,
       "url": "https://www.facebook.com/events/2220119172065287/"
     },
     {
@@ -1020,7 +1070,7 @@
       "time": "4:00PM \u2013 5:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Arts & Crafts",
+      "description": "Create decorative coral crafts in a hands-on creative workshop.",
       "icons": [
         "arts",
         "free"
@@ -1034,9 +1084,10 @@
       "time": "5:30 PM \u2013 6:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "Food and community at Victoria Public Library. Come hungry.",
+      "description": "Learn healthy cooking techniques and recipes from Texas A&M AgriLife Extension experts.",
       "icons": [
         "food",
+        "community",
         "free"
       ],
       "free": true,
@@ -1048,11 +1099,9 @@
       "time": "5:30PM \u2013 6:30PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Community Partner, \n                      Health & Wellness, \n                      Workshop",
+      "description": "Explore Mediterranean cuisine and wellness cooking in this interactive workshop.",
       "icons": [
         "food",
-        "arts",
-        "shopping",
         "community",
         "free"
       ],
@@ -1065,7 +1114,7 @@
       "time": "6:00PM \u2013 7:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Book Club",
+      "description": "Monthly gathering for book lovers to discuss and share reading recommendations.",
       "icons": [
         "community",
         "free"
@@ -1079,11 +1128,9 @@
       "time": "5:30PM \u2013 6:30PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Arts & Crafts, \n                      Community Partner, \n                      Health & Wellness, \n                      Workshop",
+      "description": "Relaxing arts and crafts session focused on wellness and self-care practices.",
       "icons": [
-        "family",
         "arts",
-        "shopping",
         "community",
         "free"
       ],
@@ -1092,26 +1139,13 @@
     },
     {
       "date": "2026-05-06",
-      "name": "Pet Supplies Plus Adoption Event",
-      "time": "6:00 PM",
-      "venue": "Pet Supplies Plus - Victoria, TX",
-      "address": "",
-      "description": "\ud83d\udc3e\ud83d\udc36DOCPAC will have shelter dogs available for on-site adoption at Pet Supplies Plus on May 6th from 1:00pm-5:00pm! \n\nAll adoption fees during this event will be discounted!\ud83d\ude42\n\n\u2b50\ufe0fPet Supplies Plus is located at: 5217 N Navarro St Suite B, Victoria, TX 77904.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1494060695836723/"
-    },
-    {
-      "date": "2026-05-06",
       "name": "Pickleball Games",
       "time": "6:00PM \u2013 7:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Game, \n                      Health & Wellness, \n                      Other, \n                      Workshop",
+      "description": "Casual recreational pickleball games for players of all skill levels.",
       "icons": [
-        "shopping",
+        "outdoors",
         "community",
         "free"
       ],
@@ -1124,10 +1158,9 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Weekly open mic jam hosted by the Victoria Area Musicians Association. All skill levels welcome.",
+      "description": "Weekly open mic jam welcoming all skill levels to perform rock and blues.",
       "icons": [
         "music",
-        "drinks",
         "free"
       ],
       "free": true,
@@ -1135,24 +1168,11 @@
     },
     {
       "date": "2026-05-06",
-      "name": "Mrs. Harrison's Retirement Chapel & Celebration",
-      "time": "7:45 PM",
-      "venue": "1501 N Glass St, Victoria, TX 77901-5130, United States",
-      "address": "",
-      "description": "After 19 wonderful years of teaching our littlest Patriots, we are celebrating the retirement of our beloved K3 teacher, Mrs. Piper Harrison \ud83d\udc9b\n\nFor nearly two decades, Mrs. Harrison has been the very first teacher for so many of our students - helping tiny hands learn to hold pen",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1307366317447881/"
-    },
-    {
-      "date": "2026-05-06",
       "name": "Victoria Farmers' Market",
       "time": "9:00 AM \u2013 1:00 PM",
       "venue": "Victoria Farmers Market",
       "address": "2805 N. Navarro St.",
-      "description": "Fresh local produce, pastured meats, honey, baked goods, and more from Victoria's best vendors.",
+      "description": "Discover fresh local produce, pastured meats, honey, baked goods, and more from top vendors.",
       "icons": [
         "food",
         "shopping",
@@ -1167,9 +1187,10 @@
       "time": "9:30AM \u2013 11:00AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Arts & Crafts",
+      "description": "Enjoy arts and crafts activities for creative fun.",
       "icons": [
         "arts",
+        "family",
         "free"
       ],
       "free": true,
@@ -1181,11 +1202,12 @@
       "time": "04:30 PM",
       "venue": "DeTar Hospital North",
       "address": "101 Medical Dr",
-      "description": "Community event open to the public.",
+      "description": "Special reunion gathering for NICU families and friends.",
       "icons": [
-        "community"
+        "community",
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://allevents.in/victoria/detar-nicu-reunion/200029764717722"
     },
     {
@@ -1194,9 +1216,10 @@
       "time": "06:00 PM",
       "venue": "402 E Power Ave, Victoria, TX, United States, Texas 77901",
       "address": "402 E Power Ave",
-      "description": "Community event open to the public.",
+      "description": "Create floral designs while sipping prosecco in a festive Mother's Day atmosphere.",
       "icons": [
-        "community"
+        "arts",
+        "drinks"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/petals-and-prosecco-mothers-day/200029932660922"
@@ -1207,10 +1230,10 @@
       "time": "11:00 AM",
       "venue": "2200 East Red River St., Victoria, TX, United States, Texas 77901",
       "address": "2200 E Red River St",
-      "description": "Arts event at 2200 East Red River St., Victoria, TX, United States, Texas 77901. Open to the public.",
+      "description": "Browse unique handmade goods from local artisans.",
       "icons": [
-        "arts",
-        "shopping"
+        "shopping",
+        "arts"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/spring-artisan-market/200029699153514"
@@ -1221,9 +1244,9 @@
       "time": "4:00 PM",
       "venue": "7602 N Navarro St, Victoria, TX 77904-2655, United States",
       "address": "",
-      "description": "Join us for complimentary shredding services at our Victoria Financial Center. We encourage you to bring your documents, start shredding and protect your security. Only paper products will be accepted, with a limit of 10 boxes/bags per visitor. This event is free and open to the",
+      "description": "Bring documents for secure, complimentary paper shredding with a 10-box limit per visitor.",
       "icons": [
-        "arts",
+        "community",
         "free"
       ],
       "free": true,
@@ -1235,9 +1258,10 @@
       "time": "5:30 PM \u2013 6:30 PM",
       "venue": "Riverside Park",
       "address": "405 Memorial Drive",
-      "description": "Listen. Walk. Repeat. Join the audiobook walking group along the Guadalupe River.",
+      "description": "Listen to audiobooks while walking scenic trails along the Guadalupe River.",
       "icons": [
         "outdoors",
+        "community",
         "free"
       ],
       "free": true,
@@ -1249,7 +1273,7 @@
       "time": "9:30AM \u2013 10:00AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Toddler Time",
+      "description": "Stories, songs, and rhymes designed for toddlers and caregivers.",
       "icons": [
         "family",
         "free"
@@ -1263,7 +1287,7 @@
       "time": "10:00AM \u2013 11:00AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Arts & Crafts",
+      "description": "Fun arts and crafts session featuring castanets for kids.",
       "icons": [
         "family",
         "arts",
@@ -1278,7 +1302,7 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Live bands and solo artists every Friday night. Check their Facebook for this week's lineup.",
+      "description": "Enjoy live bands or solo artists with drinks.",
       "icons": [
         "music",
         "drinks"
@@ -1292,7 +1316,7 @@
       "time": "07:00 PM",
       "venue": "Leo J. Welder Center for the Performing Arts",
       "address": "214 N Main St",
-      "description": "Arts event at Leo J. Welder Center for the Performing Arts. Open to the public.",
+      "description": "Performing arts event by Seger System open to all.",
       "icons": [
         "arts"
       ],
@@ -1305,8 +1329,9 @@
       "time": "09:00 PM",
       "venue": "Moonshine Drinkery",
       "address": "103 W Santa Rosa St",
-      "description": "Drinks and good times at Moonshine Drinkery.",
+      "description": "Live music performance with drinks and good times.",
       "icons": [
+        "music",
         "drinks"
       ],
       "free": false,
@@ -1318,11 +1343,11 @@
       "time": "10:30 AM \u2013 2:00 PM",
       "venue": "Power Avenue Warehouse",
       "address": "402 E Power Ave",
-      "description": "DescriptionJoin us for a high tea?inspired Mother?s Day Brunch featuring live music, a beautifully curated brunch, refreshing beverages, and exciting",
+      "description": "High tea-inspired brunch with live music and beverages.",
       "icons": [
-        "music",
         "food",
-        "outdoors"
+        "music",
+        "drinks"
       ],
       "free": false,
       "url": "https://business.victoriachamber.org/events/details/mother-s-day-brunch-4350"
@@ -1333,7 +1358,7 @@
       "time": "12:00 PM \u2013 2:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Casual chess games in the Bronte Room. All levels, all ages welcome.",
+      "description": "Casual chess games for all ages and skill levels.",
       "icons": [
         "family",
         "free"
@@ -1347,28 +1372,12 @@
       "time": "4:00 PM",
       "venue": "5803 John Stockbauer, Victoria, TX, United States, Texas 77904",
       "address": "",
-      "description": "Learn to crochet, read patterns, and more in 5 Beginner's Crochet Classes, held the 2nd and 4th Saturday's of the month. Starting April 11th from 11am-12:15pm. $20 per class, all supplies are included. Seats are limited!",
+      "description": "Hands-on classes to learn crochet basics and patterns; supplies included.",
       "icons": [
-        "arts",
-        "community"
+        "arts"
       ],
       "free": false,
       "url": "https://www.facebook.com/events/1576408166806333/"
-    },
-    {
-      "date": "2026-05-09",
-      "name": "2nd Annual Pork Steak Fundraiser",
-      "time": "4:00 PM",
-      "venue": "3102 Miori Ln., Victoria, TX, United States, Texas 77901",
-      "address": "",
-      "description": "Big, delicious BBQ pork steaks, german potatoes, and green beans to-go. Presale tickets beginning March 22nd. $15 per plate. Proceeds benefit the ministry of United Baptist Church. Help us as we give back to the community. You can learn more about what we do at ubcvictoria.org.",
-      "icons": [
-        "food",
-        "shopping",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1622250959120709/"
     },
     {
       "date": "2026-05-09",
@@ -1376,7 +1385,7 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Live bands every Saturday night. Check their Facebook for this week's lineup.",
+      "description": "Enjoy live bands every Saturday night. Check their Facebook for this week's lineup.",
       "icons": [
         "music",
         "drinks"
@@ -1390,7 +1399,7 @@
       "time": "9:00 AM \u2013 1:00 PM",
       "venue": "Victoria Farmers Market",
       "address": "2805 N. Navarro St.",
-      "description": "Fresh local produce, pastured meats, honey, baked goods. Every Wed & Sat.",
+      "description": "Discover fresh local produce, pastured meats, honey and baked goods.",
       "icons": [
         "food",
         "shopping",
@@ -1405,10 +1414,11 @@
       "time": "9:00 AM \u2013 4:00 PM",
       "venue": "",
       "address": "138 S. Market St",
-      "description": "DescriptionMarket Days is every month on the second Saturday!Goliad Market Days is an open air market which combines an arts and crafts fair, farmers",
+      "description": "Explore an open-air market with arts, crafts and farmers offerings.",
       "icons": [
+        "shopping",
         "arts",
-        "shopping"
+        "food"
       ],
       "free": false,
       "url": "https://business.victoriachamber.org/events/details/goliad-market-days-2022-05-09-2026-1771"
@@ -1419,7 +1429,7 @@
       "time": "9:00 PM",
       "venue": "Victoria, Texas",
       "address": "",
-      "description": "\u00bfYa quieres recuperar tu paz?\n\nSi sigues intentando \u201cpensar positivo\u201d\nsin entender tu mente\u2026\n\nte vas a seguir frustrando.\n\nNo necesitas m\u00e1s fuerza de voluntad.\nNecesitas conocimiento.\n\n\ufffd Eso es lo que hace este curso.\n\n\ufffd SABER ES PODER \ufffd \n\nComenta: Mente\nSi est\u00e1s listo para saber",
+      "description": "Curso para entender tu mente y recuperar el control con conocimiento pr\u00e1ctico.",
       "icons": [
         "community"
       ],
@@ -1432,11 +1442,13 @@
       "time": "09:00 AM",
       "venue": "2002 E Mockingbird Ln, Victoria, TX, United States, Texas 77904",
       "address": "2002 E Mockingbird Ln",
-      "description": "Community event open to the public.",
+      "description": "Celebraci\u00f3n comunitaria abierta al p\u00fablico para honrar a las madres.",
       "icons": [
-        "community"
+        "community",
+        "family",
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://allevents.in/victoria/mothers-day/200029914696028"
     },
     {
@@ -1445,27 +1457,13 @@
       "time": "2:00 PM \u2013 4:00 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "Community event open to the public.",
+      "description": "Reuni\u00f3n de miembros de Friends of the Victoria Public Library.",
       "icons": [
         "community",
         "free"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3640"
-    },
-    {
-      "date": "2026-05-10",
-      "name": "Baby Dedication",
-      "time": "2:30 PM",
-      "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
-      "address": "",
-      "description": "We\u2019re celebrating Baby Dedication on Sunday, May 10 at all Parkway campuses. During this special service, parents commit to raising their children to know and follow Jesus, and our church family commits to supporting them along the way. Invite family and friends to join you for t",
-      "icons": [
-        "family",
-        "outdoors"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1953195845287872/"
     }
   ]
 }
