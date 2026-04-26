@@ -12,6 +12,50 @@ recurring:
 
   # ── WEDNESDAY ───────────────────────────────────────────────────────────
 
+  - name: "VARRA Monday Night Run"
+    day: monday
+    time: "6:30 PM"
+    venue: "Riverside Stadium Parking Lot"
+    address: "Memorial Dr."
+    description: "Free weekly group run/walk hosted by the Victoria Area Road Runners Association. All levels welcome — just show up."
+    icons: [sports, outdoors, free]
+    free: true
+    url: "https://runsignup.com/MemberOrg/VictoriaAreaRoadRunnersAssociation"
+    # VERIFIED: VARRA Facebook post 2026-04-20 + RunSignup
+
+  - name: "Palace Bingo — Monday"
+    day: monday
+    time: "5:30 PM – 10:30 PM"
+    venue: "Palace Bingo"
+    address: "5306 Houston Hwy"
+    description: "Victoria's original bingo hall. Evening session with cash prizes. Cards sold at the door."
+    icons: [community]
+    free: false
+    url: "https://palacebingo.org"
+    # VERIFIED: palacebingo.org + localbingohalls.com listing
+
+  - name: "Pool Shark Tuesdays — Free Pool"
+    day: tuesday
+    time: "5:00 PM – 8:00 PM"
+    venue: "Dodge City Saloon"
+    address: "205 N Star Dr, Suite H"
+    description: "Free pool on 8 tables every Tuesday 5–8 PM with drink specials. Open until 2 AM."
+    icons: [drinks, free]
+    free: true
+    url: "https://dcsaloon.com"
+    # VERIFIED: dcsaloon.com homepage + Facebook post
+
+  - name: "Palace Bingo — Tuesday"
+    day: tuesday
+    time: "5:30 PM – 10:30 PM"
+    venue: "Palace Bingo"
+    address: "5306 Houston Hwy"
+    description: "Tuesday evening bingo session. Cash prizes, multiple games. Cards sold at the door."
+    icons: [community]
+    free: false
+    url: "https://palacebingo.org"
+    # VERIFIED: localbingohalls.com (sourced from Palace Bingo)
+
   - name: "Victoria Farmers' Market"
     day: wednesday
     time: "9:00 AM – 1:00 PM"
@@ -21,6 +65,39 @@ recurring:
     icons: [food, shopping, free]
     free: true
     url: ""
+
+  - name: "Karaoke + Cantina Night"
+    day: wednesday
+    time: "7:00 PM – close"
+    venue: "La Cantina Tacos & Tequila"
+    address: "212 S Main St."
+    description: "Weekly Wednesday karaoke downtown with margarita and drink specials."
+    icons: [drinks, food, music]
+    free: true
+    url: "https://www.instagram.com/lacantinavictoria/"
+    # VERIFIED: @lacantinavictoria IG reel + April 2026 FB community post
+
+  - name: "Wednesday Night Karaoke"
+    day: wednesday
+    time: "9:30 PM – 2:00 AM"
+    venue: "Shooters Bar"
+    address: "4705 N Navarro St."
+    description: "Late-night karaoke hosted by DJ Shane. Big dance floor, drink specials."
+    icons: [drinks, music]
+    free: true
+    url: "https://www.facebook.com/groups/384603922014986/posts/2419507071857984/"
+    # VERIFIED: DJ Shane FB schedule (April 2026) + multiple FB community posts
+
+  - name: "VARRA Wednesday Night Run"
+    day: wednesday
+    time: "6:30 PM"
+    venue: "Riverside Stadium Parking Lot"
+    address: "Memorial Dr."
+    description: "Midweek group run/walk with VARRA. Free, all levels welcome."
+    icons: [sports, outdoors, free]
+    free: true
+    url: "https://runsignup.com/MemberOrg/VictoriaAreaRoadRunnersAssociation"
+    # ⚠️ UNVERIFIED time — RunSignup/Strava confirm Wed runs but only Mon time (6:30) is in primary sources. Confirm with VARRA.
 
   - name: "VAMA Rock & Blues Open Mic"
     day: wednesday
@@ -33,6 +110,28 @@ recurring:
     url: "https://aerocrafters.pub"
 
   # ── THURSDAY ────────────────────────────────────────────────────────────
+
+  - name: "Karaoke Thursday with DJ Rocketman"
+    day: thursday
+    time: "8:00 PM – 2:00 AM"
+    venue: "Dodge City Saloon"
+    address: "205 N Star Dr, Suite H"
+    description: "Weekly karaoke hosted by DJ Rocketman. $3 Fireball/margaritas/Chamoy shots until midnight."
+    icons: [drinks, music]
+    free: true
+    url: "https://dcsaloon.com"
+    # VERIFIED: dcsaloon.com homepage screenshot 2026-04-26
+
+  - name: "Thursday Night Karaoke at 5D Tavern"
+    day: thursday
+    time: "8:00 PM – 11:00 PM"
+    venue: "5D Tavern"
+    address: "213 S Main St."
+    description: "Weekly karaoke at downtown's upscale cocktail lounge. No cover, craft cocktails."
+    icons: [drinks, music]
+    free: true
+    url: "https://www.facebook.com/victoriamainstreet/posts/-music-on-main-street-vtxthis-weekend-turn-up-the-volume-in-downtown-victoria-ga/1386079576888644/"
+    # VERIFIED: Victoria Main Street official Facebook post 2026-04-16
 
   - name: "Story Strolls — Audiobook Walking Group"
     day: thursday
@@ -82,6 +181,17 @@ recurring:
     free: true
     url: ""
     # ⚠️ UNVERIFIED — no source URL. Confirm with library.
+
+  - name: "Palace Bingo — Saturday Evening"
+    day: saturday
+    time: "5:30 PM – 11:00 PM"
+    venue: "Palace Bingo"
+    address: "5306 Houston Hwy"
+    description: "Saturday evening bingo at Victoria's original hall. Cash prizes, multiple games per session."
+    icons: [community]
+    free: false
+    url: "https://palacebingo.org"
+    # VERIFIED: localbingohalls.com
 
   - name: "Live Music at Aero Crafters"
     day: saturday
