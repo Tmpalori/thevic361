@@ -1947,6 +1947,30 @@ APIFY_RUN_TIMEOUT = 240  # seconds we'll wait for the run to finish
 _APIFY_LIMIT_TRIPPED = False
 
 
+def _load_venue_list():
+    """Return the active venue list, with venues.json as the primary source.
+
+    PR #16 introduced ``venues.json`` (Google Maps-enriched) as the primary
+    venue config. We still support the legacy ``facebook_venues.json`` and
+    its one-cycle backup ``facebook_venues.backup.json`` to keep the
+    Sunday collector running through the transition.
+    """
+    here = os.path.dirname(__file__) or "."
+    for fname in ("venues.json", "facebook_venues.json", "facebook_venues.backup.json"):
+        path = os.path.join(here, fname)
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"  [venues] Failed to load {fname}: {e}")
+            continue
+        if isinstance(data, list) and data:
+            return data, path
+    return [], None
+
+
 def _apify_hard_limit_tripped(resp_text):
     """Detect Apify's monthly hard-limit response so we can short-circuit."""
     if not resp_text:
@@ -1972,17 +1996,11 @@ def fetch_apify_facebook_events(days_ahead=14):
         print("  [Apify FB] Monthly hard limit already tripped this run — skipping")
         return events
 
-    venues_path = os.path.join(os.path.dirname(__file__) or ".", "facebook_venues.json")
-    if not os.path.exists(venues_path):
-        print(f"  [Apify FB] No facebook_venues.json at {venues_path}")
+    venues, venues_path = _load_venue_list()
+    if not venues:
+        print("  [Apify FB] No venue list found (venues.json / facebook_venues.json)")
         return events
-
-    try:
-        with open(venues_path, "r") as f:
-            venues = json.load(f)
-    except Exception as e:
-        print(f"  [Apify FB] Failed to load venues: {e}")
-        return events
+    print(f"  [Apify FB] Using venue list: {os.path.basename(venues_path)}")
 
     # Apify's facebook-events-scraper does NOT support page-tab URLs like
     # /aerocrafters/events (returns "Invalid events page response"). It DOES
@@ -2260,16 +2278,11 @@ def fetch_apify_facebook_posts(days_ahead=14):
         print("  [Apify FB Posts] No PERPLEXITY_API_KEY — cannot extract events from posts")
         return events
 
-    venues_path = os.path.join(os.path.dirname(__file__) or ".", "facebook_venues.json")
-    if not os.path.exists(venues_path):
-        print(f"  [Apify FB Posts] No facebook_venues.json at {venues_path}")
+    all_venues, venues_path = _load_venue_list()
+    if not all_venues:
+        print("  [Apify FB Posts] No venue list found (venues.json / facebook_venues.json)")
         return events
-    try:
-        with open(venues_path, "r") as f:
-            all_venues = json.load(f)
-    except Exception as e:
-        print(f"  [Apify FB Posts] Failed to load venues: {e}")
-        return events
+    print(f"  [Apify FB Posts] Using venue list: {os.path.basename(venues_path)}")
 
     high_conf = _venue_high_confidence(all_venues)
     if not high_conf:

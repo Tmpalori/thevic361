@@ -32,6 +32,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Discover venues (Google Maps)
+        # Non-destructive: if APIFY_TOKEN is missing or the actor fails,
+        # discover_venues.py exits 0 and leaves existing venue files alone.
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: |
+          python discover_venues.py || echo "Venue discovery skipped (non-fatal)"
+
       - name: Run event collector
         env:
           OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
@@ -54,7 +62,7 @@ jobs:
       - name: Check for changes
         id: changes
         run: |
-          if git diff --quiet docs/events.json candidates.json; then
+          if git diff --quiet docs/events.json candidates.json venues.json pending_venues.json facebook_venues.backup.json 2>/dev/null; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -65,6 +73,10 @@ jobs:
         run: |
           git config user.name "The Vic 361 Bot"
           git config user.email "bot@thevic361.com"
+          # Add venue files only if they exist (discovery may have been skipped).
+          for f in venues.json pending_venues.json facebook_venues.backup.json; do
+            [ -f "$f" ] && git add "$f"
+          done
           git add docs/events.json candidates.json
           git commit -m "🏙️ Update events $(date +'%Y-%m-%d')"
           git push

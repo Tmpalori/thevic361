@@ -1,0 +1,472 @@
+[
+  {
+    "name": "Aero Crafters",
+    "category": "Bar / Live Music",
+    "facebook_page": "https://www.facebook.com/aerocrafters",
+    "facebook_events": "https://www.facebook.com/aerocrafters/events",
+    "event_potential": "Live music Fri/Sat, VAMA Open Mic Wed, Music Bingo monthly",
+    "confidence": "high",
+    "notes": "Already scraped by collector",
+    "source": "seed"
+  },
+  {
+    "name": "Moonshine Drinkery",
+    "category": "Bar / Live Music",
+    "facebook_page": "https://www.facebook.com/moonshinedrinkery",
+    "facebook_events": "https://www.facebook.com/moonshinedrinkery/events",
+    "event_potential": "Live music, First Friday Art Show, No Pressure Book Club",
+    "confidence": "high",
+    "notes": "Already scraped by collector",
+    "source": "seed"
+  },
+  {
+    "name": "The Hideaway Bar",
+    "category": "Bar / Live Music",
+    "facebook_page": "https://www.facebook.com/hideawayvtx",
+    "facebook_events": "https://www.facebook.com/hideawayvtx/events",
+    "event_potential": "Live music, trivia nights, weekly events",
+    "confidence": "high",
+    "notes": "Already in collector",
+    "source": "seed"
+  },
+  {
+    "name": "Froggy's Grub & Pub",
+    "category": "Restaurant / Bar",
+    "facebook_page": "https://www.facebook.com/froggysgrubnpub",
+    "facebook_events": "https://www.facebook.com/froggysgrubnpub/events",
+    "event_potential": "Daily specials, live events, Froggy Feast annual event",
+    "confidence": "medium",
+    "notes": "Has website froggysgrub.com — FB page handle not confirmed directly",
+    "source": "seed"
+  },
+  {
+    "name": "Greek's 205 Bar",
+    "category": "Bar / Live Music",
+    "facebook_page": "https://www.facebook.com/greekbros",
+    "facebook_events": "https://www.facebook.com/greekbros/events",
+    "event_potential": "Live music, grilled steak, back patio events",
+    "confidence": "medium",
+    "notes": "Also known as Greek Bros. Oyster Bar & Grill — website greekbros.com",
+    "source": "seed"
+  },
+  {
+    "name": "5D Tavern",
+    "category": "Bar / Live Music",
+    "facebook_page": "https://www.facebook.com/5DTavernVictoria",
+    "facebook_events": "https://www.facebook.com/5DTavernVictoria/events",
+    "event_potential": "Live music most weekends, craft cocktails",
+    "confidence": "medium",
+    "notes": "Downtown Victoria — website 5dtavern.com",
+    "source": "seed"
+  },
+  {
+    "name": "Brown Bag Saloon",
+    "category": "Bar",
+    "facebook_page": "https://www.facebook.com/BrownBagSaloon",
+    "facebook_events": "https://www.facebook.com/BrownBagSaloon/events",
+    "event_potential": "Local bar, occasional events",
+    "confidence": "medium",
+    "notes": "8609 N. Navarro St — confirmed Facebook exists, handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "Cowgirls Dance Hall",
+    "category": "Bar / Music",
+    "facebook_page": "https://www.facebook.com/CowgirlsDanceHall",
+    "facebook_events": "https://www.facebook.com/CowgirlsDanceHall/events",
+    "event_potential": "Country dance hall, live music, DJ nights",
+    "confidence": "low",
+    "notes": "Could not confirm FB handle",
+    "source": "seed"
+  },
+  {
+    "name": "Dodge City Saloon",
+    "category": "Bar",
+    "facebook_page": "https://www.facebook.com/DodgeCitySaloon",
+    "facebook_events": "https://www.facebook.com/DodgeCitySaloon/events",
+    "event_potential": "Live music, karaoke, dance floor",
+    "confidence": "medium",
+    "notes": "Has website dcsaloon.com with event schedule — also worth scraping directly",
+    "source": "seed"
+  },
+  {
+    "name": "Lone Star Tavern",
+    "category": "Bar",
+    "facebook_page": "https://www.facebook.com/lonestartavern",
+    "facebook_events": "https://www.facebook.com/lonestartavern/events",
+    "event_potential": "Local bar events",
+    "confidence": "high",
+    "notes": "URL confirmed in search",
+    "source": "seed"
+  },
+  {
+    "name": "The Wellhead Tavern",
+    "category": "Bar",
+    "facebook_page": "https://www.facebook.com/WellheadTavern",
+    "facebook_events": "https://www.facebook.com/WellheadTavern/events",
+    "event_potential": "Bike shows, seasonal events",
+    "confidence": "medium",
+    "notes": "Confirmed FB presence, handle not directly confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "Shooters Bar",
+    "category": "Bar",
+    "facebook_page": "https://www.facebook.com/ShootersBarVictoriaTX",
+    "facebook_events": "https://www.facebook.com/ShootersBarVictoriaTX/events",
+    "event_potential": "Bar events",
+    "confidence": "high",
+    "notes": "Handle confirmed in search",
+    "source": "seed"
+  },
+  {
+    "name": "Another Pour Decision Bar & Grill",
+    "category": "Restaurant / Bar",
+    "facebook_page": "https://www.facebook.com/AnotherPourDecision",
+    "facebook_events": "https://www.facebook.com/AnotherPourDecision/events",
+    "event_potential": "Live music during lunch, local events",
+    "confidence": "medium",
+    "notes": "221 S Main St — confirmed FB presence, handle inferred",
+    "source": "seed"
+  },
+  {
+    "name": "Mi Casita Bar & Grill",
+    "category": "Restaurant / Bar",
+    "facebook_page": "https://www.facebook.com/MiCasitaBarAndGrill",
+    "facebook_events": "https://www.facebook.com/MiCasitaBarAndGrill/events",
+    "event_potential": "Tex-Mex, events",
+    "confidence": "medium",
+    "notes": "Website micasitabarandgrill.com links to FB",
+    "source": "seed"
+  },
+  {
+    "name": "Mi Tequila Mexican Bar & Grill",
+    "category": "Restaurant / Bar",
+    "facebook_page": "https://www.facebook.com/MiTequilaVictoriaTX",
+    "facebook_events": "https://www.facebook.com/MiTequilaVictoriaTX/events",
+    "event_potential": "Bar events, live music",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "Las Palmas Mexican Bar and Grill",
+    "category": "Restaurant / Bar",
+    "facebook_page": "https://www.facebook.com/LasPalmasVictoriaTX",
+    "facebook_events": "https://www.facebook.com/LasPalmasVictoriaTX/events",
+    "event_potential": "Mexican restaurant events",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "La Cantina Tacos & Tequila",
+    "category": "Restaurant / Bar",
+    "facebook_page": "https://www.facebook.com/LaCantinaVictoriaTX",
+    "facebook_events": "https://www.facebook.com/LaCantinaVictoriaTX/events",
+    "event_potential": "Bar/restaurant events",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "Franklin's Backyard Bayou Bar & Grill",
+    "category": "Restaurant / Bar",
+    "facebook_page": "https://www.facebook.com/FranklinsBackyardBayou",
+    "facebook_events": "https://www.facebook.com/FranklinsBackyardBayou/events",
+    "event_potential": "Bayou-style bar, live events",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "The Barn Mission Valley",
+    "category": "Bar / Music",
+    "facebook_page": "https://www.facebook.com/mvgbarn",
+    "facebook_events": "https://www.facebook.com/mvgbarn/events",
+    "event_potential": "Live country music, DJ, karaoke",
+    "confidence": "high",
+    "notes": "Handle mvgbarn confirmed in search",
+    "source": "seed"
+  },
+  {
+    "name": "Goat Night Club",
+    "category": "Nightclub",
+    "facebook_page": "",
+    "facebook_events": "",
+    "event_potential": "Nightclub",
+    "confidence": "low",
+    "notes": "Could not find — may be closed or name is different locally",
+    "source": "seed"
+  },
+  {
+    "name": "Limelight Club",
+    "category": "Nightclub",
+    "facebook_page": "",
+    "facebook_events": "",
+    "event_potential": "Nightclub",
+    "confidence": "low",
+    "notes": "Could not find — may be closed or name differs",
+    "source": "seed"
+  },
+  {
+    "name": "Gulf Breeze Winery",
+    "category": "Winery",
+    "facebook_page": "https://www.facebook.com/GulfBreezeWinery",
+    "facebook_events": "https://www.facebook.com/GulfBreezeWinery/events",
+    "event_potential": "Wine tastings, winery events",
+    "confidence": "medium",
+    "notes": "Website gulfbreezewinery.com links to FB",
+    "source": "seed"
+  },
+  {
+    "name": "J Welch Farms",
+    "category": "Farm / Venue",
+    "facebook_page": "https://www.facebook.com/JWelchFarms",
+    "facebook_events": "https://www.facebook.com/JWelchFarms/events",
+    "event_potential": "Live music Fri/Sat 7-10pm, Sunday brunch, Springfest 3/28",
+    "confidence": "medium",
+    "notes": "Website jwelchfarms.com has event calendar — worth scraping directly too",
+    "source": "seed"
+  },
+  {
+    "name": "Weber Brewing",
+    "category": "Brewery",
+    "facebook_page": "https://www.facebook.com/WeberBrewing",
+    "facebook_events": "https://www.facebook.com/WeberBrewing/events",
+    "event_potential": "Biergarten events, live music",
+    "confidence": "medium",
+    "notes": "Re-opened downtown Victoria fall 2025 — linked from TX Craft Brewers Guild",
+    "source": "seed"
+  },
+  {
+    "name": "The PumpHouse Riverside Restaurant & Bar",
+    "category": "Restaurant / Bar",
+    "facebook_page": "https://www.facebook.com/VictoriaPumpHouse",
+    "facebook_events": "https://www.facebook.com/VictoriaPumpHouse/events",
+    "event_potential": "Riverside events, live music",
+    "confidence": "medium",
+    "notes": "Has website victoriapumphouse.com",
+    "source": "seed"
+  },
+  {
+    "name": "Fossati's Delicatessen",
+    "category": "Restaurant",
+    "facebook_page": "https://www.facebook.com/FossatisDeli",
+    "facebook_events": "https://www.facebook.com/FossatisDeli/events",
+    "event_potential": "Historic deli, occasional events",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "Raven's at the Woodlawn",
+    "category": "Restaurant / Bar",
+    "facebook_page": "https://www.facebook.com/RavensAtTheWoodlawn",
+    "facebook_events": "https://www.facebook.com/RavensAtTheWoodlawn/events",
+    "event_potential": "Bar events",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "El Paso Tacos & Tequila",
+    "category": "Restaurant / Bar",
+    "facebook_page": "https://www.facebook.com/ElPasoTacosVictoriaTX",
+    "facebook_events": "https://www.facebook.com/ElPasoTacosVictoriaTX/events",
+    "event_potential": "Restaurant/bar events",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "Grapevine Cafe & Catering",
+    "category": "Restaurant",
+    "facebook_page": "https://www.facebook.com/GrapevineVictoriaTX",
+    "facebook_events": "https://www.facebook.com/GrapevineVictoriaTX/events",
+    "event_potential": "Catering events, community gatherings",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "Gardenhouse Coffee & Espresso Bar",
+    "category": "Coffee Shop",
+    "facebook_page": "https://www.facebook.com/GardenhouseCoffee",
+    "facebook_events": "https://www.facebook.com/GardenhouseCoffee/events",
+    "event_potential": "Coffee shop events, community gatherings",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "The Box Coffee Bar",
+    "category": "Coffee Shop",
+    "facebook_page": "https://www.facebook.com/TheBoxCoffeeBar",
+    "facebook_events": "https://www.facebook.com/TheBoxCoffeeBar/events",
+    "event_potential": "Coffee shop events",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "Stir Soda Shoppe",
+    "category": "Soda Shop",
+    "facebook_page": "https://www.facebook.com/StirSodaShoppe",
+    "facebook_events": "https://www.facebook.com/StirSodaShoppe/events",
+    "event_potential": "Community events, pop-ups",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "Theatre Victoria",
+    "category": "Theatre",
+    "facebook_page": "https://www.facebook.com/TheatreVictoria",
+    "facebook_events": "https://www.facebook.com/TheatreVictoria/events",
+    "event_potential": "Plays, musicals, performances",
+    "confidence": "high",
+    "notes": "Official website theatrevictoria.org links to FB",
+    "source": "seed"
+  },
+  {
+    "name": "Victoria Ballet Theatre",
+    "category": "Arts / Performance",
+    "facebook_page": "https://www.facebook.com/VictoriaBalletTheatre",
+    "facebook_events": "https://www.facebook.com/VictoriaBalletTheatre/events",
+    "event_potential": "Ballet performances, recitals",
+    "confidence": "medium",
+    "notes": "Confirmed FB exists, handle not directly confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "The Playback Venue & Arcade",
+    "category": "Entertainment",
+    "facebook_page": "https://www.facebook.com/ThePlaybackVictoriaTX",
+    "facebook_events": "https://www.facebook.com/ThePlaybackVictoriaTX/events",
+    "event_potential": "Arcade events, gaming nights, birthday parties",
+    "confidence": "high",
+    "notes": "Handle confirmed in search",
+    "source": "seed"
+  },
+  {
+    "name": "The Nave Museum",
+    "category": "Museum / Arts",
+    "facebook_page": "https://www.facebook.com/thenavemuseum",
+    "facebook_events": "https://www.facebook.com/thenavemuseum/events",
+    "event_potential": "Art exhibits, museum events",
+    "confidence": "high",
+    "notes": "Handle confirmed in search",
+    "source": "seed"
+  },
+  {
+    "name": "Victoria Art League",
+    "category": "Arts",
+    "facebook_page": "https://www.facebook.com/VictoriaArtLeague",
+    "facebook_events": "https://www.facebook.com/VictoriaArtLeague/events",
+    "event_potential": "Art shows, workshops, monthly meetings",
+    "confidence": "medium",
+    "notes": "Website victoriaartleague.org links to FB",
+    "source": "seed"
+  },
+  {
+    "name": "Crossroads Art House",
+    "category": "Arts",
+    "facebook_page": "https://www.facebook.com/CrossroadsArtHouse",
+    "facebook_events": "https://www.facebook.com/CrossroadsArtHouse/events",
+    "event_potential": "Art events, community gatherings",
+    "confidence": "medium",
+    "notes": "Owners confirmed FB is primary channel",
+    "source": "seed"
+  },
+  {
+    "name": "The Colorful Canvas",
+    "category": "Arts",
+    "facebook_page": "https://www.facebook.com/TheColorfulCanvas",
+    "facebook_events": "https://www.facebook.com/TheColorfulCanvas/events",
+    "event_potential": "Paint nights, art classes",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "Century Lanes Bowling",
+    "category": "Entertainment",
+    "facebook_page": "https://www.facebook.com/CenturyLanesBowling",
+    "facebook_events": "https://www.facebook.com/CenturyLanesBowling/events",
+    "event_potential": "Bowling leagues, cosmic bowling events",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "The Axe Society",
+    "category": "Entertainment",
+    "facebook_page": "https://www.facebook.com/TheAxeSocietyVictoriaTX",
+    "facebook_events": "https://www.facebook.com/TheAxeSocietyVictoriaTX/events",
+    "event_potential": "Axe throwing, team events",
+    "confidence": "medium",
+    "notes": "FB presence confirmed in YouTube/search",
+    "source": "seed"
+  },
+  {
+    "name": "Victoria Farmers Market",
+    "category": "Market",
+    "facebook_page": "https://www.facebook.com/VictoriaFarmersMarket",
+    "facebook_events": "https://www.facebook.com/VictoriaFarmersMarket/events",
+    "event_potential": "Weekly market, vendor events",
+    "confidence": "medium",
+    "notes": "Run by Food Bank of the Golden Crescent — posts to FB/IG regularly",
+    "source": "seed"
+  },
+  {
+    "name": "Victoria Generals Baseball",
+    "category": "Sports",
+    "facebook_page": "https://www.facebook.com/VictoriaGenerals",
+    "facebook_events": "https://www.facebook.com/VictoriaGenerals/events",
+    "event_potential": "Home games, theme nights, family events — summer season",
+    "confidence": "medium",
+    "notes": "Website victoriagenerals.com — game schedule scrapable directly",
+    "source": "seed"
+  },
+  {
+    "name": "The Texas Zoo",
+    "category": "Attraction",
+    "facebook_page": "https://www.facebook.com/TheTexasZoo",
+    "facebook_events": "https://www.facebook.com/TheTexasZoo/events",
+    "event_potential": "Zoo events, seasonal programming",
+    "confidence": "medium",
+    "notes": "Confirmed FB linked from discovervictoriatexas.com",
+    "source": "seed"
+  },
+  {
+    "name": "Southern Craft Grove",
+    "category": "Market",
+    "facebook_page": "https://www.facebook.com/SouthernCraftGrove",
+    "facebook_events": "https://www.facebook.com/SouthernCraftGrove/events",
+    "event_potential": "Craft markets, vendor pop-ups",
+    "confidence": "medium",
+    "notes": "Woman/Latina-owned — FB is primary channel",
+    "source": "seed"
+  },
+  {
+    "name": "The Market of Victoria",
+    "category": "Market",
+    "facebook_page": "https://www.facebook.com/TheMarketOfVictoria",
+    "facebook_events": "https://www.facebook.com/TheMarketOfVictoria/events",
+    "event_potential": "Market events",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  },
+  {
+    "name": "Huvar's Artisan Market",
+    "category": "Market",
+    "facebook_page": "https://www.facebook.com/HuvarsArtisanMarket",
+    "facebook_events": "https://www.facebook.com/HuvarsArtisanMarket/events",
+    "event_potential": "Artisan market events",
+    "confidence": "low",
+    "notes": "Handle not confirmed",
+    "source": "seed"
+  }
+]

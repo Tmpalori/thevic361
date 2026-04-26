@@ -16,7 +16,7 @@ The system handles ~70% of event collection automatically:
 
 | Time (Central) | What happens | Who does it |
 |---|---|---|
-| Sun 6 PM | `weekly-collect.yml` runs the collector and updates `candidates.json` / `docs/events.json` | Automated |
+| Sun 6 PM | `weekly-collect.yml` runs venue discovery (Google Maps via Apify), then the collector. Updates `venues.json`, `pending_venues.json`, `candidates.json`, and `docs/events.json` | Automated |
 | Sun 9 PM | `weekly-digest.yml` emails an **informational** summary of what was collected, with a link to the admin review page | Automated |
 | Sun 10 PM | Open `/admin.html`, pick the events you want to publish, save your selection. Admin commits go directly to `main`. | **You** |
 | Mon morning | Send the Beehiiv newsletter manually | **You** |
@@ -139,3 +139,27 @@ gh workflow run "Weekly Collect"
 
 **"Weekend events are thin"**
 → This is the main area where your weekly scan helps. Saturday & Sunday rely heavily on what you find on Facebook and venue pages.
+
+---
+
+## Venue Discovery (Background Process)
+
+A second automated step runs at Sunday 6 PM **before** the collector:
+`discover_venues.py` queries Google Maps (via the Apify
+`compass/google-maps-extractor` actor) for 8 categories — bars, restaurants,
+live music venues, theaters, museums, bowling alleys, event venues, and
+community centers in Victoria, TX. Each result is scored:
+
+- **HIGH-tier matches** (rating ≥ 4.2, ≥ 50 reviews, event-likely category,
+  Facebook or Instagram present) are auto-merged into `venues.json`.
+- **MEDIUM-tier matches** (lower rating or fewer reviews, but with social
+  presence) land in `pending_venues.json` for you to review when convenient.
+- **SKIP** means closed, fast-food chain, < 3.5 stars, or no social — they
+  never surface.
+
+To stop a venue from being re-suggested, add it to `rejected_venues.json`
+(name field at minimum). The existing `facebook_venues.json` list is kept as
+a safety floor — venues already in it are never dropped, even if Google
+Maps disagrees. If the Apify monthly cap is hit or the token is missing,
+discovery quietly skips and the collector keeps using whatever venue list
+was last good.

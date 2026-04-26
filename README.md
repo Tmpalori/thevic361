@@ -35,11 +35,39 @@ python collect_events.py --output ./docs/events.json --local-dir . --skip-web
 | File | Purpose |
 |---|---|
 | `collect_events.py` | Event collector script |
+| `discover_venues.py` | Weekly Google Maps venue discovery (Apify `compass/google-maps-extractor`) |
+| `venues.json` | Primary venue list — seed venues + auto-merged HIGH-tier discoveries |
+| `pending_venues.json` | MEDIUM-tier discoveries waiting on admin approval |
+| `rejected_venues.json` | Venues we've explicitly rejected (never re-suggested) |
+| `facebook_venues.json` | Legacy venue list (kept as a one-cycle fallback) |
+| `facebook_venues.backup.json` | Snapshot of the legacy list, refreshed each run |
 | `local_events.yaml` | Recurring + manually curated events |
 | `extras.yaml` | "New & Notable" section + sponsor |
 | `docs/` | Website files (served by GitHub Pages) |
 | `docs/events.json` | Event data powering the site |
 | `.github/workflows/` | GitHub Actions for weekly automation |
+
+## Venue Discovery
+
+`discover_venues.py` runs **before** `collect_events.py` inside
+`weekly-collect.yml`. It calls the Apify `compass/google-maps-extractor` actor
+across 8 category searches scoped to `Victoria, TX`
+(bar, restaurant, live music venue, theater, museum, bowling alley, event
+venue, community center) with detail/social enrichment turned on.
+
+Results are tiered:
+
+- **HIGH** — rating ≥ 4.2, ≥ 50 reviews, event-likely category, IG or FB →
+  auto-merged into `venues.json`.
+- **MEDIUM** — rating ≥ 3.8 OR < 50 reviews, IG or FB → appended to
+  `pending_venues.json` for admin review.
+- **SKIP** — closed, fast-food chain, rating < 3.5, or no socials.
+
+Anything in `rejected_venues.json` is never re-suggested. Existing
+`facebook_venues.json` venues are preserved as a safety floor and never
+deleted. If `APIFY_TOKEN` is missing or the actor errors out, discovery is
+a no-op — the existing venue files are left untouched and the collector
+runs as normal.
 
 ## Adding Events
 

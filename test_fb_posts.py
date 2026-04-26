@@ -54,19 +54,29 @@ def reset_state(monkeypatch, tmp_path):
         },
         {"name": "No URL Venue", "confidence": "high"},  # missing facebook_page
     ]
-    venues_path = os.path.join(os.path.dirname(ce.__file__), "facebook_venues.json")
-    original = None
-    if os.path.exists(venues_path):
-        with open(venues_path, "r") as f:
-            original = f.read()
-    with open(venues_path, "w") as f:
+    # The collector now prefers venues.json over facebook_venues.json. We
+    # write our test fixture to venues.json so it shadows the real seed list,
+    # and restore both files afterward.
+    repo_dir = os.path.dirname(ce.__file__)
+    originals = {}
+    fixture_paths = ["venues.json", "facebook_venues.json"]
+    for fname in fixture_paths:
+        path = os.path.join(repo_dir, fname)
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                originals[fname] = f.read()
+    primary = os.path.join(repo_dir, "venues.json")
+    with open(primary, "w") as f:
         json.dump(venues, f)
 
     yield
 
-    if original is not None:
-        with open(venues_path, "w") as f:
-            f.write(original)
+    for fname, content in originals.items():
+        with open(os.path.join(repo_dir, fname), "w") as f:
+            f.write(content)
+    # If venues.json didn't originally exist, remove the test artifact.
+    if "venues.json" not in originals and os.path.exists(primary):
+        os.remove(primary)
 
 
 # ─── Tests ──────────────────────────────────────────────────────────────────
