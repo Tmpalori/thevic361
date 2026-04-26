@@ -1,0 +1,205 @@
+# ─── The Vic 361 — Approval Reply Watcher ───────────────────────────────────
+# Every 15 minutes on Sunday between 8 AM and 8 PM Central Time, this workflow:
+#
+#   1. Checks Gmail (IMAP) for a reply to the weekly digest email.
+#   2. If a reply is found and parses to picks (ALL / NONE / 1,3,5 / EXCEPT:7,12),
+#      runs approve_events.py to publish, then sends a confirmation email.
+#   3. If it's the final run of the day (≥ 8 PM Central) and no reply has been
+#      received, falls back to publishing ALL.
+#
+# A marker file (.last-published-digest-YYYY-MM-DD) is committed to prevent
+# double-publishing the same week. To re-publish manually, delete the marker
+# and re-run via workflow_dispatch.
+#
+# Cron coverage (Sunday 8 AM – 8 PM Central, year-round including DST):
+#   - CDT (Mar–Nov, UTC-5): 8 AM CT = 13:00 UTC Sun; 8 PM CT = 01:00 UTC Mon
+#   - CST (Nov–Mar, UTC-6): 8 AM CT = 14:00 UTC Sun; 8 PM CT = 02:00 UTC Mon
+# We schedule for 12:00–02:00 UTC across Sun and early Mon, then the script
+# uses zoneinfo to enforce the actual Central-time window.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Approval Reply Watcher
+
+on:
+  schedule:
+    # Every 15 min, Sunday 12:00–23:45 UTC
+    - cron: '*/15 12-23 * * 0'
+    # Every 15 min, Monday 00:00–02:45 UTC (covers up to 9 PM CT CST)
+    - cron: '*/15 0-2 * * 1'
+  workflow_dispatch:
+    inputs:
+      force_fallback:
+        description: 'Force publish ALL right now (skip reply check)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: approval-watcher
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+        with:
+          # Fetch enough history that we can pull/rebase before push
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compute today's digest date (Central time)
+        id: today
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          d = datetime.now(ZoneInfo("America/Chicago")).date()
+          print(f"date={d.isoformat()}")
+          PY
+
+      - name: Check if already published this week
+        id: marker
+        run: |
+          MARKER=".last-published-digest-${{ steps.today.outputs.date }}"
+          if [ -f "$MARKER" ]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "Already published for ${{ steps.today.outputs.date }} — exiting."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Determine if we are in the publish window
+        id: window
+        if: steps.marker.outputs.already == 'false'
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import os
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          now = datetime.now(ZoneInfo("America/Chicago"))
+          forced = os.environ.get("FORCE_FALLBACK", "false").lower() == "true"
+          # Only Sunday 8 AM – 8 PM Central (or any time if manually forced)
+          in_window = (now.weekday() == 6) and (8 <= now.hour < 20)
+          # The "final" slot triggers fallback if no reply by then
+          is_final = (now.weekday() == 6) and (now.hour == 19 and now.minute >= 45)
+          print(f"in_window={'true' if in_window else 'false'}")
+          print(f"is_final={'true' if is_final else 'false'}")
+          print(f"forced={'true' if forced else 'false'}")
+          print(f"now={now.isoformat()}")
+          PY
+        env:
+          FORCE_FALLBACK: ${{ github.event.inputs.force_fallback }}
+
+      - name: Skip if outside window
+        if: steps.marker.outputs.already == 'false' && steps.window.outputs.in_window != 'true' && steps.window.outputs.forced != 'true'
+        run: |
+          echo "Outside Central-time publish window (${{ steps.window.outputs.now }}). Skipping."
+
+      - name: Force-fallback path (manual dispatch)
+        id: forced
+        if: steps.marker.outputs.already == 'false' && steps.window.outputs.forced == 'true'
+        run: |
+          echo "picks=ALL" >> "$GITHUB_OUTPUT"
+          echo "source=fallback" >> "$GITHUB_OUTPUT"
+
+      - name: Check for approval reply
+        id: check
+        if: steps.marker.outputs.already == 'false' && steps.window.outputs.in_window == 'true' && steps.window.outputs.forced != 'true'
+        env:
+          SMTP_EMAIL:    ${{ secrets.SMTP_EMAIL }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          IMAP_HOST:     imap.gmail.com
+        run: |
+          set +e
+          OUT=$(python check_approval_replies.py)
+          RC=$?
+          set -e
+          echo "Watcher exit code: $RC"
+          echo "Watcher output: $OUT"
+          # The script always emits exactly one stable line on stdout.
+          echo "result=$OUT" >> "$GITHUB_OUTPUT"
+          if [[ "$OUT" == PICKS=* ]]; then
+            PICKS="${OUT#PICKS=}"
+            echo "picks=$PICKS" >> "$GITHUB_OUTPUT"
+            echo "source=reply" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fallback if no reply by 8 PM Central
+        id: fallback
+        if: |
+          steps.marker.outputs.already == 'false' &&
+          steps.window.outputs.in_window == 'true' &&
+          steps.window.outputs.forced != 'true' &&
+          steps.window.outputs.is_final == 'true' &&
+          steps.check.outputs.picks == ''
+        run: |
+          echo "No reply received by 8 PM Central — falling back to publish ALL."
+          echo "picks=ALL" >> "$GITHUB_OUTPUT"
+          echo "source=fallback" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve final picks
+        id: final
+        if: steps.marker.outputs.already == 'false'
+        run: |
+          PICKS="${{ steps.forced.outputs.picks || steps.check.outputs.picks || steps.fallback.outputs.picks }}"
+          SOURCE="${{ steps.forced.outputs.source || steps.check.outputs.source || steps.fallback.outputs.source }}"
+          if [ -z "$PICKS" ]; then
+            echo "No picks to publish this run. Will retry on next schedule."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "picks=$PICKS" >> "$GITHUB_OUTPUT"
+            echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+            echo "Final picks: $PICKS (source: $SOURCE)"
+          fi
+
+      - name: Approve and publish events
+        if: steps.final.outputs.should_publish == 'true'
+        env:
+          SMTP_EMAIL:    ${{ secrets.SMTP_EMAIL }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        run: |
+          python approve_events.py ${{ steps.final.outputs.picks }} \
+            --candidates ./candidates.json \
+            --output ./docs/events.json \
+            --extras ./extras.yaml \
+            --notify \
+            --source "${{ steps.final.outputs.source }}"
+
+      - name: Write marker file
+        if: steps.final.outputs.should_publish == 'true'
+        run: |
+          MARKER=".last-published-digest-${{ steps.today.outputs.date }}"
+          cat > "$MARKER" <<EOF
+          published_at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          picks: ${{ steps.final.outputs.picks }}
+          source: ${{ steps.final.outputs.source }}
+          EOF
+
+      - name: Commit and push
+        if: steps.final.outputs.should_publish == 'true'
+        run: |
+          git config user.name  "The Vic 361 Bot"
+          git config user.email "bot@thevic361.com"
+          git add docs/events.json ".last-published-digest-${{ steps.today.outputs.date }}"
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+          else
+            git commit -m "🏙️ Auto-publish events ${{ steps.today.outputs.date }} (${{ steps.final.outputs.source }}: ${{ steps.final.outputs.picks }})"
+            # Pull/rebase in case another job committed in parallel
+            git pull --rebase origin main || true
+            git push
+          fi

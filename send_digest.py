@@ -75,7 +75,10 @@ def load_candidates(path, all_days=False):
 def build_email_body(events, by_date):
     """Build a clean plain-text + HTML email body with numbered events."""
     today = datetime.now()
-    subject = f"The Vic 361 — Events to Screen ({today.strftime('%a %b %d')})"
+    # Stable token "[VIC361-DIGEST YYYY-MM-DD]" lets the approval-watcher reliably
+    # find the right thread when scanning replies via IMAP.
+    digest_tag = f"[VIC361-DIGEST {today.strftime('%Y-%m-%d')}]"
+    subject = f"The Vic 361 — Events to Screen ({today.strftime('%a %b %d')}) {digest_tag}"
 
     # ── Plain text version ──
     text_lines = [
@@ -84,8 +87,14 @@ def build_email_body(events, by_date):
         f"{len(events)} events found across {len(by_date)} days",
         "",
         "Reply with the numbers you want to KEEP.",
-        "Example: 1, 3, 5, 8, 11",
-        "Or reply ALL to keep everything.",
+        "Examples:",
+        "   1, 3, 5, 8, 11      — just those events",
+        "   1-10                 — a range",
+        "   ALL except 7, 12     — everything except some",
+        "   ALL                  — keep everything",
+        "   NONE                 — publish nothing",
+        "",
+        "If no reply by 8 PM Central, ALL events will be published automatically.",
         "",
         "=" * 50,
     ]
@@ -99,8 +108,9 @@ def build_email_body(events, by_date):
         f"<p style='color: #666; margin: 5px 0;'>{len(events)} events found</p>",
         "</div>",
         "<div style='background: #F7F6F2; padding: 15px; border-radius: 8px; margin-bottom: 20px;'>",
-        "<p style='margin: 0;'><strong>Reply with the numbers you want to KEEP.</strong></p>",
-        "<p style='margin: 5px 0; color: #666;'>Example: 1, 3, 5, 8, 11 &mdash; or reply ALL to keep everything.</p>",
+        "<p style='margin: 0;'><strong>Reply to this email with the numbers you want to KEEP.</strong></p>",
+        "<p style='margin: 8px 0 0 0; color: #666; font-size: 13px;'>Examples: <code>1, 3, 5, 8</code> &nbsp;·&nbsp; <code>1-10</code> &nbsp;·&nbsp; <code>ALL except 7, 12</code> &nbsp;·&nbsp; <code>ALL</code> &nbsp;·&nbsp; <code>NONE</code></p>",
+        "<p style='margin: 8px 0 0 0; color: #888; font-size: 12px;'>If no reply by 8 PM Central, ALL events will be published automatically.</p>",
         "</div>",
     ]
 
@@ -153,13 +163,14 @@ def build_email_body(events, by_date):
             """)
 
     text_lines.append(f"\n{'=' * 50}")
-    text_lines.append(f"Reply with numbers to keep. Example: 1, 3, 5, 8")
-    text_lines.append(f"Or reply ALL to keep everything.")
+    text_lines.append("Reply with picks: e.g. '1, 3, 5, 8' or '1-10' or 'ALL except 7'")
+    text_lines.append("No reply by 8 PM Central = ALL gets published.")
 
     html_parts.append("""
     <div style='background: #F7F6F2; padding: 15px; border-radius: 8px; margin-top: 25px; text-align: center;'>
-        <p style='margin: 0;'><strong>Reply with the numbers you want to KEEP.</strong></p>
-        <p style='margin: 5px 0; color: #666;'>Example: 1, 3, 5, 8, 11</p>
+        <p style='margin: 0;'><strong>Reply to this email with your picks.</strong></p>
+        <p style='margin: 8px 0 0 0; color: #666; font-size: 13px;'><code>1, 3, 5, 8</code> &nbsp;·&nbsp; <code>1-10</code> &nbsp;·&nbsp; <code>ALL except 7</code> &nbsp;·&nbsp; <code>ALL</code> &nbsp;·&nbsp; <code>NONE</code></p>
+        <p style='margin: 8px 0 0 0; color: #888; font-size: 12px;'>No reply by 8 PM Central → ALL events get published.</p>
     </div>
     </body></html>
     """)
