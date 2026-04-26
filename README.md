@@ -69,6 +69,27 @@ deleted. If `APIFY_TOKEN` is missing or the actor errors out, discovery is
 a no-op — the existing venue files are left untouched and the collector
 runs as normal.
 
+## Social Posts → Events (Optional)
+
+Two opt-in pipelines pull recent social posts and ask Perplexity Sonar to
+extract any specific-dated events from them. They catch events announced
+as posts ("live music tonight 8pm") that never become formal Event pages.
+
+| Flag | Source | Tier limits | Lookback |
+|---|---|---|---|
+| `FB_POSTS_ENABLED=1` | Apify `apify/facebook-posts-scraper` | 50 posts × HIGH-confidence venues | 30 days |
+| `IG_POSTS_ENABLED=1` | Apify `apify/instagram-post-scraper` | 25 posts × HIGH, 15 × MEDIUM | 14 days |
+
+Both are **off by default** until cost/quality is production-validated.
+They share the `_APIFY_LIMIT_TRIPPED` tombstone, so once Apify's monthly
+hard limit trips on any actor, the rest of the run skips its remaining
+Apify calls. Toggle each independently via repo variables
+`FB_POSTS_ENABLED` / `IG_POSTS_ENABLED` (Settings → Variables → Actions);
+no code change required.
+
+Cost shape: ≤ $0.50/run for FB-posts, ≤ $0.85/run for IG-posts when both
+are enabled.
+
 ## Adding Events
 
 Edit `local_events.yaml` and add under `events:`:
