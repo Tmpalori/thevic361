@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-04-26T11:03:42-05:00",
+  "last_updated": "2026-04-26T11:11:52-05:00",
   "events": [
     {
       "date": "2026-04-21",
@@ -327,6 +327,19 @@
     },
     {
       "date": "2026-04-26",
+      "name": "GriefShare",
+      "time": "4:00 PM",
+      "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
+      "address": "",
+      "description": "Struggling with the loss of a loved one?  You aren't alone.  Join us at Grief Share on Sunday, January 25. Through this 13-week group, you\u2019ll discover what to expect in the days ahead and what\u2019s \u201cnormal\u201d in grief. Since there are no neat, orderly stages of grief, you\u2019ll learn hel",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/4197419067254402/"
+    },
+    {
+      "date": "2026-04-26",
       "name": "Misery",
       "time": "7:30 PM",
       "venue": "Theatre Victoria",
@@ -337,6 +350,32 @@
       ],
       "free": false,
       "url": "https://theatrevictoria.org"
+    },
+    {
+      "date": "2026-04-27",
+      "name": "weekly Hour of Prayer",
+      "time": "11:00 PM",
+      "venue": "402 E North St, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "Beginning Monday, January 5, we will be holding a weekly Hour of Prayer from 6:00 p.m. to 7:00 p.m. We are calling this special time \u201cHour of Power.\u201d\n\nWe invite you to come for prayer and quiet reflection in the sanctuary. The Bible tells us that \u201cthe effectual fervent prayer of",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1404134427773534/"
+    },
+    {
+      "date": "2026-04-27",
+      "name": "Pathway at Parkway",
+      "time": "11:30 PM",
+      "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
+      "address": "",
+      "description": "Life is a journey with its ups and downs and we understand the struggles and hurts that come with it. That's why we host Pathway groups. Pathway is where people find help navigating difficult seasons and situations. At Pathway, you will be encouraged and equipped with new ways to",
+      "icons": [
+        "outdoors"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1553377575708290/"
     },
     {
       "date": "2026-04-27",
@@ -380,6 +419,45 @@
       "url": "https://victoriapl.librarycalendar.com/event/baby-story-time-7161"
     },
     {
+      "date": "2026-04-28",
+      "name": "The Amazing Toddler Time",
+      "time": "2:00 PM",
+      "venue": "6104 N Navarro St, Victoria, TX 77904",
+      "address": "",
+      "description": "Bring your friendly neighborhood toddlers to Whispering Creek for a morning of web-tastic fun!",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1470924917754235/"
+    },
+    {
+      "date": "2026-04-28",
+      "name": "Townsquare Talk: Meet the Newly Promoted Police Chief Fetters",
+      "time": "4:15 PM",
+      "venue": "107 North Star Drive, Victoria, TX, United States, Texas 77904",
+      "address": "",
+      "description": "Join us & VCS Victoria Communication Services on April 28th at 11:15 AM for a special Townsquare Talk Luncheon you won\u2019t want to miss! \n\nWe are excited to welcome Police Chief Fetters and Deputy Chief Moya for a lively, engaging conversation you\u2019ll only get here. Get to know the",
+      "icons": [
+        "food"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/839396005838181/"
+    },
+    {
+      "date": "2026-04-29",
+      "name": "GroupLink at Parkway",
+      "time": "11:30 PM",
+      "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
+      "address": "",
+      "description": "GroupLink is the place where adults of every age and life-stage find their place in a group.  \n\nGroupLink meets at Parkway Victoria, Parkway Port Lavaca and Lone Tree on Wednesdays from 6:30 PM to 8:00 PM.",
+      "icons": [
+        "outdoors"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/4508337449387634/"
+    },
+    {
       "date": "2026-04-29",
       "name": "VAMA Rock & Blues Open Mic",
       "time": "7:00 PM \u2013 10:00 PM",
@@ -408,6 +486,34 @@
       ],
       "free": true,
       "url": "https://www.facebook.com/VictoriaFarmersMarket"
+    },
+    {
+      "date": "2026-04-30",
+      "name": "Party on the Patio feat. David Stockton",
+      "time": "11:00 PM",
+      "venue": "301 Colony Creek Drive, Victoria, TX, United States, Texas 77904",
+      "address": "",
+      "description": "The patio is calling and David Stockton is bringing the tunes. \ud83c\udfb6\n\nJoin us for another night on the patio: live music, our Steak Night menu, and the kind of evening you don't want to miss.\n\nDetails:\n\ud83c\udfa4 Live music: 7pm\u201310pm\n\ud83e\udd69 Steak Night menu\n\ud83d\udc65 Members only\n\ud83d\udcde Call to reserve your ta",
+      "icons": [
+        "music",
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/960487936466418/"
+    },
+    {
+      "date": "2026-04-30",
+      "name": "Victoria College Student Recital",
+      "time": "12:00 AM",
+      "venue": "2200 East Red River, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "An evening of music featuring student performers from the Victoria College Music Department. This recital highlights the work of our student musicians across a variety of styles and instruments. Come support our students as they share the results of their dedication and artistry",
+      "icons": [
+        "music",
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/924672693886668/"
     },
     {
       "date": "2026-04-30",
@@ -537,6 +643,19 @@
     },
     {
       "date": "2026-05-01",
+      "name": "CELEBRATING HER - A two Week Mother's Day Shopping Event",
+      "time": "3:00 PM",
+      "venue": "3001 E. Red River, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "Mark your calendars for two Celebrate Her weekends:\n\nMay 1\u20132 and May 8\u20139\n\nWe\u2019re planning a memorable in-store experience filled with thoughtful gifts, surprises, and beautiful moments designed to honor the women who mean the most to you.\n\nDetails are coming soon\u2014but trust us, you",
+      "icons": [
+        "shopping"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1625975308679245/"
+    },
+    {
+      "date": "2026-05-01",
       "name": "Live Music at Aero Crafters",
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
@@ -645,6 +764,33 @@
     },
     {
       "date": "2026-05-02",
+      "name": "Mother's Day Market",
+      "time": "2:00 PM",
+      "venue": "2805 N. Navarro, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "\ud835\udc0c\ud835\udc28\ud835\udc2d\ud835\udc21\ud835\udc1e\ud835\udc2b'\ud835\udc2c \ud835\udc03\ud835\udc1a\ud835\udc32 \ud835\udc0c\ud835\udc1a\ud835\udc2b\ud835\udc24\ud835\udc1e\ud835\udc2d\n\nShop early for Mom with \ud835\udc2e\ud835\udc27\ud835\udc22\ud835\udc2a\ud835\udc2e\ud835\udc1e \ud835\udc21\ud835\udc1a\ud835\udc27\ud835\udc1d\ud835\udc26\ud835\udc1a\ud835\udc1d\ud835\udc1e \ud835\udc20\ud835\udc22\ud835\udc1f\ud835\udc2d\ud835\udc2c and extra craft vendors, plus fresh, local ingredients for the perfect meal.\n\nShop local\nFind the perfect gift\nCelebrate Mom",
+      "icons": [
+        "shopping"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/2741329749593142/"
+    },
+    {
+      "date": "2026-05-02",
+      "name": "Spring Youth Art Show - Victoria Art League",
+      "time": "6:00 PM",
+      "venue": "905 S Bridge St, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "\ud83c\udf38\ud83c\udf3cVictoria Art League Spring Youth Art Show!!!\ud83c\udf3c\ud83c\udf38\n\nIt's time to bring out your children's best artwork from the year!!  Anything they've made since May 2025 will do!! \n\nDrop off with be April 25th-26th from 1-4pm at \nThe Victoria Art League\n905 South Bridge St.\nVictoria, TX 77901",
+      "icons": [
+        "family",
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1014806734554659/"
+    },
+    {
+      "date": "2026-05-02",
       "name": "Live Music at Aero Crafters",
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
@@ -726,6 +872,59 @@
       ],
       "free": false,
       "url": "https://allevents.in/victoria/springfest-2026/200029477185404"
+    },
+    {
+      "date": "2026-05-03",
+      "name": "DONNY EDWARDS LIVE!!! An Elite Tribute to Elvis",
+      "time": "12:30 AM",
+      "venue": "214 N Main St, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "International Elvis tribute artist Donny Edwards will bring his acclaimed show \u201cAn Elite Tribute to Elvis\u201d to Victoria College\u2019s Leo J. Welder Center for the Performing Arts on Saturday, May 2. \n\nEdwards is known worldwide for masterfully recreating each era of Presley's career,",
+      "icons": [
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1395198979007451/"
+    },
+    {
+      "date": "2026-05-03",
+      "name": "Graduate Recognition",
+      "time": "2:30 PM",
+      "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
+      "address": "",
+      "description": "On Sunday, May 3, we will celebrate recent graduates.  Whether you have graduated from high school, college, or graduate school, we\u2019d love to honor your work and pray for you.  Graduate Recognition will be during all services.  There is no need to sign up. Just show up and let us",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1415334216926815/"
+    },
+    {
+      "date": "2026-05-03",
+      "name": "SPARK Fine Arts Pre-School ASK & LEARN Events",
+      "time": "6:00 PM",
+      "venue": "204 N. Main St., Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "SPARK is an arts-integrated preschool for ages 3-4 \nat the Ballet Academy of South Texas now enrolling for Fall 2026. Please attend one of our ASK & LEARN events to discover more about this unique program and meet the team.",
+      "icons": [
+        "arts",
+        "outdoors"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1236025495223806/"
+    },
+    {
+      "date": "2026-05-03",
+      "name": "Organ Plus Concert at FUMC Victoria",
+      "time": "8:00 PM",
+      "venue": "407 N Bridge St, Victoria, TX 77901-6516, United States",
+      "address": "",
+      "description": "Sunday 05/03 at 3:00pm, First United Methodist Church (407 N. Bridge St. Victoria, TX 77901) will be hosting our local chapter of the American Guild of Organists for an Organ Plus concert.  We are calling this program \"Organ Plus\" because in addition to selections for the organ,",
+      "icons": [
+        "music"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1109501471389360/"
     },
     {
       "date": "2026-05-04",
@@ -815,6 +1014,34 @@
     },
     {
       "date": "2026-05-05",
+      "name": "2026 VICTORIA WEST FFA  BANQUET",
+      "time": "11:30 PM",
+      "venue": "2906 E North St, Victoria, TX 77901-8632, United States",
+      "address": "",
+      "description": "You're Invited!\nJoin us on May 5th at 6:30 PM at the VLS Hall for the Victoria West FFA Banquet!\n* Meal Provided by: Victoria West FFA Booster Club\n* Tickets: $10 per person\n* FFA Students and Advisors: meal will be provided for free\nCome celebrate the hard work and achievements",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/events/2220119172065287/"
+    },
+    {
+      "date": "2026-05-05",
+      "name": "Rhythm, Ritual, and Reflection: A Collaboration Concert",
+      "time": "12:00 AM",
+      "venue": "214 N Main St, Victoria, TX 77901-6503, United States",
+      "address": "",
+      "description": "This concert brings together Crossroads Strings, the Victoria Civic Chorus, and the Victoria College Choir in a program that explores music through rhythm, ritual, and reflection. From energetic dance-inspired works to expressions of praise and moments of quiet introspection, the",
+      "icons": [
+        "music",
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1279254236940324/"
+    },
+    {
+      "date": "2026-05-05",
       "name": "Maker's Meetup: Pasta Coral Craft",
       "time": "4:00PM \u2013 5:00PM",
       "venue": "Victoria Public Library",
@@ -891,6 +1118,19 @@
     },
     {
       "date": "2026-05-06",
+      "name": "Pet Supplies Plus Adoption Event",
+      "time": "6:00 PM",
+      "venue": "Pet Supplies Plus - Victoria, TX",
+      "address": "",
+      "description": "\ud83d\udc3e\ud83d\udc36DOCPAC will have shelter dogs available for on-site adoption at Pet Supplies Plus on May 6th from 1:00pm-5:00pm! \n\nAll adoption fees during this event will be discounted!\ud83d\ude42\n\n\u2b50\ufe0fPet Supplies Plus is located at: 5217 N Navarro St Suite B, Victoria, TX 77904.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1494060695836723/"
+    },
+    {
+      "date": "2026-05-06",
       "name": "Pickleball Games",
       "time": "6:00PM \u2013 7:00PM",
       "venue": "Victoria Public Library",
@@ -918,6 +1158,19 @@
       ],
       "free": true,
       "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-05-06",
+      "name": "Mrs. Harrison's Retirement Chapel & Celebration",
+      "time": "7:45 PM",
+      "venue": "1501 N Glass St, Victoria, TX 77901-5130, United States",
+      "address": "",
+      "description": "After 19 wonderful years of teaching our littlest Patriots, we are celebrating the retirement of our beloved K3 teacher, Mrs. Piper Harrison \ud83d\udc9b\n\nFor nearly two decades, Mrs. Harrison has been the very first teacher for so many of our students - helping tiny hands learn to hold pen",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1307366317447881/"
     },
     {
       "date": "2026-05-06",
@@ -990,6 +1243,20 @@
     },
     {
       "date": "2026-05-07",
+      "name": "Shred It | Victoria",
+      "time": "4:00 PM",
+      "venue": "7602 N Navarro St, Victoria, TX 77904-2655, United States",
+      "address": "",
+      "description": "Join us for complimentary shredding services at our Victoria Financial Center. We encourage you to bring your documents, start shredding and protect your security. Only paper products will be accepted, with a limit of 10 boxes/bags per visitor. This event is free and open to the",
+      "icons": [
+        "arts",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/events/1547624470026850/"
+    },
+    {
+      "date": "2026-05-07",
       "name": "Story Strolls \u2014 Audiobook Walking Group",
       "time": "5:30 PM \u2013 6:30 PM",
       "venue": "Riverside Park",
@@ -1001,6 +1268,19 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
+    },
+    {
+      "date": "2026-05-07",
+      "name": "Shields Elementary Career Day",
+      "time": "6:00 PM",
+      "venue": "Shields\u0001Elementary\u0003Magnet School",
+      "address": "3400 Bluebonnet St",
+      "description": "DOCPAC is a presenter at Shields Elementary's Career Day!",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1755358515430424/"
     },
     {
       "date": "2026-05-07",
@@ -1030,6 +1310,19 @@
       ],
       "free": true,
       "url": "https://victoriapl.librarycalendar.com/event/fun-friday-7546"
+    },
+    {
+      "date": "2026-05-08",
+      "name": "Mom\u2019s Swap & Social: Jewelry Edition",
+      "time": "12:00 AM",
+      "venue": "114 E. Constitution, Victoria, TX",
+      "address": "",
+      "description": "INSPIRED BY OUR TRINKET TRADE BOX\n\n\u2728 Moms Only Meet-Up & Swap: Jewelry Edition \u2728\n\nOur Trinket Trade Box has been such a hit at Here\u2019s The Scoop that we\u2019re leveling things up with a special grown-up swap night just for moms!\n\nBring a piece (or a few!) of jewelry you\u2019re ready to pa",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/840001185104195/"
     },
     {
       "date": "2026-05-08",
@@ -1102,6 +1395,35 @@
     },
     {
       "date": "2026-05-09",
+      "name": "Beginning Crochet Classes (5)",
+      "time": "4:00 PM",
+      "venue": "5803 John Stockbauer, Victoria, TX, United States, Texas 77904",
+      "address": "",
+      "description": "Learn to crochet, read patterns, and more in 5 Beginner's Crochet Classes, held the 2nd and 4th Saturday's of the month. Starting April 11th from 11am-12:15pm. $20 per class, all supplies are included. Seats are limited!",
+      "icons": [
+        "arts",
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1576408166806333/"
+    },
+    {
+      "date": "2026-05-09",
+      "name": "Bloom's & Brew Mother's Day Workshop",
+      "time": "7:00 PM",
+      "venue": "206 N Liberty Street, Victoria, TX",
+      "address": "",
+      "description": "Ticket includes:\n\n\u2022 Build-your-own floral basket arrangement \n\u2022 Easy, step-by-step instructions (no experience needed) \n\u2022 All supplies included \n\u2022 A drink and pastry of your choice provided by Blume & Flour\n\u2022 Laughs, memories, and the cutest photo op!",
+      "icons": [
+        "drinks",
+        "shopping",
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/795388950308134/"
+    },
+    {
+      "date": "2026-05-09",
       "name": "Live Music at Aero Crafters",
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
@@ -1142,6 +1464,19 @@
       ],
       "free": false,
       "url": "https://business.victoriachamber.org/events/details/goliad-market-days-2022-05-09-2026-1771"
+    },
+    {
+      "date": "2026-05-09",
+      "name": "Conoce tu Mente Recupera el Control",
+      "time": "9:00 PM",
+      "venue": "Victoria, Texas",
+      "address": "",
+      "description": "\u00bfYa quieres recuperar tu paz?\n\nSi sigues intentando \u201cpensar positivo\u201d\nsin entender tu mente\u2026\n\nte vas a seguir frustrando.\n\nNo necesitas m\u00e1s fuerza de voluntad.\nNecesitas conocimiento.\n\n\ufffd Eso es lo que hace este curso.\n\n\ufffd SABER ES PODER \ufffd \n\nComenta: Mente\nSi est\u00e1s listo para saber",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1503518127991718/"
     },
     {
       "date": "2026-05-10",
