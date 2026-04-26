@@ -7,9 +7,11 @@ A community events board that automatically collects and displays things to do i
 ## How It Works
 
 1. **`collect_events.py`** gathers events from public Victoria calendars + your curated YAML file
-2. **GitHub Actions** runs the collector every morning at 6 AM Central
-3. **GitHub Pages** serves the website from the `docs/` folder
-4. The website reads `events.json` and auto-displays the next 7 days
+2. **GitHub Actions** runs the collector every Sunday at 6 PM Central (`weekly-collect.yml`)
+3. At 9 PM Central Sunday, an informational digest email summarizes what was collected
+4. Tristen reviews and picks events at `/admin.html` around 10 PM Sunday, then manually sends the Beehiiv newsletter Monday morning
+5. **GitHub Pages** serves the website from the `docs/` folder
+6. The website reads `events.json` and auto-displays the next 7 days
 
 ## Quick Start
 
@@ -37,7 +39,7 @@ python collect_events.py --output ./docs/events.json --local-dir . --skip-web
 | `extras.yaml` | "New & Notable" section + sponsor |
 | `docs/` | Website files (served by GitHub Pages) |
 | `docs/events.json` | Event data powering the site |
-| `.github/workflows/` | GitHub Actions for daily automation |
+| `.github/workflows/` | GitHub Actions for weekly automation |
 
 ## Adding Events
 
