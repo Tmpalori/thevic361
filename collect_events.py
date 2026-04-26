@@ -2133,8 +2133,16 @@ def fetch_apify_facebook_events(days_ahead=14):
 # Toggle with FB_POSTS_ENABLED=1 (default off until Apify cap resets).
 
 
-_POSTS_PER_VENUE = 25  # Apify resultsLimit per venue page
-_POSTS_LOOKBACK_DAYS = 14  # only fetch posts from the last N days
+# Apify resultsLimit per venue page. Bumped 25 → 50 because most low-volume
+# venues only had ~1 post in a 14-day window during the first production run
+# — a wider net catches recurring-event mentions buried in older posts
+# ("Live music every Friday" remains useful even when 20 days old).
+_POSTS_PER_VENUE = 50
+
+# Lookback for posts. Bumped 14 → 30 days for the same reason. The sonar
+# prompt still constrains *event dates* to the collection window, so older
+# posts are only kept when they describe a future-dated or recurring event.
+_POSTS_LOOKBACK_DAYS = 30
 
 
 def _venue_high_confidence(venues):
@@ -2180,10 +2188,11 @@ Return ONLY a JSON array of upcoming events mentioned in these posts. Each objec
 {{"date":"YYYY-MM-DD","name":"Event Name","time":"7:00 PM or empty string","description":"One short sentence or empty string","free":true_or_false,"source_post_index":N}}
 
 Rules:
-- Only include events with a confirmed specific date between {today_str} and {end_str}.
-- If the post says "this Friday" without a year, infer the date from the post date.
-- Recurring events ("every Wednesday") count — emit one entry for each upcoming occurrence in the window.
-- If a post is just promo/photos with no specific dated event, skip it.
+- Only emit events whose ACTUAL DATE falls between {today_str} and {end_str}, regardless of when the post was made. A 20-day-old post announcing "Live music every Friday at 8pm" should produce one entry per upcoming Friday in that window.
+- For relative dates ("this Friday", "tomorrow", "next Saturday"), resolve them against the post's own posted-on date — then check the resolved date is in the window.
+- Recurring events ("every Wednesday", "Trivia Tuesdays", "weekly karaoke") MUST be expanded into one entry per upcoming occurrence in the window. Do not emit a single placeholder.
+- Skip posts that are pure promo, photo dumps, customer thank-yous, or undated announcements.
+- Skip events that already happened (post-date BEFORE today's date with no recurring signal).
 - Return [] if no events found. No prose, no markdown fences."""
 
     try:
@@ -2197,9 +2206,11 @@ Rules:
                 "model": "sonar",
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.1,
-                "max_tokens": 2000,
+                # Recurring expansion ("every Wednesday" × 3 weeks) can produce
+                # 4–8 entries per post × ~50 posts, so leave plenty of headroom.
+                "max_tokens": 4000,
             },
-            timeout=45,
+            timeout=60,
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"].strip()
