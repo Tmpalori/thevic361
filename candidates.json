@@ -1,6 +1,20 @@
 {
-  "last_updated": "2026-04-26T11:11:52-05:00",
+  "last_updated": "2026-04-26T11:41:30-05:00",
   "events": [
+    {
+      "date": "2026-04-20",
+      "name": "Early Voting & Election Day \ud83d\uddf3\ufe0f",
+      "time": "12:00 PM",
+      "venue": "Dr. Pattie Dodson Public Health Center",
+      "address": "2805 N Navarro St",
+      "description": "Strong schools = strong community.\n\nVote \"For\" The VISD Bond!",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/events/1339918707951382/"
+    },
     {
       "date": "2026-04-21",
       "name": "Baby Hour: Pages to Play",
@@ -327,6 +341,19 @@
     },
     {
       "date": "2026-04-26",
+      "name": "\"BLUE SUNDAY\" at C3 Victory",
+      "time": "3:00 PM",
+      "venue": "1604 E Crestwood Dr, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "Sunday, April 26th is BLUE Sunday at C3 Victory. \nLet's all wear blue for National Child Abuse Awareness & Prevention month. \nWe will have some ladies in church talking about specific ways we can support foster care families in our community!\nYou can also help by donating car sea",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/2104812210062550/"
+    },
+    {
+      "date": "2026-04-26",
       "name": "GriefShare",
       "time": "4:00 PM",
       "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
@@ -340,6 +367,47 @@
     },
     {
       "date": "2026-04-26",
+      "name": "Pastor Jeff Williams 1st Anniversary Celebration",
+      "time": "4:00 PM",
+      "venue": "608 East Convent, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "Looking forward to celebrating God on tomorrow.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1460447281815744/"
+    },
+    {
+      "date": "2026-04-26",
+      "name": "Dine-In with us @ Herb \u2018n\u2019 Caf\u00e9",
+      "time": "4:30 PM",
+      "venue": "9701C N. Navarro St., Victoria, TX",
+      "address": "",
+      "description": "We\u2019ve got something exciting cooking \ud83d\udd25\n\nStarting now, we are serving fresh, warm food EVERYDAY from 11:30 AM \u2013 2:00 PM \ud83d\ude4c\ud83c\udffd\n\nCome by for your lunch break and enjoy a fresh, made-to-order meal instead of the usual grab & go. Whether you\u2019re dining in or taking it to go, we\u2019ve got you",
+      "icons": [
+        "food",
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/824062884083442/"
+    },
+    {
+      "date": "2026-04-26",
+      "name": "\"Ann\u2019s Gift: 10 Years of Art and Art Cars at Five Points Museum of Contemporary Art\"",
+      "time": "5:00 PM",
+      "venue": "1201 N Moody St, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "Stop by Five Points Museum of Contemporary Art and see our 10th anniversary exhibition, \"Ann\u2019s Gift: 10 Years of Art and Art Cars at Five Points Museum of Contemporary Art\". \n\nThis exhibition features works by many artists that have been exhibited throughout the years between its",
+      "icons": [
+        "arts",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/events/1811464603571994/"
+    },
+    {
+      "date": "2026-04-26",
       "name": "Misery",
       "time": "7:30 PM",
       "venue": "Theatre Victoria",
@@ -350,19 +418,6 @@
       ],
       "free": false,
       "url": "https://theatrevictoria.org"
-    },
-    {
-      "date": "2026-04-27",
-      "name": "weekly Hour of Prayer",
-      "time": "11:00 PM",
-      "venue": "402 E North St, Victoria, TX, United States, Texas 77901",
-      "address": "",
-      "description": "Beginning Monday, January 5, we will be holding a weekly Hour of Prayer from 6:00 p.m. to 7:00 p.m. We are calling this special time \u201cHour of Power.\u201d\n\nWe invite you to come for prayer and quiet reflection in the sanctuary. The Bible tells us that \u201cthe effectual fervent prayer of",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1404134427773534/"
     },
     {
       "date": "2026-04-27",
@@ -432,19 +487,6 @@
       "url": "https://www.facebook.com/events/1470924917754235/"
     },
     {
-      "date": "2026-04-28",
-      "name": "Townsquare Talk: Meet the Newly Promoted Police Chief Fetters",
-      "time": "4:15 PM",
-      "venue": "107 North Star Drive, Victoria, TX, United States, Texas 77904",
-      "address": "",
-      "description": "Join us & VCS Victoria Communication Services on April 28th at 11:15 AM for a special Townsquare Talk Luncheon you won\u2019t want to miss! \n\nWe are excited to welcome Police Chief Fetters and Deputy Chief Moya for a lively, engaging conversation you\u2019ll only get here. Get to know the",
-      "icons": [
-        "food"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/839396005838181/"
-    },
-    {
       "date": "2026-04-29",
       "name": "GroupLink at Parkway",
       "time": "11:30 PM",
@@ -456,6 +498,19 @@
       ],
       "free": false,
       "url": "https://www.facebook.com/events/4508337449387634/"
+    },
+    {
+      "date": "2026-04-29",
+      "name": "Weekly Zoom Prayer",
+      "time": "5:00 PM",
+      "venue": "1604 E Crestwood Dr, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "Wanna pray with us?\n\nGo to this link at NOON and try out our brand new Zoom Prayer format!\nhttps://min.link/Z89\n\nMeeting ID: 821 3585 6005\nPasscode: 0PkEUR",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/878263871681485/"
     },
     {
       "date": "2026-04-29",
@@ -777,17 +832,16 @@
     },
     {
       "date": "2026-05-02",
-      "name": "Spring Youth Art Show - Victoria Art League",
-      "time": "6:00 PM",
-      "venue": "905 S Bridge St, Victoria, TX, United States, Texas 77901",
+      "name": "Challenging the Church: Commit Your Ways",
+      "time": "7:00 PM",
+      "venue": "5901 N Main St, Victoria, TX",
       "address": "",
-      "description": "\ud83c\udf38\ud83c\udf3cVictoria Art League Spring Youth Art Show!!!\ud83c\udf3c\ud83c\udf38\n\nIt's time to bring out your children's best artwork from the year!!  Anything they've made since May 2025 will do!! \n\nDrop off with be April 25th-26th from 1-4pm at \nThe Victoria Art League\n905 South Bridge St.\nVictoria, TX 77901",
+      "description": "You are invited!",
       "icons": [
-        "family",
-        "arts"
+        "community"
       ],
       "free": false,
-      "url": "https://www.facebook.com/events/1014806734554659/"
+      "url": "https://web.facebook.com/events/1605907480672255/"
     },
     {
       "date": "2026-05-02",
@@ -914,19 +968,6 @@
       "url": "https://www.facebook.com/events/1236025495223806/"
     },
     {
-      "date": "2026-05-03",
-      "name": "Organ Plus Concert at FUMC Victoria",
-      "time": "8:00 PM",
-      "venue": "407 N Bridge St, Victoria, TX 77901-6516, United States",
-      "address": "",
-      "description": "Sunday 05/03 at 3:00pm, First United Methodist Church (407 N. Bridge St. Victoria, TX 77901) will be hosting our local chapter of the American Guild of Organists for an Organ Plus concert.  We are calling this program \"Organ Plus\" because in addition to selections for the organ,",
-      "icons": [
-        "music"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1109501471389360/"
-    },
-    {
       "date": "2026-05-04",
       "name": "Skulls & Wildflowers Present: Baddie Basics, How to Styling Class",
       "time": "05:30 PM",
@@ -1014,34 +1055,6 @@
     },
     {
       "date": "2026-05-05",
-      "name": "2026 VICTORIA WEST FFA  BANQUET",
-      "time": "11:30 PM",
-      "venue": "2906 E North St, Victoria, TX 77901-8632, United States",
-      "address": "",
-      "description": "You're Invited!\nJoin us on May 5th at 6:30 PM at the VLS Hall for the Victoria West FFA Banquet!\n* Meal Provided by: Victoria West FFA Booster Club\n* Tickets: $10 per person\n* FFA Students and Advisors: meal will be provided for free\nCome celebrate the hard work and achievements",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/events/2220119172065287/"
-    },
-    {
-      "date": "2026-05-05",
-      "name": "Rhythm, Ritual, and Reflection: A Collaboration Concert",
-      "time": "12:00 AM",
-      "venue": "214 N Main St, Victoria, TX 77901-6503, United States",
-      "address": "",
-      "description": "This concert brings together Crossroads Strings, the Victoria Civic Chorus, and the Victoria College Choir in a program that explores music through rhythm, ritual, and reflection. From energetic dance-inspired works to expressions of praise and moments of quiet introspection, the",
-      "icons": [
-        "music",
-        "arts"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1279254236940324/"
-    },
-    {
-      "date": "2026-05-05",
       "name": "Maker's Meetup: Pasta Coral Craft",
       "time": "4:00PM \u2013 5:00PM",
       "venue": "Victoria Public Library",
@@ -1118,19 +1131,6 @@
     },
     {
       "date": "2026-05-06",
-      "name": "Pet Supplies Plus Adoption Event",
-      "time": "6:00 PM",
-      "venue": "Pet Supplies Plus - Victoria, TX",
-      "address": "",
-      "description": "\ud83d\udc3e\ud83d\udc36DOCPAC will have shelter dogs available for on-site adoption at Pet Supplies Plus on May 6th from 1:00pm-5:00pm! \n\nAll adoption fees during this event will be discounted!\ud83d\ude42\n\n\u2b50\ufe0fPet Supplies Plus is located at: 5217 N Navarro St Suite B, Victoria, TX 77904.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1494060695836723/"
-    },
-    {
-      "date": "2026-05-06",
       "name": "Pickleball Games",
       "time": "6:00PM \u2013 7:00PM",
       "venue": "Victoria Public Library",
@@ -1158,19 +1158,6 @@
       ],
       "free": true,
       "url": "https://aerocrafters.pub"
-    },
-    {
-      "date": "2026-05-06",
-      "name": "Mrs. Harrison's Retirement Chapel & Celebration",
-      "time": "7:45 PM",
-      "venue": "1501 N Glass St, Victoria, TX 77901-5130, United States",
-      "address": "",
-      "description": "After 19 wonderful years of teaching our littlest Patriots, we are celebrating the retirement of our beloved K3 teacher, Mrs. Piper Harrison \ud83d\udc9b\n\nFor nearly two decades, Mrs. Harrison has been the very first teacher for so many of our students - helping tiny hands learn to hold pen",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1307366317447881/"
     },
     {
       "date": "2026-05-06",
@@ -1268,19 +1255,6 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
-    },
-    {
-      "date": "2026-05-07",
-      "name": "Shields Elementary Career Day",
-      "time": "6:00 PM",
-      "venue": "Shields\u0001Elementary\u0003Magnet School",
-      "address": "3400 Bluebonnet St",
-      "description": "DOCPAC is a presenter at Shields Elementary's Career Day!",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1755358515430424/"
     },
     {
       "date": "2026-05-07",
@@ -1504,6 +1478,20 @@
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3640"
+    },
+    {
+      "date": "2026-05-10",
+      "name": "Baby Dedication",
+      "time": "2:30 PM",
+      "venue": "4802 John Stockbauer Dr, Victoria, TX, United States, Texas 77904",
+      "address": "",
+      "description": "We\u2019re celebrating Baby Dedication on Sunday, May 10 at all Parkway campuses. During this special service, parents commit to raising their children to know and follow Jesus, and our church family commits to supporting them along the way. Invite family and friends to join you for t",
+      "icons": [
+        "family",
+        "outdoors"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1953195845287872/"
     }
   ]
 }
