@@ -848,6 +848,58 @@ def fetch_moonshine_events(days_ahead=8):
 
 # ─── SOURCE: PERPLEXITY EVENT DISCOVERY ─────────────────────────────────────
 
+def _parse_sonar_json(content):
+    """Parse Perplexity sonar output that should contain a JSON array.
+
+    Tries multiple strategies in order. Returns the first list-of-dicts that
+    parses cleanly, or None on total failure.
+
+    Why this exists: sonar sometimes prepends a citation footnote like "[1]"
+    or wraps the answer in prose like "Here are the events: [...]". The old
+    single greedy regex couldn't handle either case and silently dropped the
+    entire query's results, costing us ~10 events per run.
+    """
+    if not content:
+        return None
+    content = content.strip()
+
+    # Strategy 1: direct json.loads (cleanest case — sonar followed instructions)
+    try:
+        parsed = json.loads(content)
+        if isinstance(parsed, list):
+            return parsed
+        if isinstance(parsed, dict) and isinstance(parsed.get("events"), list):
+            return parsed["events"]
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Strategy 2: find balanced top-level arrays in the text and try the
+    # largest first (small ones are usually citation refs like [1]).
+    candidates = []
+    depth = 0
+    start = -1
+    for i, ch in enumerate(content):
+        if ch == '[':
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == ']':
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    candidates.append(content[start:i+1])
+                    start = -1
+    for cand in sorted(candidates, key=len, reverse=True):
+        try:
+            parsed = json.loads(cand)
+            if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+                return parsed
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+    return None
+
+
 def fetch_perplexity_events(days_ahead=8):
     """Use Perplexity sonar to search the web for Victoria TX events.
     Runs multiple targeted queries — one per major venue/source — to maximize coverage."""
@@ -887,8 +939,17 @@ Rules:
 - If you cannot confirm a date, omit the event
 - Return [] if nothing found"""
 
+    # Per-query topics for log clarity
+    query_labels = [
+        "aero crafters", "bars (moonshine/hideaway/froggy)", "eventbrite",
+        "community/civic", "fitness/sports", "trivia/karaoke/open mic",
+        "live music", "family/kids", "arts/theater/galleries", "food/restaurants",
+    ]
+
     all_raw = []
+    query_stats = []  # for the summary log
     for i, query in enumerate(queries):
+        label = query_labels[i] if i < len(query_labels) else f"q{i+1}"
         try:
             resp = requests.post(
                 "https://api.perplexity.ai/chat/completions",
@@ -900,20 +961,33 @@ Rules:
                     "model": "sonar-pro",
                     "messages": [{"role": "user", "content": query + json_instruction}],
                     "temperature": 0.1,
-                    "max_tokens": 2000,
+                    "max_tokens": 4000,
                 },
-                timeout=30,
+                timeout=45,
             )
             resp.raise_for_status()
             content = resp.json()["choices"][0]["message"]["content"].strip()
-            content = re.sub(r'^```\w*\n?', '', content)
-            content = re.sub(r'\n?```$', '', content)
-            arr_match = re.search(r'\[.*\]', content, re.DOTALL)
-            if arr_match:
-                raw = json.loads(arr_match.group(0))
-                all_raw.extend(raw)
+            # Strip markdown fences (```json ... ```)
+            content = re.sub(r'^```\w*\s*', '', content)
+            content = re.sub(r'\s*```\s*$', '', content)
+            raw = _parse_sonar_json(content)
+            if raw is None:
+                query_stats.append(f"q{i+1} {label}: PARSE_FAIL ({len(content)}c)")
+                _sentry_warn(
+                    "Perplexity sonar JSON parse failed",
+                    query_index=i, query_label=label,
+                    sample=content[:200],
+                )
+                continue
+            n = len(raw)
+            query_stats.append(f"q{i+1} {label}: {n}")
+            all_raw.extend(raw)
+        except requests.HTTPError as e:
+            query_stats.append(f"q{i+1} {label}: HTTP_{e.response.status_code if e.response else '?'}")
+            _sentry_warn("Perplexity sonar HTTP error", query_index=i, query_label=label, status=str(e))
         except Exception as e:
-            pass  # silent — individual query failures shouldn't stop the run
+            query_stats.append(f"q{i+1} {label}: ERROR ({type(e).__name__})")
+            _sentry_warn("Perplexity sonar exception", query_index=i, query_label=label, error=str(e)[:200])
 
     # Parse and validate
     events = []
@@ -939,7 +1013,9 @@ Rules:
             "url": ev.get("url", "").strip(),
         })
 
-    print(f"  [Perplexity] {len(queries)} queries → {len(events)} raw events")
+    print(f"  [Perplexity] {len(queries)} queries → {len(all_raw)} raw, {len(events)} in-window")
+    for stat in query_stats:
+        print(f"    • {stat}")
     return events
 
 
@@ -1199,6 +1275,7 @@ def merge_events(all_events, days_ahead=7):
     end_date = _WINDOW_END
 
     seen = {}  # key → event (keep the one with more info)
+    prefix_index = {}  # prefix_key → key (so we can find existing entries by prefix)
     for ev in all_events:
         date_str = ev.get("date", "")
         if not date_str:
@@ -1212,7 +1289,12 @@ def merge_events(all_events, days_ahead=7):
 
         # Normalize key — strip punctuation differences for fuzzy dedup
         name_norm = re.sub(r'[\s\-\u2013\u2014:,]+', ' ', ev.get("name", "").lower()).strip()
+        # Also build a "prefix" key from the first 6 significant words to catch
+        # variants like "Foo with Bar" vs "Foo with Bar, Title" (same event, longer name).
+        words = [w for w in name_norm.split() if len(w) > 1]
+        prefix_norm = " ".join(words[:6])
         key = (name_norm, date_str)
+        prefix_key = (prefix_norm, date_str)
 
         # Auto-tag if needed
         if not ev.get("icons"):
@@ -1224,21 +1306,136 @@ def merge_events(all_events, days_ahead=7):
         def completeness(e):
             return sum(1 for v in [e.get("time"), e.get("venue"), e.get("address"), e.get("description")] if v)
 
-        if key not in seen or completeness(ev) > completeness(seen[key]):
-            seen[key] = {
-                "date": date_str,
-                "name": ev.get("name", "").strip(),
-                "time": ev.get("time", "").strip(),
-                "venue": ev.get("venue", "").strip(),
-                "address": ev.get("address", "").strip(),
-                "description": ev.get("description", "").strip(),
-                "icons": ev.get("icons", []),
-                "free": bool(ev.get("free", False)),
-                "url": ev.get("url", "").strip(),
-            }
+        new_entry = {
+            "date": date_str,
+            "name": ev.get("name", "").strip(),
+            "time": ev.get("time", "").strip(),
+            "venue": ev.get("venue", "").strip(),
+            "address": ev.get("address", "").strip(),
+            "description": ev.get("description", "").strip(),
+            "icons": ev.get("icons", []),
+            "free": bool(ev.get("free", False)),
+            "url": ev.get("url", "").strip(),
+        }
+
+        # Resolve dupe via exact key OR prefix key (catches "X with Y" vs "X with Y, Z").
+        existing_key = key if key in seen else prefix_index.get(prefix_key)
+        if existing_key is None:
+            seen[key] = new_entry
+            prefix_index[prefix_key] = key
+        else:
+            old = seen[existing_key]
+            # Pick the more complete entry, but always keep the shorter, cleaner name
+            # (longer names are usually a source's verbose variant of the same event).
+            chosen = new_entry if completeness(new_entry) > completeness(old) else old
+            chosen["name"] = old["name"] if len(old["name"]) <= len(new_entry["name"]) else new_entry["name"]
+            seen[existing_key] = chosen
 
     final = sorted(seen.values(), key=lambda e: (e["date"], e.get("time", "ZZ")))
     return final
+
+
+# ─── LIBRARY CAP ───────────────────────────────────────────────────────────────────────────
+#
+# The Victoria Public Library publishes ~30+ events per 14-day window — mostly
+# recurring weekly kid programs (Toddler Story Time, Baby Hour, Fun Friday).
+# Without a cap, the library single-handedly dominates the feed and crowds out
+# more interesting bar/restaurant/community content.
+#
+# Rules:
+#   - Hard cap of 2 library events per day, 8 per rolling 7-day window.
+#   - Recurring kid programs (toddler/baby/preschool story time) are limited to
+#     ONE appearance per 7-day window each — the most recent one wins.
+#   - Adult/specialty events (book clubs, lectures, AgriLife, makerspace) take
+#     priority and are kept until the daily cap fills up.
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+
+_LIBRARY_KID_PATTERNS = re.compile(
+    r"\b(toddler|baby hour|baby story|preschool|story time|storytime|fun friday|lego lab|maker'?s? meetup|learning lab|mixed media monday)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_library_event(ev):
+    url = (ev.get("url") or "").lower()
+    venue = (ev.get("venue") or "").lower()
+    return "librarycalendar" in url or "victoriapubliclibrary" in url or "victoria public library" in venue
+
+
+def _is_recurring_kid_program(ev):
+    return bool(_LIBRARY_KID_PATTERNS.search(ev.get("name", "")))
+
+
+def cap_library_events(events, per_day=2, per_week=8):
+    """Apply a hard cap on Victoria Public Library events.
+
+    The library calendar dumps 30+ items into our 14-day window. This trims it
+    to a sensible volume while preferring adult/specialty programs over
+    recurring kid story-time sessions.
+    """
+    if not events:
+        return events
+
+    library_events = [e for e in events if _is_library_event(e)]
+    other_events = [e for e in events if not _is_library_event(e)]
+
+    if not library_events:
+        return events
+
+    # Step 1: Collapse recurring kid programs to one-per-week each (per program name).
+    # "Toddler Story Time" 4x in 14 days → keep the soonest one of each pattern
+    # within each rolling 7-day window.
+    kid_programs = [e for e in library_events if _is_recurring_kid_program(e)]
+    adult_programs = [e for e in library_events if not _is_recurring_kid_program(e)]
+
+    # Bucket kid programs by (normalized name, week-bucket-of-year)
+    kid_seen = {}
+    for ev in sorted(kid_programs, key=lambda e: e["date"]):
+        try:
+            d = datetime.strptime(ev["date"], "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        # Anchor on Monday of that week
+        week_anchor = (d - timedelta(days=d.weekday())).strftime("%Y-%m-%d")
+        name_key = re.sub(r"[^a-z0-9]+", "", ev["name"].lower())[:30]
+        bucket = (name_key, week_anchor)
+        if bucket not in kid_seen:
+            kid_seen[bucket] = ev
+    deduped_kid = list(kid_seen.values())
+
+    pruned_library = adult_programs + deduped_kid
+
+    # Step 2: Apply per-day and per-week caps.
+    # Sort so adult programs win ties (they are arguably more interesting / less noisy).
+    def priority(e):
+        # Lower = kept first
+        return (0 if not _is_recurring_kid_program(e) else 1, e["date"], e.get("time", "ZZ"))
+
+    pruned_library.sort(key=priority)
+
+    by_day = Counter()
+    by_week = Counter()  # week-anchored Monday
+    kept = []
+    dropped = []
+    for ev in pruned_library:
+        try:
+            d = datetime.strptime(ev["date"], "%Y-%m-%d").date()
+        except ValueError:
+            kept.append(ev)
+            continue
+        week_anchor = (d - timedelta(days=d.weekday())).strftime("%Y-%m-%d")
+        if by_day[ev["date"]] >= per_day or by_week[week_anchor] >= per_week:
+            dropped.append(ev)
+            continue
+        kept.append(ev)
+        by_day[ev["date"]] += 1
+        by_week[week_anchor] += 1
+
+    print(f"  [LibraryCap] {len(library_events)} library events → {len(kept)} kept, {len(dropped)} dropped "
+          f"({len(kid_programs) - len(deduped_kid)} duplicate kid programs collapsed, "
+          f"{len(dropped)} over cap)")
+
+    return sorted(other_events + kept, key=lambda e: (e["date"], e.get("time", "ZZ")))
 
 
 # ─── LOAD EXTRAS (new_and_notable + sponsor) ─────────────────────────────────
@@ -1950,6 +2147,9 @@ def main():
     print(f"\n🔀 Merging {len(all_events)} raw entries...")
     merged = merge_events(all_events, args.days)
     print(f"   After dedup: {len(merged)} events")
+
+    # 5b. Cap library events to 2/day, 8/week
+    merged = cap_library_events(merged)
 
     # 6. Fill missing descriptions + URLs
     merged = fill_gaps(merged)
