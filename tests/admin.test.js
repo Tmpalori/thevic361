@@ -8,7 +8,7 @@
 //
 // No real GitHub PAT or network call is required.
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -129,13 +129,15 @@ describe('admin pure helpers', () => {
 
   it('applyFilters filters by category, venue, and search', () => {
     api._state.candidates = sampleEvents;
-    api._state.filters = { search: '', category: 'music', venue: '' };
+    // Use the 'all' escape hatch so this test stays decoupled from wall-clock
+    // time — the week filter is exercised separately below.
+    api._state.filters = { search: '', category: 'music', venue: '', week: 'all' };
     expect(api.applyFilters(sampleEvents).map(e => e.name)).toEqual(['Sunday Concert']);
 
-    api._state.filters = { search: 'market', category: '', venue: '' };
+    api._state.filters = { search: 'market', category: '', venue: '', week: 'all' };
     expect(api.applyFilters(sampleEvents).map(e => e.name)).toEqual(['Saturday Market']);
 
-    api._state.filters = { search: '', category: '', venue: 'Palace Bingo' };
+    api._state.filters = { search: '', category: '', venue: 'Palace Bingo', week: 'all' };
     expect(api.applyFilters(sampleEvents).map(e => e.name)).toEqual(['Monday Bingo']);
   });
 
@@ -178,6 +180,125 @@ describe('admin pure helpers', () => {
     expect(api._constants.WEEKEND_TARGET_MIN).toBe(8);
     expect(api._constants.WEEKEND_TARGET_MAX).toBe(12);
     expect(api._constants.PREVIEW_STORAGE_PREFIX).toBe('vic361_preview_');
+  });
+});
+
+describe('admin active-week filter', () => {
+  let api;
+  // Pin the clock to Monday 2026-04-27 18:37 America/Chicago. The system clock
+  // in this test runner is UTC, so we use a UTC instant whose local-time
+  // projection in Chicago (UTC-5 during DST) lands on that Monday evening.
+  // Using local-time Date constructors below keeps assertions independent of
+  // the runner's TZ — they always use the runner's local interpretation.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    // Pick a wall-clock instant in the runner's local time so getDay() returns
+    // Monday regardless of TZ. 2026-04-27T12:00:00 local is unambiguously Mon.
+    vi.setSystemTime(new Date(2026, 3, 27, 12, 0, 0)); // month is 0-indexed
+    api = bootDom();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    delete window.__vic361Admin;
+  });
+
+  it('getMondayOfWeek returns this Monday for a Monday', () => {
+    const m = api.getMondayOfWeek();
+    expect(api.toLocalDateStr(m)).toBe('2026-04-27');
+  });
+
+  it('getMondayOfWeek returns this Monday for a Sunday (end of same week)', () => {
+    vi.setSystemTime(new Date(2026, 4, 3, 22, 0, 0)); // Sun 2026-05-03 evening
+    const m = api.getMondayOfWeek();
+    expect(api.toLocalDateStr(m)).toBe('2026-04-27');
+  });
+
+  it('getWeekRange returns Mon–Sun for offset 0 and 1', () => {
+    expect(api.getWeekRange(0)).toEqual({
+      mondayStr: '2026-04-27', sundayStr: '2026-05-03'
+    });
+    expect(api.getWeekRange(1)).toEqual({
+      mondayStr: '2026-05-04', sundayStr: '2026-05-10'
+    });
+  });
+
+  it('inWeekBucket "this" excludes prior-week dates and includes Mon–Sun', () => {
+    // Last week — must be excluded from every bucket.
+    expect(api.inWeekBucket('2026-04-20', 'this')).toBe(false);
+    expect(api.inWeekBucket('2026-04-26', 'this')).toBe(false);
+    expect(api.inWeekBucket('2026-04-20', 'next')).toBe(false);
+    expect(api.inWeekBucket('2026-04-20', 'upcoming')).toBe(false);
+    // This week (Mon–Sun).
+    expect(api.inWeekBucket('2026-04-27', 'this')).toBe(true);
+    expect(api.inWeekBucket('2026-05-03', 'this')).toBe(true);
+    // Next week not in "this".
+    expect(api.inWeekBucket('2026-05-04', 'this')).toBe(false);
+    expect(api.inWeekBucket('2026-05-04', 'next')).toBe(true);
+    expect(api.inWeekBucket('2026-05-10', 'next')).toBe(true);
+    expect(api.inWeekBucket('2026-05-11', 'next')).toBe(false);
+    // Upcoming includes both.
+    expect(api.inWeekBucket('2026-04-27', 'upcoming')).toBe(true);
+    expect(api.inWeekBucket('2026-05-11', 'upcoming')).toBe(true);
+  });
+
+  it('applyFilters defaults to "this" week, hiding stale prior-week events', () => {
+    const events = [
+      { date: '2026-04-20', name: 'Last Mon Bingo', venue: 'Palace', icons: [] },
+      { date: '2026-04-26', name: 'Last Sun Concert', venue: 'Park', icons: [] },
+      { date: '2026-04-27', name: 'This Mon Run', venue: 'Stadium', icons: [] },
+      { date: '2026-05-03', name: 'This Sun Market', venue: 'Square', icons: [] },
+      { date: '2026-05-04', name: 'Next Mon Show', venue: 'Hall', icons: [] }
+    ];
+    api._state.candidates = events;
+    // Default week filter is 'this'.
+    expect(api._state.filters.week).toBe('this');
+    const out = api.applyFilters(events).map(e => e.name);
+    expect(out).toEqual(['This Mon Run', 'This Sun Market']);
+  });
+
+  it('applyFilters with week="next" returns next Mon–Sun only', () => {
+    const events = [
+      { date: '2026-04-27', name: 'This Mon', venue: 'A', icons: [] },
+      { date: '2026-05-04', name: 'Next Mon', venue: 'B', icons: [] },
+      { date: '2026-05-10', name: 'Next Sun', venue: 'C', icons: [] },
+      { date: '2026-05-11', name: 'Week After', venue: 'D', icons: [] }
+    ];
+    api._state.candidates = events;
+    api._state.filters = { search: '', category: '', venue: '', week: 'next' };
+    expect(api.applyFilters(events).map(e => e.name)).toEqual(['Next Mon', 'Next Sun']);
+  });
+
+  it('applyFilters with week="upcoming" includes this week + lookahead, but not past', () => {
+    const events = [
+      { date: '2026-04-20', name: 'Past', venue: 'A', icons: [] },
+      { date: '2026-04-27', name: 'This Mon', venue: 'B', icons: [] },
+      { date: '2026-05-15', name: 'Two Weeks Out', venue: 'C', icons: [] }
+    ];
+    api._state.candidates = events;
+    api._state.filters = { search: '', category: '', venue: '', week: 'upcoming' };
+    expect(api.applyFilters(events).map(e => e.name))
+      .toEqual(['This Mon', 'Two Weeks Out']);
+  });
+
+  it('pruneStalePastSelections drops picks for dates before this Monday', () => {
+    const events = [
+      { date: '2026-04-20', name: 'Stale', venue: 'A', icons: [] },
+      { date: '2026-04-27', name: 'Fresh', venue: 'B', icons: [] }
+    ];
+    api._state.candidates = events;
+    api._state.selected = new Set(events.map(api.eventKey));
+    api.pruneStalePastSelections();
+    const kept = Array.from(api._state.selected);
+    expect(kept.length).toBe(1);
+    expect(kept[0]).toContain('Fresh');
+  });
+
+  it('renders a Week filter control in the picker', () => {
+    const sel = document.getElementById('filter-week');
+    expect(sel).not.toBeNull();
+    const opts = Array.from(sel.options).map(o => o.value).sort();
+    expect(opts).toEqual(['next', 'this', 'upcoming']);
+    expect(sel.value).toBe('this');
   });
 });
 
