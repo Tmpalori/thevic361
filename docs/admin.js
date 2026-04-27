@@ -33,13 +33,57 @@
     pat: null,
     candidates: [],
     selected: new Set(), // event keys
-    filters: { search: '', category: '', venue: '' }
+    // week: 'this' (Mon–Sun of the current local week), 'next', or 'upcoming'
+    // (everything from this Monday forward). Past dates are always hidden.
+    filters: { search: '', category: '', venue: '', week: 'this' }
   };
 
   // ─── HELPERS ───
   function eventKey(ev) {
     // Stable key built from date + name + venue (no per-event id in source data).
     return [ev.date || '', ev.name || '', ev.venue || ''].join('|');
+  }
+
+  // Monday of the local-time week containing `now` (defaults to today).
+  // Returned as a Date at local midnight.
+  function getMondayOfWeek(now) {
+    const base = now ? new Date(now.getTime()) : new Date();
+    base.setHours(0, 0, 0, 0);
+    const dow = base.getDay(); // 0 = Sun, 1 = Mon, … 6 = Sat
+    const daysFromMonday = dow === 0 ? 6 : dow - 1;
+    base.setDate(base.getDate() - daysFromMonday);
+    return base;
+  }
+
+  // Returns { mondayStr, sundayStr } as YYYY-MM-DD for the active week.
+  // offsetWeeks: 0 = this week, 1 = next week, …
+  function getWeekRange(offsetWeeks, now) {
+    const monday = getMondayOfWeek(now);
+    if (offsetWeeks) monday.setDate(monday.getDate() + offsetWeeks * 7);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return { mondayStr: toLocalDateStr(monday), sundayStr: toLocalDateStr(sunday) };
+  }
+
+  function toLocalDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  // Apply the week-bucket filter to a date string. Past dates (before this
+  // Monday) are excluded from every bucket so a stale collector run doesn't
+  // resurface last week's events as the primary review set.
+  function inWeekBucket(dateStr, bucket, now) {
+    if (!dateStr) return false;
+    if (bucket === 'all') return true; // test-only escape hatch; not in UI
+    const thisMonday = toLocalDateStr(getMondayOfWeek(now));
+    if (dateStr < thisMonday) return false;
+    if (bucket === 'upcoming') return true;
+    const offset = bucket === 'next' ? 1 : 0;
+    const { mondayStr, sundayStr } = getWeekRange(offset, now);
+    return dateStr >= mondayStr && dateStr <= sundayStr;
   }
 
   function isWeekend(dateStr) {
@@ -219,6 +263,7 @@
         return da.localeCompare(db);
       });
       restoreSelectionsFromStorage();
+      pruneStalePastSelections();
       populateFilters();
       renderPicker();
       setStatus('Loaded ' + events.length + ' candidate event(s).', 'success');
@@ -260,7 +305,9 @@
   function applyFilters(events) {
     const f = state.filters;
     const q = f.search.trim().toLowerCase();
+    const bucket = f.week || 'this';
     return events.filter(ev => {
+      if (!inWeekBucket(ev.date, bucket)) return false;
       if (f.category && !(ev.icons || []).includes(f.category)) return false;
       if (f.venue && ev.venue !== f.venue) return false;
       if (q) {
@@ -391,6 +438,21 @@
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) state.selected = new Set(arr);
     } catch (_) {}
+  }
+
+  // Drop selections whose event date is before this Monday. Prevents picks
+  // from last week's review session from leaking into the new week's publish.
+  function pruneStalePastSelections() {
+    const thisMonday = toLocalDateStr(getMondayOfWeek());
+    const keep = new Set();
+    for (const ev of state.candidates) {
+      const k = eventKey(ev);
+      if (state.selected.has(k) && (ev.date || '') >= thisMonday) keep.add(k);
+    }
+    if (keep.size !== state.selected.size) {
+      state.selected = keep;
+      persistSelections();
+    }
   }
 
   // ─── PICKED EVENTS ─→ events.json shape ───
@@ -603,6 +665,7 @@
     const search = document.getElementById('filter-search');
     const cat = document.getElementById('filter-category');
     const ven = document.getElementById('filter-venue');
+    const wk = document.getElementById('filter-week');
     if (search) search.addEventListener('input', () => {
       state.filters.search = search.value; renderPicker();
     });
@@ -611,6 +674,9 @@
     });
     if (ven) ven.addEventListener('change', () => {
       state.filters.venue = ven.value; renderPicker();
+    });
+    if (wk) wk.addEventListener('change', () => {
+      state.filters.week = wk.value; renderPicker();
     });
 
     const reload = document.getElementById('reload-btn');
@@ -654,6 +720,8 @@
     applyFilters, groupByDate, buildNewsletterHtml,
     utf8ToBase64,
     buildEventsPayload, buildPreviewSrc, writePreviewToStorage,
+    getMondayOfWeek, getWeekRange, inWeekBucket, toLocalDateStr,
+    pruneStalePastSelections,
     _state: state,
     _constants: {
       WEEKDAY_TARGET_MIN, WEEKDAY_TARGET_MAX,
