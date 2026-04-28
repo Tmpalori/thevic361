@@ -144,28 +144,60 @@
     return 'Other';
   }
 
+  // Field metadata for the edit view. Keeping it declarative makes the
+  // render predictable and keeps the visible label tied to the data-edit key
+  // the save handler uses, so the admin always sees what they're editing.
+  const EDIT_FIELDS = [
+    { key: 'name',        label: 'Event name',           type: 'input',    placeholder: 'Event name' },
+    { key: 'date',        label: 'Date',                 type: 'input',    placeholder: 'YYYY-MM-DD' },
+    { key: 'time',        label: 'Start time',           type: 'input',    placeholder: 'e.g. 7:00 PM' },
+    { key: 'end_time',    label: 'End time',             type: 'input',    placeholder: 'e.g. 10:00 PM (optional)' },
+    { key: 'venue',       label: 'Venue',                type: 'input',    placeholder: 'Venue name' },
+    { key: 'address',     label: 'Address',              type: 'input',    placeholder: 'Street address' },
+    { key: 'url',         label: 'Link',                 type: 'input',    placeholder: 'https://example.com' },
+    { key: 'description', label: 'Description',          type: 'textarea', rows: 3, placeholder: 'Description' },
+    { key: 'submitter_first_name', label: 'Submitter first name', type: 'input', placeholder: 'First name' },
+    { key: 'submitter_last_name',  label: 'Submitter last name',  type: 'input', placeholder: 'Last name' },
+    { key: 'submitter_phone',      label: 'Submitter phone',      type: 'input', placeholder: 'Phone number' }
+  ];
+
+  function renderEditField(f, p) {
+    const id = 'sub-edit-' + f.key + '-' + Math.random().toString(36).slice(2, 8);
+    const val = escapeHtml(p[f.key] || '');
+    const ph = escapeHtml(f.placeholder || '');
+    const label = '<label class="submission-edit__label" for="' + id + '">' +
+      escapeHtml(f.label) + '</label>';
+    const control = f.type === 'textarea'
+      ? '<textarea id="' + id + '" data-edit="' + f.key + '" rows="' + (f.rows || 3) +
+          '" placeholder="' + ph + '">' + val + '</textarea>'
+      : '<input id="' + id + '" data-edit="' + f.key + '" value="' + val +
+          '" placeholder="' + ph + '">';
+    return '<div class="submission-edit__field">' + label + control + '</div>';
+  }
+
   function renderRow(row) {
     const p = row.payload || {};
     const cats = (p.icons || []).join(', ');
     const editing = state.editing.has(row.id);
-    const submitterBlock = (row.submitter_name || row.submitter_email || row.submitter_kind)
+    // Prefer the concatenated submitter_name (stored at row level for backcompat),
+    // fall back to the first/last parts on the payload if a row predates the
+    // backcompat write.
+    const fullName = row.submitter_name ||
+      [p.submitter_first_name, p.submitter_last_name].filter(Boolean).join(' ');
+    const submitterBlock = (fullName || row.submitter_email || row.submitter_kind || p.submitter_phone)
       ? '<div class="submission-card__submitter">' +
           '<strong>' + escapeHtml(submitterLabel(row.submitter_kind)) + '</strong>' +
-          (row.submitter_name ? ' · ' + escapeHtml(row.submitter_name) : '') +
+          (fullName ? ' · ' + escapeHtml(fullName) : '') +
           (row.submitter_email ? ' · ' + escapeHtml(row.submitter_email) : '') +
+          (p.submitter_phone ? ' · ' + escapeHtml(p.submitter_phone) : '') +
         '</div>'
       : '';
 
     const editBlock = editing
       ? '<div class="submission-edit">' +
-          '<input data-edit="name" value="' + escapeHtml(p.name || '') + '" placeholder="Name">' +
-          '<input data-edit="date" value="' + escapeHtml(p.date || '') + '" placeholder="YYYY-MM-DD">' +
-          '<input data-edit="time" value="' + escapeHtml(p.time || '') + '" placeholder="Start time">' +
-          '<input data-edit="venue" value="' + escapeHtml(p.venue || '') + '" placeholder="Venue">' +
-          '<input data-edit="address" value="' + escapeHtml(p.address || '') + '" placeholder="Address">' +
-          '<input data-edit="url" value="' + escapeHtml(p.url || '') + '" placeholder="Link">' +
-          '<textarea data-edit="description" rows="3" placeholder="Description">' +
-            escapeHtml(p.description || '') + '</textarea>' +
+          '<p class="submission-edit__title">Editing submission · ' +
+            escapeHtml(p.name || '(untitled)') + '</p>' +
+          EDIT_FIELDS.map(f => renderEditField(f, p)).join('') +
           '<div class="submission-card__actions">' +
             '<button data-act="save" class="btn btn--primary">Save edits</button>' +
             '<button data-act="cancel-edit" class="btn btn--outline">Cancel</button>' +
@@ -185,6 +217,7 @@
           (p.time ? '<span>🕒 ' + escapeHtml(p.time) +
             (p.end_time ? ' – ' + escapeHtml(p.end_time) : '') + '</span>' : '') +
           (p.venue ? '<span>📍 ' + escapeHtml(p.venue) + '</span>' : '') +
+          (p.address ? '<span>🗺️ ' + escapeHtml(p.address) + '</span>' : '') +
           (cats ? '<span>🏷️ ' + escapeHtml(cats) + '</span>' : '') +
           (p.free ? '<span>🆓 Free</span>' : '<span>🎟️ Paid</span>') +
         '</p>' +
@@ -257,7 +290,20 @@
         updates[el.getAttribute('data-edit')] = el.value;
       });
       const orig = state.submissions.find(s => s.id === id);
-      const merged = Object.assign({}, orig && orig.payload, updates);
+      // Server re-runs validateSubmission on the payload, which requires the
+      // contact fields. submitter_email lives at row level (not in payload),
+      // so merge it back in along with the row-level submitter_name fallback
+      // so a payload-only edit still validates after the form-required-fields
+      // change.
+      const merged = Object.assign(
+        {},
+        orig && orig.payload,
+        {
+          submitter_email: (orig && orig.submitter_email) || '',
+          submitter_name: (orig && orig.submitter_name) || ''
+        },
+        updates
+      );
       const updated = await patch(id, { payload: merged });
       if (updated) {
         state.editing.delete(id);

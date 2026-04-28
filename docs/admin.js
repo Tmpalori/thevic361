@@ -625,8 +625,14 @@
   function getPickedEvents() {
     return state.candidates.filter(ev => state.selected.has(eventKey(ev)));
   }
+  // Fields that must never leak to the public events.json. Includes the
+  // contact-detail fields added when the submission form started requiring
+  // first/last/email/phone — they live on the payload for the admin queue but
+  // are not part of the public event shape.
   const PRIVATE_KEYS = new Set([
     'submitter_name', 'submitter_email', 'submitter_ip', 'user_agent',
+    'submitter_first_name', 'submitter_last_name', 'submitter_phone',
+    'submitter_kind',
     'admin_notes', 'review_history'
   ]);
   function stripPrivateFields(ev) {

@@ -738,7 +738,30 @@ code {
 .submission-edit {
   margin-top: 0.5rem;
   display: grid;
-  gap: 0.4rem;
+  gap: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px dashed var(--admin-border);
+  border-radius: var(--radius);
+  background: var(--admin-input-bg);
+}
+.submission-edit__title {
+  margin: 0 0 0.2rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--admin-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.submission-edit__field {
+  display: grid;
+  gap: 0.2rem;
+}
+.submission-edit__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--admin-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 .submission-edit input,
 .submission-edit textarea {
@@ -747,7 +770,7 @@ code {
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--admin-border);
   border-radius: var(--radius);
-  background: var(--admin-input-bg);
+  background: var(--admin-surface);
   color: var(--admin-text);
 }
 

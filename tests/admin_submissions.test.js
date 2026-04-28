@@ -89,7 +89,10 @@ describe('admin Submissions tab — DOM', () => {
       submitter_kind: 'organizer', submitter_name: 'Jane', submitter_email: 'j@x.com',
       payload: {
         name: 'Test Event', date: '2026-05-12', time: '7 PM',
-        venue: 'Venue A', icons: ['music'], description: 'Hi', free: true
+        venue: 'Venue A', address: '123 Main', icons: ['music'],
+        description: 'Hi', free: true,
+        submitter_first_name: 'Jane', submitter_last_name: 'Doe',
+        submitter_phone: '(361) 555-0123'
       }
     };
     const html = submissions.renderRow(row);
@@ -98,11 +101,58 @@ describe('admin Submissions tab — DOM', () => {
     expect(html).toContain('Organizer');
     expect(html).toContain('Jane');
     expect(html).toContain('j@x.com');
+    // New: phone shows up in the submitter block, address shows up in meta.
+    expect(html).toContain('(361) 555-0123');
+    expect(html).toContain('123 Main');
     // Action buttons
     expect(html).toContain('data-act="approve"');
     expect(html).toContain('data-act="reject"');
     expect(html).toContain('data-act="duplicate"');
     expect(html).toContain('data-act="edit"');
+  });
+
+  it('renderRow edit view renders visible labels for every editable field', () => {
+    const submissions = window.__vic361Submissions;
+    submissions._state.editing.add('abc');
+    const row = {
+      id: 'abc', status: 'pending', source: 'submission',
+      submitter_kind: 'organizer', submitter_name: 'Jane Doe',
+      submitter_email: 'j@x.com',
+      payload: {
+        name: 'Test Event', date: '2026-05-12', time: '7:00 PM', end_time: '10:00 PM',
+        venue: 'Venue A', address: '123 Main', url: 'https://example.com',
+        description: 'Hi', icons: ['music'], free: true,
+        submitter_first_name: 'Jane', submitter_last_name: 'Doe',
+        submitter_phone: '(361) 555-0123'
+      }
+    };
+    const html = submissions.renderRow(row);
+    // Editing banner so the admin sees what they are editing.
+    expect(html).toContain('Editing submission');
+    expect(html).toContain('Test Event');
+    // Visible <label> per editable field (key thing the user asked for).
+    const expectedLabels = [
+      'Event name', 'Date', 'Start time', 'End time', 'Venue',
+      'Address', 'Link', 'Description',
+      'Submitter first name', 'Submitter last name', 'Submitter phone'
+    ];
+    for (const lbl of expectedLabels) {
+      expect(html, `missing label "${lbl}"`).toContain(lbl);
+    }
+    // Each label should be a <label> element bound to a control via data-edit.
+    expect(html).toContain('class="submission-edit__label"');
+    // All edit fields are still wired through data-edit attributes the save
+    // handler reads from.
+    for (const k of [
+      'name', 'date', 'time', 'end_time', 'venue', 'address', 'url',
+      'description', 'submitter_first_name', 'submitter_last_name',
+      'submitter_phone'
+    ]) {
+      expect(html, `missing data-edit="${k}"`).toContain('data-edit="' + k + '"');
+    }
+    // End time is prefilled from the payload.
+    expect(html).toContain('value="10:00 PM"');
+    submissions._state.editing.clear();
   });
 });
 
@@ -137,6 +187,10 @@ describe('admin source pills + private stripping', () => {
       submitter_name: 'Jane',
       submitter_email: 'j@x.com',
       submitter_ip: '1.2.3.4',
+      submitter_first_name: 'Jane',
+      submitter_last_name: 'Doe',
+      submitter_phone: '(361) 555-0123',
+      submitter_kind: 'organizer',
       admin_notes: 'private',
       review_history: [{ at: 't' }]
     };
@@ -148,6 +202,10 @@ describe('admin source pills + private stripping', () => {
     expect(out.submitter_name).toBeUndefined();
     expect(out.submitter_email).toBeUndefined();
     expect(out.submitter_ip).toBeUndefined();
+    expect(out.submitter_first_name).toBeUndefined();
+    expect(out.submitter_last_name).toBeUndefined();
+    expect(out.submitter_phone).toBeUndefined();
+    expect(out.submitter_kind).toBeUndefined();
     expect(out.admin_notes).toBeUndefined();
     expect(out.review_history).toBeUndefined();
     // _source preserved as public `source` for attribution.
@@ -157,8 +215,11 @@ describe('admin source pills + private stripping', () => {
   it('buildEventsPayload strips private fields from selected picks', () => {
     admin._state.candidates = [{
       date: '2026-05-12', name: 'Test', venue: 'V', time: '7 PM',
+      end_time: '10 PM', address: '123 Main',
       _source: 'submission', _submitter_kind: 'organizer',
-      submitter_email: 'j@x.com', submitter_name: 'Jane'
+      submitter_email: 'j@x.com', submitter_name: 'Jane',
+      submitter_first_name: 'Jane', submitter_last_name: 'Doe',
+      submitter_phone: '(361) 555-0123', submitter_kind: 'organizer'
     }];
     admin._state.selected = new Set([admin.eventKey(admin._state.candidates[0])]);
     const payload = admin.buildEventsPayload();
@@ -167,6 +228,13 @@ describe('admin source pills + private stripping', () => {
     expect(ev.submitter_email).toBeUndefined();
     expect(ev.submitter_name).toBeUndefined();
     expect(ev._submitter_kind).toBeUndefined();
+    expect(ev.submitter_first_name).toBeUndefined();
+    expect(ev.submitter_last_name).toBeUndefined();
+    expect(ev.submitter_phone).toBeUndefined();
+    expect(ev.submitter_kind).toBeUndefined();
+    // Public event fields routed through.
+    expect(ev.end_time).toBe('10 PM');
+    expect(ev.address).toBe('123 Main');
     expect(ev.source).toBe('submission');
   });
 
