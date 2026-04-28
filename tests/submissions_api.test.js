@@ -351,6 +351,68 @@ describe('Admin API auth + transitions', () => {
     expect(r.json.errors.name).toBeDefined();
   });
 
+  it('admin payload edit preserves all submitted fields end-to-end', async () => {
+    // Mirrors the full round-trip an admin makes from the edit view: the
+    // public submission lands, the admin tweaks the event details, and the
+    // resulting row keeps every payload field (including end_time, address
+    // and contact info) so the approved-events promotion has them.
+    const c = await fetchJson('POST', '/api/submissions', validBody());
+    const id = c.json.id;
+    const editedPayload = {
+      name: 'Live Music — edited',
+      date: '2026-05-12',
+      time: '8:00 PM',
+      end_time: '11:00 PM',
+      venue: 'The Dive Bar',
+      address: '456 Other St',
+      url: 'example.com/edited',
+      description: 'Updated by admin.',
+      icons: ['music'],
+      free: true,
+      submitter_kind: 'organizer',
+      submitter_first_name: 'Jane',
+      submitter_last_name: 'Tester',
+      submitter_email: 'jane@example.com',
+      submitter_phone: '(361) 555-0123'
+    };
+    const r = await fetchJson('POST', '/api/admin/submissions/' + id,
+      { payload: editedPayload },
+      { Authorization: 'Bearer test-admin-token' });
+    expect(r.status).toBe(200);
+    expect(r.json.ok).toBe(true);
+    const p = r.json.submission.payload;
+    expect(p.name).toBe('Live Music — edited');
+    expect(p.time).toBe('8:00 PM');
+    expect(p.end_time).toBe('11:00 PM');
+    expect(p.address).toBe('456 Other St');
+    // URL should be normalized server-side (bare host gets https://).
+    expect(p.url).toBe('https://example.com/edited');
+    expect(p.submitter_first_name).toBe('Jane');
+    expect(p.submitter_last_name).toBe('Tester');
+    expect(p.submitter_phone).toBe('(361) 555-0123');
+    // free: true means the icons should be augmented with 'free'.
+    expect(p.icons).toContain('free');
+  });
+
+  it('approved-events surfaces all event fields (incl. end_time + address) for the picker', async () => {
+    const c = await fetchJson('POST', '/api/submissions', validBody());
+    await fetchJson('POST', '/api/admin/submissions/' + c.json.id,
+      { status: 'approved' },
+      { Authorization: 'Bearer test-admin-token' });
+    const r = await fetchJson('GET', '/api/admin/approved-events', undefined,
+      { Authorization: 'Bearer test-admin-token' });
+    expect(r.status).toBe(200);
+    const ev = r.json.events[0];
+    expect(ev.end_time).toBe('10:00 PM');
+    expect(ev.address).toBe('123 Main St');
+    expect(ev.url).toBe('https://example.com/event');
+    // Submitter contact rides on the approved candidate so the admin can
+    // still see it during picker review; admin.js stripPrivateFields keeps
+    // it out of the published events.json.
+    expect(ev.submitter_first_name).toBe('Jane');
+    expect(ev.submitter_phone).toBe('(361) 555-0123');
+  });
+
   it('approved-events endpoint returns candidate-shaped events with source metadata', async () => {
     const c = await fetchJson('POST', '/api/submissions', validBody());
     await fetchJson('POST', '/api/admin/submissions/' + c.json.id,
