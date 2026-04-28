@@ -1,0 +1,111 @@
+/* server/github.js — Server-side GitHub Contents API publisher.
+ *
+ * Replaces the browser-side GitHub PAT flow. The server holds a single token
+ * (GITHUB_TOKEN / GITHUB_PAT) with `contents:write` access to the configured
+ * repo and exposes two operations to the admin via authenticated routes:
+ *
+ *   - getJsonFile(path)       Read + parse a JSON file at HEAD on BRANCH.
+ *   - putJsonFile(path,...)   Write an updated JSON file via PUT /contents.
+ *
+ * Configured by env (defaults match the existing Tmpalori/thevic361 setup):
+ *
+ *   GITHUB_TOKEN | GITHUB_PAT   Token with contents:write on the repo.
+ *   GITHUB_OWNER                Default: "Tmpalori"
+ *   GITHUB_REPO                 Default: "thevic361"
+ *   GITHUB_BRANCH               Default: "main"
+ *
+ * If no token is configured, isConfigured() returns false and route handlers
+ * surface a 503 with a clear message.
+ */
+
+const DEFAULT_OWNER = 'Tmpalori';
+const DEFAULT_REPO = 'thevic361';
+const DEFAULT_BRANCH = 'main';
+
+export function createGithub(opts = {}) {
+  const token = opts.token ?? process.env.GITHUB_TOKEN ?? process.env.GITHUB_PAT ?? null;
+  const owner = opts.owner ?? process.env.GITHUB_OWNER ?? DEFAULT_OWNER;
+  const repo = opts.repo ?? process.env.GITHUB_REPO ?? DEFAULT_REPO;
+  const branch = opts.branch ?? process.env.GITHUB_BRANCH ?? DEFAULT_BRANCH;
+  const fetchImpl = opts.fetch || globalThis.fetch;
+
+  function isConfigured() { return Boolean(token); }
+
+  function contentsUrl(filePath, ref) {
+    let u = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURI(filePath)}`;
+    if (ref) u += `?ref=${encodeURIComponent(ref)}`;
+    return u;
+  }
+
+  function ghHeaders() {
+    return {
+      Authorization: 'Bearer ' + token,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'thevic361-admin-server'
+    };
+  }
+
+  async function getJsonFile(filePath) {
+    if (!isConfigured()) throw new Error('github-not-configured');
+    const res = await fetchImpl(contentsUrl(filePath, branch), {
+      headers: ghHeaders()
+    });
+    if (res.status === 404) {
+      const err = new Error('not-found');
+      err.code = 'not-found';
+      err.status = 404;
+      throw err;
+    }
+    if (!res.ok) {
+      const err = new Error(`github-fetch-failed-${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    const meta = await res.json();
+    let text;
+    if (meta.encoding === 'base64' && typeof meta.content === 'string') {
+      text = Buffer.from(meta.content.replace(/\n/g, ''), 'base64').toString('utf8');
+    } else if (meta.download_url) {
+      const r2 = await fetchImpl(meta.download_url);
+      text = await r2.text();
+    } else {
+      throw new Error('github-unsupported-response');
+    }
+    let data;
+    try { data = JSON.parse(text); }
+    catch (_) { throw new Error('github-invalid-json'); }
+    return { sha: meta.sha, data };
+  }
+
+  async function putJsonFile(filePath, dataObj, message, sha) {
+    if (!isConfigured()) throw new Error('github-not-configured');
+    const body = {
+      message: message,
+      content: Buffer.from(JSON.stringify(dataObj, null, 2) + '\n', 'utf8').toString('base64'),
+      branch
+    };
+    if (sha) body.sha = sha;
+    const res = await fetchImpl(contentsUrl(filePath), {
+      method: 'PUT',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, ghHeaders()),
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.json()).message || ''; } catch (_) {}
+      const err = new Error(`github-put-failed-${res.status}: ${detail}`);
+      err.status = res.status;
+      err.detail = detail;
+      throw err;
+    }
+    return res.json();
+  }
+
+  return {
+    isConfigured,
+    owner, repo, branch,
+    getJsonFile,
+    putJsonFile
+  };
+}

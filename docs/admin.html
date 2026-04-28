@@ -22,16 +22,33 @@
   <section id="auth-gate" class="auth-gate" hidden>
     <div class="auth-card">
       <h1>The Vic 361 — Admin</h1>
-      <p class="auth-help">
-        Enter a GitHub Personal Access Token with <code>contents:write</code>
-        access to <code>Tmpalori/thevic361</code>. The token is stored only in
-        your browser's <code>localStorage</code>.
+      <p class="auth-help" id="auth-help">
+        Sign in with your admin username and password.
       </p>
+      <!-- Server login form (preferred when ADMIN_USERNAME / ADMIN_PASSWORD
+           / ADMIN_SESSION_SECRET are configured on the server). -->
       <form id="auth-form" class="auth-form">
+        <label for="auth-username">Username</label>
+        <input type="text" id="auth-username" name="username"
+               autocomplete="username" required>
+        <label for="auth-password">Password</label>
+        <input type="password" id="auth-password" name="password"
+               autocomplete="current-password" required>
+        <button type="submit" class="btn btn--primary">Sign in</button>
+      </form>
+      <!-- Legacy GitHub PAT fallback. Only shown when the server reports it
+           does NOT have a GitHub token configured (so the browser still has
+           to publish via the Contents API). -->
+      <form id="auth-pat-form" class="auth-form" hidden>
+        <p class="auth-help">
+          Server has no GitHub token configured. Enter a GitHub Personal Access
+          Token with <code>contents:write</code> on
+          <code>Tmpalori/thevic361</code> to publish from the browser.
+        </p>
         <label for="auth-pat">GitHub PAT</label>
         <input type="password" id="auth-pat" name="pat" autocomplete="off"
-               placeholder="ghp_..." required>
-        <button type="submit" class="btn btn--primary">Unlock</button>
+               placeholder="ghp_...">
+        <button type="submit" class="btn btn--outline">Use PAT instead</button>
       </form>
       <p id="auth-error" class="auth-error" hidden></p>
     </div>
@@ -114,7 +131,12 @@
     <!-- ─── SUBMISSIONS TAB ─── -->
     <section id="tab-submissions" class="tab-panel" role="tabpanel" hidden>
       <div class="submissions-toolbar">
-        <div class="submissions-config">
+        <!-- Legacy per-tab config inputs. Hidden by default — the unified
+             login flow shares the same session token with the picker tab. We
+             keep these in the DOM (and surface them via "Override API/token")
+             so a server admin who needs to point at a different backend or
+             paste a raw ADMIN_TOKEN can still do so without code changes. -->
+        <div class="submissions-config" id="submissions-config" hidden>
           <label>
             Submissions API
             <input type="text" id="submissions-api-url"
@@ -123,11 +145,15 @@
           <label>
             Admin token
             <input type="password" id="submissions-admin-token"
-                   placeholder="ADMIN_TOKEN env value">
+                   placeholder="Bearer token (legacy)">
           </label>
           <button id="submissions-save-config" type="button" class="btn btn--outline">
             Save
           </button>
+        </div>
+        <div class="submissions-config-toggle">
+          <button id="submissions-config-toggle" type="button"
+                  class="btn btn--link">Override API / token…</button>
         </div>
         <div class="submissions-filter-row">
           <label class="filter">

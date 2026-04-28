@@ -19,9 +19,8 @@ const DOCS = resolve(__dirname, '..', 'docs');
 const HTML = readFileSync(resolve(DOCS, 'admin.html'), 'utf8');
 const JS = readFileSync(resolve(DOCS, 'admin.js'), 'utf8');
 
-function bootDom({ pat = null } = {}) {
+function bootDom({ pat = null, session = null } = {}) {
   // Reset jsdom DOM and globals between tests.
-  // Extract the body contents from the static HTML.
   const bodyMatch = HTML.match(/<body>([\s\S]*?)<\/body>/);
   document.body.innerHTML = bodyMatch ? bodyMatch[1] : '';
   // Strip the trailing <script src="./admin.js"> — we'll evaluate JS directly.
@@ -30,9 +29,39 @@ function bootDom({ pat = null } = {}) {
   delete window.__vic361Admin;
   window.localStorage.clear();
   if (pat) window.localStorage.setItem('vic361_admin_pat', pat);
+  if (session) window.localStorage.setItem('vic361_admin_session', session);
 
-  // Evaluate admin.js in the jsdom global scope. The IIFE uses window/document
-  // from its enclosing scope, which in jsdom is the test global scope.
+  // admin.js calls fetch('/api/config') and (when a session is set)
+  // fetch('/api/admin/me'). In jsdom there is no network, so stub fetch with
+  // a default that says "no server config, no valid session" — tests that
+  // need richer behavior can override before booting.
+  if (!window.__originalFetch) window.__originalFetch = window.fetch;
+  window.fetch = vi.fn(async (url) => {
+    const u = String(url);
+    if (u.includes('/api/admin/me')) {
+      return { ok: false, status: 401, json: async () => ({ ok: false }) };
+    }
+    if (u.includes('/api/config')) {
+      return { ok: true, status: 200, json: async () => ({
+        admin_login_enabled: false,
+        admin_legacy_token_enabled: false,
+        github_publish_enabled: false
+      }) };
+    }
+    // PAT-mode fallback: admin.js calls api.github.com directly. Return an
+    // empty events file so loadCandidates doesn't blow up the test logs.
+    if (u.includes('api.github.com')) {
+      return {
+        ok: true, status: 200,
+        json: async () => ({
+          sha: 'fake', encoding: 'base64',
+          content: Buffer.from('{"events":[]}', 'utf8').toString('base64')
+        })
+      };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  });
+
   // eslint-disable-next-line no-eval
   (0, eval)(JS);
   return window.__vic361Admin;
@@ -42,7 +71,10 @@ describe('admin.html static structure', () => {
   it('exposes the expected core element ids', () => {
     bootDom();
     const ids = [
-      'auth-gate', 'auth-form', 'auth-pat', 'auth-error',
+      'auth-gate', 'auth-form',
+      'auth-username', 'auth-password',
+      'auth-pat', 'auth-pat-form',
+      'auth-error',
       'app', 'signout-btn',
       'tab-picker', 'tab-preview', 'tab-newsletter',
       'filter-search', 'filter-category', 'filter-venue',
@@ -67,26 +99,37 @@ describe('admin.html static structure', () => {
 });
 
 describe('admin auth gate behavior', () => {
-  it('shows the auth gate when no PAT is in localStorage', () => {
+  // init() is async (it probes /api/config and /api/admin/me). Yield to the
+  // microtask queue + a tick so the promise chain settles before asserting.
+  async function waitForInit() {
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  it('shows the auth gate when no credentials are stored', async () => {
     bootDom();
+    await waitForInit();
     const gate = document.getElementById('auth-gate');
     const app = document.getElementById('app');
     expect(gate.hidden).toBe(false);
     expect(app.hidden).toBe(true);
   });
 
-  it('shows the app shell when a PAT is already in localStorage', () => {
+  it('shows the app shell when a PAT is already in localStorage', async () => {
     bootDom({ pat: 'ghp_fake_for_test' });
+    await waitForInit();
     const gate = document.getElementById('auth-gate');
     const app = document.getElementById('app');
     expect(gate.hidden).toBe(true);
     expect(app.hidden).toBe(false);
   });
 
-  it('Sign out clears the PAT and re-shows the auth gate', () => {
+  it('Sign out clears the PAT and re-shows the auth gate', async () => {
     bootDom({ pat: 'ghp_fake_for_test' });
+    await waitForInit();
     document.getElementById('signout-btn').click();
     expect(window.localStorage.getItem('vic361_admin_pat')).toBeNull();
+    expect(window.localStorage.getItem('vic361_admin_session')).toBeNull();
     expect(document.getElementById('auth-gate').hidden).toBe(false);
     expect(document.getElementById('app').hidden).toBe(true);
   });

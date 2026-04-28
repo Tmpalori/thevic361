@@ -1,20 +1,23 @@
 /* admin-submissions.js — Admin Submissions tab.
  *
- * Talks to the Express API exposed by server/index.js. Two pieces of config
- * live in localStorage so the static admin can target a Railway-hosted server
- * without baking URLs into source:
- *   - vic361_submissions_api_url   (e.g. https://thevic361.up.railway.app)
- *   - vic361_submissions_admin_token (the ADMIN_TOKEN env var on the server)
+ * Talks to the Express API exposed by server/index.js. Auth modes:
+ *   1. Default: reuse the session token issued by /api/admin/login
+ *      (same `vic361_admin_session` localStorage key used by the picker tab).
+ *      Works on the Railway deploy that serves both the admin and the API.
+ *   2. Override: paste a custom API base URL + bearer token. Only needed
+ *      when pointing the static admin at a different backend, or when the
+ *      operator is using the legacy ADMIN_TOKEN env var.
  *
- * If either is missing the tab still renders a config form. If the API URL is
- * empty we treat the same origin as the API host so a Railway deploy that
- * also serves the admin static page works with no extra config.
+ * Override config keys (localStorage):
+ *   - vic361_submissions_api_url      (e.g. https://other.up.railway.app)
+ *   - vic361_submissions_admin_token  (raw bearer token)
  */
 (function () {
   'use strict';
 
   const API_KEY = 'vic361_submissions_api_url';
   const TOK_KEY = 'vic361_submissions_admin_token';
+  const SESSION_KEY = 'vic361_admin_session';
 
   const state = {
     apiBase: '',
@@ -23,6 +26,20 @@
     submissions: [],
     editing: new Set()
   };
+
+  // Resolve which API base URL + bearer token to use for /api/admin/* calls.
+  // Override (legacy) config wins if set, otherwise fall back to same-origin
+  // with the unified session token from /api/admin/login.
+  function resolveAuth() {
+    const overrideBase = state.apiBase || '';
+    const overrideTok = state.token || '';
+    if (overrideBase || overrideTok) {
+      return { base: overrideBase, token: overrideTok, source: 'override' };
+    }
+    let session = '';
+    try { session = localStorage.getItem(SESSION_KEY) || ''; } catch (_) {}
+    return { base: '', token: session, source: 'session' };
+  }
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
@@ -46,17 +63,18 @@
   }
 
   function apiUrl(path) {
-    const base = state.apiBase || '';
-    return base + path;
+    const { base } = resolveAuth();
+    return (base || '') + path;
   }
 
   async function apiFetch(path, init) {
+    const { base, token } = resolveAuth();
     const headers = Object.assign({}, (init && init.headers) || {});
-    if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
+    if (token) headers['Authorization'] = 'Bearer ' + token;
     if (init && init.body && !headers['Content-Type']) {
       headers['Content-Type'] = 'application/json';
     }
-    const res = await fetch(apiUrl(path), Object.assign({}, init, { headers }));
+    const res = await fetch((base || '') + path, Object.assign({}, init, { headers }));
     let json = null;
     try { json = await res.json(); } catch (_) {}
     return { res, json };
@@ -71,12 +89,17 @@
   }
 
   async function loadSubmissions() {
-    if (!state.apiBase && location.protocol === 'file:') {
-      showError('Set the Submissions API URL above (your Railway server).');
+    const { base, token, source } = resolveAuth();
+    if (!base && location.protocol === 'file:') {
+      showError('Open the admin from your Railway URL, or set the Submissions API URL override.');
       return;
     }
-    if (!state.token) {
-      showError('Set the admin token above (matches ADMIN_TOKEN on the server).');
+    if (!token) {
+      if (source === 'session') {
+        showError('Sign in via the login form to view submissions.');
+      } else {
+        showError('Set the admin token override above.');
+      }
       return;
     }
     showError('');
@@ -101,7 +124,8 @@
   }
 
   async function refreshPendingBadge() {
-    if (!state.apiBase || !state.token) return;
+    const { token } = resolveAuth();
+    if (!token) return;
     let res, json;
     try {
       ({ res, json } = await apiFetch('/api/admin/submissions?status=pending'));
@@ -298,6 +322,19 @@
       loadSubmissions();
     });
 
+    // Override panel toggle. Hidden by default since the unified login flow
+    // means most operators never need to touch it.
+    const cfgToggle = $('#submissions-config-toggle');
+    const cfgPanel = $('#submissions-config');
+    if (cfgToggle && cfgPanel) {
+      cfgToggle.addEventListener('click', () => {
+        cfgPanel.hidden = !cfgPanel.hidden;
+        cfgToggle.textContent = cfgPanel.hidden
+          ? 'Override API / token…'
+          : 'Hide override';
+      });
+    }
+
     const refresh = $('#submissions-refresh');
     if (refresh) refresh.addEventListener('click', loadSubmissions);
 
@@ -315,7 +352,8 @@
     document.querySelectorAll('.tab-btn').forEach(btn => {
       if (btn.dataset.tab !== 'submissions') return;
       btn.addEventListener('click', () => {
-        if (state.apiBase || state.token) loadSubmissions();
+        const { token } = resolveAuth();
+        if (token) loadSubmissions();
       });
     });
   }
