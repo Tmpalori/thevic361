@@ -478,6 +478,35 @@ export async function createApp(opts = {}) {
     res.json(result);
   });
 
+  // ─── Admin: currently-published events ───
+  // Returns the events payload that is currently being served on /events.json,
+  // pulled from the local store (Railway/Postgres). The admin UI uses this to
+  // pre-check candidates that are already live, so a fresh login still shows
+  // what was previously published instead of every checkbox starting empty.
+  // If nothing has been published locally yet (rare on a fresh deploy), we
+  // return an empty events list — the admin treats that the same as "nothing
+  // currently live."
+  app.get('/api/admin/published-events', requireAdmin, async (req, res) => {
+    try {
+      const published = await store.getPublished();
+      if (!published) {
+        return res.json({ ok: true, events: [], last_updated: null });
+      }
+      res.json({
+        ok: true,
+        events: Array.isArray(published.events) ? published.events : [],
+        last_updated: published.last_updated || null
+      });
+    } catch (err) {
+      console.error('[admin] published-events lookup failed:', err.message);
+      res.status(500).json({
+        ok: false,
+        error: 'published-lookup-failed',
+        message: err.message
+      });
+    }
+  });
+
   // ─── Admin: approved -> candidate-shaped events ───
   // Returns approved submissions in the same shape as candidates.json events
   // so the existing admin picker/publish flow can ingest them by simply

@@ -75,6 +75,12 @@
     serverConfig: null,
     candidates: [],
     selected: new Set(),
+    // Keys (date|name|venue) of events currently published on the live site.
+    // Fetched via /api/admin/published-events after candidates load. Used to
+    // pre-check live events on a fresh login and to render a "Published" pill
+    // so the operator can tell which checked rows are already live vs.
+    // session-only picks.
+    publishedKeys: new Set(),
     filters: { search: '', category: '', venue: '', week: 'this' }
   };
 
@@ -376,6 +382,10 @@
         return da.localeCompare(db);
       });
       restoreSelectionsFromStorage();
+      // Fetch the currently-published events so candidates already on the
+      // live site show up pre-checked. Best-effort: a failure here just
+      // means fewer rows are pre-checked, not a broken page.
+      await loadPublishedAndSeedSelections();
       pruneStalePastSelections();
       populateFilters();
       renderPicker();
@@ -484,6 +494,9 @@
         const srcPill = '<span class="src-pill src-pill--' + escapeHtml(src) +
           '" title="Source: ' + escapeHtml(sourceLabel(src)) + '">' +
           escapeHtml(sourceLabel(src)) + '</span>';
+        const publishedPill = state.publishedKeys.has(k)
+          ? '<span class="src-pill src-pill--published" title="Currently live on thevic361.com">Published</span>'
+          : '';
         const submitterMeta = ev._submitter_kind
           ? '<span class="src-meta">' + escapeHtml(ev._submitter_kind === 'organizer'
               ? 'Organizer' : ev._submitter_kind === 'found_online'
@@ -494,7 +507,7 @@
             '<input type="checkbox" data-key="' + escapeHtml(k) + '" ' + checked + '>' +
             '<div class="event-row__main">' +
               '<p class="event-row__name">' + escapeHtml(ev.name || '(untitled)') +
-                ' ' + srcPill + submitterMeta + '</p>' +
+                ' ' + srcPill + publishedPill + submitterMeta + '</p>' +
               '<div class="event-row__meta">' +
                 (ev.time ? '<span>🕒 ' + escapeHtml(ev.time) + '</span>' : '') +
                 (ev.venue ? '<span>📍 ' + escapeHtml(ev.venue) + '</span>' : '') +
@@ -567,6 +580,36 @@
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) state.selected = new Set(arr);
     } catch (_) {}
+  }
+
+  // Pulls the currently-published events from the server and seeds
+  // state.selected so candidates already live show up pre-checked. Also
+  // populates state.publishedKeys for the "Published" pill in renderPicker.
+  // Server endpoint requires admin auth; in PAT mode (no Railway session)
+  // there's no Railway-side published store to read, so we skip silently.
+  async function loadPublishedAndSeedSelections() {
+    if (publishMode() !== 'server') return;
+    try {
+      const { res, json } = await adminFetch('/api/admin/published-events');
+      if (!res.ok || !json || !json.ok) return;
+      const events = Array.isArray(json.events) ? json.events : [];
+      const keys = new Set(events.map(eventKey));
+      state.publishedKeys = keys;
+      // Pre-check anything that's published AND still in the candidate list.
+      // We don't add keys that aren't in candidates — they'd be invisible
+      // (no checkbox renders) and would inflate the count without recourse.
+      const candidateKeys = new Set(state.candidates.map(eventKey));
+      let added = 0;
+      for (const k of keys) {
+        if (candidateKeys.has(k) && !state.selected.has(k)) {
+          state.selected.add(k);
+          added += 1;
+        }
+      }
+      if (added > 0) persistSelections();
+    } catch (err) {
+      console.warn('[admin] published-events fetch failed:', err.message);
+    }
   }
 
   function pruneStalePastSelections() {
