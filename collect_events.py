@@ -95,6 +95,38 @@ def _sentry_exception(scraper):
             pass
 
 
+# ─── PER-SOURCE COLLECTION STATS ────────────────────────────────────────────
+# Every scraper invocation through safe_fetch (and load_local_events) records
+# one entry here so collect_events.py can write a small metadata file the
+# admin "Sources" tab consumes. Counts here are pre-merge/dedup — they reflect
+# what each source returned this run, not how many made it past dedup.
+_SOURCE_STATS = []
+
+
+def _record_source_stat(name, count, status, started_at, finished_at, message=None):
+    """Append a stats entry. Idempotent within a run; one entry per call."""
+    entry = {
+        "name": name,
+        "count": int(count or 0),
+        "status": status,  # "ok" | "empty" | "error" | "skipped"
+        "started_at": started_at,
+        "finished_at": finished_at,
+    }
+    if message:
+        entry["message"] = str(message)[:300]
+    _SOURCE_STATS.append(entry)
+
+
+def reset_source_stats():
+    """Clear per-run stats. Called at the top of main() and useful in tests."""
+    _SOURCE_STATS.clear()
+
+
+def get_source_stats():
+    """Return a copy of the per-run stats list."""
+    return list(_SOURCE_STATS)
+
+
 def safe_fetch(name, fn, args=(), expect_events=True):
     """Wrap a scraper call so exceptions are captured + zero-event runs reported.
 
@@ -103,22 +135,33 @@ def safe_fetch(name, fn, args=(), expect_events=True):
     If `expect_events` and the scraper returns 0 results, we send a Sentry
     warning so we know about silent breakage without crashing the run.
     Always returns a list (empty on failure).
+
+    Side effect: records a per-source stats entry consumed by the admin
+    "Sources" tab via collection_metadata.json.
     """
+    started = datetime.now().isoformat(timespec="seconds")
     try:
         result = fn(*args)
         if not isinstance(result, list):
             result = list(result or [])
-        if expect_events and len(result) == 0:
-            _sentry_warn(
-                f"[scraper] {name} returned 0 events",
-                scraper=name,
-            )
+        finished = datetime.now().isoformat(timespec="seconds")
+        if len(result) == 0:
+            if expect_events:
+                _sentry_warn(
+                    f"[scraper] {name} returned 0 events",
+                    scraper=name,
+                )
+            _record_source_stat(name, 0, "empty", started, finished)
+        else:
+            _record_source_stat(name, len(result), "ok", started, finished)
         return result
-    except Exception:
+    except Exception as e:
         _sentry_exception(name)
         import traceback
         print(f"  [{name}] CRASHED: ", end="")
         traceback.print_exc()
+        finished = datetime.now().isoformat(timespec="seconds")
+        _record_source_stat(name, 0, "error", started, finished, message=str(e))
         return []
 
 
@@ -3006,12 +3049,22 @@ def main():
     print(f"   {datetime.now().strftime('%A, %B %d %Y at %I:%M %p')}")
     print(f"   Collecting next {args.days} days...\n")
 
+    reset_source_stats()
     all_events = []
 
     # 1. Local YAML (backbone)
     print("📂 Local events...")
     yaml_path = os.path.join(args.local_dir, "local_events.yaml")
-    all_events.extend(load_local_events(yaml_path, args.days))
+    _local_started = datetime.now().isoformat(timespec="seconds")
+    _local = load_local_events(yaml_path, args.days)
+    _local_finished = datetime.now().isoformat(timespec="seconds")
+    _record_source_stat(
+        "local_events", len(_local),
+        "ok" if _local else "empty",
+        _local_started, _local_finished,
+        message=None if _local else "no events from local_events.yaml",
+    )
+    all_events.extend(_local)
 
     # 2. Google Sheet (manual submissions) — zero is normal here, don't alert
     print("\n📋 Google Sheet submissions...")
@@ -3113,6 +3166,33 @@ def main():
     with open(candidates_path, "w") as f:
         json.dump(candidates_output, f, indent=2)
     print(f"  Candidates: {candidates_path}")
+
+    # 8b. Write collection_metadata.json (per-source stats for the admin
+    # "Sources" tab). Lives next to candidates.json. Pre-merge/dedup counts —
+    # this is what each source actually pulled, not what survived dedup.
+    # The admin server reads this to render last-pulled timestamps and counts;
+    # if the file is missing the UI degrades to "unknown" rather than failing.
+    metadata_path = os.path.join(
+        os.path.dirname(candidates_path) or ".",
+        "collection_metadata.json",
+    )
+    try:
+        metadata_output = {
+            "last_run_at": datetime.now().isoformat(timespec="seconds"),
+            "window_start": str(_WINDOW_START),
+            "window_end": str(_WINDOW_END),
+            "days_ahead": args.days,
+            "candidates_only": bool(args.candidates_only),
+            "merged_count": len(merged),
+            "raw_count": sum(s.get("count", 0) for s in get_source_stats()),
+            "sources": get_source_stats(),
+        }
+        with open(metadata_path, "w") as f:
+            json.dump(metadata_output, f, indent=2)
+        print(f"  Metadata:   {metadata_path}")
+    except OSError as e:
+        # Metadata is observability — never let a write failure kill the run.
+        print(f"  [metadata] write failed: {e}")
 
     if args.candidates_only:
         print(f"\n✅ candidates.json updated ({len(merged)} events). "

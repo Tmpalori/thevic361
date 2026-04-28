@@ -87,6 +87,7 @@
         </button>
         <button class="tab-btn" data-tab="preview" role="tab">Preview</button>
         <button class="tab-btn" data-tab="newsletter" role="tab">Newsletter</button>
+        <button class="tab-btn" data-tab="sources" role="tab">Sources</button>
       </nav>
       <div class="admin-header__actions">
         <button id="theme-toggle" type="button" class="theme-toggle"
@@ -234,6 +235,41 @@
       </div>
       <textarea id="newsletter-html" class="newsletter-textarea"
                 spellcheck="false" readonly></textarea>
+    </section>
+
+    <!-- ─── SOURCES TAB ─── -->
+    <section id="tab-sources" class="tab-panel" role="tabpanel" hidden>
+      <div class="sources-summary" id="sources-summary">
+        <div class="sources-summary__item">
+          <span class="sources-summary__label">Last collected</span>
+          <span id="sources-last-run" class="sources-summary__value">—</span>
+        </div>
+        <div class="sources-summary__item">
+          <span class="sources-summary__label">Next auto-pull</span>
+          <span id="sources-next-run" class="sources-summary__value">—</span>
+        </div>
+        <div class="sources-summary__item">
+          <span class="sources-summary__label">After dedup</span>
+          <span id="sources-merged-count" class="sources-summary__value">—</span>
+        </div>
+      </div>
+      <div class="sources-actions">
+        <button id="sources-refresh" type="button" class="btn btn--outline">
+          Refresh
+        </button>
+        <button id="sources-trigger" type="button" class="btn btn--primary">
+          Pull now
+        </button>
+        <span id="sources-trigger-help" class="sources-help"></span>
+      </div>
+      <div id="sources-loading" class="empty-state" hidden>Loading source status…</div>
+      <div id="sources-empty" class="empty-state" hidden>
+        No source metadata yet. Press “Pull now” or wait for the next scheduled
+        run to populate this tab.
+      </div>
+      <div id="sources-error" class="empty-state empty-state--error" hidden></div>
+      <div id="sources-message" class="sources-message" role="status" aria-live="polite"></div>
+      <div id="sources-list" class="sources-list" aria-live="polite"></div>
     </section>
   </main>
 

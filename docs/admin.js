@@ -831,7 +831,8 @@
       picker: document.getElementById('tab-picker'),
       submissions: document.getElementById('tab-submissions'),
       preview: document.getElementById('tab-preview'),
-      newsletter: document.getElementById('tab-newsletter')
+      newsletter: document.getElementById('tab-newsletter'),
+      sources: document.getElementById('tab-sources')
     };
     Object.entries(panels).forEach(([k, el]) => {
       if (!el) return;
@@ -840,6 +841,167 @@
     });
     if (name === 'preview') refreshPreview();
     if (name === 'newsletter') refreshNewsletter();
+    if (name === 'sources') loadSources();
+  }
+
+  // ─── SOURCES TAB ─────────────────────────────────────────────────────
+  // Cache of the most recent payload so renderSources is testable in jsdom
+  // without re-fetching.
+  state.sources = null;
+
+  function setSourcesMessage(text, kind) {
+    const el = document.getElementById('sources-message');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.remove('is-success', 'is-error');
+    if (kind === 'success') el.classList.add('is-success');
+    if (kind === 'error') el.classList.add('is-error');
+  }
+
+  function formatSourceTime(iso) {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleString(undefined, {
+        month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit'
+      });
+    } catch (_) { return iso; }
+  }
+
+  function renderSources(payload) {
+    if (!payload) return;
+    state.sources = payload;
+    const lastEl = document.getElementById('sources-last-run');
+    const nextEl = document.getElementById('sources-next-run');
+    const mergedEl = document.getElementById('sources-merged-count');
+    if (lastEl) lastEl.textContent = formatSourceTime(payload.last_run_at);
+    if (nextEl) {
+      const t = formatSourceTime(payload.next_run_at);
+      nextEl.textContent = payload.next_run_note
+        ? t + ' · ' + payload.next_run_note
+        : t;
+    }
+    if (mergedEl) {
+      const m = (payload.merged_count == null) ? '—' : String(payload.merged_count);
+      const r = (payload.raw_count == null) ? null : String(payload.raw_count);
+      mergedEl.textContent = r ? (m + ' (from ' + r + ' raw)') : m;
+    }
+    const triggerBtn = document.getElementById('sources-trigger');
+    const triggerHelp = document.getElementById('sources-trigger-help');
+    if (triggerBtn) triggerBtn.disabled = !payload.trigger_enabled;
+    if (triggerHelp) {
+      triggerHelp.textContent = payload.trigger_enabled
+        ? ''
+        : 'Manual pull is disabled until GITHUB_TOKEN with actions:write is configured on the server.';
+    }
+    const listEl = document.getElementById('sources-list');
+    const emptyEl = document.getElementById('sources-empty');
+    const sources = Array.isArray(payload.sources) ? payload.sources : [];
+    if (!sources.length) {
+      if (listEl) listEl.innerHTML = '';
+      if (emptyEl) emptyEl.hidden = false;
+      return;
+    }
+    if (emptyEl) emptyEl.hidden = true;
+    if (!listEl) return;
+    listEl.innerHTML = sources.map(s => {
+      const statusCls = 'is-' + (s.status || 'unknown');
+      const countText = (s.status === 'unknown')
+        ? '—'
+        : String(s.count || 0);
+      const metaParts = [];
+      metaParts.push('Last pulled: ' + formatSourceTime(s.last_pulled_at));
+      const message = s.message
+        ? '<p class="source-card__message">' + escapeHtml(s.message) + '</p>'
+        : '';
+      return (
+        '<div class="source-card" data-source="' + escapeHtml(s.name) + '">' +
+          '<div class="source-card__row">' +
+            '<p class="source-card__name">' + escapeHtml(s.label || s.name) + '</p>' +
+            '<span class="source-card__status ' + statusCls + '">' +
+              escapeHtml(s.status || 'unknown') +
+            '</span>' +
+          '</div>' +
+          '<div class="source-card__row">' +
+            '<span>' +
+              '<span class="source-card__count">' + escapeHtml(countText) + '</span>' +
+              '<span class="source-card__count-label">events</span>' +
+            '</span>' +
+            '<span class="source-card__category">' + escapeHtml(s.category || '') + '</span>' +
+          '</div>' +
+          '<p class="source-card__meta">' + escapeHtml(metaParts.join(' · ')) + '</p>' +
+          message +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  async function loadSources() {
+    const loadEl = document.getElementById('sources-loading');
+    const errEl = document.getElementById('sources-error');
+    const emptyEl = document.getElementById('sources-empty');
+    if (loadEl) loadEl.hidden = false;
+    if (errEl) errEl.hidden = true;
+    if (emptyEl) emptyEl.hidden = true;
+    if (publishMode() !== 'server') {
+      if (loadEl) loadEl.hidden = true;
+      if (errEl) {
+        errEl.hidden = false;
+        errEl.textContent = 'Sign in to the server to view source status.';
+      }
+      return;
+    }
+    try {
+      const { res, json } = await adminFetch('/api/admin/sources');
+      if (!res.ok || !json || !json.ok) {
+        throw new Error((json && json.message) || ('Failed to load sources (HTTP ' + res.status + ').'));
+      }
+      renderSources(json);
+    } catch (err) {
+      console.error(err);
+      if (errEl) {
+        errEl.hidden = false;
+        errEl.textContent = err.message || String(err);
+      }
+    } finally {
+      if (loadEl) loadEl.hidden = true;
+    }
+  }
+
+  async function triggerCollect() {
+    const btn = document.getElementById('sources-trigger');
+    if (publishMode() !== 'server') {
+      setSourcesMessage('Sign in to the server first.', 'error');
+      return;
+    }
+    if (!confirm('Trigger the Weekly Collect workflow now? It usually takes a couple of minutes to finish.')) {
+      return;
+    }
+    if (btn) btn.disabled = true;
+    setSourcesMessage('Dispatching workflow…');
+    try {
+      const { res, json } = await adminFetch('/api/admin/trigger-collect', {
+        method: 'POST'
+      });
+      if (!res.ok || !json || !json.ok) {
+        const m = (json && (json.message || json.error)) || ('Trigger failed (HTTP ' + res.status + ').');
+        throw new Error(m);
+      }
+      setSourcesMessage(json.message || 'Workflow dispatched.', 'success');
+    } catch (err) {
+      console.error(err);
+      setSourcesMessage(err.message || 'Trigger failed.', 'error');
+    } finally {
+      // Always re-enable the button; the server config drives whether it stays
+      // disabled in renderSources.
+      if (btn) btn.disabled = false;
+      // Refresh status — counts won't reflect the new run yet, but timestamps
+      // and any state changes will. The actual collector run is asynchronous;
+      // a follow-up Refresh after a couple of minutes shows new counts.
+      loadSources();
+    }
   }
 
   // ─── INIT ───
@@ -1039,6 +1201,11 @@
     const newsCopy = document.getElementById('newsletter-copy');
     if (newsCopy) newsCopy.addEventListener('click', copyNewsletter);
 
+    const sourcesRefresh = document.getElementById('sources-refresh');
+    if (sourcesRefresh) sourcesRefresh.addEventListener('click', loadSources);
+    const sourcesTrigger = document.getElementById('sources-trigger');
+    if (sourcesTrigger) sourcesTrigger.addEventListener('click', triggerCollect);
+
     document.querySelectorAll('#theme-toggle, #theme-toggle-auth')
       .forEach(btn => btn.addEventListener('click', toggleTheme));
   }
@@ -1115,6 +1282,7 @@
     publishMode,
     getStoredTheme, setStoredTheme, effectiveTheme, applyTheme, toggleTheme,
     initTheme, updateThemeToggleUi,
+    renderSources, loadSources, triggerCollect, formatSourceTime,
     _state: state,
     _constants: {
       WEEKDAY_TARGET_MIN, WEEKDAY_TARGET_MAX,
