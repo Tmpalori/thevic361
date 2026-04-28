@@ -37,7 +37,13 @@ publish via the GitHub Contents API as today.
    | Variable | Required | Description |
    |---|---|---|
    | `DATABASE_URL` | recommended | Auto-injected by the Postgres plugin. If unset the server falls back to a JSON file at `data/submissions.json` (fine for dev, **not** durable on Railway because the filesystem is ephemeral). |
-   | `ADMIN_TOKEN` | **yes** | A long random string. Required to call admin endpoints. Paste it into the admin tab → "Admin token" field. |
+   | `ADMIN_USERNAME` | **yes** | Username for the admin login page. |
+   | `ADMIN_PASSWORD` | **yes** | Password for the admin login page. Use a long, unique value. |
+   | `ADMIN_SESSION_SECRET` | **yes** | HMAC key used to sign session tokens. Generate with `openssl rand -hex 32`. Rotating this value forces every signed-in admin to log in again. |
+   | `ADMIN_SESSION_TTL_HOURS` | optional | Session lifetime in hours. Default `12`. |
+   | `GITHUB_TOKEN` (or `GITHUB_PAT`) | recommended | Server-side GitHub Personal Access Token with `contents:write` access to `Tmpalori/thevic361`. Lets the admin publish events without ever putting a PAT in the browser. If unset, the admin falls back to its older browser-side PAT flow. |
+   | `GITHUB_OWNER` / `GITHUB_REPO` / `GITHUB_BRANCH` | optional | Override the default `Tmpalori` / `thevic361` / `main` target. |
+   | `ADMIN_TOKEN` | optional | Legacy single-token admin auth, kept as a fallback. If you set the three login variables above you do **not** need this. |
    | `TURNSTILE_SITE_KEY` | optional | Cloudflare Turnstile site key. Sent to the public submit page so the widget renders. |
    | `TURNSTILE_SECRET_KEY` | optional | Cloudflare Turnstile secret. When set, missing/invalid tokens are rejected server-side. |
    | `PORT` | no | Auto-injected by Railway. |
@@ -62,18 +68,62 @@ from. Two options:
   but it's a separate decision and is **explicitly out of scope** for
   this rollout.
 
-## Wire the admin to the API
+## Admin login
 
-1. Open the existing admin (`docs/admin.html`) the same way as today.
-2. Click the new **Submissions** tab.
-3. Paste the Railway public URL (e.g. `https://thevic361.up.railway.app`)
-   into "Submissions API" and your `ADMIN_TOKEN` into "Admin token".
-   Click **Save**. Both are stored in `localStorage` only.
-4. The Submissions tab now lists pending public submissions. Approve,
-   reject, mark duplicate, or edit them in place.
-5. Click **Pull approved into picker** to merge approved submissions into
-   the candidate list, then publish via the existing GitHub Contents
-   flow as you do today.
+The admin UI now signs in via a username / password form instead of a
+GitHub PAT.
+
+1. Visit `https://<your-railway-domain>/admin.html` (the Express server
+   serves the static admin from `docs/`).
+2. Enter `ADMIN_USERNAME` + `ADMIN_PASSWORD`. The server returns a signed
+   session token (HMAC over `{sub, iat, exp}` with `ADMIN_SESSION_SECRET`)
+   and the browser stores it in `localStorage` as
+   `vic361_admin_session`. Tokens expire after `ADMIN_SESSION_TTL_HOURS`
+   hours (default 12). Login attempts are rate-limited to 10 per IP per
+   15 minutes.
+3. Once signed in, every admin call — picker candidates, publishing
+   events, listing submissions, status transitions — uses the server
+   session token. No GitHub PAT is ever held in the browser when
+   `GITHUB_TOKEN` is configured.
+4. The **Submissions** tab uses the same session, so you no longer need
+   to paste an `ADMIN_TOKEN` into the tab. The legacy override panel
+   ("Override API / token…") is still available for pointing the admin
+   at a different backend or for using the old `ADMIN_TOKEN` env var.
+5. Click **Pull approved into picker** to merge approved submissions
+   into the candidate list, then click **Save & Publish** to publish via
+   the new server-side `POST /api/admin/publish-events` endpoint.
+
+### Smoke test (5 minutes after a deploy)
+
+```bash
+# 1. Server is up
+curl -sf https://<your-railway-domain>/api/health
+# 2. Config reports the right flags
+curl -s https://<your-railway-domain>/api/config
+#   → expect admin_login_enabled:true, github_publish_enabled:true
+# 3. Login works
+curl -s -X POST https://<your-railway-domain>/api/admin/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"<ADMIN_USERNAME>","password":"<ADMIN_PASSWORD>"}'
+#   → { ok:true, token:"...", expires_at:"..." }
+# 4. Token unlocks admin endpoints
+TOKEN=<token-from-step-3>
+curl -s -H "Authorization: Bearer $TOKEN" \
+  https://<your-railway-domain>/api/admin/me
+#   → { ok:true, kind:"session", sub:"<ADMIN_USERNAME>" }
+```
+
+Then sign in via the browser at `/admin.html`, click **Reload candidates**,
+pick a couple of events, and hit **Save & Publish**. Confirm a new commit
+appears on `main` in the GitHub repo.
+
+### Legacy fallback
+
+If `GITHUB_TOKEN` is **not** set, the admin shows a "Use PAT instead"
+form alongside the login form. That flow is identical to the old
+behavior — paste a GitHub PAT with `contents:write` on
+`Tmpalori/thevic361` and publish from the browser. Use this only if you
+explicitly do not want a server-side token.
 
 ## Cloudflare Turnstile
 
@@ -99,9 +149,21 @@ npm start  # http://localhost:3000
 
 Without `DATABASE_URL`, submissions are written to `data/submissions.json`
 under the repo root (gitignored). Without `TURNSTILE_SECRET_KEY`,
-verification is bypassed (still honeypot + timing + rate limit). Without
-`ADMIN_TOKEN`, admin endpoints return 503 — set
-`ADMIN_TOKEN=dev npm start` to enable them locally.
+verification is bypassed (still honeypot + timing + rate limit).
+
+For local admin testing, set:
+
+```bash
+export ADMIN_USERNAME=admin
+export ADMIN_PASSWORD=hunter2
+export ADMIN_SESSION_SECRET=$(openssl rand -hex 32)
+# Optional: also enable server-side publishing
+export GITHUB_TOKEN=ghp_...   # contents:write on Tmpalori/thevic361
+npm start
+```
+
+Without these vars, admin endpoints return 503. The legacy `ADMIN_TOKEN`
+env var is also still accepted as an alternative for scripts.
 
 ## Tests
 

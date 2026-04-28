@@ -144,13 +144,17 @@ weekly publish flow.
 - Public form: `docs/submit.html` (mobile-first, honeypot + timing +
   Cloudflare Turnstile, server-side rate limited and dedupe-checked).
 - Backend: `server/index.js` (Express). Run `npm start` locally.
-- Admin Submissions tab: opens from `docs/admin.html`. Configure the
-  Railway API URL + `ADMIN_TOKEN` once and the tab lists pending
-  submissions for review.
+- Admin login: `docs/admin.html` now signs in with username + password
+  against the server (`ADMIN_USERNAME` / `ADMIN_PASSWORD` /
+  `ADMIN_SESSION_SECRET`). The server holds the GitHub publish token
+  (`GITHUB_TOKEN`), so the browser never needs a GitHub PAT.
+- Admin Submissions tab: shares the same login session — no separate
+  token needed.
 - Public-facing `events.json` strips submitter PII and admin-only
   metadata before publish.
 
-See `RAILWAY.md` for full Railway deployment + env var details.
+See `RAILWAY.md` for full Railway deployment + env var details (including
+the new login + GitHub token variables).
 
 ## Setup
 

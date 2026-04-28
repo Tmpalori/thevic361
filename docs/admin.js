@@ -1,8 +1,18 @@
 /* admin.js — The Vic 361 admin panel
  *
- * Static single-page admin: gated by a GitHub PAT stored in localStorage,
- * lets an editor pick events from candidates.json and publish docs/events.json
- * via the GitHub Contents API.
+ * Auth model:
+ *   1. Server login (preferred). POST /api/admin/login → bearer session token
+ *      stored as `vic361_admin_session`. Used for every /api/admin/* call,
+ *      including publishing events. The server holds GITHUB_TOKEN and writes
+ *      docs/events.json on our behalf so the browser never holds a PAT.
+ *   2. Legacy PAT (fallback). If the server reports `github_publish_enabled =
+ *      false` we fall back to the old browser-side GitHub Contents API flow
+ *      using a PAT in localStorage.
+ *
+ * State stored in localStorage:
+ *   vic361_admin_session  — bearer session token from /api/admin/login
+ *   vic361_admin_pat      — legacy GitHub PAT (only used in fallback mode)
+ *   vic361_admin_picks    — selected event keys
  */
 (function () {
   'use strict';
@@ -11,8 +21,9 @@
   const REPO_OWNER = 'Tmpalori';
   const REPO_NAME  = 'thevic361';
   const BRANCH     = 'main';
-  const PAT_KEY    = 'vic361_admin_pat';
-  const PICKS_KEY  = 'vic361_admin_picks';
+  const PAT_KEY      = 'vic361_admin_pat';
+  const SESSION_KEY  = 'vic361_admin_session';
+  const PICKS_KEY    = 'vic361_admin_picks';
 
   const CANDIDATES_PATH = 'candidates.json';
   const EVENTS_PATH     = 'docs/events.json';
@@ -23,10 +34,6 @@
     community: '📣', free: '🆓'
   };
 
-  // Source pill copy. The admin shows where every event came from so the
-  // editor can decide how much to trust it (an organizer-submitted event is
-  // different from a Sonar scrape). `inferSource()` figures out a source for
-  // legacy candidates that pre-date the explicit metadata.
   const SOURCE_LABEL = {
     submission: 'Submitted',
     local: 'Local YAML',
@@ -41,8 +48,6 @@
     if (!ev) return 'unknown';
     const explicit = ev._source || (ev.meta && ev.meta.source);
     if (explicit) return explicit;
-    // Legacy heuristics: if the event was added from local YAML it usually
-    // has no URL and was edited by hand; otherwise treat as candidate.
     const u = String(ev.url || '').toLowerCase();
     if (u.includes('facebook.com')) return 'facebook';
     if (u.includes('instagram.com')) return 'instagram';
@@ -61,33 +66,31 @@
 
   // ─── STATE ───
   const state = {
+    // Session bearer token (preferred). When present, used for /api/admin/*.
+    session: null,
+    // Legacy GitHub PAT (fallback only). Used to talk directly to api.github.com.
     pat: null,
+    // Reflects /api/config so we know which auth modes are usable.
+    serverConfig: null,
     candidates: [],
-    selected: new Set(), // event keys
-    // week: 'this' (Mon–Sun of the current local week), 'next', or 'upcoming'
-    // (everything from this Monday forward). Past dates are always hidden.
+    selected: new Set(),
     filters: { search: '', category: '', venue: '', week: 'this' }
   };
 
   // ─── HELPERS ───
   function eventKey(ev) {
-    // Stable key built from date + name + venue (no per-event id in source data).
     return [ev.date || '', ev.name || '', ev.venue || ''].join('|');
   }
 
-  // Monday of the local-time week containing `now` (defaults to today).
-  // Returned as a Date at local midnight.
   function getMondayOfWeek(now) {
     const base = now ? new Date(now.getTime()) : new Date();
     base.setHours(0, 0, 0, 0);
-    const dow = base.getDay(); // 0 = Sun, 1 = Mon, … 6 = Sat
+    const dow = base.getDay();
     const daysFromMonday = dow === 0 ? 6 : dow - 1;
     base.setDate(base.getDate() - daysFromMonday);
     return base;
   }
 
-  // Returns { mondayStr, sundayStr } as YYYY-MM-DD for the active week.
-  // offsetWeeks: 0 = this week, 1 = next week, …
   function getWeekRange(offsetWeeks, now) {
     const monday = getMondayOfWeek(now);
     if (offsetWeeks) monday.setDate(monday.getDate() + offsetWeeks * 7);
@@ -103,12 +106,9 @@
     return y + '-' + m + '-' + day;
   }
 
-  // Apply the week-bucket filter to a date string. Past dates (before this
-  // Monday) are excluded from every bucket so a stale collector run doesn't
-  // resurface last week's events as the primary review set.
   function inWeekBucket(dateStr, bucket, now) {
     if (!dateStr) return false;
-    if (bucket === 'all') return true; // test-only escape hatch; not in UI
+    if (bucket === 'all') return true;
     const thisMonday = toLocalDateStr(getMondayOfWeek(now));
     if (dateStr < thisMonday) return false;
     if (bucket === 'upcoming') return true;
@@ -119,12 +119,11 @@
 
   function isWeekend(dateStr) {
     if (!dateStr) return false;
-    // Parse YYYY-MM-DD as local date to avoid TZ drift.
     const parts = dateStr.split('-').map(Number);
     if (parts.length !== 3) return false;
     const d = new Date(parts[0], parts[1] - 1, parts[2]);
     const dow = d.getDay();
-    return dow === 0 || dow === 5 || dow === 6; // Fri/Sat/Sun
+    return dow === 0 || dow === 5 || dow === 6;
   }
 
   function formatDateHeading(dateStr) {
@@ -154,7 +153,16 @@
     if (kind === 'success') el.classList.add('is-success');
   }
 
-  // ─── PAT / AUTH ───
+  // ─── SESSION + PAT STORAGE ───
+  function getSession() {
+    try { return localStorage.getItem(SESSION_KEY); } catch (_) { return null; }
+  }
+  function setSession(tok) {
+    try { localStorage.setItem(SESSION_KEY, tok); } catch (_) {}
+  }
+  function clearSession() {
+    try { localStorage.removeItem(SESSION_KEY); } catch (_) {}
+  }
   function getPat() {
     try { return localStorage.getItem(PAT_KEY); } catch (_) { return null; }
   }
@@ -162,10 +170,12 @@
     try { localStorage.setItem(PAT_KEY, pat); } catch (_) {}
   }
   function clearPat() {
-    try {
-      localStorage.removeItem(PAT_KEY);
-      localStorage.removeItem(PICKS_KEY);
-    } catch (_) {}
+    try { localStorage.removeItem(PAT_KEY); } catch (_) {}
+  }
+  function clearAuth() {
+    clearSession();
+    clearPat();
+    try { localStorage.removeItem(PICKS_KEY); } catch (_) {}
   }
 
   function showAuthGate(errMsg) {
@@ -191,7 +201,59 @@
     if (app) app.hidden = false;
   }
 
-  // ─── GITHUB API ───
+  // ─── SERVER API ───
+  function apiBaseUrl() {
+    // Same origin as the admin page. The Express server serves both, so this
+    // works without configuration on Railway.
+    return '';
+  }
+
+  async function fetchServerConfig() {
+    try {
+      const r = await fetch(apiBaseUrl() + '/api/config', { cache: 'no-store' });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (_) { return null; }
+  }
+
+  async function adminFetch(path, init) {
+    const headers = Object.assign({}, (init && init.headers) || {});
+    if (state.session) headers['Authorization'] = 'Bearer ' + state.session;
+    if (init && init.body && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+    const res = await fetch(apiBaseUrl() + path, Object.assign({}, init, { headers }));
+    let json = null;
+    try { json = await res.json(); } catch (_) {}
+    if (res.status === 401) {
+      // Session expired or revoked; force a fresh login.
+      state.session = null;
+      clearSession();
+      showAuthGate('Session expired — please sign in again.');
+    }
+    return { res, json };
+  }
+
+  async function login({ username, password }) {
+    const r = await fetch(apiBaseUrl() + '/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    let json = null;
+    try { json = await r.json(); } catch (_) {}
+    if (!r.ok || !json || !json.ok) {
+      const msg = (json && json.error === 'rate-limited')
+        ? 'Too many sign-in attempts. Try again in a few minutes.'
+        : (json && json.error === 'login-not-configured')
+          ? 'Server login is not configured. Set ADMIN_USERNAME / ADMIN_PASSWORD / ADMIN_SESSION_SECRET on the server.'
+          : 'Invalid username or password.';
+      throw new Error(msg);
+    }
+    return json.token;
+  }
+
+  // ─── GITHUB API (legacy PAT fallback) ───
   function ghHeaders() {
     return {
       Authorization: 'Bearer ' + state.pat,
@@ -199,56 +261,49 @@
       'X-GitHub-Api-Version': '2022-11-28'
     };
   }
-
-  function ghContentsUrl(path, ref) {
+  function ghContentsUrl(p, ref) {
     let u = 'https://api.github.com/repos/' + REPO_OWNER + '/' + REPO_NAME +
-            '/contents/' + path;
+            '/contents/' + p;
     if (ref) u += '?ref=' + encodeURIComponent(ref);
     return u;
   }
-
-  async function ghGetJsonFile(path) {
-    const res = await fetch(ghContentsUrl(path, BRANCH), {
+  async function ghGetJsonFile(p) {
+    const res = await fetch(ghContentsUrl(p, BRANCH), {
       headers: ghHeaders(), cache: 'no-store'
     });
     if (!res.ok) {
-      const msg = 'GitHub fetch failed (' + res.status + ') for ' + path;
-      throw new Error(msg);
+      throw new Error('GitHub fetch failed (' + res.status + ') for ' + p);
     }
     const meta = await res.json();
     let text;
     if (meta.encoding === 'base64' && typeof meta.content === 'string') {
-      // GitHub may wrap base64 in newlines.
       text = atob(meta.content.replace(/\n/g, ''));
-      // Decode UTF-8 bytes.
       try {
         const bytes = Uint8Array.from(text, c => c.charCodeAt(0));
         text = new TextDecoder('utf-8').decode(bytes);
-      } catch (_) { /* fall through with non-UTF8 text */ }
+      } catch (_) { /* keep best-effort decode */ }
     } else if (meta.download_url) {
       const r2 = await fetch(meta.download_url);
       text = await r2.text();
     } else {
-      throw new Error('Unsupported GitHub response for ' + path);
+      throw new Error('Unsupported GitHub response for ' + p);
     }
     return { sha: meta.sha, data: JSON.parse(text) };
   }
-
   function utf8ToBase64(str) {
     const bytes = new TextEncoder().encode(str);
     let bin = '';
     for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
     return btoa(bin);
   }
-
-  async function ghPutJsonFile(path, dataObj, message, sha) {
+  async function ghPutJsonFile(p, dataObj, message, sha) {
     const body = {
       message: message,
       content: utf8ToBase64(JSON.stringify(dataObj, null, 2) + '\n'),
       branch: BRANCH
     };
     if (sha) body.sha = sha;
-    const res = await fetch(ghContentsUrl(path), {
+    const res = await fetch(ghContentsUrl(p), {
       method: 'PUT',
       headers: Object.assign({ 'Content-Type': 'application/json' }, ghHeaders()),
       body: JSON.stringify(body)
@@ -260,7 +315,6 @@
     }
     return res.json();
   }
-
   async function verifyPat(pat) {
     const res = await fetch('https://api.github.com/repos/' + REPO_OWNER + '/' + REPO_NAME, {
       headers: {
@@ -277,6 +331,15 @@
   }
 
   // ─── CANDIDATES ───
+  function publishMode() {
+    // Server publish if the server says it has a token AND we have a session.
+    if (state.session && state.serverConfig && state.serverConfig.github_publish_enabled) {
+      return 'server';
+    }
+    if (state.pat) return 'pat';
+    return null;
+  }
+
   async function loadCandidates() {
     const listEl = document.getElementById('picker-list');
     const loadEl = document.getElementById('picker-loading');
@@ -286,7 +349,20 @@
     if (listEl) listEl.innerHTML = '';
 
     try {
-      const { data } = await ghGetJsonFile(CANDIDATES_PATH);
+      let data;
+      const mode = publishMode();
+      if (mode === 'server') {
+        const { res, json } = await adminFetch('/api/admin/candidates');
+        if (!res.ok || !json || !json.ok) {
+          throw new Error((json && json.message) || 'Failed to load candidates from server.');
+        }
+        data = json.data;
+      } else if (mode === 'pat') {
+        const got = await ghGetJsonFile(CANDIDATES_PATH);
+        data = got.data;
+      } else {
+        throw new Error('No publishing credentials configured.');
+      }
       const events = Array.isArray(data && data.events) ? data.events : [];
       state.candidates = events.slice().sort((a, b) => {
         const da = (a.date || '') + ' ' + (a.time || '');
@@ -431,16 +507,13 @@
       );
     }).join('');
 
-    // Wire checkboxes.
     listEl.querySelectorAll('input[type="checkbox"][data-key]').forEach(cb => {
       cb.addEventListener('change', () => {
         const k = cb.getAttribute('data-key');
         if (cb.checked) state.selected.add(k);
         else state.selected.delete(k);
         persistSelections();
-        // Re-render only counts (cheap) by updating the day-group header text.
         updateCounts();
-        // The per-day counts inside h2 also need refresh; simplest is full rerender.
         renderPicker();
       });
     });
@@ -481,8 +554,6 @@
     } catch (_) {}
   }
 
-  // Drop selections whose event date is before this Monday. Prevents picks
-  // from last week's review session from leaking into the new week's publish.
   function pruneStalePastSelections() {
     const thisMonday = toLocalDateStr(getMondayOfWeek());
     const keep = new Set();
@@ -500,11 +571,6 @@
   function getPickedEvents() {
     return state.candidates.filter(ev => state.selected.has(eventKey(ev)));
   }
-  // Public events.json must never carry submitter PII or admin-only fields.
-  // Strip every key that starts with "_" plus the explicit submitter list
-  // before writing — defense in depth on top of API-side scoping. Public
-  // _source is preserved without the underscore prefix as `source` so the
-  // public site can render attribution if it ever wants to.
   const PRIVATE_KEYS = new Set([
     'submitter_name', 'submitter_email', 'submitter_ip', 'user_agent',
     'admin_notes', 'review_history'
@@ -529,10 +595,6 @@
   }
 
   // ─── PREVIEW TAB ───
-  // Write the payload to sessionStorage under a short key, then point the
-  // iframe at index.html?previewKey=<key>. Keeps the URL short regardless of
-  // how many events are selected (the old ?preview=<json-blob> form blew past
-  // browser URI limits once the picks list got large).
   const PREVIEW_STORAGE_PREFIX = 'vic361_preview_';
 
   function generatePreviewKey() {
@@ -642,24 +704,35 @@
       setStatus('Select at least one event before publishing.', 'error');
       return;
     }
+    const mode = publishMode();
+    if (!mode) {
+      setStatus('Cannot publish — no GitHub credentials available.', 'error');
+      return;
+    }
     if (!confirm('Publish ' + picks.length + ' event(s) to docs/events.json on main?')) {
       return;
     }
     if (btn) btn.disabled = true;
     setStatus('Publishing…');
     try {
-      let sha = null;
-      try {
-        const cur = await ghGetJsonFile(EVENTS_PATH);
-        sha = cur.sha;
-      } catch (err) {
-        // 404 is fine — file may not exist yet. Anything else, surface but try.
-        console.warn('Could not get current events.json sha:', err.message);
-      }
       const payload = buildEventsPayload();
-      const msg = 'Publish events ' + new Date().toISOString().slice(0, 10) +
-                  ' (' + picks.length + ' picks)';
-      await ghPutJsonFile(EVENTS_PATH, payload, msg, sha);
+      if (mode === 'server') {
+        const { res, json } = await adminFetch('/api/admin/publish-events', {
+          method: 'POST',
+          body: JSON.stringify({ events: payload.events })
+        });
+        if (!res.ok || !json || !json.ok) {
+          throw new Error((json && (json.message || json.error)) || ('Publish failed (' + res.status + ')'));
+        }
+      } else {
+        // Legacy PAT fallback.
+        let sha = null;
+        try { sha = (await ghGetJsonFile(EVENTS_PATH)).sha; }
+        catch (err) { console.warn('Could not get current events.json sha:', err.message); }
+        const msg = 'Publish events ' + new Date().toISOString().slice(0, 10) +
+                    ' (' + picks.length + ' picks)';
+        await ghPutJsonFile(EVENTS_PATH, payload, msg, sha);
+      }
       setStatus('Published ' + picks.length + ' event(s) to docs/events.json.', 'success');
     } catch (err) {
       console.error(err);
@@ -675,6 +748,7 @@
     tabs.forEach(t => t.classList.toggle('is-active', t.dataset.tab === name));
     const panels = {
       picker: document.getElementById('tab-picker'),
+      submissions: document.getElementById('tab-submissions'),
       preview: document.getElementById('tab-preview'),
       newsletter: document.getElementById('tab-newsletter')
     };
@@ -688,13 +762,58 @@
   }
 
   // ─── INIT ───
+  function applyServerConfigToUi(cfg) {
+    const patForm = document.getElementById('auth-pat-form');
+    const loginForm = document.getElementById('auth-form');
+    const help = document.getElementById('auth-help');
+    if (!cfg) return;
+    if (cfg.admin_login_enabled) {
+      if (loginForm) loginForm.hidden = false;
+      if (help) help.textContent = 'Sign in with your admin username and password.';
+    } else {
+      if (loginForm) loginForm.hidden = true;
+      if (help) help.textContent = 'Server login is not configured. Set ADMIN_USERNAME / ADMIN_PASSWORD / ADMIN_SESSION_SECRET on the server, or use a GitHub PAT below.';
+    }
+    // Show the PAT fallback only if the server cannot publish on our behalf.
+    if (patForm) patForm.hidden = Boolean(cfg.github_publish_enabled);
+  }
+
+  async function authedSession() {
+    // Verify the stored session is still valid by hitting /api/admin/me.
+    if (!state.session) return false;
+    const r = await fetch(apiBaseUrl() + '/api/admin/me', {
+      headers: { Authorization: 'Bearer ' + state.session }
+    });
+    return r.ok;
+  }
+
   function wireEvents() {
     const authForm = document.getElementById('auth-form');
     if (authForm) {
       authForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const u = (document.getElementById('auth-username') || {}).value || '';
+        const p = (document.getElementById('auth-password') || {}).value || '';
+        const errEl = document.getElementById('auth-error');
+        if (errEl) errEl.hidden = true;
+        try {
+          const tok = await login({ username: u.trim(), password: p });
+          setSession(tok);
+          state.session = tok;
+          showApp();
+          loadCandidates();
+        } catch (err) {
+          showAuthGate(err.message || 'Sign-in failed.');
+        }
+      });
+    }
+
+    const patForm = document.getElementById('auth-pat-form');
+    if (patForm) {
+      patForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
         const input = document.getElementById('auth-pat');
-        const pat = (input.value || '').trim();
+        const pat = (input && input.value || '').trim();
         if (!pat) return;
         const errEl = document.getElementById('auth-error');
         if (errEl) errEl.hidden = true;
@@ -713,7 +832,8 @@
     const signOut = document.getElementById('signout-btn');
     if (signOut) {
       signOut.addEventListener('click', () => {
-        clearPat();
+        clearAuth();
+        state.session = null;
         state.pat = null;
         state.selected = new Set();
         showAuthGate();
@@ -756,16 +876,34 @@
     if (newsCopy) newsCopy.addEventListener('click', copyNewsletter);
   }
 
-  function init() {
+  async function init() {
     wireEvents();
-    const pat = getPat();
-    if (pat) {
-      state.pat = pat;
+    state.session = getSession();
+    state.pat = getPat();
+    // Best-effort fetch of server config so the UI knows which auth flows are
+    // usable. Failures here are non-fatal — falls back to login form visible.
+    state.serverConfig = await fetchServerConfig();
+    applyServerConfigToUi(state.serverConfig);
+
+    if (state.session) {
+      // Probe the session before showing the app so an expired session lands
+      // the editor on the login form instead of the picker with broken calls.
+      const ok = await authedSession();
+      if (ok) {
+        showApp();
+        loadCandidates();
+        return;
+      }
+      // Session was bad — clear and fall through.
+      state.session = null;
+      clearSession();
+    }
+    if (state.pat) {
       showApp();
       loadCandidates();
-    } else {
-      showAuthGate();
+      return;
     }
+    showAuthGate();
   }
 
   if (document.readyState === 'loading') {
@@ -775,12 +913,6 @@
   }
 
   // ─── TEST EXPORTS ───
-  // Expose pure helpers for unit tests in environments that have a global hook.
-  // Browser builds simply ignore this.
-  // Merge a list of candidate-shaped events into state.candidates without
-  // duplicating by eventKey. Used by the Submissions tab's "Pull approved
-  // into picker" action so the editor can include approved public submissions
-  // in the next publish without leaving the picker.
   function mergeCandidateEvents(extra) {
     if (!Array.isArray(extra) || !extra.length) return 0;
     const existing = new Set(state.candidates.map(eventKey));
@@ -812,11 +944,13 @@
     getMondayOfWeek, getWeekRange, inWeekBucket, toLocalDateStr,
     pruneStalePastSelections,
     inferSource, sourceLabel, mergeCandidateEvents, stripPrivateFields,
+    publishMode,
     _state: state,
     _constants: {
       WEEKDAY_TARGET_MIN, WEEKDAY_TARGET_MAX,
       WEEKEND_TARGET_MIN, WEEKEND_TARGET_MAX,
-      PAT_KEY, PICKS_KEY, REPO_OWNER, REPO_NAME, BRANCH,
+      PAT_KEY, PICKS_KEY, SESSION_KEY,
+      REPO_OWNER, REPO_NAME, BRANCH,
       PREVIEW_STORAGE_PREFIX
     }
   };

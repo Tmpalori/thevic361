@@ -3,7 +3,7 @@
 // admin-submissions.js so we can assert on the rendered DOM and the exposed
 // helpers.
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -25,6 +25,23 @@ function bootDom({ pat = null, apiBase = '', token = '' } = {}) {
   if (pat) window.localStorage.setItem('vic361_admin_pat', pat);
   if (apiBase) window.localStorage.setItem('vic361_submissions_api_url', apiBase);
   if (token) window.localStorage.setItem('vic361_submissions_admin_token', token);
+
+  // admin.js calls /api/config and /api/admin/me on init. Stub them out in
+  // jsdom so init() doesn't hang on a real network call.
+  window.fetch = vi.fn(async (url) => {
+    const u = String(url);
+    if (u.includes('/api/admin/me')) {
+      return { ok: false, status: 401, json: async () => ({ ok: false }) };
+    }
+    if (u.includes('/api/config')) {
+      return { ok: true, status: 200, json: async () => ({
+        admin_login_enabled: false,
+        admin_legacy_token_enabled: false,
+        github_publish_enabled: false
+      }) };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  });
 
   // eslint-disable-next-line no-eval
   (0, eval)(ADMIN_JS);

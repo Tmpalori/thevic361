@@ -62,6 +62,16 @@ code {
   color: var(--admin-text);
 }
 .btn--outline:hover { border-color: var(--admin-primary); }
+.btn--link {
+  background: transparent;
+  border: none;
+  color: var(--admin-primary);
+  text-decoration: underline;
+  padding: 0.25rem 0;
+  font-weight: 500;
+}
+.btn--link:hover { color: var(--admin-primary-hover); }
+.submissions-config-toggle { margin-bottom: 0.5rem; }
 
 /* ─── AUTH GATE ─── */
 .auth-gate {
