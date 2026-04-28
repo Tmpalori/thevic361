@@ -298,7 +298,14 @@ export async function createApp(opts = {}) {
       patch.status = body.status;
     }
     if (body.payload !== undefined) {
-      const v = validateSubmission(body.payload);
+      // Admin edits run validation in lenient mode for submitter contact
+      // fields. The public form still enforces first/last/email/phone, but a
+      // legacy row created before PR #32 doesn't have those fields and an
+      // admin shouldn't have to retype someone else's info to fix a typo on
+      // the venue. Format checks (email shape, phone digit count) still run
+      // when a value is present. The row-level submitter_email and
+      // submitter_name are preserved by leaving them out of the patch.
+      const v = validateSubmission(body.payload, { adminEdit: true });
       if (!v.ok) return res.status(400).json({ ok: false, errors: v.errors });
       patch.payload = normalizePayload(v.data.payload);
     }

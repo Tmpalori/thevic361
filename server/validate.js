@@ -58,7 +58,15 @@ export function normalizeUrl(raw) {
   return 'https://' + s;
 }
 
-export function validateSubmission(input) {
+export function validateSubmission(input, opts = {}) {
+  // adminEdit: true relaxes the submitter contact requirements (first/last
+  // name, email, phone). The public submit form still enforces them via the
+  // default mode; the admin edit view shouldn't be blocked when a legacy row
+  // (created before PR #32 made those fields required) lacks them, and an
+  // admin editing event details shouldn't have to retype someone else's
+  // contact info to save a typo fix on the venue. Format is still validated
+  // when a value is provided.
+  const adminEdit = Boolean(opts.adminEdit);
   const errors = {};
   if (!input || typeof input !== 'object') {
     return { ok: false, errors: { _form: 'Invalid request body.' } };
@@ -117,8 +125,10 @@ export function validateSubmission(input) {
   // schema work can split them out without losing data.
   const submitter_first_name = clean(input.submitter_first_name, MAX_SUBMITTER_NAME_PART);
   const submitter_last_name = clean(input.submitter_last_name, MAX_SUBMITTER_NAME_PART);
-  if (!submitter_first_name) errors.submitter_first_name = 'First name is required.';
-  if (!submitter_last_name) errors.submitter_last_name = 'Last name is required.';
+  if (!adminEdit) {
+    if (!submitter_first_name) errors.submitter_first_name = 'First name is required.';
+    if (!submitter_last_name) errors.submitter_last_name = 'Last name is required.';
+  }
 
   let submitter_name = clean(input.submitter_name, MAX_SUBMITTER_NAME);
   if (!submitter_name) {
@@ -127,14 +137,14 @@ export function validateSubmission(input) {
 
   const submitter_email = clean(input.submitter_email, MAX_EMAIL);
   if (!submitter_email) {
-    errors.submitter_email = 'Email is required.';
+    if (!adminEdit) errors.submitter_email = 'Email is required.';
   } else if (!EMAIL_RE.test(submitter_email)) {
     errors.submitter_email = 'Email looks invalid.';
   }
 
   const submitter_phone = clean(input.submitter_phone, MAX_PHONE);
   if (!submitter_phone) {
-    errors.submitter_phone = 'Phone number is required.';
+    if (!adminEdit) errors.submitter_phone = 'Phone number is required.';
   } else {
     const digits = (submitter_phone.match(PHONE_DIGIT_RE) || []).length;
     if (digits < 7) errors.submitter_phone = 'Phone number looks invalid.';
