@@ -1,8 +1,24 @@
 #!/usr/bin/env python3
 """
 The Vic 361 — Event Collector
-Fetches events from public Victoria, TX sources and outputs events.json
-for the website.
+Fetches events from public Victoria, TX sources and outputs candidates.json
+(raw/unscreened) plus, optionally, docs/events.json (the bundled fallback
+the static site reads when the Railway Postgres store has nothing).
+
+Source of truth for the live site:
+  - In production, the Express app on Railway serves /events.json from
+    Postgres (the `published_events` table written by the admin's
+    Save & Publish flow). This is the live, curated source.
+  - docs/events.json is a static bundled SNAPSHOT used as a fallback when
+    Railway has not yet published anything (fresh deploy) or when the site
+    is served directly from GitHub Pages without the Express layer.
+  - candidates.json is the full collector output — every raw event the
+    scrapers found this run, ready for the admin to screen and pick from.
+
+Because docs/events.json is committed to the repo and serves as a fallback,
+the weekly CI run uses --candidates-only so it does NOT overwrite the
+curated fallback with un-screened, un-published events. Local/manual runs
+without that flag keep the old behavior for backward compatibility.
 
 Data sources (in priority order):
   1. local_events.yaml — manually curated + recurring events (BACKBONE)
@@ -12,11 +28,12 @@ Data sources (in priority order):
 
 Usage:
   pip install -r requirements.txt
-  python collect_events.py                        # output to ./events.json
-  python collect_events.py --output /path/to.json  # custom output path
-  python collect_events.py --days 14               # 14 days ahead (default: 7)
-  python collect_events.py --skip-web              # local YAML only
-  python collect_events.py --skip-ai               # skip AI cleanup
+  python collect_events.py                          # writes candidates.json + ./events.json
+  python collect_events.py --candidates-only        # CI-safe: only writes candidates.json
+  python collect_events.py --output /path/to.json   # custom output path
+  python collect_events.py --days 14                # 14 days ahead (default: 7)
+  python collect_events.py --skip-web               # local YAML only
+  python collect_events.py --skip-ai                # skip AI cleanup
 """
 
 import argparse
@@ -249,46 +266,88 @@ def guess_free(name, description="", venue=""):
 # ─── SOURCE: LOCAL YAML (backbone) ──────────────────────────────────────────
 
 def load_local_events(yaml_path, days_ahead=7):
-    """Load recurring + one-time events from the YAML file."""
+    """Load recurring + one-time events from the YAML file.
+
+    Wrapped in defensive error handling: a malformed local_events.yaml
+    (bad indentation, an editor mid-save, etc.) must NOT crash the whole
+    collector run. We log a Sentry warning so the breakage is visible,
+    print a console message for the GitHub Actions log, and return an
+    empty list so the rest of the pipeline (web scrapers, AI review,
+    candidates.json) still gets to run.
+    """
     events = []
     today = _WINDOW_START
     end_date = _WINDOW_END
 
     if not os.path.exists(yaml_path):
         print(f"  [Local] File not found: {yaml_path}")
+        _sentry_warn(
+            f"[local_events] YAML file not found: {yaml_path}",
+            scraper="local_events",
+        )
         return events
 
-    with open(yaml_path, "r") as f:
-        data = yaml.safe_load(f) or {}
+    try:
+        with open(yaml_path, "r") as f:
+            data = yaml.safe_load(f) or {}
+    except (yaml.YAMLError, OSError, UnicodeDecodeError) as e:
+        # YAML parse error or I/O error — surface to Sentry but keep the run alive.
+        print(f"  [Local] Failed to read/parse {yaml_path}: {e}")
+        _sentry_exception("local_events")
+        return events
+    except Exception as e:  # pragma: no cover - last-resort safety net
+        print(f"  [Local] Unexpected error reading {yaml_path}: {e}")
+        _sentry_exception("local_events")
+        return events
+
+    if not isinstance(data, dict):
+        # YAML loaded but isn't a mapping (e.g. someone replaced the file
+        # with a stray list). Treat as empty rather than crashing later.
+        print(f"  [Local] {yaml_path} did not contain a mapping; skipping.")
+        _sentry_warn(
+            f"[local_events] YAML root is not a mapping in {yaml_path}",
+            scraper="local_events",
+        )
+        return events
 
     DAY_MAP = {
         "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
         "friday": 4, "saturday": 5, "sunday": 6,
     }
 
-    # Recurring events
+    # Recurring events — per-entry try/except so one bad row doesn't take down the whole list.
     for ev in data.get("recurring", []) or []:
-        dow = DAY_MAP.get(ev.get("day", "").lower())
-        if dow is None:
-            continue
-        start = datetime.strptime(ev["start_date"], "%Y-%m-%d").date() if ev.get("start_date") else today - timedelta(days=1)
-        end = datetime.strptime(ev["end_date"], "%Y-%m-%d").date() if ev.get("end_date") else end_date + timedelta(days=365)
+        try:
+            if not isinstance(ev, dict):
+                continue
+            dow = DAY_MAP.get(ev.get("day", "").lower())
+            if dow is None:
+                continue
+            start = datetime.strptime(ev["start_date"], "%Y-%m-%d").date() if ev.get("start_date") else today - timedelta(days=1)
+            end = datetime.strptime(ev["end_date"], "%Y-%m-%d").date() if ev.get("end_date") else end_date + timedelta(days=365)
 
-        d = today
-        while d <= end_date:
-            if d.weekday() == dow and start <= d <= end:
-                events.append({
-                    "date": d.strftime("%Y-%m-%d"),
-                    "name": ev["name"],
-                    "time": ev.get("time", ""),
-                    "venue": ev.get("venue", ""),
-                    "address": ev.get("address", ""),
-                    "description": ev.get("description", ""),
-                    "icons": ev.get("icons", []),
-                    "free": ev.get("free", False),
-                    "url": ev.get("url", ""),
-                })
-            d += timedelta(days=1)
+            d = today
+            while d <= end_date:
+                if d.weekday() == dow and start <= d <= end:
+                    events.append({
+                        "date": d.strftime("%Y-%m-%d"),
+                        "name": ev["name"],
+                        "time": ev.get("time", ""),
+                        "venue": ev.get("venue", ""),
+                        "address": ev.get("address", ""),
+                        "description": ev.get("description", ""),
+                        "icons": ev.get("icons", []),
+                        "free": ev.get("free", False),
+                        "url": ev.get("url", ""),
+                    })
+                d += timedelta(days=1)
+        except (ValueError, KeyError, TypeError) as e:
+            print(f"  [Local] Skipping malformed recurring entry: {e}")
+            _sentry_warn(
+                "[local_events] malformed recurring entry skipped",
+                scraper="local_events",
+            )
+            continue
 
     # One-time events
     for ev in data.get("events", []) or []:
@@ -2914,6 +2973,17 @@ def main():
     parser.add_argument("--skip-ai", action="store_true", help="Skip AI cleanup")
     parser.add_argument("--no-backfill", action="store_true",
                         help="Don't backfill to Monday of this week (default backfills)")
+    parser.add_argument(
+        "--candidates-only",
+        action="store_true",
+        help=(
+            "Only write candidates.json; do NOT overwrite docs/events.json. "
+            "Used by the weekly CI workflow so it can populate candidates "
+            "for admin review without clobbering the curated fallback. "
+            "The live source of truth is the Railway Postgres "
+            "`published_events` row written by the admin Save & Publish flow."
+        ),
+    )
     args = parser.parse_args()
 
     # Reset the per-run Apify tombstone so a successful run after a 403 day
@@ -3018,11 +3088,21 @@ def main():
         "sponsor": extras["sponsor"],
     }
 
-    # 7. Write events.json (approved / live events)
+    # 7. Write events.json (curated/live snapshot)
+    #
+    # In --candidates-only mode (the weekly CI workflow uses this), we skip
+    # this write entirely. Only the admin Save & Publish flow should be
+    # updating the curated event list — letting CI silently overwrite this
+    # file with un-screened scraper output is the bug the source-of-truth
+    # audit flagged.
     out_path = os.path.abspath(args.output)
-    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    with open(out_path, "w") as f:
-        json.dump(output, f, indent=2)
+    if args.candidates_only:
+        print(f"\n⏭  --candidates-only: skipping write to {out_path} "
+              f"(curated fallback preserved; admin Save & Publish owns this file).")
+    else:
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        with open(out_path, "w") as f:
+            json.dump(output, f, indent=2)
 
     # 8. Write candidates.json (all events for screening)
     candidates_path = os.path.abspath(args.candidates)
@@ -3034,7 +3114,11 @@ def main():
         json.dump(candidates_output, f, indent=2)
     print(f"  Candidates: {candidates_path}")
 
-    print(f"\n✅ {out_path}")
+    if args.candidates_only:
+        print(f"\n✅ candidates.json updated ({len(merged)} events). "
+              f"docs/events.json left untouched.")
+    else:
+        print(f"\n✅ {out_path}")
     print(f"   {len(merged)} events across {args.days} days")
 
     day_counts = Counter(e["date"] for e in merged)
