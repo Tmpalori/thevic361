@@ -69,8 +69,11 @@ const validBody = (overrides = {}) => Object.assign({
   icons: ['music', 'drinks'],
   free: false,
   submitter_kind: 'organizer',
+  submitter_first_name: 'Jane',
+  submitter_last_name: 'Tester',
   submitter_name: 'Jane Tester',
   submitter_email: 'jane@example.com',
+  submitter_phone: '(361) 555-0123',
   elapsed_ms: 5000
 }, overrides);
 
@@ -112,10 +115,59 @@ describe('POST /api/submissions — validation', () => {
     expect(r.json.errors.url).toBeDefined();
   });
 
+  it('accepts and normalizes a bare-host URL by adding https://', async () => {
+    const r = await fetchJson('POST', '/api/submissions', validBody({ url: 'example.com/event' }));
+    expect(r.status).toBe(201);
+    const list = await fetchJson('GET', '/api/admin/submissions', undefined, {
+      Authorization: 'Bearer test-admin-token'
+    });
+    expect(list.json.submissions[0].payload.url).toBe('https://example.com/event');
+  });
+
+  it('accepts a www-prefixed URL without scheme', async () => {
+    const r = await fetchJson('POST', '/api/submissions', validBody({
+      url: 'www.example.com', name: 'Other Show', date: '2026-06-01'
+    }));
+    expect(r.status).toBe(201);
+    const list = await fetchJson('GET', '/api/admin/submissions', undefined, {
+      Authorization: 'Bearer test-admin-token'
+    });
+    const stored = list.json.submissions.find(s => s.payload.name === 'Other Show');
+    expect(stored.payload.url).toBe('https://www.example.com');
+  });
+
   it('rejects malformed emails', async () => {
     const r = await fetchJson('POST', '/api/submissions', validBody({ submitter_email: 'not-an-email' }));
     expect(r.status).toBe(400);
     expect(r.json.errors.submitter_email).toBeDefined();
+  });
+
+  it('rejects when address is missing', async () => {
+    const r = await fetchJson('POST', '/api/submissions', validBody({ address: '' }));
+    expect(r.status).toBe(400);
+    expect(r.json.errors.address).toBeDefined();
+  });
+
+  it('rejects when first name, last name, email, or phone is missing', async () => {
+    const r = await fetchJson('POST', '/api/submissions', validBody({
+      submitter_first_name: '',
+      submitter_last_name: '',
+      submitter_email: '',
+      submitter_phone: ''
+    }));
+    expect(r.status).toBe(400);
+    expect(r.json.errors).toMatchObject({
+      submitter_first_name: expect.any(String),
+      submitter_last_name: expect.any(String),
+      submitter_email: expect.any(String),
+      submitter_phone: expect.any(String)
+    });
+  });
+
+  it('rejects an obviously-wrong phone number', async () => {
+    const r = await fetchJson('POST', '/api/submissions', validBody({ submitter_phone: 'abc' }));
+    expect(r.status).toBe(400);
+    expect(r.json.errors.submitter_phone).toBeDefined();
   });
 
   it('drops icons that are not in the allow-list', async () => {

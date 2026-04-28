@@ -60,7 +60,10 @@ export function normalizePayload(input) {
     url: s(input.url, 500),
     description: s(input.description, 2000),
     icons,
-    free: Boolean(input.free)
+    free: Boolean(input.free),
+    submitter_first_name: s(input.submitter_first_name, 60),
+    submitter_last_name: s(input.submitter_last_name, 60),
+    submitter_phone: s(input.submitter_phone, 40)
   };
 }
 
