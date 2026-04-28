@@ -581,6 +581,23 @@ code {
   color: var(--pill-candidate-fg);
 }
 
+/*
+ * "Published" pill marks candidates that are currently live on the public
+ * site (sourced from /api/admin/published-events on load). Distinct color
+ * so the operator can see at a glance which checked rows are already live
+ * vs. session-only picks. Uses theme-aware semantic success colors.
+ */
+.src-pill--published {
+  background: rgba(34, 139, 90, 0.12);
+  border-color: rgba(34, 139, 90, 0.4);
+  color: #228b5a;
+}
+[data-theme="dark"] .src-pill--published {
+  background: rgba(123, 226, 174, 0.14);
+  border-color: rgba(123, 226, 174, 0.45);
+  color: #7be2ae;
+}
+
 .src-meta {
   font-size: 0.72rem;
   color: var(--admin-muted);
