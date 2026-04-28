@@ -133,6 +133,25 @@ events:
     url: ""
 ```
 
+## Public Event Submissions (v1)
+
+A bot-resistant **Submit an Event** flow lives at `/submit.html`, served
+by a small Express backend in `server/`. Submissions land in a Postgres
+table (or a JSON file fallback), where the admin can approve, reject,
+mark duplicate, or edit them before pulling them into the existing
+weekly publish flow.
+
+- Public form: `docs/submit.html` (mobile-first, honeypot + timing +
+  Cloudflare Turnstile, server-side rate limited and dedupe-checked).
+- Backend: `server/index.js` (Express). Run `npm start` locally.
+- Admin Submissions tab: opens from `docs/admin.html`. Configure the
+  Railway API URL + `ADMIN_TOKEN` once and the tab lists pending
+  submissions for review.
+- Public-facing `events.json` strips submitter PII and admin-only
+  metadata before publish.
+
+See `RAILWAY.md` for full Railway deployment + env var details.
+
 ## Setup
 
 See `SETUP_GUIDE.md` for full setup instructions.

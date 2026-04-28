@@ -57,12 +57,12 @@ describe('admin.html static structure', () => {
     }
   });
 
-  it('exposes three tab buttons', () => {
+  it('exposes the four admin tab buttons', () => {
     bootDom();
     const tabs = document.querySelectorAll('.tab-btn');
-    expect(tabs.length).toBe(3);
+    expect(tabs.length).toBe(4);
     expect(Array.from(tabs).map(t => t.dataset.tab).sort())
-      .toEqual(['newsletter', 'picker', 'preview']);
+      .toEqual(['newsletter', 'picker', 'preview', 'submissions']);
   });
 });
 

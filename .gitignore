@@ -6,3 +6,5 @@ test_events.json
 venv/
 node_modules/
 package-lock.json
+# Local fallback storage when DATABASE_URL is not set.
+data/

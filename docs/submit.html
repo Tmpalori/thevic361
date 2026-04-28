@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Submit an Event — The Vic 361</title>
+<meta name="description" content="Tell us about an event happening in Victoria, TX. We review every submission before it goes on the site.">
+<meta name="robots" content="index, follow">
+
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="./base.css">
+<link rel="stylesheet" href="./submit.css">
+</head>
+<body>
+  <header class="submit-header">
+    <a class="submit-back" href="./index.html" aria-label="Back to The Vic 361">
+      <span aria-hidden="true">←</span> The Vic 361
+    </a>
+  </header>
+
+  <main class="submit-main">
+    <section class="submit-card" id="form-card">
+      <h1>Submit an event</h1>
+      <p class="submit-lede">
+        Got something happening in Victoria? Send it our way. We review every
+        submission before it shows up on the site.
+      </p>
+
+      <form id="submit-form" class="submit-form" novalidate>
+
+        <div class="field">
+          <label for="f-name">Event name *</label>
+          <input id="f-name" name="name" type="text" required maxlength="200"
+                 autocomplete="off" placeholder="Saturday Night Live Music">
+          <p class="field-error" data-error-for="name"></p>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="f-date">Date *</label>
+            <input id="f-date" name="date" type="date" required>
+            <p class="field-error" data-error-for="date"></p>
+          </div>
+          <div class="field">
+            <label for="f-time">Start time *</label>
+            <input id="f-time" name="time" type="text" required maxlength="60"
+                   placeholder="7:00 PM">
+            <p class="field-error" data-error-for="time"></p>
+          </div>
+          <div class="field">
+            <label for="f-end">End time</label>
+            <input id="f-end" name="end_time" type="text" maxlength="60"
+                   placeholder="10:00 PM">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="f-venue">Venue *</label>
+          <input id="f-venue" name="venue" type="text" required maxlength="200"
+                 placeholder="The Hangar">
+          <p class="field-error" data-error-for="venue"></p>
+        </div>
+
+        <div class="field">
+          <label for="f-address">Address</label>
+          <input id="f-address" name="address" type="text" maxlength="300"
+                 placeholder="123 Main St, Victoria, TX">
+        </div>
+
+        <div class="field">
+          <label for="f-url">Link (Facebook event, Eventbrite, website)</label>
+          <input id="f-url" name="url" type="url" maxlength="500"
+                 placeholder="https://...">
+          <p class="field-error" data-error-for="url"></p>
+        </div>
+
+        <div class="field">
+          <label for="f-desc">Description</label>
+          <textarea id="f-desc" name="description" rows="4" maxlength="2000"
+                    placeholder="What is it? Who's playing? Any tickets info?"></textarea>
+        </div>
+
+        <fieldset class="field field-fieldset">
+          <legend>Categories</legend>
+          <div class="chip-row" id="f-icons">
+            <label class="chip"><input type="checkbox" name="icons" value="music"><span>🎵 Music</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="food"><span>🍔 Food</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="drinks"><span>🍺 Drinks</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="family"><span>🧑‍🧑‍🧒 Family</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="arts"><span>🎨 Arts</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="shopping"><span>🛍️ Shopping</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="outdoors"><span>🏃 Outdoors</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="community"><span>📣 Community</span></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="field field-fieldset">
+          <legend>Cost</legend>
+          <div class="radio-row">
+            <label class="radio"><input type="radio" name="free" value="true" checked><span>Free</span></label>
+            <label class="radio"><input type="radio" name="free" value="false"><span>Paid / ticketed</span></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="field field-fieldset">
+          <legend>You are…</legend>
+          <div class="radio-row">
+            <label class="radio">
+              <input type="radio" name="submitter_kind" value="organizer" checked>
+              <span>The organizer</span>
+            </label>
+            <label class="radio">
+              <input type="radio" name="submitter_kind" value="found_online">
+              <span>I found it online</span>
+            </label>
+            <label class="radio">
+              <input type="radio" name="submitter_kind" value="other">
+              <span>Other</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="f-sub-name">Your name</label>
+            <input id="f-sub-name" name="submitter_name" type="text"
+                   maxlength="120" autocomplete="name" placeholder="Optional">
+          </div>
+          <div class="field">
+            <label for="f-sub-email">Your email</label>
+            <input id="f-sub-email" name="submitter_email" type="email"
+                   maxlength="254" autocomplete="email" placeholder="optional@example.com">
+            <p class="field-error" data-error-for="submitter_email"></p>
+          </div>
+        </div>
+
+        <!-- Honeypot field — real users won't see/fill it. -->
+        <div class="hp-field" aria-hidden="true">
+          <label for="f-company">Company (do not fill)</label>
+          <input id="f-company" name="company" type="text" tabindex="-1" autocomplete="off">
+        </div>
+
+        <!-- Cloudflare Turnstile mount point. The widget loads only if the
+             site key is configured (see submit.js). -->
+        <div id="f-turnstile" class="turnstile-mount"></div>
+
+        <p class="submit-error" id="form-error" hidden></p>
+
+        <div class="submit-actions">
+          <button type="submit" class="btn btn--primary" id="submit-btn">
+            Submit for review
+          </button>
+        </div>
+
+        <p class="submit-foot">
+          Your event won't appear on the site until our editor reviews and
+          approves it. We won't share your email or use it for marketing.
+        </p>
+      </form>
+    </section>
+
+    <section class="submit-card" id="thanks-card" hidden>
+      <h1>Thanks!</h1>
+      <p class="submit-lede" id="thanks-message">
+        Your submission is in our review queue. If it fits and the details
+        check out, you'll see it on The Vic 361 within a few days.
+      </p>
+      <div class="submit-actions">
+        <a class="btn btn--outline" href="./index.html">Back to home</a>
+        <button type="button" class="btn btn--primary" id="submit-another">
+          Submit another
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <script src="./submit.js"></script>
+</body>
+</html>

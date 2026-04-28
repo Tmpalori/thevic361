@@ -23,6 +23,37 @@
     community: '📣', free: '🆓'
   };
 
+  // Source pill copy. The admin shows where every event came from so the
+  // editor can decide how much to trust it (an organizer-submitted event is
+  // different from a Sonar scrape). `inferSource()` figures out a source for
+  // legacy candidates that pre-date the explicit metadata.
+  const SOURCE_LABEL = {
+    submission: 'Submitted',
+    local: 'Local YAML',
+    scraper: 'Scraper',
+    sonar: 'Sonar',
+    facebook: 'Facebook',
+    instagram: 'Instagram',
+    candidate: 'Candidate',
+    unknown: 'Unknown'
+  };
+  function inferSource(ev) {
+    if (!ev) return 'unknown';
+    const explicit = ev._source || (ev.meta && ev.meta.source);
+    if (explicit) return explicit;
+    // Legacy heuristics: if the event was added from local YAML it usually
+    // has no URL and was edited by hand; otherwise treat as candidate.
+    const u = String(ev.url || '').toLowerCase();
+    if (u.includes('facebook.com')) return 'facebook';
+    if (u.includes('instagram.com')) return 'instagram';
+    if (u.includes('eventbrite')) return 'scraper';
+    if (!u) return 'local';
+    return 'candidate';
+  }
+  function sourceLabel(key) {
+    return SOURCE_LABEL[key] || (key ? String(key) : 'Unknown');
+  }
+
   const WEEKDAY_TARGET_MIN = 4;
   const WEEKDAY_TARGET_MAX = 8;
   const WEEKEND_TARGET_MIN = 8;
@@ -358,11 +389,21 @@
         const k = eventKey(ev);
         const checked = state.selected.has(k) ? 'checked' : '';
         const icons = (ev.icons || []).map(i => ICON_MAP[i] || '').join(' ');
+        const src = inferSource(ev);
+        const srcPill = '<span class="src-pill src-pill--' + escapeHtml(src) +
+          '" title="Source: ' + escapeHtml(sourceLabel(src)) + '">' +
+          escapeHtml(sourceLabel(src)) + '</span>';
+        const submitterMeta = ev._submitter_kind
+          ? '<span class="src-meta">' + escapeHtml(ev._submitter_kind === 'organizer'
+              ? 'Organizer' : ev._submitter_kind === 'found_online'
+              ? 'Found online' : 'Submitter: ' + ev._submitter_kind) + '</span>'
+          : '';
         return (
           '<label class="event-row">' +
             '<input type="checkbox" data-key="' + escapeHtml(k) + '" ' + checked + '>' +
             '<div class="event-row__main">' +
-              '<p class="event-row__name">' + escapeHtml(ev.name || '(untitled)') + '</p>' +
+              '<p class="event-row__name">' + escapeHtml(ev.name || '(untitled)') +
+                ' ' + srcPill + submitterMeta + '</p>' +
               '<div class="event-row__meta">' +
                 (ev.time ? '<span>🕒 ' + escapeHtml(ev.time) + '</span>' : '') +
                 (ev.venue ? '<span>📍 ' + escapeHtml(ev.venue) + '</span>' : '') +
@@ -459,10 +500,31 @@
   function getPickedEvents() {
     return state.candidates.filter(ev => state.selected.has(eventKey(ev)));
   }
+  // Public events.json must never carry submitter PII or admin-only fields.
+  // Strip every key that starts with "_" plus the explicit submitter list
+  // before writing — defense in depth on top of API-side scoping. Public
+  // _source is preserved without the underscore prefix as `source` so the
+  // public site can render attribution if it ever wants to.
+  const PRIVATE_KEYS = new Set([
+    'submitter_name', 'submitter_email', 'submitter_ip', 'user_agent',
+    'admin_notes', 'review_history'
+  ]);
+  function stripPrivateFields(ev) {
+    const out = {};
+    let publicSource = null;
+    for (const [k, v] of Object.entries(ev || {})) {
+      if (PRIVATE_KEYS.has(k)) continue;
+      if (k === '_source') { publicSource = v; continue; }
+      if (k.startsWith('_')) continue;
+      out[k] = v;
+    }
+    if (publicSource) out.source = publicSource;
+    return out;
+  }
   function buildEventsPayload() {
     return {
       last_updated: new Date().toISOString(),
-      events: getPickedEvents()
+      events: getPickedEvents().map(stripPrivateFields)
     };
   }
 
@@ -715,6 +777,33 @@
   // ─── TEST EXPORTS ───
   // Expose pure helpers for unit tests in environments that have a global hook.
   // Browser builds simply ignore this.
+  // Merge a list of candidate-shaped events into state.candidates without
+  // duplicating by eventKey. Used by the Submissions tab's "Pull approved
+  // into picker" action so the editor can include approved public submissions
+  // in the next publish without leaving the picker.
+  function mergeCandidateEvents(extra) {
+    if (!Array.isArray(extra) || !extra.length) return 0;
+    const existing = new Set(state.candidates.map(eventKey));
+    let added = 0;
+    for (const ev of extra) {
+      const k = eventKey(ev);
+      if (existing.has(k)) continue;
+      state.candidates.push(ev);
+      existing.add(k);
+      added++;
+    }
+    if (added) {
+      state.candidates.sort((a, b) => {
+        const da = (a.date || '') + ' ' + (a.time || '');
+        const db = (b.date || '') + ' ' + (b.time || '');
+        return da.localeCompare(db);
+      });
+      populateFilters();
+      renderPicker();
+    }
+    return added;
+  }
+
   const api = {
     eventKey, isWeekend, formatDateHeading, escapeHtml,
     applyFilters, groupByDate, buildNewsletterHtml,
@@ -722,6 +811,7 @@
     buildEventsPayload, buildPreviewSrc, writePreviewToStorage,
     getMondayOfWeek, getWeekRange, inWeekBucket, toLocalDateStr,
     pruneStalePastSelections,
+    inferSource, sourceLabel, mergeCandidateEvents, stripPrivateFields,
     _state: state,
     _constants: {
       WEEKDAY_TARGET_MIN, WEEKDAY_TARGET_MAX,

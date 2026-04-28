@@ -1,0 +1,203 @@
+/* submit.css — Mobile-first public submit-an-event form. */
+
+:root {
+  --submit-bg: #f7f5f0;
+  --submit-surface: #ffffff;
+  --submit-border: #e4e1d9;
+  --submit-text: #1f2933;
+  --submit-muted: #5a6573;
+  --submit-primary: #2d5b8a;
+  --submit-primary-hover: #244c75;
+  --submit-danger: #b03a2e;
+  --submit-success: #1e7a44;
+  --radius: 0.55rem;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: 'DM Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+  color: var(--submit-text);
+  background: var(--submit-bg);
+}
+
+[hidden] { display: none !important; }
+
+.submit-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--submit-border);
+  background: var(--submit-surface);
+}
+.submit-back {
+  color: var(--submit-text);
+  text-decoration: none;
+  font-weight: 600;
+}
+.submit-back:hover { color: var(--submit-primary); }
+
+.submit-main {
+  padding: 1.25rem 1rem 3rem;
+  max-width: 38rem;
+  margin: 0 auto;
+}
+
+.submit-card {
+  background: var(--submit-surface);
+  border: 1px solid var(--submit-border);
+  border-radius: var(--radius);
+  padding: 1.5rem 1.25rem;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+}
+
+.submit-card h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.6rem;
+}
+
+.submit-lede {
+  margin: 0 0 1.25rem;
+  color: var(--submit-muted);
+  line-height: 1.4;
+}
+
+.submit-form .field {
+  margin-bottom: 1rem;
+}
+.submit-form .field-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+@media (min-width: 30rem) {
+  .submit-form .field-row { grid-template-columns: 1fr 1fr 1fr; }
+  .submit-form .field-row > .field { margin-bottom: 0; }
+  .submit-form .field-row.field-row--two { grid-template-columns: 1fr 1fr; }
+}
+
+.submit-form label,
+.submit-form legend {
+  display: block;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.35rem;
+}
+
+.submit-form input[type="text"],
+.submit-form input[type="email"],
+.submit-form input[type="url"],
+.submit-form input[type="date"],
+.submit-form textarea {
+  width: 100%;
+  font: inherit;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--submit-border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--submit-text);
+}
+.submit-form input:focus,
+.submit-form textarea:focus {
+  outline: 2px solid var(--submit-primary);
+  outline-offset: 1px;
+  border-color: var(--submit-primary);
+}
+.submit-form textarea { resize: vertical; min-height: 5rem; }
+
+.submit-form .field-fieldset {
+  border: 1px solid var(--submit-border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+}
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--submit-border);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.95rem;
+}
+.chip input { margin-right: 0.4rem; }
+.chip:has(input:checked) {
+  background: var(--submit-primary);
+  border-color: var(--submit-primary);
+  color: #fff;
+}
+
+.radio-row { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+}
+
+.field-error {
+  margin: 0.35rem 0 0;
+  color: var(--submit-danger);
+  font-size: 0.85rem;
+  min-height: 1em;
+}
+.field-error:empty { display: none; }
+
+.submit-error {
+  margin: 0.5rem 0;
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  background: #fdecea;
+  border: 1px solid #f5c6c2;
+  color: var(--submit-danger);
+}
+
+.submit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.65rem 1.1rem;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn--primary { background: var(--submit-primary); color: #fff; }
+.btn--primary:hover { background: var(--submit-primary-hover); }
+.btn--primary:disabled { background: var(--submit-muted); cursor: not-allowed; }
+.btn--outline {
+  background: transparent;
+  border-color: var(--submit-border);
+  color: var(--submit-text);
+}
+.btn--outline:hover { border-color: var(--submit-primary); }
+
+.submit-foot {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: var(--submit-muted);
+  line-height: 1.4;
+}
+
+/* Honeypot field — visually hidden but still in the DOM. */
+.hp-field {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.turnstile-mount { margin: 0.5rem 0; min-height: 1px; }
