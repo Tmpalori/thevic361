@@ -147,6 +147,82 @@ def test_candidates_only_does_not_overwrite_events_json(tmp_path, monkeypatch):
     assert "events" in cand
 
 
+def test_safe_fetch_records_per_source_stats():
+    """safe_fetch should append one entry per call to the per-run stats list,
+    with the right status (ok/empty/error). The admin Sources tab consumes
+    this via collection_metadata.json."""
+    collect_events.reset_source_stats()
+
+    def good():
+        return [{"a": 1}, {"a": 2}, {"a": 3}]
+
+    def empty():
+        return []
+
+    def boom():
+        raise RuntimeError("kaboom")
+
+    collect_events.safe_fetch("good_one", good)
+    collect_events.safe_fetch("empty_one", empty, expect_events=False)
+    collect_events.safe_fetch("crashy_one", boom)
+
+    stats = collect_events.get_source_stats()
+    by_name = {s["name"]: s for s in stats}
+    assert by_name["good_one"]["count"] == 3
+    assert by_name["good_one"]["status"] == "ok"
+    assert by_name["empty_one"]["count"] == 0
+    assert by_name["empty_one"]["status"] == "empty"
+    assert by_name["crashy_one"]["count"] == 0
+    assert by_name["crashy_one"]["status"] == "error"
+    assert "kaboom" in by_name["crashy_one"]["message"]
+
+
+def test_main_writes_collection_metadata_json(tmp_path, monkeypatch):
+    """The new collection_metadata.json must be written next to candidates.json
+    and must include per-source stats for the admin Sources tab."""
+    events_path = tmp_path / "events.json"
+    candidates_path = tmp_path / "candidates.json"
+    local_dir = tmp_path
+    (local_dir / "local_events.yaml").write_text("recurring: []\nevents: []\n")
+    (local_dir / "extras.yaml").write_text("new_and_notable: []\nsponsor: null\n")
+
+    for fn_name in [
+        "fetch_google_sheet_events", "fetch_city_calendar", "fetch_chamber_events",
+        "fetch_library_events", "fetch_moonshine_events", "fetch_vtx_artwalk",
+        "fetch_jwelch_events", "fetch_theatre_victoria_events",
+        "fetch_generals_events", "fetch_allevents_events",
+        "fetch_apify_facebook_events", "fetch_apify_facebook_posts",
+        "fetch_apify_instagram_posts", "fetch_perplexity_events",
+    ]:
+        if hasattr(collect_events, fn_name):
+            monkeypatch.setattr(collect_events, fn_name, lambda *a, **kw: [])
+
+    argv = [
+        "collect_events.py",
+        "--output", str(events_path),
+        "--candidates", str(candidates_path),
+        "--local-dir", str(local_dir),
+        "--days", "14",
+        "--skip-ai",
+        "--candidates-only",
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    collect_events.main()
+
+    metadata_path = tmp_path / "collection_metadata.json"
+    assert metadata_path.exists(), "collection_metadata.json should be written"
+    meta = json.loads(metadata_path.read_text())
+    assert "last_run_at" in meta
+    assert "sources" in meta
+    assert isinstance(meta["sources"], list)
+    # Sanity: at least the local_events entry should be present.
+    names = {s["name"] for s in meta["sources"]}
+    assert "local_events" in names
+    # raw_count is the sum of per-source counts; must be a non-negative int.
+    assert isinstance(meta["raw_count"], int)
+    assert meta["raw_count"] >= 0
+
+
 def test_default_mode_still_writes_events_json(tmp_path, monkeypatch):
     """Backward-compat: a manual run without --candidates-only still updates
     docs/events.json (this is what local dev workflows depend on)."""

@@ -102,10 +102,58 @@ export function createGithub(opts = {}) {
     return res.json();
   }
 
+  // ─── Workflow dispatch ────────────────────────────────────────────────
+  // POST /repos/{owner}/{repo}/actions/workflows/{file}/dispatches
+  // Triggers a workflow_dispatch event on `branch`. Used by the admin
+  // "Sources" tab to kick the Weekly Collect job between scheduled runs.
+  // Returns true on success. Throws an Error with .status on failure.
+  // The token must have `actions:write` on the repo (a fine-grained PAT or
+  // a classic PAT with `workflow` scope works); plain `contents:write` is
+  // not enough. Callers surface the error to the UI.
+  async function dispatchWorkflow(workflowFile, ref) {
+    if (!isConfigured()) throw new Error('github-not-configured');
+    const url = `https://api.github.com/repos/${owner}/${repo}` +
+      `/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
+    const body = JSON.stringify({ ref: ref || branch });
+    const res = await fetchImpl(url, {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, ghHeaders()),
+      body
+    });
+    // 204 No Content is the success response.
+    if (res.status === 204) return true;
+    let detail = '';
+    try { detail = (await res.json()).message || ''; } catch (_) {}
+    const err = new Error(`github-dispatch-failed-${res.status}: ${detail}`);
+    err.status = res.status;
+    err.detail = detail;
+    throw err;
+  }
+
+  // ─── Workflow runs ────────────────────────────────────────────────────
+  // GET /repos/{owner}/{repo}/actions/workflows/{file}/runs?per_page=N
+  // Returns the parsed JSON body. Used by the admin "Sources" tab to show
+  // when the last Weekly Collect run completed.
+  async function listWorkflowRuns(workflowFile, perPage) {
+    if (!isConfigured()) throw new Error('github-not-configured');
+    const n = Math.max(1, Math.min(50, Number(perPage) || 5));
+    const url = `https://api.github.com/repos/${owner}/${repo}` +
+      `/actions/workflows/${encodeURIComponent(workflowFile)}/runs?per_page=${n}`;
+    const res = await fetchImpl(url, { headers: ghHeaders() });
+    if (!res.ok) {
+      const err = new Error(`github-runs-failed-${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    return res.json();
+  }
+
   return {
     isConfigured,
     owner, repo, branch,
     getJsonFile,
-    putJsonFile
+    putJsonFile,
+    dispatchWorkflow,
+    listWorkflowRuns
   };
 }

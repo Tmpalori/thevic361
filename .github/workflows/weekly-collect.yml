@@ -99,7 +99,9 @@ jobs:
           # Note: docs/events.json is intentionally NOT in this list — the
           # weekly job runs in --candidates-only mode and must never commit
           # changes to the curated fallback.
-          if git diff --quiet candidates.json venues.json pending_venues.json facebook_venues.backup.json 2>/dev/null; then
+          # collection_metadata.json is included so the admin Sources tab on
+          # Railway can read per-source pull counts/timestamps after each run.
+          if git diff --quiet candidates.json collection_metadata.json venues.json pending_venues.json facebook_venues.backup.json 2>/dev/null; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -118,5 +120,8 @@ jobs:
           # fallback and only the admin Save & Publish flow (running with
           # GITHUB_TOKEN) is allowed to commit to it.
           git add candidates.json
+          # collection_metadata.json is the admin Sources-tab feed (per-source
+          # counts + timestamps). Add it only if the collector wrote one.
+          [ -f collection_metadata.json ] && git add collection_metadata.json
           git commit -m "🏙️ Update candidates $(date +'%Y-%m-%d')"
           git push

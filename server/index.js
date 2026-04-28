@@ -23,12 +23,15 @@ import { verifyTurnstile } from './turnstile.js';
 import { createRateLimiter } from './rateLimit.js';
 import { createAuth } from './auth.js';
 import { createGithub } from './github.js';
+import { readMetadataFile, buildSourcesPayload } from './sources.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DOCS_DIR = path.join(REPO_ROOT, 'docs');
 const CANDIDATES_FILE = path.join(REPO_ROOT, 'candidates.json');
+const COLLECTION_METADATA_FILE = path.join(REPO_ROOT, 'collection_metadata.json');
 const EVENTS_FILE = path.join(DOCS_DIR, 'events.json');
+const WEEKLY_COLLECT_WORKFLOW = 'weekly-collect.yml';
 
 async function readJsonFile(file) {
   const raw = await fsp.readFile(file, 'utf8');
@@ -104,7 +107,11 @@ export async function createApp(opts = {}) {
       github_publish_enabled: github.isConfigured(),
       github_owner: github.owner,
       github_repo: github.repo,
-      github_branch: github.branch
+      github_branch: github.branch,
+      // The Sources tab uses this to enable or disable the manual-pull button.
+      // We piggyback on github_publish_enabled because both gates require a
+      // GITHUB_TOKEN. The actual trigger endpoint also enforces this.
+      sources_trigger_enabled: github.isConfigured()
     });
   });
 
@@ -549,6 +556,68 @@ export async function createApp(opts = {}) {
         ok: false,
         error: 'published-lookup-failed',
         message: err.message
+      });
+    }
+  });
+
+  // ─── Admin: per-source pull status ───────────────────────────────────
+  // Returns a compact summary of what the weekly collector pulled this run,
+  // which sources fed the candidate list, when each one was pulled, and
+  // when the next auto-pull is due. The admin "Sources" tab consumes this.
+  //
+  // The data comes from `collection_metadata.json` (written next to
+  // candidates.json by collect_events.py). If the file is missing — e.g.
+  // before the first weekly run after this code ships — we still return a
+  // useful payload with placeholder rows + the next scheduled run time.
+  const metadataFile = opts.collectionMetadataFile || COLLECTION_METADATA_FILE;
+  app.get('/api/admin/sources', requireAdmin, async (req, res) => {
+    try {
+      const read = await readMetadataFile(metadataFile);
+      const payload = buildSourcesPayload({
+        metadata: read ? read.meta : null,
+        mtime: read ? read.mtime : null,
+        now: new Date(),
+        githubConfigured: github.isConfigured(),
+      });
+      res.json(payload);
+    } catch (err) {
+      console.error('[admin] sources lookup failed:', err.message);
+      res.status(500).json({ ok: false, error: 'sources-failed', message: err.message });
+    }
+  });
+
+  // ─── Admin: trigger weekly collect workflow ───────────────────────────
+  // POST /api/admin/trigger-collect
+  // Fires a workflow_dispatch on the Weekly Collect GitHub Actions workflow.
+  // Requires GITHUB_TOKEN with `actions:write` scope. Degrades clearly when
+  // the token is missing (503 + diagnostic message) so the UI can disable
+  // the button instead of silently failing.
+  app.post('/api/admin/trigger-collect', requireAdmin, async (req, res) => {
+    if (!github.isConfigured()) {
+      return res.status(503).json({
+        ok: false,
+        error: 'github-not-configured',
+        message: 'GITHUB_TOKEN is not set on the server. The Weekly Collect workflow can only be triggered manually from the GitHub Actions tab.'
+      });
+    }
+    try {
+      await github.dispatchWorkflow(WEEKLY_COLLECT_WORKFLOW, github.branch);
+      res.json({
+        ok: true,
+        workflow: WEEKLY_COLLECT_WORKFLOW,
+        ref: github.branch,
+        message: 'Weekly Collect workflow dispatched. Refresh in a minute or two to see updated counts.'
+      });
+    } catch (err) {
+      console.error('[admin] trigger-collect failed:', err.message);
+      // 403 typically means the token lacks `actions:write`. 404 = workflow
+      // file not found on the configured branch. Both are useful to surface.
+      const status = (err.status === 403 || err.status === 404) ? err.status : 502;
+      res.status(status).json({
+        ok: false,
+        error: 'dispatch-failed',
+        github_status: err.status || null,
+        message: err.detail || err.message
       });
     }
   });

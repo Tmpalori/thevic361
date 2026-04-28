@@ -89,12 +89,81 @@ describe('admin.html static structure', () => {
     }
   });
 
-  it('exposes the four admin tab buttons', () => {
+  it('exposes the five admin tab buttons', () => {
     bootDom();
     const tabs = document.querySelectorAll('.tab-btn');
-    expect(tabs.length).toBe(4);
+    expect(tabs.length).toBe(5);
     expect(Array.from(tabs).map(t => t.dataset.tab).sort())
-      .toEqual(['newsletter', 'picker', 'preview', 'submissions']);
+      .toEqual(['newsletter', 'picker', 'preview', 'sources', 'submissions']);
+  });
+
+  it('exposes the Sources tab structure', () => {
+    bootDom();
+    const ids = [
+      'tab-sources',
+      'sources-summary', 'sources-last-run', 'sources-next-run',
+      'sources-merged-count',
+      'sources-actions', // wrapper class, not an id — keep as a sanity miss
+      'sources-refresh', 'sources-trigger', 'sources-trigger-help',
+      'sources-loading', 'sources-empty', 'sources-error',
+      'sources-message', 'sources-list'
+    ];
+    // 'sources-actions' is a class, not an id — drop it from the strict check.
+    for (const id of ids.filter(i => i !== 'sources-actions')) {
+      expect(document.getElementById(id), `missing #${id}`).not.toBeNull();
+    }
+  });
+});
+
+describe('admin Sources tab rendering', () => {
+  let api;
+  beforeEach(() => { api = bootDom(); });
+  afterEach(() => { delete window.__vic361Admin; });
+
+  it('renderSources fills summary fields and emits one card per source', () => {
+    api.renderSources({
+      ok: true,
+      last_run_at: '2026-04-26T18:30:00',
+      next_run_at: '2026-05-03T23:00:00.000Z',
+      next_run_note: 'Sundays 23:00 UTC',
+      merged_count: 80,
+      raw_count: 120,
+      trigger_enabled: true,
+      sources: [
+        { name: 'library', label: 'Public Library', category: 'web',
+          count: 12, status: 'ok',
+          started_at: '2026-04-26T18:25:00', finished_at: '2026-04-26T18:25:30',
+          last_pulled_at: '2026-04-26T18:25:30' },
+        { name: 'apify_facebook', label: 'Apify · Facebook', category: 'apify',
+          count: 0, status: 'error', message: 'APIFY_TOKEN missing',
+          last_pulled_at: '2026-04-26T18:27:00' }
+      ]
+    });
+    const cards = document.querySelectorAll('.source-card');
+    expect(cards.length).toBe(2);
+    expect(document.getElementById('sources-merged-count').textContent)
+      .toMatch(/80.*120 raw/);
+    // Library card carries the count.
+    const libCard = document.querySelector('[data-source="library"]');
+    expect(libCard.textContent).toContain('Public Library');
+    expect(libCard.textContent).toContain('12');
+    // Apify card surfaces the message.
+    const fbCard = document.querySelector('[data-source="apify_facebook"]');
+    expect(fbCard.textContent).toContain('APIFY_TOKEN missing');
+  });
+
+  it('renderSources disables the trigger button and shows help when not enabled', () => {
+    api.renderSources({
+      ok: true,
+      last_run_at: null,
+      next_run_at: '2026-05-03T23:00:00.000Z',
+      trigger_enabled: false,
+      sources: []
+    });
+    const btn = document.getElementById('sources-trigger');
+    expect(btn.disabled).toBe(true);
+    expect(document.getElementById('sources-trigger-help').textContent)
+      .toContain('GITHUB_TOKEN');
   });
 });
 
