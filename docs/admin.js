@@ -766,7 +766,7 @@
     }
     const mode = publishMode();
     if (!mode) {
-      setStatus('Cannot publish — no GitHub credentials available.', 'error');
+      setStatus('Cannot publish — please sign in first.', 'error');
       return;
     }
     if (!confirm('Publish ' + picks.length + ' event(s) to docs/events.json on main?')) {
@@ -786,17 +786,23 @@
         }
         // Surface partial-publish status. The server always saves to Railway
         // first; the GitHub commit is best-effort and only happens when
-        // GITHUB_TOKEN is configured.
+        // GITHUB_TOKEN is configured. A failed/skipped GitHub commit must NOT
+        // be surfaced as an error — the public site (Railway/Postgres) is
+        // already updated, which is what Save & Publish is responsible for.
         const dest = (json && json.destinations) || {};
         const ghOk = dest.github && dest.github.ok;
         const ghAttempted = dest.github && dest.github.error !== 'github-not-configured';
         if (ghOk) {
           setStatus('Published ' + picks.length + ' event(s) to Railway and GitHub.', 'success');
         } else if (ghAttempted) {
-          setStatus('Saved ' + picks.length + ' event(s) to Railway. GitHub commit failed: ' +
-            ((dest.github && dest.github.message) || 'unknown error'), 'error');
+          // Optional GitHub mirror failed (e.g. expired/bad token). The local
+          // publish to Railway already succeeded, so this is a non-blocking
+          // warning, not a failure of Save & Publish.
+          console.warn('[admin] github mirror commit skipped:',
+            (dest.github && dest.github.message) || 'unknown error');
+          setStatus('Published ' + picks.length + ' event(s) to Railway. (Optional GitHub mirror skipped.)', 'success');
         } else {
-          setStatus('Saved ' + picks.length + ' event(s) to Railway. GitHub token not configured — set GITHUB_TOKEN if you also want to commit to the repo.', 'success');
+          setStatus('Published ' + picks.length + ' event(s) to Railway.', 'success');
         }
         return;
       } else {
