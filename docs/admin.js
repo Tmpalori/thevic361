@@ -24,6 +24,7 @@
   const PAT_KEY      = 'vic361_admin_pat';
   const SESSION_KEY  = 'vic361_admin_session';
   const PICKS_KEY    = 'vic361_admin_picks';
+  const THEME_KEY    = 'vic361_admin_theme';
 
   const CANDIDATES_PATH = 'candidates.json';
   const EVENTS_PATH     = 'docs/events.json';
@@ -818,6 +819,87 @@
     return r.ok;
   }
 
+  // ─── THEME (DARK MODE) ───
+  // Stored value is 'dark' | 'light'. Absent = follow OS preference (handled
+  // by `@media (prefers-color-scheme: dark)` in admin.css). The pre-paint
+  // <script> in admin.html already applied any saved choice; this code keeps
+  // the toggle button label in sync and handles user clicks.
+  function getStoredTheme() {
+    try {
+      const v = localStorage.getItem(THEME_KEY);
+      return v === 'dark' || v === 'light' ? v : null;
+    } catch (_) { return null; }
+  }
+  function setStoredTheme(v) {
+    try {
+      if (v === 'dark' || v === 'light') localStorage.setItem(THEME_KEY, v);
+      else localStorage.removeItem(THEME_KEY);
+    } catch (_) { /* ignore */ }
+  }
+  function prefersDark() {
+    try {
+      return !!(window.matchMedia &&
+                window.matchMedia('(prefers-color-scheme: dark)').matches);
+    } catch (_) { return false; }
+  }
+  function effectiveTheme() {
+    const stored = getStoredTheme();
+    if (stored) return stored;
+    return prefersDark() ? 'dark' : 'light';
+  }
+  function applyTheme(theme) {
+    const root = document.documentElement;
+    if (theme === 'dark' || theme === 'light') {
+      root.setAttribute('data-theme', theme);
+    } else {
+      root.removeAttribute('data-theme');
+    }
+    updateThemeToggleUi();
+  }
+  function updateThemeToggleUi() {
+    const isDark = effectiveTheme() === 'dark';
+    const buttons = document.querySelectorAll('#theme-toggle, #theme-toggle-auth');
+    buttons.forEach(btn => {
+      btn.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+      btn.setAttribute('aria-label',
+        isDark ? 'Switch to light mode' : 'Switch to dark mode');
+      const icon = btn.querySelector('.theme-toggle__icon');
+      const label = btn.querySelector('.theme-toggle__label');
+      if (icon) icon.textContent = isDark ? '☀️' : '🌙';
+      if (label) label.textContent = isDark ? 'Light mode' : 'Dark mode';
+    });
+  }
+  function toggleTheme() {
+    const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+    setStoredTheme(next);
+    applyTheme(next);
+  }
+  function initTheme() {
+    // Apply whichever choice (or system default) is in effect, then keep the
+    // toggle button labels accurate. The pre-paint script already handled the
+    // explicit case; this catches the OS-pref case where data-theme is unset.
+    const stored = getStoredTheme();
+    if (stored) {
+      applyTheme(stored);
+    } else {
+      applyTheme(null);
+    }
+    // If the user hasn't picked explicitly, follow OS-level changes live.
+    try {
+      const mq = window.matchMedia &&
+                 window.matchMedia('(prefers-color-scheme: dark)');
+      if (mq && mq.addEventListener) {
+        mq.addEventListener('change', () => {
+          if (!getStoredTheme()) updateThemeToggleUi();
+        });
+      } else if (mq && mq.addListener) {
+        mq.addListener(() => {
+          if (!getStoredTheme()) updateThemeToggleUi();
+        });
+      }
+    } catch (_) { /* ignore */ }
+  }
+
   function wireEvents() {
     const authForm = document.getElementById('auth-form');
     if (authForm) {
@@ -905,10 +987,14 @@
     if (newsRefresh) newsRefresh.addEventListener('click', refreshNewsletter);
     const newsCopy = document.getElementById('newsletter-copy');
     if (newsCopy) newsCopy.addEventListener('click', copyNewsletter);
+
+    document.querySelectorAll('#theme-toggle, #theme-toggle-auth')
+      .forEach(btn => btn.addEventListener('click', toggleTheme));
   }
 
   async function init() {
     wireEvents();
+    initTheme();
     state.session = getSession();
     state.pat = getPat();
     // Best-effort fetch of server config so the UI knows which auth flows are
@@ -976,11 +1062,13 @@
     pruneStalePastSelections,
     inferSource, sourceLabel, mergeCandidateEvents, stripPrivateFields,
     publishMode,
+    getStoredTheme, setStoredTheme, effectiveTheme, applyTheme, toggleTheme,
+    initTheme, updateThemeToggleUi,
     _state: state,
     _constants: {
       WEEKDAY_TARGET_MIN, WEEKDAY_TARGET_MAX,
       WEEKEND_TARGET_MIN, WEEKEND_TARGET_MAX,
-      PAT_KEY, PICKS_KEY, SESSION_KEY,
+      PAT_KEY, PICKS_KEY, SESSION_KEY, THEME_KEY,
       REPO_OWNER, REPO_NAME, BRANCH,
       PREVIEW_STORAGE_PREFIX
     }

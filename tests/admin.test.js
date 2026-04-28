@@ -345,6 +345,101 @@ describe('admin active-week filter', () => {
   });
 });
 
+describe('admin dark mode toggle', () => {
+  // jsdom does not implement matchMedia by default. Provide a stub that we
+  // can flip per-test to simulate the user's OS-level color scheme.
+  let osPrefersDark = false;
+  beforeEach(() => {
+    osPrefersDark = false;
+    window.matchMedia = (q) => ({
+      matches: q.includes('dark') ? osPrefersDark : !osPrefersDark,
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {}
+    });
+  });
+  afterEach(() => {
+    document.documentElement.removeAttribute('data-theme');
+    delete window.__vic361Admin;
+  });
+
+  it('renders a theme toggle in the auth gate AND the admin header', () => {
+    bootDom();
+    expect(document.getElementById('theme-toggle-auth')).not.toBeNull();
+    expect(document.getElementById('theme-toggle')).not.toBeNull();
+  });
+
+  it('exposes the theme storage key constant', () => {
+    const api = bootDom();
+    expect(api._constants.THEME_KEY).toBe('vic361_admin_theme');
+  });
+
+  it('defaults to system preference when no choice is stored', () => {
+    osPrefersDark = true;
+    const api = bootDom();
+    expect(api.getStoredTheme()).toBeNull();
+    expect(api.effectiveTheme()).toBe('dark');
+
+    osPrefersDark = false;
+    document.documentElement.removeAttribute('data-theme');
+    const api2 = bootDom();
+    expect(api2.effectiveTheme()).toBe('light');
+  });
+
+  it('toggleTheme flips and persists the preference to localStorage', () => {
+    const api = bootDom();
+    expect(window.localStorage.getItem('vic361_admin_theme')).toBeNull();
+
+    api.toggleTheme();
+    expect(window.localStorage.getItem('vic361_admin_theme')).toBe('dark');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(api.effectiveTheme()).toBe('dark');
+
+    api.toggleTheme();
+    expect(window.localStorage.getItem('vic361_admin_theme')).toBe('light');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(api.effectiveTheme()).toBe('light');
+  });
+
+  it('clicking the header toggle switches theme and updates aria-pressed', async () => {
+    const api = bootDom();
+    // Wait for init() so wireEvents has attached the click listener.
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+
+    const btn = document.getElementById('theme-toggle');
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    btn.click();
+    expect(api.effectiveTheme()).toBe('dark');
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+    expect(btn.querySelector('.theme-toggle__label').textContent).toBe('Light mode');
+    btn.click();
+    expect(api.effectiveTheme()).toBe('light');
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    expect(btn.querySelector('.theme-toggle__label').textContent).toBe('Dark mode');
+  });
+
+  it('a stored "dark" preference is applied (initTheme sets data-theme)', () => {
+    const api = bootDom();
+    // Simulate the user having previously chosen dark, then re-init.
+    window.localStorage.setItem('vic361_admin_theme', 'dark');
+    api.initTheme();
+    expect(api.getStoredTheme()).toBe('dark');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('signout does NOT clear the theme preference', async () => {
+    bootDom({ pat: 'ghp_fake_for_test' });
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    window.localStorage.setItem('vic361_admin_theme', 'dark');
+    document.getElementById('signout-btn').click();
+    expect(window.localStorage.getItem('vic361_admin_theme')).toBe('dark');
+  });
+});
+
 describe('admin preview mode (PR #20)', () => {
   let api;
   beforeEach(() => {

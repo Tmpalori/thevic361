@@ -3,15 +3,181 @@
 :root {
   --admin-bg: #f7f5f0;
   --admin-surface: #ffffff;
+  --admin-surface-2: #f0ede4;
+  --admin-input-bg: #ffffff;
   --admin-border: #e4e1d9;
   --admin-text: #1f2933;
   --admin-muted: #5a6573;
   --admin-primary: #2d5b8a;
   --admin-primary-hover: #244c75;
+  --admin-primary-fg: #ffffff;
   --admin-danger: #b03a2e;
   --admin-success: #1e7a44;
   --admin-warn: #b07d2e;
+  --admin-code-bg: rgba(0, 0, 0, 0.05);
+  --admin-submitter-bg: rgba(0, 0, 0, 0.03);
+  --admin-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+
+  /* Source-pill palette (overridden in dark mode for contrast). */
+  --pill-default-bg: #eef1f5;
+  --pill-default-border: var(--admin-border);
+  --pill-default-fg: var(--admin-muted);
+  --pill-submission-bg: #e8f0fe;
+  --pill-submission-border: #c8d8f5;
+  --pill-submission-fg: #2d5b8a;
+  --pill-local-bg: #f0ebd9;
+  --pill-local-border: #ddd2a6;
+  --pill-local-fg: #75571a;
+  --pill-scraper-bg: #ece8f5;
+  --pill-scraper-border: #cdc1ea;
+  --pill-scraper-fg: #4b3a85;
+  --pill-facebook-bg: #e0eaf6;
+  --pill-facebook-border: #bcd0eb;
+  --pill-facebook-fg: #214881;
+  --pill-instagram-bg: #fbe5ec;
+  --pill-instagram-border: #f1c0d0;
+  --pill-instagram-fg: #8a2c5b;
+  --pill-candidate-bg: #eef5ee;
+  --pill-candidate-border: #c9dfc9;
+  --pill-candidate-fg: #2c6634;
+
+  /* Submission status palette. */
+  --status-pending-bg: #fff5da;
+  --status-pending-border: #f0deaa;
+  --status-pending-fg: #8a6c1c;
+  --status-approved-bg: #e3f4ea;
+  --status-approved-border: #b8dcc4;
+  --status-approved-fg: var(--admin-success);
+  --status-rejected-bg: #fdecea;
+  --status-rejected-border: #f5c6c2;
+  --status-rejected-fg: var(--admin-danger);
+  --status-duplicate-bg: #ece8f5;
+  --status-duplicate-border: #cdc1ea;
+  --status-duplicate-fg: #4b3a85;
+
   --radius: 0.5rem;
+}
+
+/* ─── DARK THEME ───
+ * Activated via `data-theme="dark"` on the <html> element. The toggle in
+ * admin.js sets this explicitly when the user picks a theme; otherwise we
+ * fall back to the OS preference (see the prefers-color-scheme block below).
+ * Only the admin page references admin.css, so this never leaks into the
+ * public site. */
+:root[data-theme="dark"] {
+  --admin-bg: #11161d;
+  --admin-surface: #1a212b;
+  --admin-surface-2: #232c38;
+  --admin-input-bg: #232c38;
+  --admin-border: #313b48;
+  --admin-text: #e6ecf2;
+  --admin-muted: #9aa6b4;
+  --admin-primary: #6aa8e0;
+  --admin-primary-hover: #8cbdea;
+  --admin-primary-fg: #0c1218;
+  --admin-danger: #ef7a6f;
+  --admin-success: #6cc290;
+  --admin-warn: #e0b56a;
+  --admin-code-bg: rgba(255, 255, 255, 0.08);
+  --admin-submitter-bg: rgba(255, 255, 255, 0.05);
+  --admin-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+
+  --pill-default-bg: #2a3340;
+  --pill-default-border: #3a4756;
+  --pill-default-fg: #c4ccd6;
+  --pill-submission-bg: #1f3556;
+  --pill-submission-border: #355987;
+  --pill-submission-fg: #a8c5ee;
+  --pill-local-bg: #3a3320;
+  --pill-local-border: #5a4d28;
+  --pill-local-fg: #e0c97a;
+  --pill-scraper-bg: #2f2a45;
+  --pill-scraper-border: #4a416c;
+  --pill-scraper-fg: #c2b6e8;
+  --pill-facebook-bg: #1f2e4a;
+  --pill-facebook-border: #355084;
+  --pill-facebook-fg: #a8c1e8;
+  --pill-instagram-bg: #432333;
+  --pill-instagram-border: #6c3a55;
+  --pill-instagram-fg: #ecaac5;
+  --pill-candidate-bg: #1f3a25;
+  --pill-candidate-border: #355c40;
+  --pill-candidate-fg: #9ed3a7;
+
+  --status-pending-bg: #3a3220;
+  --status-pending-border: #5a4d28;
+  --status-pending-fg: #e0c97a;
+  --status-approved-bg: #1f3a28;
+  --status-approved-border: #355c40;
+  --status-approved-fg: #87d49f;
+  --status-rejected-bg: #3d2222;
+  --status-rejected-border: #6a3635;
+  --status-rejected-fg: #ef9a90;
+  --status-duplicate-bg: #2f2a45;
+  --status-duplicate-border: #4a416c;
+  --status-duplicate-fg: #c2b6e8;
+
+  color-scheme: dark;
+}
+
+/* OS-level dark preference when the user hasn't explicitly chosen a theme.
+ * The JS toggle sets data-theme="light" / "dark" to opt out of this. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --admin-bg: #11161d;
+    --admin-surface: #1a212b;
+    --admin-surface-2: #232c38;
+    --admin-input-bg: #232c38;
+    --admin-border: #313b48;
+    --admin-text: #e6ecf2;
+    --admin-muted: #9aa6b4;
+    --admin-primary: #6aa8e0;
+    --admin-primary-hover: #8cbdea;
+    --admin-primary-fg: #0c1218;
+    --admin-danger: #ef7a6f;
+    --admin-success: #6cc290;
+    --admin-warn: #e0b56a;
+    --admin-code-bg: rgba(255, 255, 255, 0.08);
+    --admin-submitter-bg: rgba(255, 255, 255, 0.05);
+    --admin-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+
+    --pill-default-bg: #2a3340;
+    --pill-default-border: #3a4756;
+    --pill-default-fg: #c4ccd6;
+    --pill-submission-bg: #1f3556;
+    --pill-submission-border: #355987;
+    --pill-submission-fg: #a8c5ee;
+    --pill-local-bg: #3a3320;
+    --pill-local-border: #5a4d28;
+    --pill-local-fg: #e0c97a;
+    --pill-scraper-bg: #2f2a45;
+    --pill-scraper-border: #4a416c;
+    --pill-scraper-fg: #c2b6e8;
+    --pill-facebook-bg: #1f2e4a;
+    --pill-facebook-border: #355084;
+    --pill-facebook-fg: #a8c1e8;
+    --pill-instagram-bg: #432333;
+    --pill-instagram-border: #6c3a55;
+    --pill-instagram-fg: #ecaac5;
+    --pill-candidate-bg: #1f3a25;
+    --pill-candidate-border: #355c40;
+    --pill-candidate-fg: #9ed3a7;
+
+    --status-pending-bg: #3a3220;
+    --status-pending-border: #5a4d28;
+    --status-pending-fg: #e0c97a;
+    --status-approved-bg: #1f3a28;
+    --status-approved-border: #355c40;
+    --status-approved-fg: #87d49f;
+    --status-rejected-bg: #3d2222;
+    --status-rejected-border: #6a3635;
+    --status-rejected-fg: #ef9a90;
+    --status-duplicate-bg: #2f2a45;
+    --status-duplicate-border: #4a416c;
+    --status-duplicate-fg: #c2b6e8;
+
+    color-scheme: dark;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -29,7 +195,7 @@ body { min-height: 100vh; }
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--admin-code-bg);
   padding: 0.1em 0.35em;
   border-radius: 0.25rem;
 }
@@ -49,7 +215,7 @@ code {
 }
 .btn--primary {
   background: var(--admin-primary);
-  color: #fff;
+  color: var(--admin-primary-fg);
 }
 .btn--primary:hover { background: var(--admin-primary-hover); }
 .btn--primary:disabled {
@@ -87,7 +253,7 @@ code {
   padding: 2rem;
   max-width: 28rem;
   width: 100%;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--admin-shadow);
 }
 .auth-card h1 {
   margin: 0 0 0.5rem;
@@ -113,7 +279,8 @@ code {
   padding: 0.6rem 0.75rem;
   border: 1px solid var(--admin-border);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--admin-input-bg);
+  color: var(--admin-text);
 }
 .auth-form input:focus {
   outline: 2px solid var(--admin-primary);
@@ -229,7 +396,7 @@ code {
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--admin-border);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--admin-input-bg);
 }
 .filter-actions {
   grid-column: 1 / -1;
@@ -338,6 +505,9 @@ code {
   min-height: 32rem;
   border: 1px solid var(--admin-border);
   border-radius: var(--radius);
+  /* The preview iframe loads the public site, which has its own background.
+   * Keep this white so the public-site rendering looks the same regardless
+   * of whether the admin is in dark mode. */
   background: #fff;
 }
 
@@ -361,7 +531,8 @@ code {
   padding: 1rem;
   border: 1px solid var(--admin-border);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--admin-input-bg);
+  color: var(--admin-text);
   resize: vertical;
 }
 
@@ -373,22 +544,42 @@ code {
   padding: 0.1rem 0.45rem;
   border-radius: 999px;
   margin-left: 0.4rem;
-  background: #eef1f5;
-  color: var(--admin-muted);
-  border: 1px solid var(--admin-border);
+  background: var(--pill-default-bg);
+  color: var(--pill-default-fg);
+  border: 1px solid var(--pill-default-border);
   vertical-align: middle;
   letter-spacing: 0.02em;
 }
 .src-pill--submission {
-  background: #e8f0fe;
-  border-color: #c8d8f5;
-  color: #2d5b8a;
+  background: var(--pill-submission-bg);
+  border-color: var(--pill-submission-border);
+  color: var(--pill-submission-fg);
 }
-.src-pill--local { background: #f0ebd9; border-color: #ddd2a6; color: #75571a; }
-.src-pill--scraper, .src-pill--sonar { background: #ece8f5; border-color: #cdc1ea; color: #4b3a85; }
-.src-pill--facebook { background: #e0eaf6; border-color: #bcd0eb; color: #214881; }
-.src-pill--instagram { background: #fbe5ec; border-color: #f1c0d0; color: #8a2c5b; }
-.src-pill--candidate { background: #eef5ee; border-color: #c9dfc9; color: #2c6634; }
+.src-pill--local {
+  background: var(--pill-local-bg);
+  border-color: var(--pill-local-border);
+  color: var(--pill-local-fg);
+}
+.src-pill--scraper, .src-pill--sonar {
+  background: var(--pill-scraper-bg);
+  border-color: var(--pill-scraper-border);
+  color: var(--pill-scraper-fg);
+}
+.src-pill--facebook {
+  background: var(--pill-facebook-bg);
+  border-color: var(--pill-facebook-border);
+  color: var(--pill-facebook-fg);
+}
+.src-pill--instagram {
+  background: var(--pill-instagram-bg);
+  border-color: var(--pill-instagram-border);
+  color: var(--pill-instagram-fg);
+}
+.src-pill--candidate {
+  background: var(--pill-candidate-bg);
+  border-color: var(--pill-candidate-border);
+  color: var(--pill-candidate-fg);
+}
 
 .src-meta {
   font-size: 0.72rem;
@@ -441,7 +632,8 @@ code {
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--admin-border);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--admin-input-bg);
+  color: var(--admin-text);
 }
 .submissions-list {
   display: flex;
@@ -482,7 +674,7 @@ code {
 .submission-card__submitter {
   font-size: 0.85rem;
   color: var(--admin-muted);
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--admin-submitter-bg);
   padding: 0.4rem 0.6rem;
   border-radius: var(--radius);
   margin: 0.3rem 0 0.6rem;
@@ -500,15 +692,31 @@ code {
   font-weight: 600;
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
-  background: #eef1f5;
-  border: 1px solid var(--admin-border);
-  color: var(--admin-muted);
+  background: var(--pill-default-bg);
+  border: 1px solid var(--pill-default-border);
+  color: var(--pill-default-fg);
   text-transform: capitalize;
 }
-.submission-status--pending { background: #fff5da; border-color: #f0deaa; color: #8a6c1c; }
-.submission-status--approved { background: #e3f4ea; border-color: #b8dcc4; color: var(--admin-success); }
-.submission-status--rejected { background: #fdecea; border-color: #f5c6c2; color: var(--admin-danger); }
-.submission-status--duplicate { background: #ece8f5; border-color: #cdc1ea; color: #4b3a85; }
+.submission-status--pending {
+  background: var(--status-pending-bg);
+  border-color: var(--status-pending-border);
+  color: var(--status-pending-fg);
+}
+.submission-status--approved {
+  background: var(--status-approved-bg);
+  border-color: var(--status-approved-border);
+  color: var(--status-approved-fg);
+}
+.submission-status--rejected {
+  background: var(--status-rejected-bg);
+  border-color: var(--status-rejected-border);
+  color: var(--status-rejected-fg);
+}
+.submission-status--duplicate {
+  background: var(--status-duplicate-bg);
+  border-color: var(--status-duplicate-border);
+  color: var(--status-duplicate-fg);
+}
 
 .submission-edit {
   margin-top: 0.5rem;
@@ -522,5 +730,43 @@ code {
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--admin-border);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--admin-input-bg);
+  color: var(--admin-text);
+}
+
+/* ─── THEME TOGGLE ─── */
+.theme-toggle {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.theme-toggle:hover {
+  border-color: var(--admin-primary);
+  color: var(--admin-primary);
+}
+.theme-toggle__icon { font-size: 1rem; line-height: 1; }
+.theme-toggle__label { display: inline; }
+@media (max-width: 540px) {
+  .theme-toggle__label { display: none; }
+}
+
+/* Toggle inside the auth-card (pre-login). Float it top-right. */
+.auth-card { position: relative; }
+.auth-card .theme-toggle {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
 }
