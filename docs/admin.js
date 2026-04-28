@@ -389,16 +389,12 @@
       pruneStalePastSelections();
       populateFilters();
       renderPicker();
-      const sourceNote = source === 'local-file'
-        ? ' (from local file — GitHub token not configured or unavailable)'
-        : '';
-      setStatus('Loaded ' + events.length + ' candidate event(s)' + sourceNote + '.', 'success');
-      if (warning && errEl) {
-        // Non-fatal: server fell back to the bundled file. Surface so the
-        // operator knows the GitHub fetch was rejected, but don't block.
-        errEl.hidden = false;
-        errEl.textContent = 'Note: ' + warning + ' — showing bundled candidates instead.';
-      }
+      setStatus('Loaded ' + events.length + ' candidate event(s).', 'success');
+      // Note: the server may report `source=local-file` and a `warning` field
+      // when the optional GITHUB_TOKEN isn't configured. That's the intended
+      // operating mode now — candidates are served from the bundled file on
+      // disk — so we deliberately don't surface those as a banner anymore.
+      void warning;
     } catch (err) {
       console.error(err);
       if (errEl) {
