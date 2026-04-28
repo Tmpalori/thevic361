@@ -1,14 +1,24 @@
 {
-  "name": "thevic361-admin-tests",
+  "name": "thevic361",
   "private": true,
-  "version": "0.0.0",
-  "description": "Smoke tests for the static admin panel under docs/",
+  "version": "0.1.0",
+  "description": "The Vic 361 — community events board (static site + submission server).",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.11.5"
   },
   "devDependencies": {
     "jsdom": "^24.1.0",
+    "supertest": "^7.0.0",
     "vitest": "^1.6.0"
   }
 }

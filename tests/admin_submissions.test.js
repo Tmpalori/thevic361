@@ -1,0 +1,169 @@
+// Admin Submissions tab smoke tests + source pill rendering + private-field
+// stripping. Loads docs/admin.html into jsdom and evaluates both admin.js and
+// admin-submissions.js so we can assert on the rendered DOM and the exposed
+// helpers.
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DOCS = resolve(__dirname, '..', 'docs');
+const HTML = readFileSync(resolve(DOCS, 'admin.html'), 'utf8');
+const ADMIN_JS = readFileSync(resolve(DOCS, 'admin.js'), 'utf8');
+const SUB_JS = readFileSync(resolve(DOCS, 'admin-submissions.js'), 'utf8');
+
+function bootDom({ pat = null, apiBase = '', token = '' } = {}) {
+  const bodyMatch = HTML.match(/<body>([\s\S]*?)<\/body>/);
+  document.body.innerHTML = bodyMatch ? bodyMatch[1] : '';
+  document.querySelectorAll('script[src*="admin"]').forEach(s => s.remove());
+
+  delete window.__vic361Admin;
+  delete window.__vic361Submissions;
+  window.localStorage.clear();
+  if (pat) window.localStorage.setItem('vic361_admin_pat', pat);
+  if (apiBase) window.localStorage.setItem('vic361_submissions_api_url', apiBase);
+  if (token) window.localStorage.setItem('vic361_submissions_admin_token', token);
+
+  // eslint-disable-next-line no-eval
+  (0, eval)(ADMIN_JS);
+  // eslint-disable-next-line no-eval
+  (0, eval)(SUB_JS);
+  return {
+    admin: window.__vic361Admin,
+    submissions: window.__vic361Submissions
+  };
+}
+
+describe('admin Submissions tab — DOM', () => {
+  beforeEach(() => bootDom());
+
+  it('renders a Submissions tab button', () => {
+    const tabs = Array.from(document.querySelectorAll('.tab-btn')).map(t => t.dataset.tab);
+    expect(tabs).toContain('submissions');
+  });
+
+  it('exposes the submissions panel and its config inputs', () => {
+    const ids = [
+      'tab-submissions', 'submissions-api-url', 'submissions-admin-token',
+      'submissions-save-config', 'submissions-status', 'submissions-refresh',
+      'submissions-pull-approved', 'submissions-list', 'submissions-empty',
+      'submissions-error', 'submissions-pending-badge'
+    ];
+    for (const id of ids) {
+      expect(document.getElementById(id), `missing #${id}`).not.toBeNull();
+    }
+  });
+
+  it('persists config inputs to localStorage on Save', () => {
+    document.getElementById('submissions-api-url').value = 'https://example.up.railway.app/';
+    document.getElementById('submissions-admin-token').value = 'tok-abc';
+    document.getElementById('submissions-save-config').click();
+    expect(window.localStorage.getItem('vic361_submissions_api_url'))
+      .toBe('https://example.up.railway.app');
+    expect(window.localStorage.getItem('vic361_submissions_admin_token')).toBe('tok-abc');
+  });
+
+  it('renderRow renders submission card with status pill and submitter block', () => {
+    const { submissions } = { submissions: window.__vic361Submissions };
+    const row = {
+      id: 'abc', status: 'pending', source: 'submission',
+      submitter_kind: 'organizer', submitter_name: 'Jane', submitter_email: 'j@x.com',
+      payload: {
+        name: 'Test Event', date: '2026-05-12', time: '7 PM',
+        venue: 'Venue A', icons: ['music'], description: 'Hi', free: true
+      }
+    };
+    const html = submissions.renderRow(row);
+    expect(html).toContain('Test Event');
+    expect(html).toContain('submission-status--pending');
+    expect(html).toContain('Organizer');
+    expect(html).toContain('Jane');
+    expect(html).toContain('j@x.com');
+    // Action buttons
+    expect(html).toContain('data-act="approve"');
+    expect(html).toContain('data-act="reject"');
+    expect(html).toContain('data-act="duplicate"');
+    expect(html).toContain('data-act="edit"');
+  });
+});
+
+describe('admin source pills + private stripping', () => {
+  let admin;
+  beforeEach(() => { admin = bootDom().admin; });
+
+  it('inferSource recognizes explicit _source', () => {
+    expect(admin.inferSource({ _source: 'submission' })).toBe('submission');
+    expect(admin.inferSource({ _source: 'sonar' })).toBe('sonar');
+  });
+
+  it('inferSource falls back to URL heuristics for legacy events', () => {
+    expect(admin.inferSource({ url: 'https://www.facebook.com/events/123' })).toBe('facebook');
+    expect(admin.inferSource({ url: 'https://www.instagram.com/p/abc' })).toBe('instagram');
+    expect(admin.inferSource({ url: 'https://www.eventbrite.com/x' })).toBe('scraper');
+    expect(admin.inferSource({ url: '' })).toBe('local');
+  });
+
+  it('sourceLabel handles known + unknown keys', () => {
+    expect(admin.sourceLabel('submission')).toBe('Submitted');
+    expect(admin.sourceLabel('weird')).toBe('weird');
+    expect(admin.sourceLabel(undefined)).toBe('Unknown');
+  });
+
+  it('stripPrivateFields removes underscore-prefixed + submitter PII', () => {
+    const ev = {
+      name: 'X', date: '2026-05-12', time: '7 PM', venue: 'V',
+      _source: 'submission',
+      _source_id: 'abc-123',
+      _submitter_kind: 'organizer',
+      submitter_name: 'Jane',
+      submitter_email: 'j@x.com',
+      submitter_ip: '1.2.3.4',
+      admin_notes: 'private',
+      review_history: [{ at: 't' }]
+    };
+    const out = admin.stripPrivateFields(ev);
+    expect(out.name).toBe('X');
+    expect(out._source).toBeUndefined();
+    expect(out._source_id).toBeUndefined();
+    expect(out._submitter_kind).toBeUndefined();
+    expect(out.submitter_name).toBeUndefined();
+    expect(out.submitter_email).toBeUndefined();
+    expect(out.submitter_ip).toBeUndefined();
+    expect(out.admin_notes).toBeUndefined();
+    expect(out.review_history).toBeUndefined();
+    // _source preserved as public `source` for attribution.
+    expect(out.source).toBe('submission');
+  });
+
+  it('buildEventsPayload strips private fields from selected picks', () => {
+    admin._state.candidates = [{
+      date: '2026-05-12', name: 'Test', venue: 'V', time: '7 PM',
+      _source: 'submission', _submitter_kind: 'organizer',
+      submitter_email: 'j@x.com', submitter_name: 'Jane'
+    }];
+    admin._state.selected = new Set([admin.eventKey(admin._state.candidates[0])]);
+    const payload = admin.buildEventsPayload();
+    expect(payload.events.length).toBe(1);
+    const ev = payload.events[0];
+    expect(ev.submitter_email).toBeUndefined();
+    expect(ev.submitter_name).toBeUndefined();
+    expect(ev._submitter_kind).toBeUndefined();
+    expect(ev.source).toBe('submission');
+  });
+
+  it('mergeCandidateEvents adds new events but skips dupes by key', () => {
+    admin._state.candidates = [
+      { date: '2026-05-12', name: 'Existing', venue: 'V' }
+    ];
+    const added1 = admin.mergeCandidateEvents([
+      { date: '2026-05-12', name: 'Existing', venue: 'V' }, // dup
+      { date: '2026-05-13', name: 'New', venue: 'V', _source: 'submission' }
+    ]);
+    expect(added1).toBe(1);
+    expect(admin._state.candidates.length).toBe(2);
+    const added2 = admin.mergeCandidateEvents([]);
+    expect(added2).toBe(0);
+  });
+});

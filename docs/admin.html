@@ -46,6 +46,9 @@
       </div>
       <nav class="admin-tabs" role="tablist">
         <button class="tab-btn is-active" data-tab="picker" role="tab">Pick events</button>
+        <button class="tab-btn" data-tab="submissions" role="tab">
+          Submissions <span id="submissions-pending-badge" class="tab-badge" hidden>0</span>
+        </button>
         <button class="tab-btn" data-tab="preview" role="tab">Preview</button>
         <button class="tab-btn" data-tab="newsletter" role="tab">Newsletter</button>
       </nav>
@@ -108,6 +111,50 @@
       <div id="picker-list" class="picker-list" aria-live="polite"></div>
     </section>
 
+    <!-- ─── SUBMISSIONS TAB ─── -->
+    <section id="tab-submissions" class="tab-panel" role="tabpanel" hidden>
+      <div class="submissions-toolbar">
+        <div class="submissions-config">
+          <label>
+            Submissions API
+            <input type="text" id="submissions-api-url"
+                   placeholder="https://thevic361.up.railway.app">
+          </label>
+          <label>
+            Admin token
+            <input type="password" id="submissions-admin-token"
+                   placeholder="ADMIN_TOKEN env value">
+          </label>
+          <button id="submissions-save-config" type="button" class="btn btn--outline">
+            Save
+          </button>
+        </div>
+        <div class="submissions-filter-row">
+          <label class="filter">
+            <span>Status</span>
+            <select id="submissions-status">
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="duplicate">Duplicate</option>
+              <option value="">All</option>
+            </select>
+          </label>
+          <button id="submissions-refresh" type="button" class="btn btn--outline">
+            Refresh
+          </button>
+          <button id="submissions-pull-approved" type="button" class="btn btn--primary">
+            Pull approved into picker
+          </button>
+        </div>
+      </div>
+      <div id="submissions-empty" class="empty-state" hidden>
+        No submissions in this status.
+      </div>
+      <div id="submissions-error" class="empty-state empty-state--error" hidden></div>
+      <div id="submissions-list" class="submissions-list"></div>
+    </section>
+
     <!-- ─── PREVIEW TAB ─── -->
     <section id="tab-preview" class="tab-panel" role="tabpanel" hidden>
       <div class="preview-actions">
@@ -140,5 +187,6 @@
   </main>
 
   <script src="./admin.js"></script>
+  <script src="./admin-submissions.js"></script>
 </body>
 </html>
