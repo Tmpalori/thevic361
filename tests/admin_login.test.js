@@ -248,6 +248,8 @@ describe('GitHub publish proxy', () => {
     expect(r.status).toBe(200);
     expect(r.json.ok).toBe(true);
     expect(r.json.published).toBe(1);
+    expect(r.json.destinations.github.ok).toBe(true);
+    expect(r.json.destinations.local.ok).toBe(true);
     // Confirm we issued a PUT to docs/events.json.
     const put = calls.find(c => c.init && c.init.method === 'PUT');
     expect(put).toBeDefined();
@@ -268,7 +270,7 @@ describe('GitHub publish proxy', () => {
     expect(r.status).toBe(400);
   });
 
-  it('returns 503 when GITHUB_TOKEN is not configured', async () => {
+  it('publishes to local store and reports github-not-configured when GITHUB_TOKEN is missing', async () => {
     await stopApp();
     await startApp({ githubToken: null });
     const tok = await (async () => {
@@ -277,9 +279,14 @@ describe('GitHub publish proxy', () => {
       return login.json.token;
     })();
     const r = await fetchJson('POST', '/api/admin/publish-events',
-      { events: [] }, { Authorization: 'Bearer ' + tok });
-    expect(r.status).toBe(503);
-    expect(r.json.error).toBe('github-not-configured');
+      { events: [{ name: 'X', date: '2026-05-12' }] },
+      { Authorization: 'Bearer ' + tok });
+    // Local save always succeeds even without GITHUB_TOKEN.
+    expect(r.status).toBe(200);
+    expect(r.json.ok).toBe(true);
+    expect(r.json.destinations.local.ok).toBe(true);
+    expect(r.json.destinations.github.ok).toBe(false);
+    expect(r.json.destinations.github.error).toBe('github-not-configured');
   });
 });
 

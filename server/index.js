@@ -14,6 +14,7 @@
 
 import express from 'express';
 import path from 'node:path';
+import { promises as fsp } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { createStore, normalizePayload, newId, nowIso } from './db.js';
@@ -26,6 +27,13 @@ import { createGithub } from './github.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DOCS_DIR = path.join(REPO_ROOT, 'docs');
+const CANDIDATES_FILE = path.join(REPO_ROOT, 'candidates.json');
+const EVENTS_FILE = path.join(DOCS_DIR, 'events.json');
+
+async function readJsonFile(file) {
+  const raw = await fsp.readFile(file, 'utf8');
+  return JSON.parse(raw);
+}
 
 export async function createApp(opts = {}) {
   const app = express();
@@ -309,42 +317,96 @@ export async function createApp(opts = {}) {
     res.json({ ok: true, submission: updated });
   });
 
-  // ─── Admin: GitHub-backed candidates fetch ────────────────────────────
-  // Returns the parsed candidates.json from the configured repo branch.
-  // Replaces the old browser flow of calling api.github.com directly with
-  // the editor's PAT.
+  // ─── Admin: candidates fetch ──────────────────────────────────────────
+  // Tries GitHub first (so the editor sees the latest candidates.json), then
+  // falls back to the bundled candidates.json on disk if the token is missing
+  // or the GitHub API rejects us. The fallback keeps the admin usable on
+  // Railway when GITHUB_TOKEN is unset or expired — the editor can still
+  // pick events and publish them; only the GitHub commit step needs the
+  // token.
+  //
+  // Approved submissions from the local store are *always* merged in so the
+  // editor sees them in the picker without needing a separate "Pull approved"
+  // round trip.
   app.get('/api/admin/candidates', requireAdmin, async (req, res) => {
-    if (!github.isConfigured()) {
-      return res.status(503).json({
-        ok: false,
-        error: 'github-not-configured',
-        message: 'Set GITHUB_TOKEN (or GITHUB_PAT) on the server to enable GitHub publishing.'
-      });
+    let sha = null;
+    let events = [];
+    let source = 'unknown';
+    let warning = null;
+
+    if (github.isConfigured()) {
+      try {
+        const got = await github.getJsonFile('candidates.json');
+        sha = got.sha;
+        events = Array.isArray(got.data && got.data.events) ? got.data.events : [];
+        source = 'github';
+      } catch (err) {
+        console.warn('[admin] candidates github fetch failed, falling back to local file:', err.message);
+        warning = `github-fetch-failed-${err.status || 'error'}`;
+      }
     }
+
+    if (source !== 'github') {
+      try {
+        const local = await readJsonFile(CANDIDATES_FILE);
+        events = Array.isArray(local && local.events) ? local.events : [];
+        source = 'local-file';
+      } catch (err) {
+        if (err.code === 'ENOENT') {
+          source = 'empty';
+          events = [];
+        } else {
+          console.error('[admin] local candidates read failed:', err.message);
+          return res.status(500).json({
+            ok: false, error: 'candidates-read-failed', message: err.message
+          });
+        }
+      }
+    }
+
+    // Merge approved submissions so the editor sees them in the picker.
     try {
-      const { sha, data } = await github.getJsonFile('candidates.json');
-      res.json({ ok: true, sha, data });
+      const approved = await store.list({ status: 'approved' });
+      const seen = new Set(events.map(e =>
+        [e.date || '', e.name || '', e.venue || ''].join('|')
+      ));
+      for (const r of approved) {
+        const ev = {
+          ...r.payload,
+          _source: r.source || 'submission',
+          _source_id: r.id,
+          _submitter_kind: r.submitter_kind || null
+        };
+        const k = [ev.date || '', ev.name || '', ev.venue || ''].join('|');
+        if (seen.has(k)) continue;
+        seen.add(k);
+        events.push(ev);
+      }
     } catch (err) {
-      console.warn('[admin] candidates fetch failed:', err.message);
-      const status = err.status === 404 ? 404 : 502;
-      res.status(status).json({ ok: false, error: 'github-error', message: err.message });
+      console.warn('[admin] approved submissions merge skipped:', err.message);
     }
+
+    res.json({
+      ok: true,
+      sha,
+      source,
+      warning,
+      data: { events }
+    });
   });
 
   // ─── Admin: publish events.json ───────────────────────────────────────
   // Body: { events: [...], message?: "..." }
-  // Performs the same Contents API PUT the browser used to do, but with the
-  // server-side token so the editor never needs a PAT. Reads the current sha
-  // for an "update" PUT; if the file does not exist yet it does an initial
-  // create.
+  //
+  // Behavior:
+  //   1. Always saves the payload to the local store (Postgres or JSON file)
+  //      so the Railway app's public events at /events.json reflects the new
+  //      picks immediately, without depending on GitHub.
+  //   2. If GITHUB_TOKEN is configured, also commits docs/events.json on the
+  //      configured branch via the Contents API. Failures here are surfaced
+  //      but do NOT fail the request — the local save already succeeded and
+  //      the public site is updated.
   app.post('/api/admin/publish-events', requireAdmin, async (req, res) => {
-    if (!github.isConfigured()) {
-      return res.status(503).json({
-        ok: false,
-        error: 'github-not-configured',
-        message: 'Set GITHUB_TOKEN (or GITHUB_PAT) on the server to enable GitHub publishing.'
-      });
-    }
     const body = req.body || {};
     const events = Array.isArray(body.events) ? body.events : null;
     if (!events) {
@@ -354,32 +416,66 @@ export async function createApp(opts = {}) {
       last_updated: new Date().toISOString(),
       events
     };
-    let sha = null;
+
+    // Step 1 — local persistence. This is what makes the Railway public site
+    // reflect the new picks regardless of GitHub state.
     try {
-      const cur = await github.getJsonFile('docs/events.json');
-      sha = cur.sha;
+      await store.setPublished(payload);
     } catch (err) {
-      if (err.status !== 404) {
-        console.warn('[admin] events.json sha fetch failed:', err.message);
-      }
-    }
-    const message = (typeof body.message === 'string' && body.message.trim())
-      ? body.message.trim().slice(0, 200)
-      : `Publish events ${new Date().toISOString().slice(0, 10)} (${events.length} picks)`;
-    try {
-      const result = await github.putJsonFile('docs/events.json', payload, message, sha);
-      res.json({
-        ok: true,
-        commit: result && result.commit ? {
-          sha: result.commit.sha,
-          html_url: result.commit.html_url
-        } : null,
-        published: events.length
+      console.error('[admin] local publish save failed:', err.message);
+      return res.status(500).json({
+        ok: false, error: 'local-publish-failed', message: err.message
       });
-    } catch (err) {
-      console.error('[admin] publish failed:', err.message);
-      res.status(502).json({ ok: false, error: 'publish-failed', message: err.detail || err.message });
     }
+
+    const result = {
+      ok: true,
+      published: events.length,
+      destinations: { local: { ok: true } }
+    };
+
+    // Step 2 — best-effort GitHub commit. Only attempted when configured.
+    if (github.isConfigured()) {
+      let sha = null;
+      try {
+        const cur = await github.getJsonFile('docs/events.json');
+        sha = cur.sha;
+      } catch (err) {
+        if (err.status !== 404) {
+          console.warn('[admin] events.json sha fetch failed:', err.message);
+        }
+      }
+      const message = (typeof body.message === 'string' && body.message.trim())
+        ? body.message.trim().slice(0, 200)
+        : `Publish events ${new Date().toISOString().slice(0, 10)} (${events.length} picks)`;
+      try {
+        const gh = await github.putJsonFile('docs/events.json', payload, message, sha);
+        result.destinations.github = {
+          ok: true,
+          commit: gh && gh.commit ? {
+            sha: gh.commit.sha,
+            html_url: gh.commit.html_url
+          } : null
+        };
+        result.commit = result.destinations.github.commit;
+      } catch (err) {
+        console.error('[admin] github publish failed (local save still succeeded):', err.message);
+        result.destinations.github = {
+          ok: false,
+          error: 'publish-failed',
+          message: err.detail || err.message
+        };
+        result.warning = 'github-publish-failed';
+      }
+    } else {
+      result.destinations.github = {
+        ok: false,
+        error: 'github-not-configured',
+        message: 'GITHUB_TOKEN is not set; events were saved to Railway but not committed to GitHub.'
+      };
+    }
+
+    res.json(result);
   });
 
   // ─── Admin: approved -> candidate-shaped events ───
@@ -396,6 +492,27 @@ export async function createApp(opts = {}) {
     }));
     res.json({ ok: true, events });
   });
+
+  // ─── Public events feed ───────────────────────────────────────────────
+  // The static site at /index.html fetches `./events.json`. When the admin
+  // publishes via /api/admin/publish-events we always save to the local
+  // store (regardless of whether the GitHub commit also succeeded), so this
+  // route serves the freshest copy if one exists. Otherwise we fall through
+  // to the bundled docs/events.json from the deploy.
+  async function serveEventsJson(req, res, next) {
+    try {
+      const published = await store.getPublished();
+      if (published) {
+        res.set('Cache-Control', 'no-store');
+        return res.json(published);
+      }
+    } catch (err) {
+      console.warn('[events] published lookup failed:', err.message);
+    }
+    next();
+  }
+  app.get('/events.json', serveEventsJson);
+  app.get('/docs/events.json', serveEventsJson);
 
   // ─── Static site ───
   app.use(express.static(DOCS_DIR, { extensions: ['html'] }));

@@ -75,12 +75,13 @@ class FileStore {
     try {
       const raw = await fs.readFile(this.file, 'utf8');
       const parsed = JSON.parse(raw);
-      if (!parsed || !Array.isArray(parsed.submissions)) {
-        return { submissions: [] };
+      if (!parsed || typeof parsed !== 'object') {
+        return { submissions: [], published: null };
       }
+      if (!Array.isArray(parsed.submissions)) parsed.submissions = [];
       return parsed;
     } catch (err) {
-      if (err.code === 'ENOENT') return { submissions: [] };
+      if (err.code === 'ENOENT') return { submissions: [], published: null };
       throw err;
     }
   }
@@ -136,6 +137,22 @@ class FileStore {
     });
   }
 
+  // Last-published events.json payload, for the case where Railway is
+  // operating without a GitHub token and we still want a durable copy.
+  async getPublished() {
+    const data = await this._read();
+    return data.published || null;
+  }
+
+  async setPublished(payload) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      data.published = payload;
+      await this._write(data);
+      return payload;
+    });
+  }
+
   // Lightweight duplicate detector: same date + normalized name + venue, status
   // not rejected.
   async findDuplicate({ date, name, venue }) {
@@ -186,6 +203,16 @@ class PgStore {
         await this.pool.query(`
           CREATE INDEX IF NOT EXISTS event_submissions_created_idx
             ON event_submissions(created_at DESC);
+        `);
+        // Single-row store for the most-recent published events.json payload.
+        // Lets Railway operate independently of GitHub when GITHUB_TOKEN is
+        // not configured or the GitHub API is unreachable.
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS published_events (
+            id INT PRIMARY KEY,
+            payload JSONB NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
         `);
       })().catch(err => {
         this._readyPromise = null;
@@ -266,6 +293,25 @@ class PgStore {
     const q = `UPDATE event_submissions SET ${sets.join(', ')} WHERE id = $${args.length} RETURNING *`;
     const r = await this.pool.query(q, args);
     return this._row(r.rows[0] || null);
+  }
+
+  async getPublished() {
+    await this.ready();
+    const r = await this.pool.query(
+      'SELECT payload FROM published_events WHERE id = 1'
+    );
+    return r.rows[0] ? r.rows[0].payload : null;
+  }
+
+  async setPublished(payload) {
+    await this.ready();
+    await this.pool.query(`
+      INSERT INTO published_events (id, payload, updated_at)
+      VALUES (1, $1, NOW())
+      ON CONFLICT (id) DO UPDATE
+        SET payload = EXCLUDED.payload, updated_at = NOW();
+    `, [JSON.stringify(payload)]);
+    return payload;
   }
 
   async findDuplicate({ date, name, venue }) {
