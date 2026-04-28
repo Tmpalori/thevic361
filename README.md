@@ -6,12 +6,18 @@ A community events board that automatically collects and displays things to do i
 
 ## How It Works
 
-1. **`collect_events.py`** gathers events from public Victoria calendars + your curated YAML file
-2. **GitHub Actions** runs the collector every Sunday at 6 PM Central (`weekly-collect.yml`)
+1. **`collect_events.py`** gathers events from public Victoria calendars + your curated YAML file into `candidates.json`
+2. **GitHub Actions** runs the collector every Sunday evening (`weekly-collect.yml`) in **candidates-only** mode — it writes `candidates.json` but does NOT overwrite the curated fallback at `docs/events.json`
 3. At 9 PM Central Sunday, an informational digest email summarizes what was collected
-4. Tristen reviews and picks events at `/admin.html` around 10 PM Sunday, then manually sends the Beehiiv newsletter Monday morning
-5. **GitHub Pages** serves the website from the `docs/` folder
+4. Tristen reviews and picks events at `/admin.html` around 10 PM Sunday, then manually sends the Beehiiv newsletter Monday morning. **Save & Publish** writes the curated payload to Railway Postgres (the live source of truth) and, when `GITHUB_TOKEN` is configured, also commits `docs/events.json` as a fallback.
+5. **Railway** serves the live site; `events.json` is read from Postgres first, falling back to the bundled `docs/events.json` snapshot
 6. The website reads `events.json` and auto-displays the next 7 days
+
+### Source of truth (`events.json`)
+
+- **Live, curated source:** Railway Postgres `published_events` row (`store.getPublished()`), written by the admin Save & Publish flow.
+- **Fallback snapshot:** `docs/events.json` in this repo. Only updated by Save & Publish (with `GITHUB_TOKEN`). The weekly collector workflow runs with `--candidates-only` so CI never overwrites this file with un-screened scraper output.
+- **`candidates.json`:** the full raw collector output for the admin to screen each week. Auto-committed by the weekly workflow.
 
 ## Quick Start
 
@@ -44,7 +50,8 @@ python collect_events.py --output ./docs/events.json --local-dir . --skip-web
 | `local_events.yaml` | Recurring + manually curated events |
 | `extras.yaml` | "New & Notable" section + sponsor |
 | `docs/` | Website files (served by GitHub Pages) |
-| `docs/events.json` | Event data powering the site |
+| `docs/events.json` | Curated fallback snapshot. Live data is served from Railway Postgres; this file is only used when Postgres has nothing or the site is served without the Express layer. Only the admin Save & Publish flow writes this file — the weekly collector skips it via `--candidates-only`. |
+| `candidates.json` | Full raw collector output (every event found this week), for admin screening. |
 | `.github/workflows/` | GitHub Actions for weekly automation |
 
 ## Venue Discovery

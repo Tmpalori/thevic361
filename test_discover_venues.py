@@ -341,3 +341,73 @@ def test_collector_returns_empty_when_no_files(tmp_path, monkeypatch):
     venues, path = ce._load_venue_list()
     assert venues == []
     assert path is None
+
+
+# ─── Observability (Sentry hooks) ───────────────────────────────────────────
+
+
+def test_missing_apify_token_fires_sentry_warn(tmp_path, monkeypatch):
+    """When APIFY_TOKEN is empty, the script must:
+       - skip discovery (no exception)
+       - emit a Sentry warning (not silently)
+    """
+    monkeypatch.setenv("APIFY_TOKEN", "")
+    monkeypatch.delenv("APIFY_TOKEN", raising=False)
+
+    warns = []
+    monkeypatch.setattr(dv, "_sentry_warn",
+                        lambda msg, **tags: warns.append((msg, tags)))
+
+    summary = dv.discover_and_update(repo_root=str(tmp_path))
+    assert summary["ran_apify"] is False
+    # A Sentry warning was fired with a meaningful tag.
+    assert any("APIFY_TOKEN" in m for m, _t in warns), warns
+
+
+def test_apify_http_error_fires_sentry_warn(monkeypatch):
+    """Apify HTTP 4xx/5xx must surface to Sentry, not just stdout."""
+    warns = []
+    monkeypatch.setattr(dv, "_sentry_warn",
+                        lambda msg, **tags: warns.append((msg, tags)))
+
+    class FakeResp:
+        status_code = 503
+        text = "service unavailable"
+
+    items = dv.run_apify_discovery("any-token",
+                                    http_post=lambda *a, **kw: FakeResp())
+    assert items == []
+    assert any("Apify HTTP" in m for m, _t in warns), warns
+
+
+def test_apify_request_exception_fires_sentry_exception(monkeypatch):
+    excs = []
+    monkeypatch.setattr(dv, "_sentry_exception",
+                        lambda stage, **tags: excs.append((stage, tags)))
+
+    def boom(*a, **kw):
+        raise RuntimeError("network down")
+
+    items = dv.run_apify_discovery("tok", http_post=boom)
+    assert items == []
+    assert any(stage == "apify_request" for stage, _t in excs)
+
+
+def test_apify_zero_results_fires_sentry_warn(tmp_path, monkeypatch):
+    """Token set + actor ran but no HIGH/MEDIUM venues → warn (silent breakage)."""
+    monkeypatch.setenv("APIFY_TOKEN", "fake-token")
+
+    warns = []
+    monkeypatch.setattr(dv, "_sentry_warn",
+                        lambda msg, **tags: warns.append((msg, tags)))
+
+    # Apify returns one place that classifies as SKIP (no social) so the
+    # zero-HIGH-zero-MEDIUM Sentry warning is what we want to assert.
+    monkeypatch.setattr(dv, "run_apify_discovery",
+                        lambda token, http_post=None: [
+                            {"title": "Something", "totalScore": 4.0,
+                             "reviewsCount": 100, "categories": ["Bar"]}
+                        ])
+    summary = dv.discover_and_update(repo_root=str(tmp_path))
+    assert summary["ran_apify"] is True
+    assert any("0 HIGH and 0 MEDIUM" in m for m, _t in warns), warns

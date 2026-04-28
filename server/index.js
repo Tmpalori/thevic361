@@ -403,7 +403,7 @@ export async function createApp(opts = {}) {
   });
 
   // ─── Admin: publish events.json ───────────────────────────────────────
-  // Body: { events: [...], message?: "..." }
+  // Body: { events: [...], message?: "..." [, extras: {...}] }
   //
   // Behavior:
   //   1. Always saves the payload to the local store (Postgres or JSON file)
@@ -413,16 +413,55 @@ export async function createApp(opts = {}) {
   //      configured branch via the Contents API. Failures here are surfaced
   //      but do NOT fail the request — the local save already succeeded and
   //      the public site is updated.
+  //   3. Preserves top-level extras like `new_and_notable` and `sponsor`.
+  //      The admin UI only edits the events list; if the request body does
+  //      not include `extras`, we carry forward whatever was on the most
+  //      recent published payload (Railway Postgres, then the bundled
+  //      docs/events.json fallback). This stops events-only publishes from
+  //      silently wiping out the New & Notable section and the sponsor
+  //      block. Callers can also send `extras: { new_and_notable, sponsor }`
+  //      explicitly to update them.
   app.post('/api/admin/publish-events', requireAdmin, async (req, res) => {
     const body = req.body || {};
     const events = Array.isArray(body.events) ? body.events : null;
     if (!events) {
       return res.status(400).json({ ok: false, error: 'bad-payload', message: 'events[] required' });
     }
-    const payload = {
+
+    // Carry-forward top-level extras (new_and_notable, sponsor, …) so an
+    // events-only Save & Publish doesn't drop them. Priority order:
+    //   1. body.extras (caller explicitly provided them)
+    //   2. last published payload from the store
+    //   3. bundled docs/events.json on disk
+    const PROTECTED_KEYS = new Set(['last_updated', 'events']);
+    const extras = {};
+    const explicit = (body.extras && typeof body.extras === 'object' && !Array.isArray(body.extras))
+      ? body.extras : null;
+    if (explicit) {
+      for (const [k, v] of Object.entries(explicit)) {
+        if (!PROTECTED_KEYS.has(k)) extras[k] = v;
+      }
+    } else {
+      // Try previously published first.
+      let prior = null;
+      try { prior = await store.getPublished(); }
+      catch (err) { console.warn('[admin] prior published lookup failed:', err.message); }
+      if (!prior) {
+        // Fall back to the bundled snapshot.
+        try { prior = await readJsonFile(EVENTS_FILE); }
+        catch (_) { prior = null; }
+      }
+      if (prior && typeof prior === 'object') {
+        for (const [k, v] of Object.entries(prior)) {
+          if (!PROTECTED_KEYS.has(k)) extras[k] = v;
+        }
+      }
+    }
+
+    const payload = Object.assign({}, extras, {
       last_updated: new Date().toISOString(),
       events
-    };
+    });
 
     // Step 1 — local persistence. This is what makes the Railway public site
     // reflect the new picks regardless of GitHub state.

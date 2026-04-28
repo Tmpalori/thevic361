@@ -1,6 +1,23 @@
 # ─── The Vic 361 — Weekly Event Collection ───────────────────────────────────
-# Runs every Sunday at 6:00 PM Central (23:00 UTC during CDT) to collect events
-# and update the website's events.json.
+# Runs every Sunday evening to populate candidates.json for the admin to
+# screen. Does NOT auto-publish: the live source of truth on Railway is the
+# `published_events` row written by the admin Save & Publish flow, and
+# docs/events.json in this repo is a curated fallback that Save & Publish
+# (via GITHUB_TOKEN) is the only writer of. The weekly run uses
+# --candidates-only so CI never overwrites that fallback with raw scraper
+# output. See README.md "Public Event Submissions" / RAILWAY.md for details.
+#
+# Schedule note (DST drift): GitHub Actions cron runs in UTC and does NOT
+# observe US daylight-saving transitions. The fixed cron below means the
+# job fires:
+#   - 6:00 PM Central during CDT (Mar–Nov, UTC-5)
+#   - 5:00 PM Central during CST (Nov–Mar, UTC-6)
+# The 1-hour shift twice a year is intentional and acceptable — the digest
+# job and the admin's Sunday-evening review window both have plenty of
+# slack. If you need an exact 6:00 PM Central year-round, switch to two
+# scheduled triggers gated by month, or move the trigger to a service that
+# honors timezones (e.g. Railway cron). Do NOT silently "fix" the cron each
+# DST switch — that's an unsignalled drift the audit flagged.
 # Also runs on manual trigger (workflow_dispatch).
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -8,11 +25,13 @@ name: Weekly Collect
 
 on:
   schedule:
-    - cron: '0 23 * * 0'  # 6:00 PM Central, Sunday (UTC-5 during CDT)
+    # 23:00 UTC every Sunday. = 6 PM CDT (Mar–Nov) / 5 PM CST (Nov–Mar).
+    # See header comment for why we accept this 1-hour DST drift.
+    - cron: '0 23 * * 0'
   workflow_dispatch:       # Manual trigger from GitHub UI
 
 permissions:
-  contents: write          # Needed to push updated events.json
+  contents: write          # Needed to push updated candidates.json + venue files
 
 jobs:
   collect:
@@ -33,12 +52,19 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Discover venues (Google Maps)
-        # Non-destructive: if APIFY_TOKEN is missing or the actor fails,
-        # discover_venues.py exits 0 and leaves existing venue files alone.
+        # Non-destructive: discover_venues.py is wrapped so a missing
+        # APIFY_TOKEN, an Apify HTTP error, or a top-level exception all
+        # exit 0 and leave existing venue files alone. Each of those
+        # paths now also fires a Sentry warning/exception, so failures
+        # are visible without grep-diving the workflow log. We do NOT
+        # `|| echo` here any more — the script already exits 0 on
+        # expected failures, and masking exit codes would re-introduce
+        # the double-silencing the audit flagged.
         env:
-          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-        run: |
-          python discover_venues.py || echo "Venue discovery skipped (non-fatal)"
+          APIFY_TOKEN:        ${{ secrets.APIFY_TOKEN }}
+          SENTRY_DSN:         ${{ secrets.SENTRY_DSN }}
+          SENTRY_ENVIRONMENT: production
+        run: python discover_venues.py
 
       - name: Run event collector
         env:
@@ -57,16 +83,23 @@ jobs:
           # IG_POSTS_ENABLED=1 (Settings → Variables → Actions) to enable.
           IG_POSTS_ENABLED:   ${{ vars.IG_POSTS_ENABLED }}
         run: |
+          # --candidates-only: write candidates.json but DO NOT overwrite
+          # docs/events.json. The curated fallback at docs/events.json is
+          # owned exclusively by the admin Save & Publish flow.
           python collect_events.py \
             --output ./docs/events.json \
             --candidates ./candidates.json \
             --local-dir . \
-            --days 14
+            --days 14 \
+            --candidates-only
 
       - name: Check for changes
         id: changes
         run: |
-          if git diff --quiet docs/events.json candidates.json venues.json pending_venues.json facebook_venues.backup.json 2>/dev/null; then
+          # Note: docs/events.json is intentionally NOT in this list — the
+          # weekly job runs in --candidates-only mode and must never commit
+          # changes to the curated fallback.
+          if git diff --quiet candidates.json venues.json pending_venues.json facebook_venues.backup.json 2>/dev/null; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -81,6 +114,9 @@ jobs:
           for f in venues.json pending_venues.json facebook_venues.backup.json; do
             [ -f "$f" ] && git add "$f"
           done
-          git add docs/events.json candidates.json
-          git commit -m "🏙️ Update events $(date +'%Y-%m-%d')"
+          # docs/events.json is deliberately omitted: it's the curated
+          # fallback and only the admin Save & Publish flow (running with
+          # GITHUB_TOKEN) is allowed to commit to it.
+          git add candidates.json
+          git commit -m "🏙️ Update candidates $(date +'%Y-%m-%d')"
           git push

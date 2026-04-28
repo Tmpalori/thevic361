@@ -38,6 +38,57 @@ from typing import Any, Iterable
 import requests
 
 
+# ─── SENTRY (silent failure observability) ──────────────────────────────────
+# Mirrors collect_events.py: a missing SENTRY_DSN or missing sentry_sdk
+# leaves these hooks as no-ops, but if Sentry IS configured the workflow
+# logs are no longer the only way to see breakage. The audit specifically
+# called out that this script previously double-silenced everything (every
+# error path printed a one-liner and returned []), so each interesting
+# failure now also fires a Sentry event.
+
+_SENTRY_ENABLED = False
+try:
+    import sentry_sdk  # type: ignore
+    _dsn = os.environ.get("SENTRY_DSN", "").strip()
+    if _dsn:
+        sentry_sdk.init(
+            dsn=_dsn,
+            traces_sample_rate=0.0,
+            environment=os.environ.get(
+                "SENTRY_ENVIRONMENT", "thevic361-discover-venues"
+            ),
+            release=os.environ.get("GITHUB_SHA", "local")[:12],
+        )
+        _SENTRY_ENABLED = True
+except Exception:
+    _SENTRY_ENABLED = False
+
+
+def _sentry_warn(message: str, **tags: Any) -> None:
+    if not _SENTRY_ENABLED:
+        return
+    try:
+        with sentry_sdk.push_scope() as scope:
+            for k, v in tags.items():
+                scope.set_tag(k, v)
+            sentry_sdk.capture_message(message, level="warning")
+    except Exception:
+        pass
+
+
+def _sentry_exception(stage: str, **tags: Any) -> None:
+    if not _SENTRY_ENABLED:
+        return
+    try:
+        with sentry_sdk.push_scope() as scope:
+            scope.set_tag("stage", stage)
+            for k, v in tags.items():
+                scope.set_tag(k, v)
+            sentry_sdk.capture_exception()
+    except Exception:
+        pass
+
+
 # ─── Constants ──────────────────────────────────────────────────────────────
 
 APIFY_GMAPS_ACTOR = "compass~google-maps-extractor"
@@ -299,7 +350,13 @@ def _build_actor_input(search_terms: list[str]) -> dict:
 
 
 def run_apify_discovery(token: str, *, http_post=None) -> list[dict]:
-    """Call the Apify actor and return the raw item list. Empty list on error."""
+    """Call the Apify actor and return the raw item list. Empty list on error.
+
+    Failures are intentionally non-fatal (the workflow comment says discovery
+    is best-effort), but they are no longer silent — each failure path fires
+    a Sentry event so the operator can see breakage without grep-diving the
+    Actions log.
+    """
     post = http_post or requests.post
     url = (
         f"https://api.apify.com/v2/acts/{APIFY_GMAPS_ACTOR}"
@@ -315,22 +372,35 @@ def run_apify_discovery(token: str, *, http_post=None) -> list[dict]:
         )
     except Exception as e:
         print(f"  [discover] Apify request failed: {e}")
+        _sentry_exception("apify_request", actor=APIFY_GMAPS_ACTOR)
         return []
 
     status = getattr(resp, "status_code", 0)
     if status >= 400:
         text = getattr(resp, "text", "") or ""
         print(f"  [discover] Apify HTTP {status}: {text[:300]}")
+        _sentry_warn(
+            f"[discover] Apify HTTP {status}",
+            actor=APIFY_GMAPS_ACTOR,
+            status=str(status),
+        )
         return []
 
     try:
         items = resp.json()
     except Exception as e:
         print(f"  [discover] Apify response parse failed: {e}")
+        _sentry_exception("apify_parse", actor=APIFY_GMAPS_ACTOR)
         return []
 
     if not isinstance(items, list):
-        print(f"  [discover] Unexpected Apify payload type: {type(items).__name__}")
+        kind = type(items).__name__
+        print(f"  [discover] Unexpected Apify payload type: {kind}")
+        _sentry_warn(
+            "[discover] Unexpected Apify payload type",
+            actor=APIFY_GMAPS_ACTOR,
+            payload_type=kind,
+        )
         return []
     return items
 
@@ -537,7 +607,14 @@ def discover_and_update(repo_root: str | None = None, *, http_post=None) -> dict
     skipped = 0
 
     if not token:
+        # Visible-skipped-token: a zero-effort path that used to be logged
+        # only to stdout. Now also fires a Sentry warning so the operator
+        # finds out before the next weekly digest comes in dry.
         print("  [discover] No APIFY_TOKEN — skipping Google Maps discovery")
+        _sentry_warn(
+            "[discover] APIFY_TOKEN not set; venue discovery skipped",
+            stage="apify_token_missing",
+        )
     else:
         items = run_apify_discovery(token, http_post=http_post)
         summary["ran_apify"] = True
@@ -559,6 +636,20 @@ def discover_and_update(repo_root: str | None = None, *, http_post=None) -> dict
                 discovered_medium.append(v)
             else:
                 skipped += 1
+
+        # Surface the silent-zero case: token was set, actor ran, but
+        # NOTHING new came back across HIGH/MEDIUM. That can be legitimate
+        # (everything in Victoria is already in the seed list) but is more
+        # often a sign the actor schema changed, the token's quota lapsed,
+        # or the location query stopped resolving. We want a Sentry ping
+        # on that, not just a dry workflow log.
+        if not discovered_high and not discovered_medium:
+            _sentry_warn(
+                "[discover] Apify ran but produced 0 HIGH and 0 MEDIUM venues",
+                stage="apify_zero_results",
+                items=str(len(items)),
+                skipped=str(skipped),
+            )
 
     # 2. Merge HIGH + seed + existing → venues.json
     merged = merge_venues(seed, discovered_high, existing_primary)
@@ -602,8 +693,14 @@ def main(argv: list[str] | None = None) -> int:
         discover_and_update(repo_root=args.repo_root)
         return 0
     except Exception as e:
-        # Non-destructive failure: log and exit 0 so the workflow continues.
+        # Non-destructive failure: capture to Sentry (so it's visible) and
+        # exit 0 so the workflow continues with the existing venue files.
+        # The audit's complaint was that THIS path used to be the only
+        # signal that anything went wrong — it was a stdout one-liner that
+        # the workflow then masked again with `|| echo "skipped"`. Sentry
+        # makes the failure surface even when nobody reads the Action log.
         print(f"  [discover] Discovery failed (non-fatal): {e}")
+        _sentry_exception("discover_top_level")
         return 0
 
 
