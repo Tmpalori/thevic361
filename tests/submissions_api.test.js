@@ -394,6 +394,69 @@ describe('Admin API auth + transitions', () => {
     expect(p.icons).toContain('free');
   });
 
+  it('admin Save Edits succeeds on a LEGACY row missing submitter contact fields', async () => {
+    // Regression for the post-PR#32/#34 Save Edits 400. Rows created before
+    // first/last/phone became required don't carry those keys on the payload;
+    // when the admin opens the edit view, the contact inputs are blank, and
+    // saving used to fail validation. The admin endpoint now runs in lenient
+    // mode so legacy data can still be edited without retyping someone else's
+    // contact info.
+    const c = await fetchJson('POST', '/api/submissions', validBody());
+    const id = c.json.id;
+    // Strip the contact fields from the payload to simulate a legacy row,
+    // then drive the same merge the admin frontend does on Save Edits.
+    const list = await fetchJson('GET', '/api/admin/submissions', undefined,
+      { Authorization: 'Bearer test-admin-token' });
+    const orig = list.json.submissions.find(s => s.id === id);
+    const legacyPayload = { ...orig.payload };
+    delete legacyPayload.submitter_first_name;
+    delete legacyPayload.submitter_last_name;
+    delete legacyPayload.submitter_phone;
+    // Admin tweaks the venue name only; contact fields stay blank because the
+    // legacy row never had them.
+    const merged = {
+      ...legacyPayload,
+      submitter_email: orig.submitter_email || '',
+      submitter_name: orig.submitter_name || '',
+      venue: 'Renamed Venue',
+      submitter_first_name: '',
+      submitter_last_name: '',
+      submitter_phone: ''
+    };
+    const r = await fetchJson('POST', '/api/admin/submissions/' + id,
+      { payload: merged }, { Authorization: 'Bearer test-admin-token' });
+    expect(r.status).toBe(200);
+    expect(r.json.ok).toBe(true);
+    expect(r.json.submission.payload.venue).toBe('Renamed Venue');
+    // Row-level submitter info is preserved (not wiped by the edit).
+    expect(r.json.submission.submitter_email).toBe('jane@example.com');
+    expect(r.json.submission.submitter_name).toBe('Jane Tester');
+  });
+
+  it('admin Save Edits still validates core event fields (name length etc.)', async () => {
+    // The lenient mode only relaxes submitter contact requirements. Core
+    // event-level validation must still fire so a save can't bypass name/date/
+    // venue/address checks.
+    const c = await fetchJson('POST', '/api/submissions', validBody());
+    const r = await fetchJson('POST', '/api/admin/submissions/' + c.json.id,
+      { payload: { name: 'X', date: '2026-05-12', time: '7:00 PM',
+        venue: 'V', address: '123 Main' } },
+      { Authorization: 'Bearer test-admin-token' });
+    expect(r.status).toBe(400);
+    expect(r.json.errors.name).toBeDefined();
+  });
+
+  it('admin Save Edits still rejects a malformed email when one is provided', async () => {
+    // Lenient = optional, not unchecked. If the admin types an obviously bad
+    // email, the format rule still fires.
+    const c = await fetchJson('POST', '/api/submissions', validBody());
+    const r = await fetchJson('POST', '/api/admin/submissions/' + c.json.id,
+      { payload: { ...validBody(), submitter_email: 'not-an-email' } },
+      { Authorization: 'Bearer test-admin-token' });
+    expect(r.status).toBe(400);
+    expect(r.json.errors.submitter_email).toBeDefined();
+  });
+
   it('approved-events surfaces all event fields (incl. end_time + address) for the picker', async () => {
     const c = await fetchJson('POST', '/api/submissions', validBody());
     await fetchJson('POST', '/api/admin/submissions/' + c.json.id,
