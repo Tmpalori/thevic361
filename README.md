@@ -150,6 +150,13 @@ weekly publish flow.
   (`GITHUB_TOKEN`), so the browser never needs a GitHub PAT.
 - Admin Submissions tab: shares the same login session — no separate
   token needed.
+- `GITHUB_TOKEN` is **optional**. Without it, the admin still loads
+  candidates from the bundled `candidates.json` plus the approved-
+  submissions queue, and **Save & Publish** stores the published payload
+  in Railway (Postgres or JSON-file fallback) so the Railway public site
+  serves it from `/events.json`. With `GITHUB_TOKEN`, **Save & Publish**
+  also commits `docs/events.json` to `Tmpalori/thevic361@main` so GitHub
+  Pages stays in sync.
 - Public-facing `events.json` strips submitter PII and admin-only
   metadata before publish.
 

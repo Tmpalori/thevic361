@@ -332,10 +332,11 @@
 
   // ─── CANDIDATES ───
   function publishMode() {
-    // Server publish if the server says it has a token AND we have a session.
-    if (state.session && state.serverConfig && state.serverConfig.github_publish_enabled) {
-      return 'server';
-    }
+    // Prefer the server whenever we're signed in. The server now handles
+    // candidates (local-file fallback when GITHUB_TOKEN is missing) and
+    // publishing (saved to Railway's local store; optionally also committed
+    // to GitHub when GITHUB_TOKEN is configured).
+    if (state.session) return 'server';
     if (state.pat) return 'pat';
     return null;
   }
@@ -350,6 +351,8 @@
 
     try {
       let data;
+      let warning = null;
+      let source = null;
       const mode = publishMode();
       if (mode === 'server') {
         const { res, json } = await adminFetch('/api/admin/candidates');
@@ -357,6 +360,8 @@
           throw new Error((json && json.message) || 'Failed to load candidates from server.');
         }
         data = json.data;
+        warning = json.warning || null;
+        source = json.source || null;
       } else if (mode === 'pat') {
         const got = await ghGetJsonFile(CANDIDATES_PATH);
         data = got.data;
@@ -373,7 +378,16 @@
       pruneStalePastSelections();
       populateFilters();
       renderPicker();
-      setStatus('Loaded ' + events.length + ' candidate event(s).', 'success');
+      const sourceNote = source === 'local-file'
+        ? ' (from local file — GitHub token not configured or unavailable)'
+        : '';
+      setStatus('Loaded ' + events.length + ' candidate event(s)' + sourceNote + '.', 'success');
+      if (warning && errEl) {
+        // Non-fatal: server fell back to the bundled file. Surface so the
+        // operator knows the GitHub fetch was rejected, but don't block.
+        errEl.hidden = false;
+        errEl.textContent = 'Note: ' + warning + ' — showing bundled candidates instead.';
+      }
     } catch (err) {
       console.error(err);
       if (errEl) {
@@ -724,6 +738,21 @@
         if (!res.ok || !json || !json.ok) {
           throw new Error((json && (json.message || json.error)) || ('Publish failed (' + res.status + ')'));
         }
+        // Surface partial-publish status. The server always saves to Railway
+        // first; the GitHub commit is best-effort and only happens when
+        // GITHUB_TOKEN is configured.
+        const dest = (json && json.destinations) || {};
+        const ghOk = dest.github && dest.github.ok;
+        const ghAttempted = dest.github && dest.github.error !== 'github-not-configured';
+        if (ghOk) {
+          setStatus('Published ' + picks.length + ' event(s) to Railway and GitHub.', 'success');
+        } else if (ghAttempted) {
+          setStatus('Saved ' + picks.length + ' event(s) to Railway. GitHub commit failed: ' +
+            ((dest.github && dest.github.message) || 'unknown error'), 'error');
+        } else {
+          setStatus('Saved ' + picks.length + ' event(s) to Railway. GitHub token not configured — set GITHUB_TOKEN if you also want to commit to the repo.', 'success');
+        }
+        return;
       } else {
         // Legacy PAT fallback.
         let sha = null;
@@ -774,8 +803,10 @@
       if (loginForm) loginForm.hidden = true;
       if (help) help.textContent = 'Server login is not configured. Set ADMIN_USERNAME / ADMIN_PASSWORD / ADMIN_SESSION_SECRET on the server, or use a GitHub PAT below.';
     }
-    // Show the PAT fallback only if the server cannot publish on our behalf.
-    if (patForm) patForm.hidden = Boolean(cfg.github_publish_enabled);
+    // The server can now load candidates and save publishes locally without a
+    // GitHub token, so the PAT fallback is only useful when login itself is
+    // not configured. Hide it whenever login works.
+    if (patForm) patForm.hidden = Boolean(cfg.admin_login_enabled);
   }
 
   async function authedSession() {

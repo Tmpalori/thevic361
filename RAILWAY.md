@@ -41,7 +41,7 @@ publish via the GitHub Contents API as today.
    | `ADMIN_PASSWORD` | **yes** | Password for the admin login page. Use a long, unique value. |
    | `ADMIN_SESSION_SECRET` | **yes** | HMAC key used to sign session tokens. Generate with `openssl rand -hex 32`. Rotating this value forces every signed-in admin to log in again. |
    | `ADMIN_SESSION_TTL_HOURS` | optional | Session lifetime in hours. Default `12`. |
-   | `GITHUB_TOKEN` (or `GITHUB_PAT`) | recommended | Server-side GitHub Personal Access Token with `contents:write` access to `Tmpalori/thevic361`. Lets the admin publish events without ever putting a PAT in the browser. If unset, the admin falls back to its older browser-side PAT flow. |
+   | `GITHUB_TOKEN` (or `GITHUB_PAT`) | **optional** | Only required if you also want **Save & Publish** to commit `docs/events.json` back to GitHub. Without it, the admin still loads candidates (from the bundled `candidates.json` plus approved submissions) and **Save & Publish** still works — it stores the published payload in Railway's Postgres and the public site at the Railway domain serves it from there. Set this only when you want a parallel commit to `Tmpalori/thevic361`. |
    | `GITHUB_OWNER` / `GITHUB_REPO` / `GITHUB_BRANCH` | optional | Override the default `Tmpalori` / `thevic361` / `main` target. |
    | `ADMIN_TOKEN` | optional | Legacy single-token admin auth, kept as a fallback. If you set the three login variables above you do **not** need this. |
    | `TURNSTILE_SITE_KEY` | optional | Cloudflare Turnstile site key. Sent to the public submit page so the widget renders. |
@@ -114,16 +114,46 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 ```
 
 Then sign in via the browser at `/admin.html`, click **Reload candidates**,
-pick a couple of events, and hit **Save & Publish**. Confirm a new commit
-appears on `main` in the GitHub repo.
+pick a couple of events, and hit **Save & Publish**. With `GITHUB_TOKEN`
+set, you should see "Published to Railway and GitHub" and a new commit on
+`main`. Without it, you'll see "Saved to Railway. GitHub token not
+configured…" and the Railway public events feed updates immediately.
 
-### Legacy fallback
+### What loads candidates when `GITHUB_TOKEN` is missing
 
-If `GITHUB_TOKEN` is **not** set, the admin shows a "Use PAT instead"
-form alongside the login form. That flow is identical to the old
-behavior — paste a GitHub PAT with `contents:write` on
-`Tmpalori/thevic361` and publish from the browser. Use this only if you
-explicitly do not want a server-side token.
+The admin **Pick events** tab works without a GitHub token:
+
+- The server first tries the GitHub Contents API. If `GITHUB_TOKEN` is unset
+  *or* the API returns an auth error, it falls back to reading the
+  `candidates.json` file bundled with the deploy.
+- Approved submissions from the review queue (`event_submissions` table or
+  `data/submissions.json` fallback) are merged into the candidate list
+  automatically — you no longer need to click **Pull approved into picker**
+  to see them.
+- The admin UI surfaces a banner like "Note: github-fetch-failed-401 —
+  showing bundled candidates instead." so you can tell the difference at a
+  glance.
+
+### Save & Publish without GitHub
+
+`POST /api/admin/publish-events` now does two things:
+
+1. **Always** writes the published payload to the local store (Postgres
+   `published_events` row when `DATABASE_URL` is set, otherwise the JSON
+   file). Express serves `/events.json` from this store, so the public site
+   at the Railway domain reflects the publish immediately.
+2. **If `GITHUB_TOKEN` is configured**, additionally commits
+   `docs/events.json` on `main` via the Contents API. A failure here is
+   surfaced as a warning (`destinations.github.error`) but does **not** roll
+   back the local save — you can fix the token and re-publish to push the
+   GitHub copy back into sync.
+
+### Legacy GitHub PAT fallback
+
+The "Use PAT instead" form is only shown when server login is not
+configured at all (no `ADMIN_USERNAME` / `ADMIN_PASSWORD` /
+`ADMIN_SESSION_SECRET`). With login configured the server handles
+candidates and publishing; the browser never holds a PAT.
 
 ## Cloudflare Turnstile
 
@@ -180,6 +210,10 @@ Covers:
 - Admin auth + status transitions
 - Approved-events shape
 - Source pill rendering + private-field stripping in the admin
+- Candidates load with no `GITHUB_TOKEN` (local-file fallback) and on a
+  GitHub 401 (token-rejected fallback)
+- `Save & Publish` works without `GITHUB_TOKEN` (local-only) and stays in
+  sync with GitHub when both are configured
 
 ## Existing GitHub Actions / collector
 
