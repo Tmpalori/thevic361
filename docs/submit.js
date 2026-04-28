@@ -32,6 +32,46 @@
     fe.hidden = false;
   }
 
+  // Build the time options used by the start/end time selects. 30-minute
+  // increments covering normal event hours (7:00 AM – 1:30 AM next day) keep
+  // the list practical without forcing TBD on people who actually know.
+  function buildTimeOptions() {
+    const out = [];
+    // 7am through midnight, then 12:30am, 1:00am, 1:30am as late-night slots.
+    const slots = [];
+    for (let h = 7; h <= 23; h++) slots.push(h * 60, h * 60 + 30);
+    slots.push(24 * 60, 24 * 60 + 30, 25 * 60, 25 * 60 + 30); // 12:00am, 12:30am, 1:00am, 1:30am
+    for (const m of slots) {
+      const hh = Math.floor(m / 60) % 24;
+      const mm = m % 60;
+      const ampm = hh < 12 ? 'AM' : 'PM';
+      const h12 = ((hh + 11) % 12) + 1;
+      const label = `${h12}:${String(mm).padStart(2, '0')} ${ampm}`;
+      out.push(label);
+    }
+    return out;
+  }
+
+  function populateTimeSelects() {
+    const opts = buildTimeOptions();
+    const start = $('#f-time');
+    const end = $('#f-end');
+    if (start) {
+      for (const t of opts) {
+        const o = document.createElement('option');
+        o.value = t; o.textContent = t;
+        start.appendChild(o);
+      }
+    }
+    if (end) {
+      for (const t of opts) {
+        const o = document.createElement('option');
+        o.value = t; o.textContent = t;
+        end.appendChild(o);
+      }
+    }
+  }
+
   // Load Cloudflare Turnstile script and render the widget if a site key is
   // configured. Stores the resulting token via setTurnstileToken().
   function setTurnstileToken(t) { turnstileToken = t; }
@@ -81,6 +121,9 @@
     };
     const free = (document.querySelector('input[name="free"]:checked') || {}).value === 'true';
     const submitter_kind = (document.querySelector('input[name="submitter_kind"]:checked') || {}).value || 'other';
+    const first = get('submitter_first_name');
+    const last = get('submitter_last_name');
+    const combinedName = [first, last].map(s => (s || '').trim()).filter(Boolean).join(' ');
     return {
       name: get('name'),
       date: get('date'),
@@ -93,8 +136,11 @@
       icons: collectIcons(),
       free,
       submitter_kind,
-      submitter_name: get('submitter_name'),
+      submitter_first_name: first,
+      submitter_last_name: last,
+      submitter_name: combinedName,
       submitter_email: get('submitter_email'),
+      submitter_phone: get('submitter_phone'),
       company: get('company'),
       elapsed_ms: Date.now() - FORM_LOAD_TS,
       turnstile_token: turnstileToken
@@ -173,6 +219,7 @@
   }
 
   async function init() {
+    populateTimeSelects();
     const form = $('#submit-form');
     if (form) form.addEventListener('submit', handleSubmit);
     wireResetForAnother();
@@ -202,7 +249,7 @@
   // Test hook — exposes the form collector + token setter for jsdom tests.
   if (typeof window !== 'undefined') {
     window.__vic361Submit = {
-      collectForm, setTurnstileToken, FORM_LOAD_TS
+      collectForm, setTurnstileToken, FORM_LOAD_TS, buildTimeOptions, populateTimeSelects
     };
   }
 })();

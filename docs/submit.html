@@ -49,14 +49,16 @@
           </div>
           <div class="field">
             <label for="f-time">Start time *</label>
-            <input id="f-time" name="time" type="text" required maxlength="60"
-                   placeholder="7:00 PM">
+            <select id="f-time" name="time" required>
+              <option value="" disabled selected>Select a start time…</option>
+            </select>
             <p class="field-error" data-error-for="time"></p>
           </div>
           <div class="field">
             <label for="f-end">End time</label>
-            <input id="f-end" name="end_time" type="text" maxlength="60"
-                   placeholder="10:00 PM">
+            <select id="f-end" name="end_time">
+              <option value="" selected>Select an end time…</option>
+            </select>
           </div>
         </div>
 
@@ -68,15 +70,16 @@
         </div>
 
         <div class="field">
-          <label for="f-address">Address</label>
-          <input id="f-address" name="address" type="text" maxlength="300"
+          <label for="f-address">Address *</label>
+          <input id="f-address" name="address" type="text" required maxlength="300"
                  placeholder="123 Main St, Victoria, TX">
+          <p class="field-error" data-error-for="address"></p>
         </div>
 
         <div class="field">
           <label for="f-url">Link (Facebook event, Eventbrite, website)</label>
-          <input id="f-url" name="url" type="url" maxlength="500"
-                 placeholder="https://...">
+          <input id="f-url" name="url" type="text" maxlength="500"
+                 placeholder="example.com or https://example.com/event">
           <p class="field-error" data-error-for="url"></p>
         </div>
 
@@ -128,15 +131,31 @@
 
         <div class="field-row">
           <div class="field">
-            <label for="f-sub-name">Your name</label>
-            <input id="f-sub-name" name="submitter_name" type="text"
-                   maxlength="120" autocomplete="name" placeholder="Optional">
+            <label for="f-sub-first">First name *</label>
+            <input id="f-sub-first" name="submitter_first_name" type="text"
+                   required maxlength="60" autocomplete="given-name" placeholder="Jane">
+            <p class="field-error" data-error-for="submitter_first_name"></p>
           </div>
           <div class="field">
-            <label for="f-sub-email">Your email</label>
+            <label for="f-sub-last">Last name *</label>
+            <input id="f-sub-last" name="submitter_last_name" type="text"
+                   required maxlength="60" autocomplete="family-name" placeholder="Doe">
+            <p class="field-error" data-error-for="submitter_last_name"></p>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="f-sub-email">Your email *</label>
             <input id="f-sub-email" name="submitter_email" type="email"
-                   maxlength="254" autocomplete="email" placeholder="optional@example.com">
+                   required maxlength="254" autocomplete="email" placeholder="you@example.com">
             <p class="field-error" data-error-for="submitter_email"></p>
+          </div>
+          <div class="field">
+            <label for="f-sub-phone">Phone number *</label>
+            <input id="f-sub-phone" name="submitter_phone" type="tel"
+                   required maxlength="40" autocomplete="tel" placeholder="(361) 555-0123">
+            <p class="field-error" data-error-for="submitter_phone"></p>
           </div>
         </div>
 

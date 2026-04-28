@@ -72,10 +72,14 @@ describe('submit.js — collectForm()', () => {
   }
 
   it('returns the canonical event shape with bot-signal extras', () => {
+    // Time is a select now — populate it first so it has options to pick.
+    api.populateTimeSelects();
     fill({
-      name: 'Test', date: '2026-05-12', time: '7 PM',
+      name: 'Test', date: '2026-05-12', time: '7:00 PM',
       venue: 'V', address: 'A', url: 'https://x.test',
-      description: 'd', submitter_name: 'Jane', submitter_email: 'j@x.com'
+      description: 'd',
+      submitter_first_name: 'Jane', submitter_last_name: 'Doe',
+      submitter_email: 'j@x.com', submitter_phone: '(361) 555-0000'
     });
     document.querySelector('input[name="icons"][value="music"]').checked = true;
     api.setTurnstileToken('cf-token');
@@ -86,6 +90,10 @@ describe('submit.js — collectForm()', () => {
     expect(typeof out.elapsed_ms).toBe('number');
     expect(out.company).toBe('');
     expect(out.submitter_kind).toBe('organizer');
+    expect(out.submitter_first_name).toBe('Jane');
+    expect(out.submitter_last_name).toBe('Doe');
+    expect(out.submitter_name).toBe('Jane Doe');
+    expect(out.submitter_phone).toBe('(361) 555-0000');
   });
 
   it('honeypot value is included in the payload (server detects it)', () => {

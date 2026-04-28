@@ -15,6 +15,8 @@ const MAX_URL = 500;
 const MAX_TIME = 60;
 const MAX_EMAIL = 254;
 const MAX_SUBMITTER_NAME = 120;
+const MAX_SUBMITTER_NAME_PART = 60;
+const MAX_PHONE = 40;
 
 const ALLOWED_ICONS = new Set([
   'food', 'music', 'family', 'drinks', 'arts',
@@ -24,8 +26,15 @@ const ALLOWED_ICONS = new Set([
 const ALLOWED_SUBMITTER_KIND = new Set(['organizer', 'found_online', 'other']);
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+// Accepts http(s)://host/... — used to validate the URL after scheme
+// normalization (we add https:// when the user supplied a bare host like
+// example.com, so the stored value is always a usable absolute URL).
 const URL_RE = /^https?:\/\/[^\s]+$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Phone: at least 7 digits when punctuation/spaces are stripped. Permissive on
+// formatting (parentheses, dashes, dots, +, spaces) so users aren't forced into
+// a specific style.
+const PHONE_DIGIT_RE = /\d/g;
 
 // Strip ASCII control chars (\x00-\x1F minus \t\n, plus DEL) before trim/cap.
 const CONTROL_CHARS = new RegExp('[\\x00-\\x08\\x0B-\\x1F\\x7F]', 'g');
@@ -33,6 +42,20 @@ const CONTROL_CHARS = new RegExp('[\\x00-\\x08\\x0B-\\x1F\\x7F]', 'g');
 function clean(s, max) {
   if (s == null) return '';
   return String(s).replace(CONTROL_CHARS, '').trim().slice(0, max);
+}
+
+// Normalize a user-entered URL. If the user typed `example.com` or
+// `www.example.com` we add `https://` so the stored value is a usable absolute
+// URL. Existing http:// or https:// inputs are passed through unchanged.
+// Returns '' for empty input.
+export function normalizeUrl(raw) {
+  const s = clean(raw, MAX_URL);
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  // Reject obvious non-http schemes (javascript:, data:, mailto:, etc.) — we
+  // only auto-prepend https:// to inputs that look like a bare host/path.
+  if (/^[a-z][a-z0-9+\-.]*:/i.test(s)) return s; // leave intact; URL_RE check below will reject
+  return 'https://' + s;
 }
 
 export function validateSubmission(input) {
@@ -62,10 +85,19 @@ export function validateSubmission(input) {
   if (!venue) errors.venue = 'Venue is required.';
 
   const address = clean(input.address, MAX_ADDRESS);
+  if (!address) errors.address = 'Address is required.';
+
   const description = clean(input.description, MAX_DESC);
-  const url = clean(input.url, MAX_URL);
-  if (url && !URL_RE.test(url)) {
-    errors.url = 'Link must start with http:// or https://';
+
+  // URL: optional. If supplied, accept bare hosts (example.com,
+  // www.example.com) by prepending https:// before validating.
+  const rawUrl = clean(input.url, MAX_URL);
+  let url = '';
+  if (rawUrl) {
+    url = normalizeUrl(rawUrl);
+    if (!URL_RE.test(url)) {
+      errors.url = 'Link must be a valid website (e.g. example.com).';
+    }
   }
 
   let icons = [];
@@ -79,10 +111,33 @@ export function validateSubmission(input) {
   const free = Boolean(input.free);
   if (free && !icons.includes('free')) icons.push('free');
 
-  const submitter_name = clean(input.submitter_name, MAX_SUBMITTER_NAME);
+  // Submitter contact: first/last/email/phone are now all required. We keep
+  // submitter_name (concatenated) populated for backward compatibility with
+  // existing storage and admin code; the parts live on the payload so future
+  // schema work can split them out without losing data.
+  const submitter_first_name = clean(input.submitter_first_name, MAX_SUBMITTER_NAME_PART);
+  const submitter_last_name = clean(input.submitter_last_name, MAX_SUBMITTER_NAME_PART);
+  if (!submitter_first_name) errors.submitter_first_name = 'First name is required.';
+  if (!submitter_last_name) errors.submitter_last_name = 'Last name is required.';
+
+  let submitter_name = clean(input.submitter_name, MAX_SUBMITTER_NAME);
+  if (!submitter_name) {
+    submitter_name = [submitter_first_name, submitter_last_name].filter(Boolean).join(' ').slice(0, MAX_SUBMITTER_NAME);
+  }
+
   const submitter_email = clean(input.submitter_email, MAX_EMAIL);
-  if (submitter_email && !EMAIL_RE.test(submitter_email)) {
+  if (!submitter_email) {
+    errors.submitter_email = 'Email is required.';
+  } else if (!EMAIL_RE.test(submitter_email)) {
     errors.submitter_email = 'Email looks invalid.';
+  }
+
+  const submitter_phone = clean(input.submitter_phone, MAX_PHONE);
+  if (!submitter_phone) {
+    errors.submitter_phone = 'Phone number is required.';
+  } else {
+    const digits = (submitter_phone.match(PHONE_DIGIT_RE) || []).length;
+    if (digits < 7) errors.submitter_phone = 'Phone number looks invalid.';
   }
 
   let submitter_kind = clean(input.submitter_kind, 32).toLowerCase();
@@ -98,7 +153,8 @@ export function validateSubmission(input) {
     data: {
       payload: {
         name, date, time, end_time, venue, address, description, url,
-        icons, free
+        icons, free,
+        submitter_first_name, submitter_last_name, submitter_phone
       },
       submitter_name,
       submitter_email,
