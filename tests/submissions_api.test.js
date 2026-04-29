@@ -148,6 +148,16 @@ describe('POST /api/submissions — validation', () => {
     expect(r.json.errors.address).toBeDefined();
   });
 
+  it('rejects when description is missing or blank', async () => {
+    const r1 = await fetchJson('POST', '/api/submissions', validBody({ description: '' }));
+    expect(r1.status).toBe(400);
+    expect(r1.json.errors.description).toBeDefined();
+
+    const r2 = await fetchJson('POST', '/api/submissions', validBody({ description: '   ' }));
+    expect(r2.status).toBe(400);
+    expect(r2.json.errors.description).toBeDefined();
+  });
+
   it('rejects when first name, last name, email, or phone is missing', async () => {
     const r = await fetchJson('POST', '/api/submissions', validBody({
       submitter_first_name: '',

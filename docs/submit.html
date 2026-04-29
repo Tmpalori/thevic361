@@ -84,9 +84,10 @@
         </div>
 
         <div class="field">
-          <label for="f-desc">Description</label>
-          <textarea id="f-desc" name="description" rows="4" maxlength="2000"
+          <label for="f-desc">Description *</label>
+          <textarea id="f-desc" name="description" rows="4" required maxlength="2000"
                     placeholder="What is it? Who's playing? Any tickets info?"></textarea>
+          <p class="field-error" data-error-for="description"></p>
         </div>
 
         <fieldset class="field field-fieldset">

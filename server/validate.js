@@ -96,6 +96,7 @@ export function validateSubmission(input, opts = {}) {
   if (!address) errors.address = 'Address is required.';
 
   const description = clean(input.description, MAX_DESC);
+  if (!description) errors.description = 'Description is required.';
 
   // URL: optional. If supplied, accept bare hosts (example.com,
   // www.example.com) by prepending https:// before validating.

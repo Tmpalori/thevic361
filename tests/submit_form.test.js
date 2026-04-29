@@ -56,6 +56,14 @@ describe('submit.html structure', () => {
     const cats = Array.from(document.querySelectorAll('input[name="icons"]')).map(c => c.value);
     expect(cats).toEqual(expect.arrayContaining(['music', 'food', 'family', 'community']));
   });
+
+  it('marks description as required and exposes a field-error slot for it', () => {
+    const desc = document.getElementById('f-desc');
+    expect(desc).not.toBeNull();
+    expect(desc.required).toBe(true);
+    const err = document.querySelector('[data-error-for="description"]');
+    expect(err).not.toBeNull();
+  });
 });
 
 describe('submit.js — collectForm()', () => {
