@@ -7,7 +7,13 @@
     "event_potential": "Live music Fri/Sat, VAMA Open Mic Wed, Music Bingo monthly",
     "confidence": "high",
     "notes": "Already scraped by collector",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagrams": [
+      "aerocrafters"
+    ],
+    "instagram_url": "https://www.instagram.com/aerocrafters/",
+    "website": "https://aerocrafters.pub"
   },
   {
     "name": "Moonshine Drinkery",
@@ -17,7 +23,12 @@
     "event_potential": "Live music, First Friday Art Show, No Pressure Book Club",
     "confidence": "high",
     "notes": "Already scraped by collector",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagrams": [
+      "mdrinkery"
+    ],
+    "instagram_url": "https://www.instagram.com/mdrinkery/"
   },
   {
     "name": "The Hideaway Bar",
@@ -45,9 +56,11 @@
     "facebook_page": "https://www.facebook.com/greekbros",
     "facebook_events": "https://www.facebook.com/greekbros/events",
     "event_potential": "Live music, grilled steak, back patio events",
-    "confidence": "medium",
+    "confidence": "high",
     "notes": "Also known as Greek Bros. Oyster Bar & Grill — website greekbros.com",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagram_url": "https://www.instagram.com/explore/locations/835256297/graffitis-sports-pub/"
   },
   {
     "name": "5D Tavern",
@@ -55,9 +68,15 @@
     "facebook_page": "https://www.facebook.com/5DTavernVictoria",
     "facebook_events": "https://www.facebook.com/5DTavernVictoria/events",
     "event_potential": "Live music most weekends, craft cocktails",
-    "confidence": "medium",
+    "confidence": "high",
     "notes": "Downtown Victoria — website 5dtavern.com",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagrams": [
+      "5dtavern_victoria"
+    ],
+    "instagram_url": "https://www.instagram.com/5dtavern_victoria/",
+    "website": "https://5dtavern.com"
   },
   {
     "name": "Brown Bag Saloon",
@@ -117,7 +136,12 @@
     "event_potential": "Bar events",
     "confidence": "high",
     "notes": "Handle confirmed in search",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagrams": [
+      "shooters_bar4705"
+    ],
+    "instagram_url": "https://www.instagram.com/shooters_bar4705/"
   },
   {
     "name": "Another Pour Decision Bar & Grill",
@@ -155,9 +179,15 @@
     "facebook_page": "https://www.facebook.com/LasPalmasVictoriaTX",
     "facebook_events": "https://www.facebook.com/LasPalmasVictoriaTX/events",
     "event_potential": "Mexican restaurant events",
-    "confidence": "low",
+    "confidence": "medium",
     "notes": "Handle not confirmed",
-    "source": "seed"
+    "source": "seed",
+    "tier": "MEDIUM",
+    "instagrams": [
+      "laspalmasvictoria"
+    ],
+    "instagram_url": "https://www.instagram.com/laspalmasvictoria/",
+    "website": "https://laspalmasmexbarandgrill.com"
   },
   {
     "name": "La Cantina Tacos & Tequila",
@@ -165,9 +195,12 @@
     "facebook_page": "https://www.facebook.com/LaCantinaVictoriaTX",
     "facebook_events": "https://www.facebook.com/LaCantinaVictoriaTX/events",
     "event_potential": "Bar/restaurant events",
-    "confidence": "low",
+    "confidence": "high",
     "notes": "Handle not confirmed",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagram_url": "https://www.instagram.com/p/DAmq1L3trk4/",
+    "website": "https://lacantina-victoria.com"
   },
   {
     "name": "Franklin's Backyard Bayou Bar & Grill",
@@ -225,9 +258,15 @@
     "facebook_page": "https://www.facebook.com/JWelchFarms",
     "facebook_events": "https://www.facebook.com/JWelchFarms/events",
     "event_potential": "Live music Fri/Sat 7-10pm, Sunday brunch, Springfest 3/28",
-    "confidence": "medium",
+    "confidence": "high",
     "notes": "Website jwelchfarms.com has event calendar — worth scraping directly too",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagrams": [
+      "jwelchfarms"
+    ],
+    "instagram_url": "https://www.instagram.com/jwelchfarms/",
+    "website": "https://www.jwelchfarms.com"
   },
   {
     "name": "Weber Brewing",
@@ -235,9 +274,14 @@
     "facebook_page": "https://www.facebook.com/WeberBrewing",
     "facebook_events": "https://www.facebook.com/WeberBrewing/events",
     "event_potential": "Biergarten events, live music",
-    "confidence": "medium",
+    "confidence": "high",
     "notes": "Re-opened downtown Victoria fall 2025 — linked from TX Craft Brewers Guild",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagrams": [
+      "weberbrewing"
+    ],
+    "instagram_url": "https://www.instagram.com/weberbrewing/"
   },
   {
     "name": "The PumpHouse Riverside Restaurant & Bar",
@@ -245,9 +289,15 @@
     "facebook_page": "https://www.facebook.com/VictoriaPumpHouse",
     "facebook_events": "https://www.facebook.com/VictoriaPumpHouse/events",
     "event_potential": "Riverside events, live music",
-    "confidence": "medium",
+    "confidence": "high",
     "notes": "Has website victoriapumphouse.com",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagrams": [
+      "victoriapumphouse"
+    ],
+    "instagram_url": "https://www.instagram.com/victoriapumphouse/",
+    "website": "https://victoriapumphouse.com"
   },
   {
     "name": "Fossati's Delicatessen",
@@ -305,9 +355,15 @@
     "facebook_page": "https://www.facebook.com/TheBoxCoffeeBar",
     "facebook_events": "https://www.facebook.com/TheBoxCoffeeBar/events",
     "event_potential": "Coffee shop events",
-    "confidence": "low",
+    "confidence": "medium",
     "notes": "Handle not confirmed",
-    "source": "seed"
+    "source": "seed",
+    "tier": "MEDIUM",
+    "instagrams": [
+      "theboxcoffeebar"
+    ],
+    "instagram_url": "https://www.instagram.com/theboxcoffeebar/",
+    "website": "https://theboxcoffeebar.com"
   },
   {
     "name": "Stir Soda Shoppe",
@@ -327,7 +383,12 @@
     "event_potential": "Plays, musicals, performances",
     "confidence": "high",
     "notes": "Official website theatrevictoria.org links to FB",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagrams": [
+      "theatrevictoria"
+    ],
+    "instagram_url": "https://www.instagram.com/theatrevictoria/"
   },
   {
     "name": "Victoria Ballet Theatre",
@@ -335,9 +396,15 @@
     "facebook_page": "https://www.facebook.com/VictoriaBalletTheatre",
     "facebook_events": "https://www.facebook.com/VictoriaBalletTheatre/events",
     "event_potential": "Ballet performances, recitals",
-    "confidence": "medium",
+    "confidence": "high",
     "notes": "Confirmed FB exists, handle not directly confirmed",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagrams": [
+      "victoriaballettheatre"
+    ],
+    "instagram_url": "https://www.instagram.com/victoriaballettheatre/",
+    "website": "https://victoriaballet.org"
   },
   {
     "name": "The Playback Venue & Arcade",
@@ -357,7 +424,12 @@
     "event_potential": "Art exhibits, museum events",
     "confidence": "high",
     "notes": "Handle confirmed in search",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagrams": [
+      "thenavemuseum"
+    ],
+    "instagram_url": "https://www.instagram.com/thenavemuseum/"
   },
   {
     "name": "Victoria Art League",
@@ -415,9 +487,11 @@
     "facebook_page": "https://www.facebook.com/VictoriaFarmersMarket",
     "facebook_events": "https://www.facebook.com/VictoriaFarmersMarket/events",
     "event_potential": "Weekly market, vendor events",
-    "confidence": "medium",
+    "confidence": "high",
     "notes": "Run by Food Bank of the Golden Crescent — posts to FB/IG regularly",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagram_url": "https://www.instagram.com/p/DW_nOEyDUFt/"
   },
   {
     "name": "Victoria Generals Baseball",
@@ -435,9 +509,15 @@
     "facebook_page": "https://www.facebook.com/TheTexasZoo",
     "facebook_events": "https://www.facebook.com/TheTexasZoo/events",
     "event_potential": "Zoo events, seasonal programming",
-    "confidence": "medium",
+    "confidence": "high",
     "notes": "Confirmed FB linked from discovervictoriatexas.com",
-    "source": "seed"
+    "source": "seed",
+    "tier": "HIGH",
+    "instagrams": [
+      "thetexaszoo"
+    ],
+    "instagram_url": "https://www.instagram.com/thetexaszoo/",
+    "website": "https://www.texaszoo.org"
   },
   {
     "name": "Southern Craft Grove",
@@ -468,5 +548,380 @@
     "confidence": "low",
     "notes": "Handle not confirmed",
     "source": "seed"
+  },
+  {
+    "name": "Victoria Main Street Program",
+    "category": "Downtown Events Hub / Community",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "1.6K+ followers, 1K+ posts, guide to all Downtown VTX events and local biz",
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "victoriamainstreet"
+    ],
+    "instagram_url": "https://www.instagram.com/victoriamainstreet/",
+    "website": "https://victoriamainstreet.org"
+  },
+  {
+    "name": "Discover Victoria Texas",
+    "category": "Tourism / Events Aggregator",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "3.4K+ followers, official CVB aggregating all local venue events",
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "discovervictoriatexas"
+    ],
+    "instagram_url": "https://www.instagram.com/discovervictoriatexas/",
+    "website": "https://www.discovervictoriatexas.com"
+  },
+  {
+    "name": "Victoria Fine Arts Association",
+    "category": "Arts / Music Events",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "Annual VTX Art Walk, jazz brunch, Duck Safari, live music, 71+ years of events",
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "vtx_fineartsassoc"
+    ],
+    "instagram_url": "https://www.instagram.com/vtx_fineartsassoc/",
+    "website": "https://victoriafinearts.org"
+  },
+  {
+    "name": "Leo J. Welder Center for the Performing Arts",
+    "category": "Performing Arts Center",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "Primary performing arts venue for VTX; hosts Theatre Victoria, ballet, concerts, festivals",
+    "source": "seed-csv-2026-04",
+    "instagram_url": "https://www.instagram.com/explore/locations/1421941/",
+    "website": "https://www.weldercenter.org"
+  },
+  {
+    "name": "Victoria Bach Festival",
+    "category": "Classical Music Festival",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "Annual festival, free community concerts, active IG, 20 miles from Gulf Coast branding",
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "victoriabachfestival"
+    ],
+    "instagram_url": "https://www.instagram.com/victoriabachfestival/"
+  },
+  {
+    "name": "Tejas Fest",
+    "category": "Annual Music Festival",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "977 IG followers, largest free festival in VTX, Tejano + Texas Country, De Leon Plaza",
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "tejasfest"
+    ],
+    "instagram_url": "https://www.instagram.com/tejasfest/"
+  },
+  {
+    "name": "Shadow's Bar",
+    "category": "Nightclub / Bar",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "DJ nights, club nights, drink specials, karaoke, 1.9K FB likes, newer venue 2025",
+    "source": "seed-csv-2026-04",
+    "instagram_url": "https://www.instagram.com/p/DT_m8NojYh_/",
+    "facebook_page": "https://www.facebook.com/p/Shadows-Bar-61572952928589/",
+    "facebook_events": "https://www.facebook.com/p/Shadows-Bar-61572952928589/events"
+  },
+  {
+    "name": "Starlight Dance Studio",
+    "category": "Dance Studio / Event Space",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "Group/private dance classes, event space rental, community performances",
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "starlightdancevictoria"
+    ],
+    "instagram_url": "https://www.instagram.com/starlightdancevictoria/",
+    "website": "https://www.starlightvictoria.com"
+  },
+  {
+    "name": "Victoria All Star Dance Academy",
+    "category": "Dance Studio / Event Rental",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "5400 sq ft studio + 300-person event space; competitions and workshops",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "Victoria Community Center",
+    "category": "Community / Event Center",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "12305 sq ft dome + 46K sq ft arena; hosts fairs / sporting events / conventions",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "Spring Creek Place Event Center",
+    "category": "Event / Wedding Venue",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "Countryside 500-cap charming outdoor setting near Victoria",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "361 Pop-Up Shops & Events Venue LLC",
+    "category": "Pop-Up / Events Venue",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "Hosts pop-up markets, vendor events, fashion shows; 5.6K FB followers",
+    "source": "seed-csv-2026-04",
+    "facebook_page": "https://www.facebook.com/361popup/",
+    "facebook_events": "https://www.facebook.com/361popup/events"
+  },
+  {
+    "name": "ICONIC VTX",
+    "category": "Vintage / Y2K Clothing Boutique",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "1.8K+ IG followers, downtown, hosts events (Goth Night, pop-up collabs)",
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "iconicvtx"
+    ],
+    "instagram_url": "https://www.instagram.com/iconicvtx/"
+  },
+  {
+    "name": "Here's the Scoop VTX",
+    "category": "Ice Cream Shop / Pop-Up Events",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "Downtown VTX, hosts themed events (Ice Cream Social, Hello Kitty events), community anchor",
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "heresthescoopvtx"
+    ],
+    "instagram_url": "https://www.instagram.com/heresthescoopvtx/"
+  },
+  {
+    "name": "Outlaw Pass Family Fun Center",
+    "category": "Family Entertainment",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "Go-karts + adventure golf + arcade + seasonal events; 78 Tate Rd Victoria TX",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "Spirit Inn of Mission Valley",
+    "category": "Historic Event / Wedding Venue",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "Near Victoria, overlooking Guadalupe, customizable packages, entertainment available",
+    "source": "seed-csv-2026-04",
+    "website": "https://spiritinnmv.com"
+  },
+  {
+    "name": "Victoria Public Library",
+    "category": "Public Library / Community Programs",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "Regular public workshops, Fun Fridays, author events, Baddie Basics series",
+    "source": "seed-csv-2026-04",
+    "website": "https://www.victoriapubliclibrary.org"
+  },
+  {
+    "name": "Victoria College (VC)",
+    "category": "Community College",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "Public-facing events, College Fair, Student Government events",
+    "source": "seed-csv-2026-04",
+    "website": "https://victoriacollege.edu"
+  },
+  {
+    "name": "University of Houston Victoria (UHV)",
+    "category": "University",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "UHV Discovers speaker series, public events, free and open to community",
+    "source": "seed-csv-2026-04",
+    "website": "https://www.uhv.edu"
+  },
+  {
+    "name": "De Leon Plaza",
+    "category": "Downtown Plaza / Public Event Space",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "Central hub for Tejas Fest, Cinco de Mayo, Tejano concerts, VTX's main outdoor event stage",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "Riverside Park Special Events Area",
+    "category": "Park / Outdoor Event Venue",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "Memorial Weekend Bash + Pacifico events + large outdoor concerts; 407 Memorial Dr",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "Tierra Mexican Grill Cantina Bar",
+    "category": "Mexican Restaurant / Live Music",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "Saturday night live music performers; event hosting; downtown VTX",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "The Water Well Cafe 361",
+    "category": "Café / Comfort Food",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "Downtown Victoria community café; social media active; local events crossover",
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "thewaterwellcafe"
+    ],
+    "instagram_url": "https://www.instagram.com/thewaterwellcafe/"
+  },
+  {
+    "name": "Forum Club",
+    "category": "Bar / Entertainment",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "Local live music bar, 1901 E Red River St, Yelp top live music venues VTX",
+    "source": "seed-csv-2026-04",
+    "facebook_page": "https://www.facebook.com/forumclubbar/",
+    "facebook_events": "https://www.facebook.com/forumclubbar/events"
+  },
+  {
+    "name": "Barkays Music Bar",
+    "category": "Music Bar",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "Dedicated music bar, 1901 Kern Dr, live music focus",
+    "source": "seed-csv-2026-04",
+    "facebook_page": "https://www.facebook.com/100087769441959/",
+    "facebook_events": "https://www.facebook.com/100087769441959/events"
+  },
+  {
+    "name": "Boutique 361",
+    "category": "Online / Pop-Up Boutique",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "Victoria TX boutique hosting pop-up events, #boutique361 community",
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "boutique.361"
+    ],
+    "instagram_url": "https://www.instagram.com/boutique.361/"
+  },
+  {
+    "name": "Victoria Fine Arts Center (VISD)",
+    "category": "Performing Arts Center / School Venue",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "4.9/5 TripAdvisor; concerts + lectures + drama + art shows open to public",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "Coleto Creek Park & Reservoir",
+    "category": "Outdoor Recreation / Events",
+    "tier": "LOW",
+    "confidence": "low",
+    "event_potential": "Annual Kid's Fishing Tournament, July 4th fireworks, photography contest",
+    "source": "seed-csv-2026-04",
+    "website": "https://www.gbra.org"
+  },
+  {
+    "name": "Tejas Crossroads 361",
+    "category": "Tejano Music / Event Promoter",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "Active local Tejano music scene promoter, community events in VTX",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "J.L Events 361",
+    "category": "Event Promoter",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "Victoria TX event promoter, Memorial Weekend Bash, car shows, community events",
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "j.l_events_361"
+    ],
+    "instagram_url": "https://www.instagram.com/j.l_events_361/"
+  },
+  {
+    "name": "Fit Strong United CrossFit",
+    "category": "CrossFit / Fitness Events",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "Hosts competitive events (Battle for the Monument 2024); Victoria TX location",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "Mister Boleton",
+    "category": "Concert / Event Promoter",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "https://www.misterboleton.com",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "Downtown VTX / Meet.Victoria",
+    "category": "Community Media / Events",
+    "tier": "HIGH",
+    "confidence": "high",
+    "event_potential": "Local media covering all VTX events, high event content density, community focus",
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "meet.victoria"
+    ],
+    "instagram_url": "https://www.instagram.com/meet.victoria/"
+  },
+  {
+    "name": "Victoria Main Street Market Days",
+    "category": "Annual Street Market",
+    "tier": "MEDIUM",
+    "confidence": "medium",
+    "event_potential": "https://victoriamainstreet.org",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "Community Transformation Church",
+    "category": "Church / Worship Events",
+    "tier": "LOW",
+    "confidence": "low",
+    "event_potential": "Public worship nights on Eventbrite; Victoria TX community events",
+    "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "First English Evangelical Lutheran Church",
+    "category": "Church / Heritage Events",
+    "tier": "LOW",
+    "confidence": "low",
+    "event_potential": "Annual Heritage Day celebration, family community events",
+    "source": "seed-csv-2026-04",
+    "facebook_page": "https://www.facebook.com/FELCvictoria/",
+    "facebook_events": "https://www.facebook.com/FELCvictoria/events"
+  },
+  {
+    "name": "Trinity Episcopal Church & School",
+    "category": "Church / Community Events",
+    "tier": "LOW",
+    "confidence": "low",
+    "event_potential": "Public events calendar, women's brunch, VBS, community programming",
+    "source": "seed-csv-2026-04",
+    "website": "https://trinityvictoria.org"
+  },
+  {
+    "name": "Hilton Garden Inn Victoria",
+    "category": "Hotel / Event Venue",
+    "tier": "LOW",
+    "confidence": "low",
+    "event_potential": "673-person event capacity; meeting rooms; cross-platform community events",
+    "source": "seed-csv-2026-04"
   }
 ]
