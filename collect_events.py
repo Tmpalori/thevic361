@@ -2713,6 +2713,12 @@ def fetch_apify_facebook_posts(days_ahead=14):
 _IG_POSTS_PER_HIGH = 25
 _IG_POSTS_PER_MEDIUM = 15
 _IG_POSTS_LOOKBACK_DAYS = 14
+# Hard ceiling on the number of IG venues we'll scrape in a single run, even
+# if venues.json grows. HIGH venues are processed first, then MEDIUM, so the
+# cap drops the lowest-value targets when the list gets long. Set so the
+# worst-case bill stays at most ~$1.50 per run while we're still validating
+# IG_POSTS_ENABLED in production.
+_IG_POSTS_MAX_VENUES = 30
 
 
 def _venue_tier(venue):
@@ -2874,12 +2880,26 @@ def fetch_apify_instagram_posts(days_ahead=14):
         print(f"  [Apify IG Posts] No tiered venues with IG handles (low_tier={skipped_low_tier}, no_ig={skipped_no_ig})")
         return events
 
+    # Cost cap: HIGH tier first, then MEDIUM. Prevents a future venues.json
+    # explosion (or schema bug that mass-promotes everything to HIGH) from
+    # silently 10× our Apify bill. Stable sort preserves discovery order
+    # within each tier so consecutive runs scrape the same set.
+    targets.sort(key=lambda t: 0 if t[2] == "HIGH" else 1)
+    if len(targets) > _IG_POSTS_MAX_VENUES:
+        dropped = len(targets) - _IG_POSTS_MAX_VENUES
+        print(
+            f"  [Apify IG Posts] Capping {len(targets)} → {_IG_POSTS_MAX_VENUES} "
+            f"venues for this run (dropped {dropped} lowest-priority)"
+        )
+        targets = targets[:_IG_POSTS_MAX_VENUES]
+
     newer_than = (datetime.now().date() - timedelta(days=_IG_POSTS_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
     n_high = sum(1 for t in targets if t[2] == "HIGH")
     n_med = sum(1 for t in targets if t[2] == "MEDIUM")
     print(
         f"  [Apify IG Posts] Pulling posts from {len(targets)} venues "
-        f"(HIGH={n_high}, MEDIUM={n_med}, since {newer_than})"
+        f"(HIGH={n_high}, MEDIUM={n_med}, since {newer_than}, "
+        f"skipped low_tier={skipped_low_tier}, no_ig={skipped_no_ig})"
     )
 
     actor_run_url = (
@@ -2888,6 +2908,10 @@ def fetch_apify_instagram_posts(days_ahead=14):
     )
 
     venue_stats = []
+    n_http_errors = 0
+    n_request_errors = 0
+    n_zero_post_venues = 0
+    total_posts_pulled = 0
     for venue, username, tier, posts_limit in targets:
         if _APIFY_LIMIT_TRIPPED:
             venue_stats.append(f"{venue.get('name','?')}: SKIP (limit tripped)")
@@ -2913,11 +2937,13 @@ def fetch_apify_instagram_posts(days_ahead=14):
                 headers={"Content-Type": "application/json"},
             )
         except Exception as e:
+            n_request_errors += 1
             venue_stats.append(f"{venue_name}: ERROR ({type(e).__name__})")
             _sentry_warn("IG posts actor exception", venue=venue_name, error=str(e)[:200])
             continue
 
         if resp.status_code >= 400:
+            n_http_errors += 1
             venue_stats.append(f"{venue_name}: HTTP {resp.status_code}")
             if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
                 _APIFY_LIMIT_TRIPPED = True
@@ -2955,6 +2981,9 @@ def fetch_apify_instagram_posts(days_ahead=14):
                 "url": p.get("url") or p.get("postUrl") or p.get("link") or "",
                 "time": p.get("timestamp") or p.get("time") or p.get("date") or "",
             })
+        total_posts_pulled += len(normalized)
+        if not normalized:
+            n_zero_post_venues += 1
 
         raw = _extract_events_from_posts_via_sonar(venue_name, normalized)
         kept = 0
@@ -2998,9 +3027,29 @@ def fetch_apify_instagram_posts(days_ahead=14):
             kept += 1
         venue_stats.append(f"{venue_name} [{tier}]: {len(normalized)} posts → {kept} events")
 
-    print(f"  [Apify IG Posts] Extracted {len(events)} events across {len(targets)} venues")
+    print(
+        f"  [Apify IG Posts] Extracted {len(events)} events across {len(targets)} venues "
+        f"(posts_pulled={total_posts_pulled}, zero_post_venues={n_zero_post_venues}, "
+        f"http_errors={n_http_errors}, request_errors={n_request_errors})"
+    )
     for s in venue_stats:
         print(f"    • {s}")
+
+    # Surface "ran but extracted nothing" the same way discover_venues does.
+    # If we burned Apify credits for posts and Sonar reads but ended up with
+    # zero events, that's almost always a regression — a Sonar prompt drift,
+    # an actor schema bump, or every venue handle going stale at once. Easier
+    # to spot a Sentry ping than to diff weekly digests for missing events.
+    actor_succeeded = n_http_errors + n_request_errors < len(targets)
+    if actor_succeeded and total_posts_pulled > 0 and not events:
+        _sentry_warn(
+            "[Apify IG Posts] Actor returned posts but produced 0 events",
+            actor=APIFY_IG_POSTS_ACTOR,
+            venues=str(len(targets)),
+            posts_pulled=str(total_posts_pulled),
+            zero_post_venues=str(n_zero_post_venues),
+        )
+
     return events
 
 

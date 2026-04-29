@@ -22,6 +22,14 @@ sys.path.insert(0, os.path.dirname(__file__))
 import discover_venues as dv  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _noop_sleep(monkeypatch):
+    """Discovery now retries failed Apify calls with exponential backoff.
+    Tests don't need real sleeps — patch out time.sleep so retry-heavy
+    cases (network down, 503 storms) don't add ~12s each."""
+    monkeypatch.setattr(dv.time, "sleep", lambda *_a, **_kw: None)
+
+
 # ─── Tier classification ────────────────────────────────────────────────────
 
 
@@ -388,9 +396,167 @@ def test_apify_request_exception_fires_sentry_exception(monkeypatch):
     def boom(*a, **kw):
         raise RuntimeError("network down")
 
-    items = dv.run_apify_discovery("tok", http_post=boom)
+    items = dv.run_apify_discovery("tok", http_post=boom, sleep=lambda *_a, **_k: None)
     assert items == []
     assert any(stage == "apify_request" for stage, _t in excs)
+
+
+# ─── Per-category split + retry behavior ────────────────────────────────────
+
+
+def test_run_apify_discovery_calls_one_request_per_category(monkeypatch):
+    """The combined-call timeout that produced 0 venues on Apr-29 was the
+    motivation for splitting per category. Each category gets its own
+    Apify request with its own timeout/retry budget."""
+    calls = []
+
+    def fake_post(url, **kwargs):
+        calls.append(kwargs.get("json"))
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = []
+        return resp
+
+    items = dv.run_apify_discovery("tok", http_post=fake_post,
+                                    sleep=lambda *_a, **_k: None)
+    assert items == []
+    assert len(calls) == len(dv.CATEGORY_SEARCHES)
+    # Each call carries exactly one search term, not the combined list.
+    for payload, term in zip(calls, dv.CATEGORY_SEARCHES):
+        assert payload["searchStringsArray"] == [term]
+
+
+def test_run_apify_discovery_per_call_timeout_is_capped(monkeypatch):
+    """Per-call timeout must be the tighter PER_CALL ceiling, not the legacy
+    240s combined timeout. A 6-minute step budget can't survive 8 categories
+    × 240s if the network is sick."""
+    timeouts = []
+
+    def fake_post(url, **kwargs):
+        timeouts.append(kwargs.get("timeout"))
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = []
+        return resp
+
+    dv.run_apify_discovery("tok", http_post=fake_post,
+                           sleep=lambda *_a, **_k: None)
+    assert timeouts, "expected at least one Apify call"
+    assert all(t == dv.APIFY_PER_CALL_TIMEOUT for t in timeouts)
+    assert dv.APIFY_PER_CALL_TIMEOUT <= 180
+
+
+def test_run_apify_discovery_retries_on_network_failure(monkeypatch):
+    """Transient network exceptions should be retried (with backoff) before
+    we give up on a category."""
+    n_categories = len(dv.CATEGORY_SEARCHES)
+    expected_attempts = n_categories * (1 + dv.APIFY_MAX_RETRIES)
+    attempts = {"n": 0}
+
+    def fake_post(url, **kwargs):
+        attempts["n"] += 1
+        raise ConnectionError("blip")
+
+    items = dv.run_apify_discovery("tok", http_post=fake_post,
+                                    sleep=lambda *_a, **_k: None)
+    assert items == []
+    assert attempts["n"] == expected_attempts
+
+
+def test_run_apify_discovery_retries_on_5xx(monkeypatch):
+    """5xx responses are transient; retry up to APIFY_MAX_RETRIES times."""
+    state = {"calls": 0}
+
+    def fake_post(url, **kwargs):
+        state["calls"] += 1
+        resp = MagicMock()
+        resp.status_code = 503
+        resp.text = "service unavailable"
+        return resp
+
+    dv.run_apify_discovery("tok", http_post=fake_post,
+                           sleep=lambda *_a, **_k: None)
+    expected_calls = len(dv.CATEGORY_SEARCHES) * (1 + dv.APIFY_MAX_RETRIES)
+    assert state["calls"] == expected_calls
+
+
+def test_run_apify_discovery_does_not_retry_4xx_permanent(monkeypatch):
+    """A permanent 4xx (e.g. 401 invalid token) should fail fast — retrying
+    burns the step budget without changing the outcome."""
+    state = {"calls": 0}
+
+    def fake_post(url, **kwargs):
+        state["calls"] += 1
+        resp = MagicMock()
+        resp.status_code = 401
+        resp.text = "invalid token"
+        return resp
+
+    dv.run_apify_discovery("tok", http_post=fake_post,
+                           sleep=lambda *_a, **_k: None)
+    # 1 attempt per category, no retries on permanent 4xx.
+    assert state["calls"] == len(dv.CATEGORY_SEARCHES)
+
+
+def test_run_apify_discovery_recovers_on_retry(monkeypatch):
+    """First attempt blows up, retry succeeds → items flow through."""
+    state = {"calls": 0}
+
+    def fake_post(url, **kwargs):
+        state["calls"] += 1
+        if state["calls"] == 1:
+            raise ConnectionError("transient")
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = [{"title": "Recovered Bar"}]
+        return resp
+
+    items = dv.run_apify_discovery("tok", http_post=fake_post,
+                                    sleep=lambda *_a, **_k: None)
+    # First category needed a retry; remaining 7 succeeded on first try.
+    assert state["calls"] == len(dv.CATEGORY_SEARCHES) + 1
+    titles = [it.get("title") for it in items]
+    assert titles.count("Recovered Bar") == len(dv.CATEGORY_SEARCHES)
+
+
+def test_run_apify_discovery_per_category_failure_is_isolated(monkeypatch):
+    """One category's failure must not lose the others' results — that's
+    the whole point of the per-category split."""
+    failing_term = dv.CATEGORY_SEARCHES[0]
+
+    def fake_post(url, **kwargs):
+        payload = kwargs.get("json", {})
+        terms = payload.get("searchStringsArray", [])
+        resp = MagicMock()
+        if failing_term in terms:
+            resp.status_code = 503
+            resp.text = "boom"
+            return resp
+        resp.status_code = 200
+        resp.json.return_value = [
+            {"title": f"Place from {terms[0]}", "categories": [terms[0]],
+             "totalScore": 4.6, "reviewsCount": 200,
+             "facebooks": ["https://facebook.com/x"]}
+        ]
+        return resp
+
+    items = dv.run_apify_discovery("tok", http_post=fake_post,
+                                    sleep=lambda *_a, **_k: None)
+    # 7 successful categories × 1 item each; failing category contributes 0.
+    assert len(items) == len(dv.CATEGORY_SEARCHES) - 1
+
+
+def test_all_categories_failing_fires_sentry_warn(monkeypatch):
+    warns = []
+    monkeypatch.setattr(dv, "_sentry_warn",
+                        lambda msg, **tags: warns.append((msg, tags)))
+
+    def fake_post(url, **kwargs):
+        raise RuntimeError("everything is on fire")
+
+    dv.run_apify_discovery("tok", http_post=fake_post,
+                           sleep=lambda *_a, **_k: None)
+    assert any("All Apify categories failed" in m for m, _ in warns), warns
 
 
 def test_apify_zero_results_fires_sentry_warn(tmp_path, monkeypatch):
@@ -404,7 +570,7 @@ def test_apify_zero_results_fires_sentry_warn(tmp_path, monkeypatch):
     # Apify returns one place that classifies as SKIP (no social) so the
     # zero-HIGH-zero-MEDIUM Sentry warning is what we want to assert.
     monkeypatch.setattr(dv, "run_apify_discovery",
-                        lambda token, http_post=None: [
+                        lambda token, http_post=None, sleep=None: [
                             {"title": "Something", "totalScore": 4.0,
                              "reviewsCount": 100, "categories": ["Bar"]}
                         ])
