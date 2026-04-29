@@ -41,9 +41,9 @@ python collect_events.py --output ./docs/events.json --local-dir . --skip-web
 | File | Purpose |
 |---|---|
 | `collect_events.py` | Event collector script |
-| `discover_venues.py` | Weekly Google Maps venue discovery (Apify `compass/google-maps-extractor`) |
-| `venues.json` | Primary venue list — seed venues + auto-merged HIGH-tier discoveries |
-| `pending_venues.json` | MEDIUM-tier discoveries waiting on admin approval |
+| `discover_venues.py` | Optional/manual Google Maps venue discovery utility (Apify `compass/google-maps-extractor`). No longer part of the weekly cron — see "Venue Discovery" below. |
+| `venues.json` | Primary venue list — manually curated (seed venues + any venues you choose to add) |
+| `pending_venues.json` | Holding file for venues awaiting admin review (no longer auto-populated) |
 | `rejected_venues.json` | Venues we've explicitly rejected (never re-suggested) |
 | `facebook_venues.json` | Legacy venue list (kept as a one-cycle fallback) |
 | `facebook_venues.backup.json` | Snapshot of the legacy list, refreshed each run |
@@ -56,25 +56,22 @@ python collect_events.py --output ./docs/events.json --local-dir . --skip-web
 
 ## Venue Discovery
 
-`discover_venues.py` runs **before** `collect_events.py` inside
-`weekly-collect.yml`. It calls the Apify `compass/google-maps-extractor` actor
-across 8 category searches scoped to `Victoria, TX`
-(bar, restaurant, live music venue, theater, museum, bowling alley, event
-venue, community center) with detail/social enrichment turned on.
+Venue curation is **manual**. `venues.json` is edited by hand (or via the
+admin tooling) and is the primary source for the Sonar prompts and venue-
+grounded scrapers. `facebook_venues.json` is kept as a one-cycle legacy
+fallback. `rejected_venues.json` blocks names we've explicitly decided
+against.
 
-Results are tiered:
-
-- **HIGH** — rating ≥ 4.2, ≥ 50 reviews, event-likely category, IG or FB →
-  auto-merged into `venues.json`.
-- **MEDIUM** — rating ≥ 3.8 OR < 50 reviews, IG or FB → appended to
-  `pending_venues.json` for admin review.
-- **SKIP** — closed, fast-food chain, rating < 3.5, or no socials.
-
-Anything in `rejected_venues.json` is never re-suggested. Existing
-`facebook_venues.json` venues are preserved as a safety floor and never
-deleted. If `APIFY_TOKEN` is missing or the actor errors out, discovery is
-a no-op — the existing venue files are left untouched and the collector
-runs as normal.
+Google Maps discovery is **no longer run on the weekly cron**. The
+`discover_venues.py` script (Apify `compass/google-maps-extractor` across
+8 category searches scoped to `Victoria, TX`) was removed from
+`weekly-collect.yml` in Apr 2026 after production runs showed it
+consuming ~4 minutes, hitting per-category Apify timeouts, skipping 5/8
+categories, and still producing HIGH=0/MEDIUM=0 from 60 raw items. The
+script and its tests are kept in-tree as an opt-in utility — run it
+locally with `APIFY_TOKEN=… python discover_venues.py` if you want to
+seed `pending_venues.json` for manual review — but it does not run
+automatically anywhere.
 
 ## Sonar Event Discovery (Venue-Grounded Prompts)
 
