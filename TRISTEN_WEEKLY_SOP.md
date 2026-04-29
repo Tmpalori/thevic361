@@ -16,7 +16,7 @@ The system handles ~70% of event collection automatically:
 
 | Time (Central) | What happens | Who does it |
 |---|---|---|
-| Sun 6 PM | `weekly-collect.yml` runs venue discovery (Google Maps via Apify), then the collector. Updates `venues.json`, `pending_venues.json`, `candidates.json`, and `docs/events.json` | Automated |
+| Sun 6 PM | `weekly-collect.yml` runs the event collector and writes `candidates.json` (plus `collection_metadata.json` for the admin Sources tab). It does **not** overwrite `docs/events.json` — that's the admin Save & Publish flow's job. | Automated |
 | Sun 9 PM | `weekly-digest.yml` emails an **informational** summary of what was collected, with a link to the admin review page | Automated |
 | Sun 10 PM | Open `/admin.html`, pick the events you want to publish, save your selection. Admin commits go directly to `main`. | **You** |
 | Mon morning | Send the Beehiiv newsletter manually | **You** |
@@ -142,27 +142,30 @@ gh workflow run "Weekly Collect"
 
 ---
 
-## Venue Discovery (Background Process)
+## Venue Discovery (Manual)
 
-A second automated step runs at Sunday 6 PM **before** the collector:
-`discover_venues.py` queries Google Maps (via the Apify
-`compass/google-maps-extractor` actor) for 8 categories — bars, restaurants,
-live music venues, theaters, museums, bowling alleys, event venues, and
-community centers in Victoria, TX. Each result is scored:
+Venue curation is now **manual**. Edit `venues.json` directly (HIGH-tier
+list used by Sonar prompts and venue-grounded scrapers) and
+`facebook_venues.json` for the legacy fallback. `rejected_venues.json`
+blocks names you've explicitly decided against.
 
-- **HIGH-tier matches** (rating ≥ 4.2, ≥ 50 reviews, event-likely category,
-  Facebook or Instagram present) are auto-merged into `venues.json`.
-- **MEDIUM-tier matches** (lower rating or fewer reviews, but with social
-  presence) land in `pending_venues.json` for you to review when convenient.
-- **SKIP** means closed, fast-food chain, < 3.5 stars, or no social — they
-  never surface.
+The Google Maps discovery step that used to run before the collector
+(`discover_venues.py`, Apify `compass/google-maps-extractor`) was
+**removed from the weekly cron in Apr 2026** because production runs
+were spending ~4 minutes per pull, timing out partway through, skipping
+most categories, and still landing 0 HIGH/0 MEDIUM venues. Not worth
+the cost or schedule risk.
 
-To stop a venue from being re-suggested, add it to `rejected_venues.json`
-(name field at minimum). The existing `facebook_venues.json` list is kept as
-a safety floor — venues already in it are never dropped, even if Google
-Maps disagrees. If the Apify monthly cap is hit or the token is missing,
-discovery quietly skips and the collector keeps using whatever venue list
-was last good.
+The script itself is still in the repo. If you ever want to take a one-
+off look at what Google Maps would suggest, run it manually with an
+Apify token:
+
+```bash
+APIFY_TOKEN=... python discover_venues.py
+```
+
+That writes/updates `venues.json` and `pending_venues.json` locally for
+you to review and commit by hand. It does not run on any schedule.
 
 ---
 
@@ -187,7 +190,8 @@ Each bucket caps named venues at 6 (HIGH first) so prompts stay short. If
 `venues.json` lacks HIGH venues for a category, that bucket falls back to
 category-only phrasing — the collector still runs. Anything you want named
 in these prompts should land in `venues.json` as a HIGH-confidence venue
-(via Google Maps discovery merge or a manual seed entry).
+(via a manual seed entry, or by running `discover_venues.py` locally and
+committing the result by hand).
 
 ---
 

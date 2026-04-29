@@ -20,11 +20,16 @@
 # DST switch — that's an unsignalled drift the audit flagged.
 # Also runs on manual trigger (workflow_dispatch).
 #
+# Google Maps venue discovery removed (Apr 2026): production runs showed
+# `discover_venues.py` consuming ~4 minutes, hitting per-category Apify
+# timeouts, skipping 5/8 categories, and still yielding HIGH=0 MEDIUM=0
+# from 60 raw items — slow and low-quality. Venue curation now happens
+# manually via venues.json. The script and its tests are kept in-tree as
+# an opt-in utility (`python discover_venues.py`) but no longer run on
+# the weekly cron. See PRs #42/#43 for the prior non-blocking attempts
+# that this PR supersedes.
+#
 # Timeout budget (job-level 25 min, with per-step caps):
-#   - The Apr-29 manual run was killed at the previous 10-min cap after a
-#     single 4-minute Apify discovery timeout left the collector with too
-#     little budget to finish. The healthy Apr-26 scheduled run took 8m16s,
-#     i.e. there was effectively no slack at all.
 #   - Apify and Perplexity each use a 240s per-call timeout, and the
 #     collector chains several of them; 25 minutes gives room for a couple
 #     of those to time out without killing the whole run.
@@ -34,13 +39,6 @@
 #   - PYTHONUNBUFFERED=1 + `python -u` flush stdout line-by-line so that if
 #     a step does stall, the workflow log shows where it got stuck instead
 #     of the silent gap we saw in run 25121385371.
-#   - Discovery (Google Maps via Apify) has both an internal time budget
-#     in the script (~220s, exits with partial results) AND
-#     `continue-on-error: true` on the step. Run 25123919466 had per-
-#     category Apify discovery hit the 6-min step timeout after 5/8
-#     categories completed, killing the workflow before the collector
-#     ran. Discovery is best-effort — the collector falls back to the
-#     existing venues.json — so it must never block the weekly pull.
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: Weekly Collect
@@ -53,13 +51,13 @@ on:
   workflow_dispatch:       # Manual trigger from GitHub UI
 
 permissions:
-  contents: write          # Needed to push updated candidates.json + venue files
+  contents: write          # Needed to push updated candidates.json
 
 jobs:
   collect:
     runs-on: ubuntu-latest
-    # Healthy runs are ~8 min; per-step timeouts below keep any single phase
-    # bounded. 25 min is the overall safety net — see header comment.
+    # Per-step timeouts below keep any single phase bounded. 25 min is the
+    # overall safety net — see header comment.
     timeout-minutes: 25
     env:
       # Force line-buffered stdout for every Python step so progress logs
@@ -80,38 +78,6 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
-
-      - name: Discover venues (Google Maps)
-        # Non-destructive: discover_venues.py is wrapped so a missing
-        # APIFY_TOKEN, an Apify HTTP error, or a top-level exception all
-        # exit 0 and leave existing venue files alone. Each of those
-        # paths now also fires a Sentry warning/exception, so failures
-        # are visible without grep-diving the workflow log. We do NOT
-        # `|| echo` here any more — the script already exits 0 on
-        # expected failures, and masking exit codes would re-introduce
-        # the double-silencing the audit flagged.
-        #
-        # Step-level timeout: the in-script Apify call uses a 120s read
-        # timeout per category, and the script enforces an internal
-        # ~220s total budget to bail with partial results before GitHub
-        # forcibly kills us. 6 min is a hard outer ceiling.
-        #
-        # continue-on-error: discovery is a best-effort refresh of
-        # venues.json. Run 25123919466 had this step killed at the 6m
-        # cap and the workflow then skipped the collector — that's the
-        # opposite of what we want. The collector has its own fallback
-        # to the existing venues.json / facebook_venues.json, so even a
-        # nonzero exit here (e.g. an unexpected SIGKILL on step timeout)
-        # must not block the weekly pull. The script itself still exits
-        # 0 on expected failures, so this only catches the truly
-        # unexpected.
-        timeout-minutes: 6
-        continue-on-error: true
-        env:
-          APIFY_TOKEN:        ${{ secrets.APIFY_TOKEN }}
-          SENTRY_DSN:         ${{ secrets.SENTRY_DSN }}
-          SENTRY_ENVIRONMENT: production
-        run: python -u discover_venues.py
 
       - name: Run event collector
         # Step-level timeout: collector chains several scrapers (city
@@ -159,7 +125,10 @@ jobs:
           # changes to the curated fallback.
           # collection_metadata.json is included so the admin Sources tab on
           # Railway can read per-source pull counts/timestamps after each run.
-          if git diff --quiet candidates.json collection_metadata.json venues.json pending_venues.json facebook_venues.backup.json 2>/dev/null; then
+          # venues.json / pending_venues.json / facebook_venues.backup.json
+          # are no longer touched here — Google Maps discovery was removed
+          # (see header comment) and the collector only reads venue files.
+          if git diff --quiet candidates.json collection_metadata.json 2>/dev/null; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -170,10 +139,6 @@ jobs:
         run: |
           git config user.name "The Vic 361 Bot"
           git config user.email "bot@thevic361.com"
-          # Add venue files only if they exist (discovery may have been skipped).
-          for f in venues.json pending_venues.json facebook_venues.backup.json; do
-            [ -f "$f" ] && git add "$f"
-          done
           # docs/events.json is deliberately omitted: it's the curated
           # fallback and only the admin Save & Publish flow (running with
           # GITHUB_TOKEN) is allowed to commit to it.
