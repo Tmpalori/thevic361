@@ -2446,6 +2446,40 @@ _POSTS_PER_VENUE = 50
 # posts are only kept when they describe a future-dated or recurring event.
 _POSTS_LOOKBACK_DAYS = 30
 
+# Hard ceiling on the number of FB venues we'll scrape in a single run.
+# Mirrors _IG_POSTS_MAX_VENUES — added after run 25127431431 where the
+# combined FB+IG scrape (36 + 30 venues) consumed ~13 minutes and pushed
+# AI Review past the step timeout. ``None`` = no cap (legacy behavior),
+# which is what FB has shipped with historically. Override at runtime by
+# setting FB_POSTS_MAX_VENUES (env var); a positive integer is treated as
+# the cap and applied in venues.json order (which already has high-value
+# venues first).
+_FB_POSTS_MAX_VENUES = None
+
+
+def _resolve_int_env(name, default):
+    """Read a positive-int env override, falling back to ``default``.
+
+    Empty / unset / unparseable / ``≤ 0`` all fall back to ``default``,
+    so a misconfigured workflow variable can never widen the cap into
+    runaway territory. Used by the IG/FB venue caps so the weekly job
+    can be re-tuned via Settings → Variables → Actions without a code
+    change.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    raw = raw.strip()
+    if not raw:
+        return default
+    try:
+        n = int(raw)
+    except ValueError:
+        return default
+    if n <= 0:
+        return default
+    return n
+
 
 def _venue_high_confidence(venues):
     """Return venues marked confidence=high in facebook_venues.json."""
@@ -2572,6 +2606,21 @@ def fetch_apify_facebook_posts(days_ahead=14):
     if not high_conf:
         print("  [Apify FB Posts] No high-confidence venues to scrape")
         return events
+
+    # Optional env-tunable cap (FB_POSTS_MAX_VENUES). Default ``None`` keeps
+    # the legacy behavior (no cap) — the weekly job can opt into a step-
+    # timeout-safe ceiling via Actions Variables when venues.json grows or
+    # IG_POSTS_ENABLED is also on. venues.json order is preserved (the seed
+    # already lists high-value pages first), matching how IG drops the
+    # lowest-priority targets first.
+    fb_cap = _resolve_int_env("FB_POSTS_MAX_VENUES", _FB_POSTS_MAX_VENUES)
+    if fb_cap is not None and len(high_conf) > fb_cap:
+        dropped = len(high_conf) - fb_cap
+        print(
+            f"  [Apify FB Posts] Capping {len(high_conf)} → {fb_cap} "
+            f"venues for this run (dropped {dropped} lowest-priority)"
+        )
+        high_conf = high_conf[:fb_cap]
 
     newer_than = (datetime.now().date() - timedelta(days=_POSTS_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
     print(f"  [Apify FB Posts] Pulling posts from {len(high_conf)} venues (since {newer_than})")
@@ -2718,7 +2767,15 @@ _IG_POSTS_LOOKBACK_DAYS = 14
 # cap drops the lowest-value targets when the list gets long. Set so the
 # worst-case bill stays at most ~$1.50 per run while we're still validating
 # IG_POSTS_ENABLED in production.
-_IG_POSTS_MAX_VENUES = 30
+#
+# Lowered 30 → 20 after run 25127431431: with the PR #45 venues.json seed
+# (26 HIGH + 4 MEDIUM = 30 IG-capable venues) the IG scrape consumed ~7m17s
+# at ~14.5s/venue and crowded the AI Review tail past the 15-min step
+# timeout. 20 venues × 14.5s ≈ 4m50s leaves headroom for FB Posts + AI
+# Review under the bumped 25-min step ceiling. Override at runtime by
+# setting IG_POSTS_MAX_VENUES (env var) — useful for backfill runs or
+# venue-list growth without re-deploying the workflow.
+_IG_POSTS_MAX_VENUES = 20
 
 
 def _venue_tier(venue):
@@ -2885,13 +2942,18 @@ def fetch_apify_instagram_posts(days_ahead=14):
     # silently 10× our Apify bill. Stable sort preserves discovery order
     # within each tier so consecutive runs scrape the same set.
     targets.sort(key=lambda t: 0 if t[2] == "HIGH" else 1)
-    if len(targets) > _IG_POSTS_MAX_VENUES:
-        dropped = len(targets) - _IG_POSTS_MAX_VENUES
+    # Cap is env-tunable (IG_POSTS_MAX_VENUES) so the weekly workflow can be
+    # re-tuned via Actions Variables without a code change. Default 20 is
+    # a step-timeout-safe value picked from production timing in run
+    # 25127431431 (~14.5s/venue × 20 ≈ 4m50s).
+    cap = _resolve_int_env("IG_POSTS_MAX_VENUES", _IG_POSTS_MAX_VENUES)
+    if len(targets) > cap:
+        dropped = len(targets) - cap
         print(
-            f"  [Apify IG Posts] Capping {len(targets)} → {_IG_POSTS_MAX_VENUES} "
+            f"  [Apify IG Posts] Capping {len(targets)} → {cap} "
             f"venues for this run (dropped {dropped} lowest-priority)"
         )
-        targets = targets[:_IG_POSTS_MAX_VENUES]
+        targets = targets[:cap]
 
     newer_than = (datetime.now().date() - timedelta(days=_IG_POSTS_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
     n_high = sum(1 for t in targets if t[2] == "HIGH")

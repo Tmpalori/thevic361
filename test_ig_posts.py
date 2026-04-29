@@ -399,6 +399,86 @@ def test_ig_posts_caps_total_venues_per_run(monkeypatch):
     assert all(u.startswith("high") for u in selected_users), selected_users
 
 
+def test_ig_posts_env_var_overrides_default_cap(monkeypatch):
+    """IG_POSTS_MAX_VENUES env var (when valid positive int) overrides
+    _IG_POSTS_MAX_VENUES at runtime, so the workflow can re-tune via
+    Actions Variables without a code change."""
+    monkeypatch.setenv("IG_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    # Module default is 20 — env override must win.
+    monkeypatch.setenv("IG_POSTS_MAX_VENUES", "2")
+
+    venues = [
+        {"name": f"H{i}", "tier": "HIGH", "instagrams": [f"high{i}"]}
+        for i in range(5)
+    ]
+    repo_dir = os.path.dirname(ce.__file__)
+    primary = os.path.join(repo_dir, "venues.json")
+    with open(primary, "w") as f:
+        json.dump(venues, f)
+
+    captured = []
+
+    def fake_post(url, **kwargs):
+        resp = MagicMock()
+        resp.status_code = 200
+        if "instagram-post-scraper" in url:
+            captured.append(kwargs.get("json"))
+            resp.json.return_value = []
+        else:
+            resp.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
+        return resp
+
+    with patch("collect_events.requests.post", side_effect=fake_post):
+        ce.fetch_apify_instagram_posts(14)
+
+    assert len(captured) == 2, f"expected 2 venues, got {len(captured)}"
+
+
+def test_ig_posts_invalid_env_falls_back_to_default(monkeypatch):
+    """Garbage / zero / negative IG_POSTS_MAX_VENUES values fall back to the
+    code default — a misconfigured workflow var must never widen the cap."""
+    monkeypatch.setenv("IG_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setattr(ce, "_IG_POSTS_MAX_VENUES", 3)
+
+    venues = [
+        {"name": f"H{i}", "tier": "HIGH", "instagrams": [f"high{i}"]}
+        for i in range(5)
+    ]
+    repo_dir = os.path.dirname(ce.__file__)
+    primary = os.path.join(repo_dir, "venues.json")
+    with open(primary, "w") as f:
+        json.dump(venues, f)
+
+    for bad in ("not-a-number", "", "0", "-5", "  "):
+        captured = []
+        monkeypatch.setenv("IG_POSTS_MAX_VENUES", bad)
+
+        def fake_post(url, **kwargs):
+            resp = MagicMock()
+            resp.status_code = 200
+            if "instagram-post-scraper" in url:
+                captured.append(kwargs.get("json"))
+                resp.json.return_value = []
+            else:
+                resp.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
+            return resp
+
+        with patch("collect_events.requests.post", side_effect=fake_post):
+            ce.fetch_apify_instagram_posts(14)
+        assert len(captured) == 3, f"bad={bad!r} expected 3 venues, got {len(captured)}"
+
+
+def test_ig_posts_default_cap_is_20(monkeypatch):
+    """Lock in the lowered default. PR #45 seeded 26 HIGH IG-capable venues
+    and the 30-cap let IG consume 7m17s of the 15-min step; we tightened
+    the default to 20 so AI Review fits under the bumped 25-min ceiling."""
+    assert ce._IG_POSTS_MAX_VENUES == 20
+
+
 def test_ig_posts_zero_events_with_posts_fires_sentry(monkeypatch):
     """If Apify returns posts but Sonar extracts zero events for ALL venues,
     that's a silent regression — fire a Sentry warning so it's visible."""

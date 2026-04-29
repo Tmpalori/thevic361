@@ -268,6 +268,112 @@ def test_posts_scraper_handles_actor_500(monkeypatch):
     assert ce._APIFY_LIMIT_TRIPPED is False  # not a hard-limit
 
 
+def test_fb_posts_env_cap_limits_venues(monkeypatch):
+    """FB_POSTS_MAX_VENUES env var caps the FB scrape to its first N
+    high-confidence venues (venues.json order)."""
+    monkeypatch.setenv("FB_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("FB_POSTS_MAX_VENUES", "1")
+
+    captured_urls = []
+
+    def fake_post(url, **kwargs):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        if "facebook-posts-scraper" in url:
+            captured_urls.append(kwargs.get("json", {}).get("startUrls", [{}])[0].get("url"))
+            resp.json.return_value = []
+        elif "perplexity.ai" in url:
+            resp.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
+        return resp
+
+    with patch("collect_events.requests.post", side_effect=fake_post):
+        ce.fetch_apify_facebook_posts(14)
+
+    # Fixture has 2 high-confidence venues with URLs (Aero, Moonshine).
+    # Cap of 1 → only the first is scraped.
+    assert len(captured_urls) == 1
+    assert captured_urls[0] == "https://www.facebook.com/aerocrafters"
+
+
+def test_fb_posts_no_env_means_no_cap(monkeypatch):
+    """Default _FB_POSTS_MAX_VENUES is None — no cap unless env is set,
+    matching shipped behavior before the IG cost-cap addition."""
+    monkeypatch.setenv("FB_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.delenv("FB_POSTS_MAX_VENUES", raising=False)
+
+    assert ce._FB_POSTS_MAX_VENUES is None
+
+    captured_urls = []
+
+    def fake_post(url, **kwargs):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        if "facebook-posts-scraper" in url:
+            captured_urls.append(kwargs.get("json", {}).get("startUrls", [{}])[0].get("url"))
+            resp.json.return_value = []
+        elif "perplexity.ai" in url:
+            resp.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
+        return resp
+
+    with patch("collect_events.requests.post", side_effect=fake_post):
+        ce.fetch_apify_facebook_posts(14)
+
+    # Both Aero + Moonshine scraped (Froggy's = medium, "No URL Venue" = no URL).
+    assert len(captured_urls) == 2
+
+
+def test_fb_posts_invalid_env_disables_cap(monkeypatch):
+    """Non-positive / unparseable FB_POSTS_MAX_VENUES values fall back to
+    the default (None = no cap), so a misconfigured workflow var can't
+    silently zero out the FB scrape."""
+    monkeypatch.setenv("FB_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+
+    for bad in ("not-a-number", "", "0", "-2"):
+        captured_urls = []
+        monkeypatch.setenv("FB_POSTS_MAX_VENUES", bad)
+
+        def fake_post(url, **kwargs):
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.raise_for_status = MagicMock()
+            if "facebook-posts-scraper" in url:
+                captured_urls.append(kwargs.get("json", {}).get("startUrls", [{}])[0].get("url"))
+                resp.json.return_value = []
+            elif "perplexity.ai" in url:
+                resp.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
+            return resp
+
+        with patch("collect_events.requests.post", side_effect=fake_post):
+            ce.fetch_apify_facebook_posts(14)
+        assert len(captured_urls) == 2, f"bad={bad!r} got {captured_urls}"
+
+
+def test_resolve_int_env_helper(monkeypatch):
+    """Direct unit-test of the env-int resolver used by both caps."""
+    monkeypatch.delenv("FOO_CAP", raising=False)
+    assert ce._resolve_int_env("FOO_CAP", 10) == 10
+    assert ce._resolve_int_env("FOO_CAP", None) is None
+
+    for val, expected in [
+        ("5", 5),
+        ("  7  ", 7),
+        ("0", 10),       # zero → default
+        ("-3", 10),      # negative → default
+        ("abc", 10),     # garbage → default
+        ("", 10),        # empty → default
+    ]:
+        monkeypatch.setenv("FOO_CAP", val)
+        assert ce._resolve_int_env("FOO_CAP", 10) == expected, f"{val!r}"
+
+
 def test_events_scraper_max_events_is_25(monkeypatch):
     """Regression: we lowered maxEvents from 60 to 25 to save credits."""
     monkeypatch.setenv("APIFY_TOKEN", "fake")
