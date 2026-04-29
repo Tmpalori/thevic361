@@ -34,6 +34,13 @@
 #   - PYTHONUNBUFFERED=1 + `python -u` flush stdout line-by-line so that if
 #     a step does stall, the workflow log shows where it got stuck instead
 #     of the silent gap we saw in run 25121385371.
+#   - Discovery (Google Maps via Apify) has both an internal time budget
+#     in the script (~220s, exits with partial results) AND
+#     `continue-on-error: true` on the step. Run 25123919466 had per-
+#     category Apify discovery hit the 6-min step timeout after 5/8
+#     categories completed, killing the workflow before the collector
+#     ran. Discovery is best-effort — the collector falls back to the
+#     existing venues.json — so it must never block the weekly pull.
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: Weekly Collect
@@ -84,12 +91,22 @@ jobs:
         # expected failures, and masking exit codes would re-introduce
         # the double-silencing the audit flagged.
         #
-        # Step-level timeout: the in-script Apify call uses a 240s read
-        # timeout, plus a small overhead for normalize/merge/write. 6 min
-        # is a hard ceiling — if the Apify SDK or the network ever stalls
-        # past that, this step alone fails instead of eating the whole
-        # job budget like it did on Apr-29.
+        # Step-level timeout: the in-script Apify call uses a 120s read
+        # timeout per category, and the script enforces an internal
+        # ~220s total budget to bail with partial results before GitHub
+        # forcibly kills us. 6 min is a hard outer ceiling.
+        #
+        # continue-on-error: discovery is a best-effort refresh of
+        # venues.json. Run 25123919466 had this step killed at the 6m
+        # cap and the workflow then skipped the collector — that's the
+        # opposite of what we want. The collector has its own fallback
+        # to the existing venues.json / facebook_venues.json, so even a
+        # nonzero exit here (e.g. an unexpected SIGKILL on step timeout)
+        # must not block the weekly pull. The script itself still exits
+        # 0 on expected failures, so this only catches the truly
+        # unexpected.
         timeout-minutes: 6
+        continue-on-error: true
         env:
           APIFY_TOKEN:        ${{ secrets.APIFY_TOKEN }}
           SENTRY_DSN:         ${{ secrets.SENTRY_DSN }}

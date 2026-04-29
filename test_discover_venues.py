@@ -559,6 +559,133 @@ def test_all_categories_failing_fires_sentry_warn(monkeypatch):
     assert any("All Apify categories failed" in m for m, _ in warns), warns
 
 
+def test_run_apify_discovery_honors_total_budget(monkeypatch):
+    """Per-category loop must exit early when the internal time budget is
+    exhausted, returning whatever it has gathered so far. Simulates the
+    Apr-29 production failure (run 25123919466) where 5/8 categories
+    completed before the GitHub step timeout killed the process — under
+    the new contract, those 5 categories' results survive and the script
+    exits cleanly with a Sentry warning instead of being SIGKILLed."""
+    n_terms = len(dv.CATEGORY_SEARCHES)
+    # Each call "takes" 70s (the Apr-29 average). Budget is 220s, so the
+    # 4th iteration's pre-call check (elapsed=210s) still fits, but the
+    # 5th (elapsed=280s) exceeds the budget and bails. We expect 4
+    # categories to have completed.
+    fake_now = {"t": 0.0}
+
+    def fake_monotonic():
+        return fake_now["t"]
+
+    def fake_post(url, **kwargs):
+        fake_now["t"] += 70.0
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = [
+            {"title": f"Place from call {fake_now['t']}",
+             "facebooks": ["https://facebook.com/x"]}
+        ]
+        return resp
+
+    warns = []
+    monkeypatch.setattr(dv, "_sentry_warn",
+                        lambda msg, **tags: warns.append((msg, tags)))
+
+    items = dv.run_apify_discovery(
+        "tok",
+        http_post=fake_post,
+        sleep=lambda *_a, **_k: None,
+        monotonic=fake_monotonic,
+        total_budget_seconds=220,
+    )
+
+    # Some categories ran (partial results survive)…
+    assert 0 < len(items) < n_terms
+    # …but not all of them: 4 admitted under the budget, 4 skipped.
+    assert len(items) == 4, (
+        f"Expected 4 categories under a 220s budget at 70s/call, "
+        f"got {len(items)}"
+    )
+    # And a Sentry warning fired about the budget.
+    assert any("time budget exhausted" in m.lower() for m, _t in warns), warns
+
+
+def test_run_apify_discovery_no_budget_breach_no_warning(monkeypatch):
+    """When all categories finish under the budget, no budget-exhausted
+    warning should be emitted (otherwise the operator gets noise on every
+    healthy run)."""
+    fake_now = {"t": 0.0}
+
+    def fake_monotonic():
+        return fake_now["t"]
+
+    def fake_post(url, **kwargs):
+        fake_now["t"] += 5.0  # 5s per call → well under any sane budget
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = []
+        return resp
+
+    warns = []
+    monkeypatch.setattr(dv, "_sentry_warn",
+                        lambda msg, **tags: warns.append((msg, tags)))
+
+    dv.run_apify_discovery(
+        "tok", http_post=fake_post,
+        sleep=lambda *_a, **_k: None,
+        monotonic=fake_monotonic,
+        total_budget_seconds=220,
+    )
+    assert not any("time budget exhausted" in m.lower() for m, _t in warns), warns
+
+
+def test_discover_and_update_keeps_partial_budget_results(monkeypatch, tmp_path):
+    """End-to-end: when the budget trips mid-loop, the categories that did
+    run still get classified and written to venues.json / pending_venues.json,
+    so the operator gets a partial refresh instead of an empty pass."""
+    monkeypatch.setenv("APIFY_TOKEN", "fake-token")
+    _seed_repo(tmp_path)
+
+    fake_now = {"t": 0.0}
+
+    def fake_monotonic():
+        return fake_now["t"]
+
+    def fake_post(url, **kwargs):
+        # Each category "takes" 70s, so a 220s budget admits 3 categories.
+        fake_now["t"] += 70.0
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = [
+            {"title": f"Place {fake_now['t']:.0f}",
+             "categories": ["Bar"], "totalScore": 4.5,
+             "reviewsCount": 200,
+             "facebooks": [f"https://facebook.com/p{fake_now['t']:.0f}"]},
+        ]
+        return resp
+
+    summary = dv.discover_and_update(
+        repo_root=str(tmp_path),
+        http_post=fake_post,
+        monotonic=fake_monotonic,
+    )
+
+    assert summary["ran_apify"] is True
+    # Four categories admitted under the budget = four HIGH places
+    # (5th iteration's pre-call check at 280s exceeds the 220s budget).
+    assert summary["discovered_high"] == 4
+    venues = json.loads((tmp_path / "venues.json").read_text())
+    # Seed survives + 4 new HIGH = 5 venues.
+    assert len(venues) == 5
+
+
+def test_apify_per_call_timeout_fits_in_step_budget():
+    """Sanity bound: the per-call timeout must be small enough that even a
+    couple of stuck categories can't blow through the 6-minute step ceiling
+    before the internal budget kicks in. 120s × 2 = 240s ≤ 360s (step cap)."""
+    assert dv.APIFY_PER_CALL_TIMEOUT <= 130
+    assert dv.APIFY_TOTAL_BUDGET_SECONDS + dv.APIFY_PER_CALL_TIMEOUT < 360
+
+
 def test_apify_zero_results_fires_sentry_warn(tmp_path, monkeypatch):
     """Token set + actor ran but no HIGH/MEDIUM venues → warn (silent breakage)."""
     monkeypatch.setenv("APIFY_TOKEN", "fake-token")
@@ -570,7 +697,8 @@ def test_apify_zero_results_fires_sentry_warn(tmp_path, monkeypatch):
     # Apify returns one place that classifies as SKIP (no social) so the
     # zero-HIGH-zero-MEDIUM Sentry warning is what we want to assert.
     monkeypatch.setattr(dv, "run_apify_discovery",
-                        lambda token, http_post=None, sleep=None: [
+                        lambda token, http_post=None, sleep=None,
+                        monotonic=None, **kw: [
                             {"title": "Something", "totalScore": 4.0,
                              "reviewsCount": 100, "categories": ["Bar"]}
                         ])

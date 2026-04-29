@@ -127,9 +127,24 @@ LOCATION_QUERY = "Victoria, TX"
 
 # Per-category place cap. Combined-call previously asked for 30 places per
 # search × 8 searches = 240 enriched places, which was the root cause of the
-# 240s timeout. 25 is plenty for Victoria — the long tail beyond rank 25 is
+# 240s timeout. 20 is plenty for Victoria — the long tail beyond rank 20 is
 # almost entirely dupes or non-event-likely results that classify_tier drops.
-PLACES_PER_SEARCH = 25
+# Lowered from 25 → 20 after run 25123919466 timed out: per-category latency
+# was averaging ~70s with 25 enriched places, leaving < 1 min budget for the
+# last three categories under a 6-minute step ceiling.
+PLACES_PER_SEARCH = 20
+
+# Internal time budget for the whole per-category loop. Exists so the script
+# self-terminates with partial results instead of being SIGKILLed by the
+# GitHub Actions step timeout. Run 25123919466 demonstrated the failure mode:
+# 5 of 8 categories completed in 5m43s and the step was killed at 6m, losing
+# the partial results AND blocking the collector that depended on this step.
+#
+# The budget is checked between categories — a single category that stalls
+# its full APIFY_PER_CALL_TIMEOUT (120s) can still push us over by up to that
+# amount, so we set the budget to leave a one-category cushion under the
+# 6-minute (360s) step ceiling: 360 − 120 = 240s, with a small safety margin.
+APIFY_TOTAL_BUDGET_SECONDS = 220
 
 # Categories where we're meaningfully more likely to discover events. Used as
 # part of the HIGH-tier gate.
@@ -487,21 +502,36 @@ def _run_actor_with_retries(
     return []
 
 
-def run_apify_discovery(token: str, *, http_post=None, sleep=None) -> list[dict]:
+def run_apify_discovery(
+    token: str,
+    *,
+    http_post=None,
+    sleep=None,
+    monotonic=None,
+    total_budget_seconds: float = APIFY_TOTAL_BUDGET_SECONDS,
+) -> list[dict]:
     """Call the Apify actor per category and return the merged item list.
 
     Splitting into one call per category keeps any single Apify timeout from
     losing the whole discovery pass — Apr-29's run timed out the combined
     8-category call after 4 minutes and produced 0 venues. Per-category
-    calls are smaller (single search × 25 places + enrichment) and each has
+    calls are smaller (single search × 20 places + enrichment) and each has
     its own retry budget, so a slow category at most contributes one bad
     line of stats instead of a step-level failure.
+
+    Internal time budget: run 25123919466 showed that 5 of 8 categories
+    completed in 5m43s before GitHub killed the step at 6m, losing the
+    partial results entirely. ``total_budget_seconds`` caps the whole
+    per-category loop so we exit gracefully with whatever we collected and
+    a list of skipped categories, instead of being SIGKILLed.
 
     Failures are intentionally non-fatal (discovery is best-effort), but
     they are no longer silent — each failure path fires a Sentry event so
     the operator can see breakage without grep-diving the Actions log.
     """
     post = http_post or requests.post
+    if monotonic is None:
+        monotonic = time.monotonic
     url = (
         f"https://api.apify.com/v2/acts/{APIFY_GMAPS_ACTOR}"
         f"/run-sync-get-dataset-items?token={token}"
@@ -509,7 +539,28 @@ def run_apify_discovery(token: str, *, http_post=None, sleep=None) -> list[dict]
     all_items: list[dict] = []
     successes = 0
     failures = 0
-    for term in CATEGORY_SEARCHES:
+    skipped_terms: list[str] = []
+    started = monotonic()
+    for idx, term in enumerate(CATEGORY_SEARCHES):
+        elapsed = monotonic() - started
+        if elapsed >= total_budget_seconds:
+            # Budget exhausted: skip remaining categories and log them.
+            remaining = list(CATEGORY_SEARCHES[idx:])
+            skipped_terms.extend(remaining)
+            print(
+                f"  [discover] Time budget reached after {elapsed:.1f}s; "
+                f"skipping remaining {len(remaining)} categories: "
+                f"{', '.join(remaining)}"
+            )
+            _sentry_warn(
+                "[discover] Apify time budget exhausted; partial results",
+                actor=APIFY_GMAPS_ACTOR,
+                completed=str(idx),
+                skipped=str(len(remaining)),
+                elapsed_seconds=f"{elapsed:.1f}",
+            )
+            break
+
         payload = _build_actor_input([term])
         items = _run_actor_with_retries(
             post, url, payload,
@@ -525,15 +576,16 @@ def run_apify_discovery(token: str, *, http_post=None, sleep=None) -> list[dict]
             failures += 1
         print(f"  [discover] {term}: {len(items)} raw items")
 
+    elapsed_total = monotonic() - started
     print(
-        f"  [discover] Apify per-category complete: "
+        f"  [discover] Apify per-category complete in {elapsed_total:.1f}s: "
         f"{successes}/{len(CATEGORY_SEARCHES)} categories succeeded, "
-        f"{failures} failed, {len(all_items)} raw items total"
+        f"{failures} failed, {len(skipped_terms)} skipped (budget), "
+        f"{len(all_items)} raw items total"
     )
-    if successes == 0 and len(CATEGORY_SEARCHES) > 0:
-        # Every category failed: very different signal from "ran but nothing
-        # new" (which the orchestrator already covers). Fire a separate
-        # Sentry warning so operator gets a single, attributable ping.
+    if successes == 0 and len(CATEGORY_SEARCHES) > 0 and not skipped_terms:
+        # Every attempted category failed — and we didn't bail on time.
+        # Different signal from "ran but nothing new" or "ran out of clock".
         _sentry_warn(
             "[discover] All Apify categories failed",
             actor=APIFY_GMAPS_ACTOR,
@@ -701,7 +753,7 @@ def append_pending(
 
 
 def discover_and_update(
-    repo_root: str | None = None, *, http_post=None, sleep=None
+    repo_root: str | None = None, *, http_post=None, sleep=None, monotonic=None,
 ) -> dict:
     """Top-level entry point. Returns a summary dict for logging/tests."""
     root = repo_root or _here()
@@ -755,7 +807,9 @@ def discover_and_update(
             stage="apify_token_missing",
         )
     else:
-        items = run_apify_discovery(token, http_post=http_post, sleep=sleep)
+        items = run_apify_discovery(
+            token, http_post=http_post, sleep=sleep, monotonic=monotonic,
+        )
         summary["ran_apify"] = True
         seen_keys: set[str] = set()
         for raw in items:
