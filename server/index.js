@@ -349,6 +349,7 @@ export async function createApp(opts = {}) {
   // Approved submissions from the local store are *always* merged in so the
   // editor sees them in the picker without needing a separate "Pull approved"
   // round trip.
+  const candidatesFile = opts.candidatesFile || CANDIDATES_FILE;
   app.get('/api/admin/candidates', requireAdmin, async (req, res) => {
     let sha = null;
     let events = [];
@@ -369,7 +370,7 @@ export async function createApp(opts = {}) {
 
     if (source !== 'github') {
       try {
-        const local = await readJsonFile(CANDIDATES_FILE);
+        const local = await readJsonFile(candidatesFile);
         events = Array.isArray(local && local.events) ? local.events : [];
         source = 'local-file';
       } catch (err) {
@@ -597,19 +598,51 @@ export async function createApp(opts = {}) {
     res.json(result);
   });
 
+  const eventsFile = opts.eventsFile || EVENTS_FILE;
   // ─── Admin: currently-published events ───
-  // Returns the events payload that is currently being served on /events.json,
-  // pulled from the local store (Railway/Postgres). The admin UI uses this to
-  // pre-check candidates that are already live, so a fresh login still shows
-  // what was previously published instead of every checkbox starting empty.
-  // If nothing has been published locally yet (rare on a fresh deploy), we
-  // return an empty events list — the admin treats that the same as "nothing
-  // currently live."
+  // Returns the events payload that is currently being served on /events.json
+  // so the admin picker can pre-check rows that are already live. Source
+  // priority:
+  //   1. Local store (Railway/Postgres). This is what the public site is
+  //      actually serving for any session that has hit Save & Publish since
+  //      Railway took over publishing.
+  //   2. Bundled docs/events.json on disk. This is the source of truth when
+  //      the admin hasn't published since PR #47 deployed (so the local store
+  //      is empty), but the public site still shows whatever the most recent
+  //      GitHub publish committed to docs/events.json.
+  // Without the file fallback, a fresh deploy with a non-empty docs/events.json
+  // and an empty Railway store would show every published event as unchecked
+  // in the admin — which is exactly what the user reported.
   app.get('/api/admin/published-events', requireAdmin, async (req, res) => {
     try {
-      const published = await store.getPublished();
+      let published = null;
+      let source = 'store';
+      try {
+        published = await store.getPublished();
+      } catch (err) {
+        console.warn('[admin] published-events store lookup failed:', err.message);
+      }
       if (!published) {
-        return res.json({ ok: true, events: [], last_updated: null });
+        // Fall back to the bundled events.json snapshot. This is the file
+        // GitHub Pages / Railway statically served before Railway took over
+        // publishing, and it remains a faithful picture of "currently live"
+        // until the admin hits Save & Publish under the new flow.
+        try {
+          const bundled = await readJsonFile(eventsFile);
+          if (bundled && Array.isArray(bundled.events)) {
+            published = bundled;
+            source = 'docs-file';
+          }
+        } catch (err) {
+          if (err.code !== 'ENOENT') {
+            console.warn('[admin] published-events file fallback failed:', err.message);
+          }
+        }
+      }
+      if (!published) {
+        return res.json({
+          ok: true, events: [], last_updated: null, source: 'empty'
+        });
       }
       let events = Array.isArray(published.events) ? published.events : [];
       // Apply the same admin edits overlay so a correction made in the editor
@@ -625,7 +658,8 @@ export async function createApp(opts = {}) {
       res.json({
         ok: true,
         events,
-        last_updated: published.last_updated || null
+        last_updated: published.last_updated || null,
+        source
       });
     } catch (err) {
       console.error('[admin] published-events lookup failed:', err.message);

@@ -1114,25 +1114,63 @@ code {
 .event-row__source-link:focus {
   text-decoration-thickness: 2px;
 }
-/* Modal URL row: input + adjacent "Open ↗" link. */
-.event-edit-form__url-row {
-  display: flex;
-  align-items: stretch;
-  gap: 0.5rem;
-}
-.event-edit-form__url-row input {
-  flex: 1 1 auto;
-  min-width: 0;
+/* Modal URL field. The input is on its own row at full width so the admin
+   can triple-click or drag-select the entire URL without it being clipped
+   by an adjacent action button. The Copy / Open actions sit on a separate
+   row directly below — never on the same line as the input. */
+.event-edit-form__url-input {
   /* Belt-and-suspenders: parents won't disable selection here. */
   user-select: text;
   -webkit-user-select: text;
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88rem;
+}
+.event-edit-form__url-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+.event-edit-form__url-copy {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.7rem;
 }
 .event-edit-form__url-open {
-  align-self: center;
   font-size: 0.85rem;
   color: var(--admin-primary, #2d5b8a);
   text-decoration: underline;
   white-space: nowrap;
+}
+.event-edit-form__url-copied {
+  color: var(--admin-success);
+  font-size: 0.85rem;
+}
+/* Read-only display of the full URL underneath the input. Selectable so
+   the admin can triple-click and copy without fighting the input. The
+   font-family + word-break let very long URLs wrap inside the modal. */
+.event-edit-form__url-display {
+  display: block;
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.55rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--admin-text);
+  background: var(--admin-code-bg);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--radius);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  user-select: all;
+  -webkit-user-select: all;
+  cursor: text;
+}
+.event-edit-form__url-display:focus {
+  outline: 2px solid var(--admin-primary);
+  outline-offset: 1px;
 }
 /* The URL field's outer wrapper is a <div>, not a <label>. The visible
    field caption uses <label for="...">; this rule keeps it visually flush

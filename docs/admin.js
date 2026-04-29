@@ -892,21 +892,78 @@
     }
   }
 
-  // Keep the modal's "Open ↗" link in sync with whatever's typed in the URL
-  // field. Hidden when the input is empty or doesn't parse as http(s) — we
-  // never let the admin click through to a javascript: URL or similar.
+  // Keep the modal's "Open ↗" link, "Copy full URL" button, and read-only
+  // <code> display in sync with whatever's typed in the URL field. The Open
+  // link is hidden when the input is empty or doesn't parse as http(s) so we
+  // never let the admin click through to a javascript: URL or similar. The
+  // Copy button + display show whenever there's any URL text at all (even a
+  // partial URL the admin is fixing) so it's always copy-able.
   function syncEditUrlOpenLink() {
     const input = document.getElementById('event-edit-url');
     const link = document.getElementById('event-edit-url-open');
-    if (!input || !link) return;
+    const copyBtn = document.getElementById('event-edit-url-copy');
+    const display = document.getElementById('event-edit-url-display');
+    const copied = document.getElementById('event-edit-url-copied');
+    if (!input) return;
     const raw = (input.value || '').trim();
-    if (isHttpUrl(raw)) {
-      link.href = raw;
-      link.hidden = false;
-    } else {
-      link.removeAttribute('href');
-      link.hidden = true;
+    if (link) {
+      if (isHttpUrl(raw)) {
+        link.href = raw;
+        link.hidden = false;
+      } else {
+        link.removeAttribute('href');
+        link.hidden = true;
+      }
     }
+    if (copyBtn) copyBtn.hidden = !raw;
+    if (display) {
+      if (raw) {
+        display.textContent = raw;
+        display.hidden = false;
+      } else {
+        display.textContent = '';
+        display.hidden = true;
+      }
+    }
+    // Hide the "Copied!" flash whenever the URL changes — it's only shown
+    // briefly after a successful copy.
+    if (copied) copied.hidden = true;
+  }
+
+  // Copies the full URL to the clipboard. Falls back to the legacy
+  // execCommand path on browsers without navigator.clipboard. We surface a
+  // brief "Copied!" flash so the admin gets immediate confirmation; if the
+  // copy fails we set a status message instead of leaving the user wondering.
+  async function copyEditUrl() {
+    const input = document.getElementById('event-edit-url');
+    const copied = document.getElementById('event-edit-url-copied');
+    if (!input) return false;
+    const raw = (input.value || '').trim();
+    if (!raw) return false;
+    let ok = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(raw);
+        ok = true;
+      }
+    } catch (_) { /* fall through to legacy path */ }
+    if (!ok) {
+      try {
+        // Legacy path: select the input contents and run execCommand('copy').
+        // Works even when navigator.clipboard is unavailable (older Safari,
+        // insecure contexts).
+        input.focus();
+        input.select();
+        ok = document.execCommand && document.execCommand('copy');
+      } catch (_) { ok = false; }
+    }
+    if (ok && copied) {
+      copied.hidden = false;
+      setTimeout(() => { copied.hidden = true; }, 1500);
+    } else if (!ok) {
+      setEditFormStatus('Could not copy — please select the URL text manually.', 'error');
+    }
+    return ok;
   }
 
   function openEventEditModal(ev) {
@@ -1075,11 +1132,32 @@
       if (e.key === 'Escape' && !modal.hidden) closeEventEditModal();
     });
     form.addEventListener('submit', saveEventEdit);
-    // Live-update the "Open ↗" link as the URL field changes.
+    // Live-update the "Open ↗" link, copy button, and full-URL display as
+    // the admin edits the URL field.
     const urlInput = document.getElementById('event-edit-url');
     if (urlInput) {
       urlInput.addEventListener('input', syncEditUrlOpenLink);
       urlInput.addEventListener('change', syncEditUrlOpenLink);
+    }
+    const copyBtn = document.getElementById('event-edit-url-copy');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        copyEditUrl();
+      });
+    }
+    // The read-only <code> display is selectable. When the admin clicks it,
+    // select the entire URL so a single click + Cmd/Ctrl+C is enough to copy.
+    const display = document.getElementById('event-edit-url-display');
+    if (display) {
+      display.addEventListener('click', () => {
+        try {
+          const r = document.createRange();
+          r.selectNodeContents(display);
+          const sel = window.getSelection();
+          if (sel) { sel.removeAllRanges(); sel.addRange(r); }
+        } catch (_) { /* ignore — fallback is the Copy button */ }
+      });
     }
   }
 
@@ -1694,6 +1772,7 @@
     setSourcesMessage, describeTriggerError,
     openEventEditModal, closeEventEditModal, applyEditToLocalState,
     readEditFormPayload, showEditFormErrors, syncEditUrlOpenLink,
+    copyEditUrl,
     isHttpUrl, shortenUrl,
     _state: state,
     _constants: {

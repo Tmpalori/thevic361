@@ -338,20 +338,34 @@
                swallow mousedown drags so the admin can't select/highlight
                text inside the input. The explicit <label for="..."> binding
                below preserves accessibility without that selection bug.
-               The "Open" link gives the admin a one-click way to open the
-               source URL in a new tab while editing. -->
+               The input is on its own row (full width), with the Copy / Open
+               actions on a separate row underneath so they never overlap or
+               clip the URL text. A read-only <code> display below shows the
+               full URL even when it overflows the input — the admin can
+               triple-click to select all of it without scrolling. -->
           <div class="event-edit-form__field event-edit-form__field--wide">
             <label for="event-edit-url" class="event-edit-form__field-label">
               <span>Source / link</span>
             </label>
-            <div class="event-edit-form__url-row">
-              <input type="url" id="event-edit-url" name="url" maxlength="500"
-                     placeholder="https://example.com"
-                     autocomplete="url" spellcheck="false">
+            <input type="url" id="event-edit-url" name="url" maxlength="500"
+                   class="event-edit-form__url-input"
+                   placeholder="https://example.com"
+                   autocomplete="url" spellcheck="false">
+            <div class="event-edit-form__url-actions">
+              <button type="button" id="event-edit-url-copy"
+                      class="btn btn--outline event-edit-form__url-copy"
+                      data-act="copy-url"
+                      hidden>Copy full URL</button>
               <a id="event-edit-url-open" class="event-edit-form__url-open"
                  href="#" target="_blank" rel="noopener noreferrer"
                  hidden>Open ↗</a>
+              <span id="event-edit-url-copied"
+                    class="event-edit-form__url-copied"
+                    role="status" aria-live="polite" hidden>Copied!</span>
             </div>
+            <code id="event-edit-url-display"
+                  class="event-edit-form__url-display"
+                  tabindex="0" hidden></code>
             <span class="event-edit-form__field-error" data-error-for="url"></span>
           </div>
         </div>

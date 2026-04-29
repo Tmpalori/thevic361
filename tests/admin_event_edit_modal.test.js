@@ -310,3 +310,104 @@ describe('admin source URL — clickable + selectable', () => {
     expect(links.length).toBe(0);
   });
 });
+
+// ─── Modal URL field: copy button + read-only display ─────────────────────
+//
+// The user's second URL-selection complaint after the first fix was: "I still
+// can't highlight the entire link in edit mode." The first fix moved the input
+// out of a parent <label>, but it left the input on a flex row next to the
+// "Open ↗" link, which in some browsers still clipped the URL or made it hard
+// to triple-click. The follow-up fix:
+//   - puts the URL input on its own full-width row
+//   - adds a "Copy full URL" button as a reliable copy mechanism
+//   - renders the full URL in a selectable read-only <code> element so the
+//     admin can triple-click + Cmd-C even if the input is finicky
+//
+// These tests guard those guarantees so future refactors don't regress them.
+
+describe('admin event edit modal — Copy full URL + selectable display', () => {
+  let api;
+  beforeEach(() => { api = bootDom(); });
+  afterEach(() => { delete window.__vic361Admin; });
+
+  it('exposes a Copy full URL button and a read-only URL display', () => {
+    expect(document.getElementById('event-edit-url-copy')).not.toBeNull();
+    expect(document.getElementById('event-edit-url-display')).not.toBeNull();
+    expect(document.getElementById('event-edit-url-copied')).not.toBeNull();
+  });
+
+  it('the Copy button and display are hidden when the URL field is empty', () => {
+    api.openEventEditModal({ date: '2026-04-27', name: 'X', venue: 'Y', url: '' });
+    expect(document.getElementById('event-edit-url-copy').hidden).toBe(true);
+    expect(document.getElementById('event-edit-url-display').hidden).toBe(true);
+  });
+
+  it('the Copy button and display reveal whenever the URL field has any text', () => {
+    api.openEventEditModal({
+      date: '2026-04-27', name: 'X', venue: 'Y',
+      url: 'https://example.com/very/long/path/that/might/overflow/the/input/box'
+    });
+    const copyBtn = document.getElementById('event-edit-url-copy');
+    const display = document.getElementById('event-edit-url-display');
+    expect(copyBtn.hidden).toBe(false);
+    expect(display.hidden).toBe(false);
+    // The display shows the COMPLETE url verbatim — no truncation, no escape.
+    expect(display.textContent).toBe(
+      'https://example.com/very/long/path/that/might/overflow/the/input/box'
+    );
+  });
+
+  it('typing into the URL input live-updates the read-only display', () => {
+    api.openEventEditModal({ date: '2026-04-27', name: 'X', venue: 'Y', url: '' });
+    const input = document.getElementById('event-edit-url');
+    const display = document.getElementById('event-edit-url-display');
+    input.value = 'https://example.com/foo';
+    api.syncEditUrlOpenLink();
+    expect(display.hidden).toBe(false);
+    expect(display.textContent).toBe('https://example.com/foo');
+  });
+
+  it('the URL input is not on a flex row that could clip its right edge', () => {
+    // The input must be a top-level child of the field wrapper, not nested
+    // inside another flex container alongside the Open link. The test reads
+    // the input's parent class — anything ending with "url-row" indicates the
+    // old, regression-prone layout.
+    const input = document.getElementById('event-edit-url');
+    const parent = input.parentElement;
+    const cls = parent.className || '';
+    expect(cls).not.toMatch(/url-row/);
+  });
+
+  it('copyEditUrl writes the URL to the clipboard and shows the Copied flash', async () => {
+    let written = null;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (s) => { written = s; } }
+    });
+    api.openEventEditModal({
+      date: '2026-04-27', name: 'X', venue: 'Y',
+      url: 'https://example.com/copy-me'
+    });
+    const ok = await api.copyEditUrl();
+    expect(ok).toBe(true);
+    expect(written).toBe('https://example.com/copy-me');
+    expect(document.getElementById('event-edit-url-copied').hidden).toBe(false);
+  });
+
+  it('copyEditUrl returns false when there is no URL to copy', async () => {
+    api.openEventEditModal({ date: '2026-04-27', name: 'X', venue: 'Y', url: '' });
+    const ok = await api.copyEditUrl();
+    expect(ok).toBe(false);
+  });
+
+  it('the URL display has user-select that allows full text selection', () => {
+    // We can't read computed styles for an external CSS rule reliably in
+    // jsdom, but we can verify the element is NOT marked unselectable inline
+    // and that its tabindex makes it keyboard-focusable so the admin can
+    // press Tab to reach it and then Cmd-A / Cmd-C.
+    const display = document.getElementById('event-edit-url-display');
+    const inline = display.getAttribute('style') || '';
+    expect(inline).not.toMatch(/user-select\s*:\s*none/i);
+    expect(display.getAttribute('tabindex')).toBe('0');
+  });
+});

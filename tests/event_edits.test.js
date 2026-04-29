@@ -26,13 +26,26 @@ async function startApp(opts = {}) {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-edits-'));
   const file = path.join(tmpDir, 'submissions.json');
   const storeBundle = { kind: 'file', store: new FileStore(file), file };
+  // Isolate the bundled candidate/events files from the real repo so a test
+  // that publishes "Original Title" doesn't compete with the 100+ candidates
+  // in the real candidates.json.
+  const candidatesFile = path.join(tmpDir, 'candidates.json');
+  const eventsFile = path.join(tmpDir, 'events.json');
+  if (opts.seedCandidates !== undefined) {
+    await fs.writeFile(candidatesFile,
+      JSON.stringify({ events: opts.seedCandidates }), 'utf8');
+  } else {
+    await fs.writeFile(candidatesFile, JSON.stringify({ events: [] }), 'utf8');
+  }
   appBundle = await createApp(Object.assign({
     storeBundle,
     adminUsername: 'tristen',
     adminPassword: 'pw',
     adminSessionSecret: 'test-secret',
     trustProxy: false,
-    githubToken: null
+    githubToken: null,
+    candidatesFile,
+    eventsFile
   }, opts));
   server = http.createServer(appBundle.app);
   await new Promise(r => server.listen(0, r));
@@ -308,5 +321,118 @@ describe('overlay applies to live data', () => {
     const body = await r.json();
     expect(body.events).toHaveLength(1);
     expect(body.events[0].name).toBe('Fixed Event');
+  });
+
+  it('candidates and published-events agree on identity after overlay edits', async () => {
+    // The user-reported bug: after editing an event, candidates show the
+    // post-edit shape (because the candidates endpoint applies the overlay),
+    // but published-events still showed the pre-edit shape — so the admin
+    // picker rendered the row unchecked even though the live site had it.
+    //
+    // This test reproduces the scenario end-to-end: seed the same event in
+    // candidates.json AND publish it, edit it via the overlay, then assert
+    // that BOTH /api/admin/candidates and /api/admin/published-events return
+    // the same eventKey for the same row. The admin picker pre-checks rows
+    // by intersecting these two key sets.
+    const original = {
+      date: '2026-05-15', name: 'Original Title', venue: 'Town Hall'
+    };
+    await startApp({ seedCandidates: [original] });
+    const tok = await loginToken();
+
+    // Publish the same event so the local store has a published payload.
+    await fetchJson('POST', '/api/admin/publish-events',
+      { events: [original] }, { Authorization: 'Bearer ' + tok });
+
+    // Now edit it. The overlay's original_key is the pre-edit identity; the
+    // payload changes the name (so the post-edit identity is different).
+    const newPayload = {
+      name: 'Corrected Title',
+      date: '2026-05-15',
+      time: '7 PM',
+      venue: 'Town Hall',
+      description: 'Updated description.'
+    };
+    await fetchJson('POST', '/api/admin/event-edits', {
+      original_key: '2026-05-15|Original Title|Town Hall',
+      payload: newPayload
+    }, { Authorization: 'Bearer ' + tok });
+
+    // Hit both endpoints and compare keys.
+    const cand = await fetchJson('GET', '/api/admin/candidates', undefined,
+      { Authorization: 'Bearer ' + tok });
+    const pub = await fetchJson('GET', '/api/admin/published-events', undefined,
+      { Authorization: 'Bearer ' + tok });
+    expect(cand.status).toBe(200);
+    expect(pub.status).toBe(200);
+
+    const keyOf = (e) => [e.date || '', e.name || '', e.venue || ''].join('|');
+    const candKeys = new Set(cand.json.data.events.map(keyOf));
+    const pubKeys = new Set(pub.json.events.map(keyOf));
+    const expectedKey = '2026-05-15|Corrected Title|Town Hall';
+    // Both endpoints must surface the post-edit key — that's what makes the
+    // checkbox appear pre-checked in the admin picker.
+    expect(candKeys.has(expectedKey)).toBe(true);
+    expect(pubKeys.has(expectedKey)).toBe(true);
+  });
+
+  it('published-events matching survives a date change in the overlay', async () => {
+    const original = {
+      date: '2026-06-01', name: 'Wrong Date', venue: 'Library'
+    };
+    await startApp({ seedCandidates: [original] });
+    const tok = await loginToken();
+    await fetchJson('POST', '/api/admin/publish-events',
+      { events: [original] }, { Authorization: 'Bearer ' + tok });
+    await fetchJson('POST', '/api/admin/event-edits', {
+      original_key: '2026-06-01|Wrong Date|Library',
+      payload: {
+        name: 'Wrong Date',
+        date: '2026-06-02', // operator fixes the date
+        time: '5 PM',
+        venue: 'Library',
+        description: 'desc'
+      }
+    }, { Authorization: 'Bearer ' + tok });
+    const cand = await fetchJson('GET', '/api/admin/candidates', undefined,
+      { Authorization: 'Bearer ' + tok });
+    const pub = await fetchJson('GET', '/api/admin/published-events', undefined,
+      { Authorization: 'Bearer ' + tok });
+    const keyOf = (e) => [e.date || '', e.name || '', e.venue || ''].join('|');
+    const expectedKey = '2026-06-02|Wrong Date|Library';
+    expect(cand.json.data.events.map(keyOf)).toContain(expectedKey);
+    expect(pub.json.events.map(keyOf)).toContain(expectedKey);
+  });
+
+  it('published-events matching survives a venue/time change in the overlay', async () => {
+    const original = {
+      date: '2026-06-05', name: 'Open Mic', venue: 'Wrong Venue'
+    };
+    await startApp({ seedCandidates: [original] });
+    const tok = await loginToken();
+    await fetchJson('POST', '/api/admin/publish-events',
+      { events: [original] }, { Authorization: 'Bearer ' + tok });
+    await fetchJson('POST', '/api/admin/event-edits', {
+      original_key: '2026-06-05|Open Mic|Wrong Venue',
+      payload: {
+        name: 'Open Mic',
+        date: '2026-06-05',
+        time: '8:00 PM',
+        venue: 'Right Venue',
+        description: 'desc'
+      }
+    }, { Authorization: 'Bearer ' + tok });
+    const cand = await fetchJson('GET', '/api/admin/candidates', undefined,
+      { Authorization: 'Bearer ' + tok });
+    const pub = await fetchJson('GET', '/api/admin/published-events', undefined,
+      { Authorization: 'Bearer ' + tok });
+    const keyOf = (e) => [e.date || '', e.name || '', e.venue || ''].join('|');
+    const expectedKey = '2026-06-05|Open Mic|Right Venue';
+    expect(cand.json.data.events.map(keyOf)).toContain(expectedKey);
+    expect(pub.json.events.map(keyOf)).toContain(expectedKey);
+    // Keep the time on the published copy so the admin sees the corrected
+    // time without having to re-publish.
+    const editedPub = pub.json.events.find(e => keyOf(e) === expectedKey);
+    expect(editedPub.time).toBe('8:00 PM');
   });
 });

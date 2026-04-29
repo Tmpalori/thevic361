@@ -23,13 +23,24 @@ async function startApp(opts = {}) {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-published-'));
   const file = path.join(tmpDir, 'submissions.json');
   const storeBundle = { kind: 'file', store: new FileStore(file), file };
+  // Optional: seed an isolated docs/events.json alternative so tests of the
+  // file-fallback path don't depend on the real repo's bundled events.
+  let extraOpts = {};
+  if (opts.seedDocsEvents !== undefined) {
+    const eventsFile = path.join(tmpDir, 'events.json');
+    await fs.writeFile(eventsFile,
+      JSON.stringify(opts.seedDocsEvents), 'utf8');
+    extraOpts.eventsFile = eventsFile;
+  } else if (opts.eventsFile !== undefined) {
+    extraOpts.eventsFile = opts.eventsFile;
+  }
   appBundle = await createApp(Object.assign({
     storeBundle,
     adminUsername: 'tristen',
     adminPassword: 'pw',
     adminSessionSecret: 'test-secret',
     trustProxy: false
-  }, opts));
+  }, extraOpts, opts));
   server = http.createServer(appBundle.app);
   await new Promise(r => server.listen(0, r));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -70,8 +81,22 @@ describe('GET /api/admin/published-events', () => {
     expect(r.status).toBe(401);
   });
 
-  it('returns an empty events array when nothing has been published', async () => {
-    await startApp({ githubToken: null });
+  it('falls back to bundled docs/events.json when the local store is empty', async () => {
+    // Before PR #47 deployed, publishing wrote docs/events.json directly via
+    // GitHub. After PR #47, Save & Publish writes to the Railway store. If the
+    // admin lands on the picker without having published since the cutover,
+    // store.getPublished() is null but docs/events.json still represents what
+    // the public site is serving — so the admin checkboxes should be seeded
+    // from the file. Without this fallback, every live event renders unchecked
+    // even though it's still on the site.
+    const seeded = {
+      last_updated: '2026-04-29T20:11:08.345Z',
+      events: [
+        { date: '2026-04-27', name: 'JP Music Night', venue: 'The Barn' },
+        { date: '2026-04-28', name: 'Pool Shark Tuesdays', venue: 'Dodge City' }
+      ]
+    };
+    await startApp({ githubToken: null, seedDocsEvents: seeded });
     const tok = await loginToken();
     const r = await fetchJson('GET', '/api/admin/published-events', undefined, {
       Authorization: 'Bearer ' + tok
@@ -79,8 +104,47 @@ describe('GET /api/admin/published-events', () => {
     expect(r.status).toBe(200);
     expect(r.json.ok).toBe(true);
     expect(Array.isArray(r.json.events)).toBe(true);
-    expect(r.json.events.length).toBe(0);
-    expect(r.json.last_updated).toBeNull();
+    expect(r.json.events).toHaveLength(2);
+    expect(r.json.events.map(e => e.name).sort()).toEqual(
+      ['JP Music Night', 'Pool Shark Tuesdays']
+    );
+    expect(r.json.last_updated).toBe('2026-04-29T20:11:08.345Z');
+    expect(r.json.source).toBe('docs-file');
+  });
+
+  it('returns an empty list when neither the store nor docs/events.json has events', async () => {
+    await startApp({
+      githubToken: null,
+      seedDocsEvents: { events: [] }
+    });
+    const tok = await loginToken();
+    const r = await fetchJson('GET', '/api/admin/published-events', undefined, {
+      Authorization: 'Bearer ' + tok
+    });
+    expect(r.status).toBe(200);
+    // events: [] is a valid shape — the fallback uses it, but reports empty.
+    expect(r.json.events).toEqual([]);
+  });
+
+  it('store-published payload always wins over the docs/events.json fallback', async () => {
+    // After Save & Publish writes a payload to the Railway store, that
+    // payload — not the bundled file — is the source of truth. Otherwise
+    // a stale docs/events.json (e.g. before the latest GitHub commit) would
+    // mask freshly-published events.
+    const seeded = {
+      events: [{ date: '2026-04-27', name: 'Stale Bundle Event', venue: 'X' }]
+    };
+    await startApp({ githubToken: null, seedDocsEvents: seeded });
+    const tok = await loginToken();
+    await fetchJson('POST', '/api/admin/publish-events', {
+      events: [{ date: '2026-05-30', name: 'Fresh Store Event', venue: 'Y' }]
+    }, { Authorization: 'Bearer ' + tok });
+    const r = await fetchJson('GET', '/api/admin/published-events', undefined, {
+      Authorization: 'Bearer ' + tok
+    });
+    expect(r.json.events).toHaveLength(1);
+    expect(r.json.events[0].name).toBe('Fresh Store Event');
+    expect(r.json.source).toBe('store');
   });
 
   it('returns the latest published payload after a publish', async () => {
