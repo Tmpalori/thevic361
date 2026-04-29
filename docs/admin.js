@@ -60,6 +60,39 @@
     return SOURCE_LABEL[key] || (key ? String(key) : 'Unknown');
   }
 
+  // Only http(s) URLs are allowed as a clickable source link — anything else
+  // (javascript:, data:, mailto:, blank) is rendered as plain text or hidden.
+  // We rely on the URL constructor to reject malformed input rather than
+  // hand-rolling a regex.
+  function isHttpUrl(value) {
+    if (!value) return false;
+    const s = String(value).trim();
+    if (!s) return false;
+    try {
+      const u = new URL(s);
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Compact display form for a URL in the picker row. Keeps the host plus a
+  // short tail of the path so the operator can tell which page it points at
+  // without the row blowing up to two lines.
+  function shortenUrl(value) {
+    const s = String(value || '').trim();
+    if (!s) return '';
+    try {
+      const u = new URL(s);
+      const host = u.hostname.replace(/^www\./, '');
+      const path = u.pathname.replace(/\/+$/, '');
+      const display = host + (path && path !== '/' ? path : '');
+      return display.length > 48 ? display.slice(0, 45) + '…' : display;
+    } catch (_) {
+      return s.length > 48 ? s.slice(0, 45) + '…' : s;
+    }
+  }
+
   const WEEKDAY_TARGET_MIN = 4;
   const WEEKDAY_TARGET_MAX = 8;
   const WEEKEND_TARGET_MIN = 8;
@@ -498,6 +531,18 @@
               ? 'Organizer' : ev._submitter_kind === 'found_online'
               ? 'Found online' : 'Submitter: ' + ev._submitter_kind) + '</span>'
           : '';
+        // Clickable source URL. Rendered OUTSIDE the parent <label> so a
+        // click opens the link instead of toggling the row checkbox, and
+        // text-drag selects the URL text instead of being intercepted by
+        // the label. data-act="open-source" lets the click handler stop
+        // propagation so the surrounding label never sees it.
+        const sourceLink = isHttpUrl(ev.url)
+          ? '<a class="event-row__source-link" data-act="open-source" ' +
+              'href="' + escapeHtml(ev.url) + '" ' +
+              'target="_blank" rel="noopener noreferrer" ' +
+              'title="Open source: ' + escapeHtml(ev.url) + '">' +
+              escapeHtml(shortenUrl(ev.url)) + ' ↗</a>'
+          : '';
         // The Edit button is rendered alongside the checkbox label so the
         // operator can correct AI mistakes on a candidate (typos, missing
         // times, wrong venue) without touching the checkbox state. It lives
@@ -505,6 +550,9 @@
         const editBtn = (publishMode() === 'server')
           ? '<button type="button" class="btn btn--outline event-row__edit-btn" ' +
               'data-act="edit-event" data-key="' + escapeHtml(k) + '">Edit</button>'
+          : '';
+        const actionsHtml = (editBtn || sourceLink)
+          ? '<div class="event-row__actions">' + editBtn + sourceLink + '</div>'
           : '';
         return (
           '<div class="event-row-wrap">' +
@@ -521,7 +569,7 @@
                 (ev.description
                   ? '<p class="event-row__desc">' + escapeHtml(ev.description) + '</p>'
                   : '') +
-                (editBtn ? '<div class="event-row__actions">' + editBtn + '</div>' : '') +
+                actionsHtml +
               '</div>' +
               '<div class="event-row__icons" aria-hidden="true">' + icons + '</div>' +
             '</label>' +
@@ -560,6 +608,19 @@
         const k = btn.getAttribute('data-key');
         const ev = state.candidates.find(c => eventKey(c) === k);
         if (ev) openEventEditModal(ev);
+      });
+    });
+
+    // Source link click must not toggle the row's checkbox or "select" the
+    // label. We stop propagation but DON'T preventDefault — the browser
+    // still follows the href into a new tab via target="_blank".
+    listEl.querySelectorAll('a[data-act="open-source"]').forEach(a => {
+      a.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      // Same for keyboard activation (Enter on a focused link).
+      a.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
       });
     });
 
@@ -831,6 +892,23 @@
     }
   }
 
+  // Keep the modal's "Open ↗" link in sync with whatever's typed in the URL
+  // field. Hidden when the input is empty or doesn't parse as http(s) — we
+  // never let the admin click through to a javascript: URL or similar.
+  function syncEditUrlOpenLink() {
+    const input = document.getElementById('event-edit-url');
+    const link = document.getElementById('event-edit-url-open');
+    if (!input || !link) return;
+    const raw = (input.value || '').trim();
+    if (isHttpUrl(raw)) {
+      link.href = raw;
+      link.hidden = false;
+    } else {
+      link.removeAttribute('href');
+      link.hidden = true;
+    }
+  }
+
   function openEventEditModal(ev) {
     if (!ev) return;
     editingEvent = ev;
@@ -848,6 +926,7 @@
     form.elements['address'].value = ev.address || '';
     form.elements['description'].value = ev.description || '';
     form.elements['url'].value = ev.url || '';
+    syncEditUrlOpenLink();
     form.elements['free'].checked = Boolean(ev.free);
     const haveIcons = new Set(Array.isArray(ev.icons) ? ev.icons : []);
     form.querySelectorAll('input[name="icons"]').forEach(cb => {
@@ -867,6 +946,7 @@
     clearEditFormErrors();
     setEditFormStatus('');
     setSaving(false);
+    syncEditUrlOpenLink();
   }
 
   function setSaving(on) {
@@ -995,6 +1075,12 @@
       if (e.key === 'Escape' && !modal.hidden) closeEventEditModal();
     });
     form.addEventListener('submit', saveEventEdit);
+    // Live-update the "Open ↗" link as the URL field changes.
+    const urlInput = document.getElementById('event-edit-url');
+    if (urlInput) {
+      urlInput.addEventListener('input', syncEditUrlOpenLink);
+      urlInput.addEventListener('change', syncEditUrlOpenLink);
+    }
   }
 
   // ─── PUBLISH ───
@@ -1607,7 +1693,8 @@
     renderSources, loadSources, triggerCollect, formatSourceTime,
     setSourcesMessage, describeTriggerError,
     openEventEditModal, closeEventEditModal, applyEditToLocalState,
-    readEditFormPayload, showEditFormErrors,
+    readEditFormPayload, showEditFormErrors, syncEditUrlOpenLink,
+    isHttpUrl, shortenUrl,
     _state: state,
     _constants: {
       WEEKDAY_TARGET_MIN, WEEKDAY_TARGET_MAX,

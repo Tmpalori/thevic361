@@ -333,12 +333,27 @@
             <textarea name="description" rows="4" maxlength="2000" required></textarea>
             <span class="event-edit-form__field-error" data-error-for="description"></span>
           </label>
-          <label class="event-edit-form__field event-edit-form__field--wide">
-            <span>Source / link</span>
-            <input type="text" name="url" maxlength="500"
-                   placeholder="https://example.com">
+          <!-- Source URL field. Intentionally NOT wrapped in a <label> like
+               the other fields: a parent <label> on macOS Safari/Chrome can
+               swallow mousedown drags so the admin can't select/highlight
+               text inside the input. The explicit <label for="..."> binding
+               below preserves accessibility without that selection bug.
+               The "Open" link gives the admin a one-click way to open the
+               source URL in a new tab while editing. -->
+          <div class="event-edit-form__field event-edit-form__field--wide">
+            <label for="event-edit-url" class="event-edit-form__field-label">
+              <span>Source / link</span>
+            </label>
+            <div class="event-edit-form__url-row">
+              <input type="url" id="event-edit-url" name="url" maxlength="500"
+                     placeholder="https://example.com"
+                     autocomplete="url" spellcheck="false">
+              <a id="event-edit-url-open" class="event-edit-form__url-open"
+                 href="#" target="_blank" rel="noopener noreferrer"
+                 hidden>Open ↗</a>
+            </div>
             <span class="event-edit-form__field-error" data-error-for="url"></span>
-          </label>
+          </div>
         </div>
         <fieldset class="event-edit-form__fieldset">
           <legend>Categories</legend>

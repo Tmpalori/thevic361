@@ -147,3 +147,166 @@ describe('admin event edit modal — interactions', () => {
     expect(document.getElementById('event-edit-form-error').hidden).toBe(false);
   });
 });
+
+// ─── Source URL: clickable link + selectable input ────────────────────────
+//
+// The user reported they couldn't click the source link from the admin and
+// couldn't highlight the URL inside the edit modal. These tests guard the
+// fixes:
+//   - clicking a source link in a picker row doesn't toggle the row
+//   - the URL input is NOT inside a parent <label> (which on some browsers
+//     swallows mousedown drags and prevents text selection)
+//   - the modal exposes an "Open ↗" link that points at the same href and
+//     opens in a new tab safely (rel includes noopener+noreferrer)
+
+describe('admin source URL — clickable + selectable', () => {
+  let api;
+  beforeEach(() => { api = bootDom(); });
+  afterEach(() => { delete window.__vic361Admin; });
+
+  it('the URL input is NOT wrapped by a <label> ancestor', () => {
+    // The bug we are fixing: when the input is wrapped by <label>, mousedown
+    // drags inside the input get treated as label clicks, so the admin can't
+    // select text. The fix moved the URL field to a <div> with a sibling
+    // <label for="event-edit-url"> caption.
+    const input = document.getElementById('event-edit-url');
+    expect(input, 'event-edit-url input is missing').toBeTruthy();
+    expect(input.closest('label')).toBeNull();
+    // The input is still labelled for assistive tech via for/id:
+    const lbl = document.querySelector('label[for="event-edit-url"]');
+    expect(lbl, 'expected an explicit label[for=event-edit-url]').toBeTruthy();
+  });
+
+  it('isHttpUrl accepts http/https only and rejects unsafe schemes', () => {
+    expect(api.isHttpUrl('https://example.com/foo')).toBe(true);
+    expect(api.isHttpUrl('http://example.com')).toBe(true);
+    expect(api.isHttpUrl('  https://example.com  ')).toBe(true);
+    expect(api.isHttpUrl('javascript:alert(1)')).toBe(false);
+    expect(api.isHttpUrl('mailto:a@b.co')).toBe(false);
+    expect(api.isHttpUrl('not a url')).toBe(false);
+    expect(api.isHttpUrl('')).toBe(false);
+    expect(api.isHttpUrl(null)).toBe(false);
+  });
+
+  it('opening a candidate with a URL reveals the modal "Open ↗" link', () => {
+    api.openEventEditModal({
+      date: '2026-04-27', name: 'X', venue: 'Y',
+      url: 'https://facebook.com/foo/bar'
+    });
+    const link = document.getElementById('event-edit-url-open');
+    expect(link).toBeTruthy();
+    expect(link.hidden).toBe(false);
+    expect(link.getAttribute('href')).toBe('https://facebook.com/foo/bar');
+    expect(link.getAttribute('target')).toBe('_blank');
+    // Both noopener and noreferrer must be present.
+    const rel = (link.getAttribute('rel') || '').toLowerCase();
+    expect(rel).toContain('noopener');
+    expect(rel).toContain('noreferrer');
+  });
+
+  it('opening a candidate with no URL hides the modal "Open ↗" link', () => {
+    api.openEventEditModal({
+      date: '2026-04-27', name: 'X', venue: 'Y', url: ''
+    });
+    const link = document.getElementById('event-edit-url-open');
+    expect(link.hidden).toBe(true);
+    expect(link.hasAttribute('href')).toBe(false);
+  });
+
+  it('typing a valid URL into the input live-updates the "Open ↗" link', () => {
+    api.openEventEditModal({ date: '2026-04-27', name: 'X', venue: 'Y' });
+    const input = document.getElementById('event-edit-url');
+    input.value = 'https://example.com/event/42';
+    api.syncEditUrlOpenLink();
+    const link = document.getElementById('event-edit-url-open');
+    expect(link.hidden).toBe(false);
+    expect(link.getAttribute('href')).toBe('https://example.com/event/42');
+
+    // Switching back to invalid (e.g. javascript:) hides + clears the href.
+    input.value = 'javascript:alert(1)';
+    api.syncEditUrlOpenLink();
+    expect(link.hidden).toBe(true);
+    expect(link.hasAttribute('href')).toBe(false);
+  });
+
+  it('the URL input is not blocked from text selection by inline CSS', () => {
+    // `user-select: none` (or its vendor prefixes) on an input or any
+    // ancestor would prevent the admin from drag-selecting the URL. We
+    // walk up the tree from the input and verify no inline rule disables
+    // selection.
+    const input = document.getElementById('event-edit-url');
+    let el = input;
+    while (el && el !== document.body) {
+      const style = el.getAttribute('style') || '';
+      expect(style).not.toMatch(/user-select\s*:\s*none/i);
+      el = el.parentElement;
+    }
+  });
+
+  it('renders a clickable source link in the picker row', () => {
+    // Seed candidates and call the picker render through the public path:
+    // we set state.candidates and then read the DOM admin.js produces.
+    api._state.candidates = [{
+      date: '2026-04-27', name: 'JP Night', venue: 'Barn',
+      url: 'https://facebook.com/jp/events/123'
+    }];
+    // Bypass week filter — the "this week" filter would hide our test row
+    // since 2026-04-27 may not match the live clock.
+    api._state.filters.week = 'upcoming';
+    // Re-run the picker via a manual dispatch: admin.js wires renderPicker
+    // internally on filter changes, so trigger one.
+    document.getElementById('filter-week').value = 'upcoming';
+    document.getElementById('filter-week').dispatchEvent(new Event('change'));
+
+    const links = document.querySelectorAll(
+      '#picker-list a[data-act="open-source"]'
+    );
+    expect(links.length).toBeGreaterThanOrEqual(1);
+    const a = links[0];
+    expect(a.getAttribute('href')).toBe('https://facebook.com/jp/events/123');
+    expect(a.getAttribute('target')).toBe('_blank');
+    const rel = (a.getAttribute('rel') || '').toLowerCase();
+    expect(rel).toContain('noopener');
+    expect(rel).toContain('noreferrer');
+  });
+
+  it('clicking the picker source link does not toggle the row checkbox', () => {
+    api._state.candidates = [{
+      date: '2026-04-27', name: 'JP Night', venue: 'Barn',
+      url: 'https://facebook.com/jp/events/123'
+    }];
+    api._state.filters.week = 'upcoming';
+    document.getElementById('filter-week').value = 'upcoming';
+    document.getElementById('filter-week').dispatchEvent(new Event('change'));
+
+    const before = api._state.selected.size;
+    const link = document.querySelector(
+      '#picker-list a[data-act="open-source"]'
+    );
+    expect(link).toBeTruthy();
+
+    // jsdom would otherwise actually try to navigate. Suppress the default
+    // so the test environment doesn't complain, but make sure stopPropagation
+    // is what blocks the row checkbox from toggling — the click handler
+    // installed by admin.js calls stopPropagation, so the surrounding
+    // <label> never fires its synthetic checkbox click.
+    link.addEventListener('click', (e) => e.preventDefault(), { once: true });
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(api._state.selected.size).toBe(before);
+  });
+
+  it('a non-http(s) ev.url is not rendered as a clickable source link', () => {
+    api._state.candidates = [{
+      date: '2026-04-27', name: 'X', venue: 'Y',
+      url: 'javascript:alert(1)'
+    }];
+    api._state.filters.week = 'upcoming';
+    document.getElementById('filter-week').value = 'upcoming';
+    document.getElementById('filter-week').dispatchEvent(new Event('change'));
+    const links = document.querySelectorAll(
+      '#picker-list a[data-act="open-source"]'
+    );
+    expect(links.length).toBe(0);
+  });
+});

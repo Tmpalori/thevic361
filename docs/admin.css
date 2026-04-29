@@ -1088,12 +1088,64 @@ code {
 }
 .event-row__actions {
   display: flex;
-  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
   margin-top: 0.4rem;
 }
 .event-row__edit-btn {
   font-size: 0.8rem;
   padding: 0.2rem 0.6rem;
+}
+/* Source link in the picker row. We override the surrounding label's
+   cursor:pointer so the link feels like a link, not part of the row body. */
+.event-row__source-link {
+  font-size: 0.82rem;
+  color: var(--admin-primary, #2d5b8a);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  word-break: break-all;
+  /* Allow text-selection so the admin can copy the link text directly. */
+  user-select: text;
+  -webkit-user-select: text;
+}
+.event-row__source-link:hover,
+.event-row__source-link:focus {
+  text-decoration-thickness: 2px;
+}
+/* Modal URL row: input + adjacent "Open ↗" link. */
+.event-edit-form__url-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+.event-edit-form__url-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Belt-and-suspenders: parents won't disable selection here. */
+  user-select: text;
+  -webkit-user-select: text;
+}
+.event-edit-form__url-open {
+  align-self: center;
+  font-size: 0.85rem;
+  color: var(--admin-primary, #2d5b8a);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+/* The URL field's outer wrapper is a <div>, not a <label>. The visible
+   field caption uses <label for="...">; this rule keeps it visually flush
+   with the other fields' uppercase caption span. */
+.event-edit-form__field-label {
+  display: block;
+}
+.event-edit-form__field-label > span:first-child {
+  font-weight: 600;
+  color: var(--admin-muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 @media (max-width: 600px) {
   .event-edit-form__grid { grid-template-columns: 1fr; }
