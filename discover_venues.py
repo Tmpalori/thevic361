@@ -31,8 +31,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import re
 import sys
+import time
 from typing import Any, Iterable
 
 import requests
@@ -92,7 +94,23 @@ def _sentry_exception(stage: str, **tags: Any) -> None:
 # ─── Constants ──────────────────────────────────────────────────────────────
 
 APIFY_GMAPS_ACTOR = "compass~google-maps-extractor"
-APIFY_RUN_TIMEOUT = 240  # seconds
+
+# Per-call read timeout. Apr-29 production run timed out the single combined
+# call at 240s because we were asking the actor to do all 8 categories in one
+# shot with full place-detail enrichment. We now split per category and shrink
+# the ceiling: 120s is enough for a single category × 25 places + enrichment,
+# and a clean timeout on one category no longer takes the whole step with it.
+APIFY_PER_CALL_TIMEOUT = 120
+
+# Up to two retries per category on transient failures (request exception,
+# 5xx, or read timeout). Backoff is exponential with jitter — if Apify is
+# overloaded the second attempt has a real chance of succeeding instead of
+# piling on. Retries are capped to keep the worst-case discovery step well
+# under the workflow's 6-minute step ceiling: 8 categories × (120s + 120s
+# retry + ~120s second retry) is the absolute worst case, but in practice
+# only 1–2 categories ever retry and most return well under 60s.
+APIFY_MAX_RETRIES = 2
+APIFY_BACKOFF_BASE = 4.0  # seconds before retry #1; doubled before retry #2
 
 CATEGORY_SEARCHES = [
     "bar",
@@ -106,6 +124,12 @@ CATEGORY_SEARCHES = [
 ]
 
 LOCATION_QUERY = "Victoria, TX"
+
+# Per-category place cap. Combined-call previously asked for 30 places per
+# search × 8 searches = 240 enriched places, which was the root cause of the
+# 240s timeout. 25 is plenty for Victoria — the long tail beyond rank 25 is
+# almost entirely dupes or non-event-likely results that classify_tier drops.
+PLACES_PER_SEARCH = 25
 
 # Categories where we're meaningfully more likely to discover events. Used as
 # part of the HIGH-tier gate.
@@ -333,7 +357,7 @@ def _build_actor_input(search_terms: list[str]) -> dict:
         "searchStringsArray": search_terms,
         "locationQuery": LOCATION_QUERY,
         "language": "en",
-        "maxCrawledPlacesPerSearch": 30,
+        "maxCrawledPlacesPerSearch": PLACES_PER_SEARCH,
         # Detail-page enrichment — different actor versions accept different
         # spellings, so include both.
         "scrapePlaceDetailPage": True,
@@ -349,60 +373,173 @@ def _build_actor_input(search_terms: list[str]) -> dict:
     }
 
 
-def run_apify_discovery(token: str, *, http_post=None) -> list[dict]:
-    """Call the Apify actor and return the raw item list. Empty list on error.
+def _run_actor_once(post, url: str, payload: dict, *, timeout: int):
+    """Single Apify run-sync call. Returns (items, error_kind, status_or_msg).
 
-    Failures are intentionally non-fatal (the workflow comment says discovery
-    is best-effort), but they are no longer silent — each failure path fires
-    a Sentry event so the operator can see breakage without grep-diving the
-    Actions log.
+    error_kind is one of:
+      None       — success, items is a list (possibly empty)
+      "exc"      — request raised (network, read timeout). status_or_msg = str(exc)
+      "http"     — HTTP 4xx/5xx.            status_or_msg = (status_code, body)
+      "parse"    — JSON parse failed.       status_or_msg = str(exc)
+      "shape"    — non-list payload.        status_or_msg = type name
+    """
+    try:
+        resp = post(
+            url,
+            json=payload,
+            timeout=timeout,
+            headers={"Content-Type": "application/json"},
+        )
+    except Exception as e:
+        return [], "exc", f"{type(e).__name__}: {e}"
+
+    status = getattr(resp, "status_code", 0)
+    if status >= 400:
+        text = getattr(resp, "text", "") or ""
+        return [], "http", (status, text[:300])
+
+    try:
+        items = resp.json()
+    except Exception as e:
+        return [], "parse", str(e)
+
+    if not isinstance(items, list):
+        return [], "shape", type(items).__name__
+
+    return items, None, ""
+
+
+def _run_actor_with_retries(
+    post,
+    url: str,
+    payload: dict,
+    *,
+    label: str,
+    timeout: int = APIFY_PER_CALL_TIMEOUT,
+    max_retries: int = APIFY_MAX_RETRIES,
+    sleep=None,
+) -> list[dict]:
+    if sleep is None:
+        sleep = time.sleep
+    """Call the Apify actor, retrying transient failures (network, 5xx).
+
+    HTTP 4xx (other than 408/429) is permanent — no retries. The label is
+    only used for logging/Sentry tags so per-category failures are
+    attributable.
+    """
+    attempts = max_retries + 1
+    last_kind = None
+    for attempt in range(attempts):
+        items, kind, info = _run_actor_once(post, url, payload, timeout=timeout)
+        if kind is None:
+            return items
+
+        last_kind = kind
+        transient = (
+            kind == "exc"
+            or kind == "parse"
+            or (kind == "http" and (info[0] >= 500 or info[0] in (408, 429)))
+        )
+        if kind == "exc":
+            print(f"  [discover] {label}: request failed ({info})")
+            _sentry_exception(
+                "apify_request", actor=APIFY_GMAPS_ACTOR, search=label,
+            )
+        elif kind == "http":
+            status, body = info
+            print(f"  [discover] {label}: HTTP {status}: {body}")
+            _sentry_warn(
+                f"[discover] Apify HTTP {status}",
+                actor=APIFY_GMAPS_ACTOR,
+                search=label,
+                status=str(status),
+            )
+        elif kind == "parse":
+            print(f"  [discover] {label}: response parse failed: {info}")
+            _sentry_exception(
+                "apify_parse", actor=APIFY_GMAPS_ACTOR, search=label,
+            )
+        elif kind == "shape":
+            print(f"  [discover] {label}: unexpected payload type: {info}")
+            _sentry_warn(
+                "[discover] Unexpected Apify payload type",
+                actor=APIFY_GMAPS_ACTOR,
+                search=label,
+                payload_type=info,
+            )
+
+        if not transient or attempt + 1 >= attempts:
+            return []
+
+        # Exponential backoff with jitter so simultaneous retries (after a
+        # platform blip) don't dogpile.
+        delay = APIFY_BACKOFF_BASE * (2 ** attempt) + random.uniform(0, 1.0)
+        print(f"  [discover] {label}: retrying in {delay:.1f}s (attempt {attempt + 2}/{attempts})")
+        sleep(delay)
+
+    # Loop fell through: all attempts failed.
+    _sentry_warn(
+        "[discover] All Apify retries failed",
+        actor=APIFY_GMAPS_ACTOR,
+        search=label,
+        last_kind=str(last_kind),
+    )
+    return []
+
+
+def run_apify_discovery(token: str, *, http_post=None, sleep=None) -> list[dict]:
+    """Call the Apify actor per category and return the merged item list.
+
+    Splitting into one call per category keeps any single Apify timeout from
+    losing the whole discovery pass — Apr-29's run timed out the combined
+    8-category call after 4 minutes and produced 0 venues. Per-category
+    calls are smaller (single search × 25 places + enrichment) and each has
+    its own retry budget, so a slow category at most contributes one bad
+    line of stats instead of a step-level failure.
+
+    Failures are intentionally non-fatal (discovery is best-effort), but
+    they are no longer silent — each failure path fires a Sentry event so
+    the operator can see breakage without grep-diving the Actions log.
     """
     post = http_post or requests.post
     url = (
         f"https://api.apify.com/v2/acts/{APIFY_GMAPS_ACTOR}"
         f"/run-sync-get-dataset-items?token={token}"
     )
-    payload = _build_actor_input(CATEGORY_SEARCHES)
-    try:
-        resp = post(
-            url,
-            json=payload,
-            timeout=APIFY_RUN_TIMEOUT,
-            headers={"Content-Type": "application/json"},
+    all_items: list[dict] = []
+    successes = 0
+    failures = 0
+    for term in CATEGORY_SEARCHES:
+        payload = _build_actor_input([term])
+        items = _run_actor_with_retries(
+            post, url, payload,
+            label=term,
+            timeout=APIFY_PER_CALL_TIMEOUT,
+            max_retries=APIFY_MAX_RETRIES,
+            sleep=sleep,
         )
-    except Exception as e:
-        print(f"  [discover] Apify request failed: {e}")
-        _sentry_exception("apify_request", actor=APIFY_GMAPS_ACTOR)
-        return []
+        if items:
+            successes += 1
+            all_items.extend(items)
+        else:
+            failures += 1
+        print(f"  [discover] {term}: {len(items)} raw items")
 
-    status = getattr(resp, "status_code", 0)
-    if status >= 400:
-        text = getattr(resp, "text", "") or ""
-        print(f"  [discover] Apify HTTP {status}: {text[:300]}")
+    print(
+        f"  [discover] Apify per-category complete: "
+        f"{successes}/{len(CATEGORY_SEARCHES)} categories succeeded, "
+        f"{failures} failed, {len(all_items)} raw items total"
+    )
+    if successes == 0 and len(CATEGORY_SEARCHES) > 0:
+        # Every category failed: very different signal from "ran but nothing
+        # new" (which the orchestrator already covers). Fire a separate
+        # Sentry warning so operator gets a single, attributable ping.
         _sentry_warn(
-            f"[discover] Apify HTTP {status}",
+            "[discover] All Apify categories failed",
             actor=APIFY_GMAPS_ACTOR,
-            status=str(status),
+            categories=str(len(CATEGORY_SEARCHES)),
         )
-        return []
-
-    try:
-        items = resp.json()
-    except Exception as e:
-        print(f"  [discover] Apify response parse failed: {e}")
-        _sentry_exception("apify_parse", actor=APIFY_GMAPS_ACTOR)
-        return []
-
-    if not isinstance(items, list):
-        kind = type(items).__name__
-        print(f"  [discover] Unexpected Apify payload type: {kind}")
-        _sentry_warn(
-            "[discover] Unexpected Apify payload type",
-            actor=APIFY_GMAPS_ACTOR,
-            payload_type=kind,
-        )
-        return []
-    return items
+    return all_items
 
 
 # ─── Mapping Apify items → our venue dict ───────────────────────────────────
@@ -563,7 +700,9 @@ def append_pending(
 # ─── Orchestration ──────────────────────────────────────────────────────────
 
 
-def discover_and_update(repo_root: str | None = None, *, http_post=None) -> dict:
+def discover_and_update(
+    repo_root: str | None = None, *, http_post=None, sleep=None
+) -> dict:
     """Top-level entry point. Returns a summary dict for logging/tests."""
     root = repo_root or _here()
     venues_path = os.path.join(root, "venues.json")
@@ -616,7 +755,7 @@ def discover_and_update(repo_root: str | None = None, *, http_post=None) -> dict
             stage="apify_token_missing",
         )
     else:
-        items = run_apify_discovery(token, http_post=http_post)
+        items = run_apify_discovery(token, http_post=http_post, sleep=sleep)
         summary["ran_apify"] = True
         seen_keys: set[str] = set()
         for raw in items:

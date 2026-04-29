@@ -355,6 +355,80 @@ def test_ig_posts_handles_request_exception(monkeypatch):
     assert ce._APIFY_LIMIT_TRIPPED is False
 
 
+def test_ig_posts_caps_total_venues_per_run(monkeypatch):
+    """Cost guardrail: IG run is capped at _IG_POSTS_MAX_VENUES even if the
+    venue list grows. HIGH tier is preserved before MEDIUM."""
+    monkeypatch.setenv("IG_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+
+    # Shrink the cap so the test stays readable.
+    monkeypatch.setattr(ce, "_IG_POSTS_MAX_VENUES", 3)
+
+    venues = []
+    for i in range(5):
+        venues.append({"name": f"H{i}", "tier": "HIGH",
+                       "instagrams": [f"high{i}"]})
+    for i in range(5):
+        venues.append({"name": f"M{i}", "tier": "MEDIUM",
+                       "instagrams": [f"med{i}"]})
+
+    repo_dir = os.path.dirname(ce.__file__)
+    primary = os.path.join(repo_dir, "venues.json")
+    with open(primary, "w") as f:
+        json.dump(venues, f)
+
+    captured = []
+
+    def fake_post(url, **kwargs):
+        resp = MagicMock()
+        resp.status_code = 200
+        if "instagram-post-scraper" in url:
+            captured.append(kwargs.get("json"))
+            resp.json.return_value = []
+        else:
+            resp.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
+        return resp
+
+    with patch("collect_events.requests.post", side_effect=fake_post):
+        ce.fetch_apify_instagram_posts(14)
+
+    assert len(captured) == 3, f"expected 3 venues, got {len(captured)}"
+    # All 3 selected venues must be HIGH (HIGH-first ordering before cap).
+    selected_users = [p["username"][0] for p in captured]
+    assert all(u.startswith("high") for u in selected_users), selected_users
+
+
+def test_ig_posts_zero_events_with_posts_fires_sentry(monkeypatch):
+    """If Apify returns posts but Sonar extracts zero events for ALL venues,
+    that's a silent regression — fire a Sentry warning so it's visible."""
+    monkeypatch.setenv("IG_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+
+    warns = []
+    monkeypatch.setattr(ce, "_sentry_warn",
+                        lambda msg, **tags: warns.append((msg, tags)))
+
+    def fake_post(url, **kwargs):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        if "instagram-post-scraper" in url:
+            resp.json.return_value = [
+                {"caption": "general vibes only", "url": "https://x", "timestamp": ""}
+            ]
+        else:
+            resp.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
+        return resp
+
+    with patch("collect_events.requests.post", side_effect=fake_post):
+        out = ce.fetch_apify_instagram_posts(14)
+
+    assert out == []
+    assert any("0 events" in m for m, _ in warns), warns
+
+
 def test_ig_posts_no_tiered_ig_venues_short_circuits(monkeypatch, tmp_path):
     """When venues.json has no tiered venues with IG handles, we should
     return [] without making any HTTP calls."""
