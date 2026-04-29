@@ -277,6 +277,98 @@
     </section>
   </main>
 
+  <!-- ═══ EVENT EDIT MODAL ═══
+       Lets the admin correct details on a candidate event (typos, missing
+       times, wrong venue) without re-running the collector. The modal is
+       hidden by default and opened by admin.js when the operator clicks an
+       Edit button on a picker row. The form posts to /api/admin/event-edits;
+       the server stores an overlay keyed by the original event identity and
+       applies it to candidates/published-events automatically. -->
+  <div id="event-edit-modal" class="event-edit-modal" hidden
+       role="dialog" aria-modal="true" aria-labelledby="event-edit-title">
+    <div class="event-edit-modal__backdrop" data-act="close"></div>
+    <div class="event-edit-modal__panel" role="document">
+      <header class="event-edit-modal__header">
+        <h2 id="event-edit-title">Edit event</h2>
+        <button type="button" class="event-edit-modal__close"
+                data-act="close" aria-label="Close">×</button>
+      </header>
+      <form id="event-edit-form" class="event-edit-form" novalidate>
+        <p id="event-edit-form-error" class="event-edit-form__error" role="alert" hidden></p>
+        <div class="event-edit-form__grid">
+          <label class="event-edit-form__field">
+            <span>Event name <em>*</em></span>
+            <input type="text" name="name" maxlength="200" required>
+            <span class="event-edit-form__field-error" data-error-for="name"></span>
+          </label>
+          <label class="event-edit-form__field">
+            <span>Date <em>*</em></span>
+            <input type="date" name="date" required>
+            <span class="event-edit-form__field-error" data-error-for="date"></span>
+          </label>
+          <label class="event-edit-form__field">
+            <span>Start time <em>*</em></span>
+            <input type="text" name="time" maxlength="60" required
+                   placeholder="e.g. 6:00 PM">
+            <span class="event-edit-form__field-error" data-error-for="time"></span>
+          </label>
+          <label class="event-edit-form__field">
+            <span>End time</span>
+            <input type="text" name="end_time" maxlength="60"
+                   placeholder="e.g. 9:00 PM">
+            <span class="event-edit-form__field-error" data-error-for="end_time"></span>
+          </label>
+          <label class="event-edit-form__field event-edit-form__field--wide">
+            <span>Venue <em>*</em></span>
+            <input type="text" name="venue" maxlength="200" required>
+            <span class="event-edit-form__field-error" data-error-for="venue"></span>
+          </label>
+          <label class="event-edit-form__field event-edit-form__field--wide">
+            <span>Address</span>
+            <input type="text" name="address" maxlength="300">
+            <span class="event-edit-form__field-error" data-error-for="address"></span>
+          </label>
+          <label class="event-edit-form__field event-edit-form__field--wide">
+            <span>Description <em>*</em></span>
+            <textarea name="description" rows="4" maxlength="2000" required></textarea>
+            <span class="event-edit-form__field-error" data-error-for="description"></span>
+          </label>
+          <label class="event-edit-form__field event-edit-form__field--wide">
+            <span>Source / link</span>
+            <input type="text" name="url" maxlength="500"
+                   placeholder="https://example.com">
+            <span class="event-edit-form__field-error" data-error-for="url"></span>
+          </label>
+        </div>
+        <fieldset class="event-edit-form__fieldset">
+          <legend>Categories</legend>
+          <div class="event-edit-form__icons">
+            <label><input type="checkbox" name="icons" value="food"> 🍔 Food</label>
+            <label><input type="checkbox" name="icons" value="music"> 🎵 Music</label>
+            <label><input type="checkbox" name="icons" value="family"> 🧑‍🧑‍🧒 Family</label>
+            <label><input type="checkbox" name="icons" value="drinks"> 🍺 Drinks</label>
+            <label><input type="checkbox" name="icons" value="arts"> 🎨 Arts</label>
+            <label><input type="checkbox" name="icons" value="shopping"> 🛍️ Shopping</label>
+            <label><input type="checkbox" name="icons" value="outdoors"> 🏃 Outdoors</label>
+            <label><input type="checkbox" name="icons" value="community"> 📣 Community</label>
+            <label><input type="checkbox" name="icons" value="free"> 🆓 Free</label>
+          </div>
+        </fieldset>
+        <label class="event-edit-form__check">
+          <input type="checkbox" name="free"> This event is free
+        </label>
+        <footer class="event-edit-form__actions">
+          <span id="event-edit-status" class="event-edit-form__status"
+                role="status" aria-live="polite"></span>
+          <button type="button" class="btn btn--outline" data-act="close">Cancel</button>
+          <button type="submit" class="btn btn--primary" id="event-edit-save-btn">
+            Save changes
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
   <script src="./admin.js"></script>
   <script src="./admin-submissions.js"></script>
 </body>

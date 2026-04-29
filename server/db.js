@@ -22,6 +22,17 @@
  * used in candidates.json / docs/events.json (date, name, time, venue,
  * address, url, description, icons, free) so the admin can promote a row to a
  * publishable event without remapping fields.
+ *
+ * Event edits overlay (PR #22): admins can correct mistakes the AI made on
+ * candidate events (typos, wrong times, missing end_time, etc.) without
+ * forcing a re-collect. Each overlay is keyed by the ORIGINAL event key
+ * (date|name|venue) so we can find the candidate to replace even when the
+ * edit changes one of those fields.
+ *
+ *   id             text    — same as original_key
+ *   original_key   text    — date|name|venue at time of first edit
+ *   payload        json    — full edited event (date, name, time, venue, ...)
+ *   updated_at     iso
  */
 
 import { promises as fs } from 'node:fs';
@@ -67,6 +78,38 @@ export function normalizePayload(input) {
   };
 }
 
+// Canonical "event identity" key used everywhere in the codebase to dedupe
+// candidates and detect duplicate submissions. Keep in sync with the
+// browser-side eventKey() in docs/admin.js.
+export function eventKeyOf(ev) {
+  if (!ev) return '||';
+  return [ev.date || '', ev.name || '', ev.venue || ''].join('|');
+}
+
+// Apply the admin event-edits overlay on top of a list of events. For each
+// event matching an edit's original_key (or current key), replace it with the
+// edited payload. New keys produced by an edit replace any existing event
+// that would otherwise collide so the admin sees a single corrected row.
+export function applyEventEdits(events, edits) {
+  if (!Array.isArray(events) || !edits || !edits.length) return events || [];
+  const byOriginal = new Map();
+  for (const e of edits) {
+    if (e && e.original_key) byOriginal.set(e.original_key, e);
+  }
+  const seen = new Set();
+  const out = [];
+  for (const ev of events) {
+    const k = eventKeyOf(ev);
+    const edit = byOriginal.get(k);
+    const merged = edit ? { ...ev, ...edit.payload } : ev;
+    const newKey = eventKeyOf(merged);
+    if (seen.has(newKey)) continue;
+    seen.add(newKey);
+    out.push(merged);
+  }
+  return out;
+}
+
 // ─── JSON FILE BACKEND ───
 class FileStore {
   constructor(file) {
@@ -79,12 +122,15 @@ class FileStore {
       const raw = await fs.readFile(this.file, 'utf8');
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') {
-        return { submissions: [], published: null };
+        return { submissions: [], published: null, event_edits: [] };
       }
       if (!Array.isArray(parsed.submissions)) parsed.submissions = [];
+      if (!Array.isArray(parsed.event_edits)) parsed.event_edits = [];
       return parsed;
     } catch (err) {
-      if (err.code === 'ENOENT') return { submissions: [], published: null };
+      if (err.code === 'ENOENT') {
+        return { submissions: [], published: null, event_edits: [] };
+      }
       throw err;
     }
   }
@@ -170,6 +216,35 @@ class FileStore {
         norm(p.venue) === dv;
     }) || null;
   }
+
+  // Admin event-edits overlay (PR #22). Stored as a flat list keyed by
+  // original_key — the eventKey at the time of the first edit. Subsequent
+  // edits to the same row update the same entry so we never accumulate
+  // multiple stale overlays for one event.
+  async listEventEdits() {
+    const data = await this._read();
+    return Array.isArray(data.event_edits) ? data.event_edits.slice() : [];
+  }
+
+  async upsertEventEdit({ original_key, payload }) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      if (!Array.isArray(data.event_edits)) data.event_edits = [];
+      const idx = data.event_edits.findIndex(e => e.original_key === original_key);
+      const now = nowIso();
+      const row = {
+        id: original_key,
+        original_key,
+        payload,
+        updated_at: now,
+        created_at: idx === -1 ? now : (data.event_edits[idx].created_at || now)
+      };
+      if (idx === -1) data.event_edits.push(row);
+      else data.event_edits[idx] = row;
+      await this._write(data);
+      return row;
+    });
+  }
 }
 
 // ─── POSTGRES BACKEND ───
@@ -214,6 +289,17 @@ class PgStore {
           CREATE TABLE IF NOT EXISTS published_events (
             id INT PRIMARY KEY,
             payload JSONB NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `);
+        // Admin event-edits overlay (PR #22). Keyed by the original event
+        // identity (date|name|venue) so subsequent edits to the same row
+        // upsert the same record instead of stacking.
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS event_edits (
+            original_key TEXT PRIMARY KEY,
+            payload JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
         `);
@@ -330,6 +416,40 @@ class PgStore {
     `;
     const r = await this.pool.query(q, [date, norm(name), norm(venue)]);
     return this._row(r.rows[0] || null);
+  }
+
+  async listEventEdits() {
+    await this.ready();
+    const r = await this.pool.query(
+      'SELECT original_key, payload, created_at, updated_at FROM event_edits ORDER BY updated_at DESC'
+    );
+    return r.rows.map(row => ({
+      id: row.original_key,
+      original_key: row.original_key,
+      payload: row.payload,
+      created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+      updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
+    }));
+  }
+
+  async upsertEventEdit({ original_key, payload }) {
+    await this.ready();
+    const r = await this.pool.query(`
+      INSERT INTO event_edits (original_key, payload, created_at, updated_at)
+      VALUES ($1, $2, NOW(), NOW())
+      ON CONFLICT (original_key) DO UPDATE
+        SET payload = EXCLUDED.payload,
+            updated_at = NOW()
+      RETURNING original_key, payload, created_at, updated_at;
+    `, [original_key, JSON.stringify(payload)]);
+    const row = r.rows[0];
+    return {
+      id: row.original_key,
+      original_key: row.original_key,
+      payload: row.payload,
+      created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+      updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
+    };
   }
 }
 

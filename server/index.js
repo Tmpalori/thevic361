@@ -17,8 +17,8 @@ import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { createStore, normalizePayload, newId, nowIso } from './db.js';
-import { validateSubmission, checkBotSignals } from './validate.js';
+import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf } from './db.js';
+import { validateSubmission, validateEventEdit, checkBotSignals } from './validate.js';
 import { verifyTurnstile } from './turnstile.js';
 import { createRateLimiter } from './rateLimit.js';
 import { createAuth } from './auth.js';
@@ -407,6 +407,17 @@ export async function createApp(opts = {}) {
       console.warn('[admin] approved submissions merge skipped:', err.message);
     }
 
+    // Apply admin event-edits overlay last so the editor sees the corrected
+    // version of every candidate, regardless of source. Failures here are
+    // best-effort — without overlays the admin still sees the raw events.
+    let edits = [];
+    try {
+      edits = await store.listEventEdits();
+    } catch (err) {
+      console.warn('[admin] event_edits list failed:', err.message);
+    }
+    events = applyEventEdits(events, edits);
+
     res.json({
       ok: true,
       sha,
@@ -414,6 +425,54 @@ export async function createApp(opts = {}) {
       warning,
       data: { events }
     });
+  });
+
+  // ─── Admin: edit a candidate event ────────────────────────────────────
+  // POST /api/admin/event-edits
+  // Body: { original_key, payload: { name, date, time, end_time, venue,
+  //         address, description, url, icons, free } }
+  //
+  // The original_key is the eventKey (date|name|venue) of the candidate row
+  // the admin is correcting; the server uses it to attach the edit to the
+  // right source row even when the admin changes the date/name/venue. The
+  // overlay is applied automatically in /api/admin/candidates and
+  // /api/admin/published-events so the picker, preview, newsletter, and
+  // published shape all stay in sync — without duplicating the row.
+  //
+  // This endpoint never publishes to the public site by itself. The admin
+  // still has to hit Save & Publish to push the corrected event live, which
+  // preserves the existing approval/publish workflow.
+  app.post('/api/admin/event-edits', requireAdmin, async (req, res) => {
+    const body = req.body || {};
+    const original_key = typeof body.original_key === 'string'
+      ? body.original_key.trim().slice(0, 600)
+      : '';
+    if (!original_key || original_key.split('|').length !== 3) {
+      return res.status(400).json({
+        ok: false,
+        error: 'bad-original-key',
+        message: 'original_key must be "date|name|venue".'
+      });
+    }
+    const v = validateEventEdit(body.payload || {});
+    if (!v.ok) return res.status(400).json({ ok: false, errors: v.errors });
+
+    try {
+      const row = await store.upsertEventEdit({
+        original_key,
+        payload: v.data
+      });
+      res.json({
+        ok: true,
+        edit: row,
+        new_key: eventKeyOf(v.data)
+      });
+    } catch (err) {
+      console.error('[admin] event-edit upsert failed:', err.message);
+      res.status(500).json({
+        ok: false, error: 'event-edit-failed', message: err.message
+      });
+    }
   });
 
   // ─── Admin: publish events.json ───────────────────────────────────────
@@ -552,9 +611,20 @@ export async function createApp(opts = {}) {
       if (!published) {
         return res.json({ ok: true, events: [], last_updated: null });
       }
+      let events = Array.isArray(published.events) ? published.events : [];
+      // Apply the same admin edits overlay so a correction made in the editor
+      // shows up immediately on the live site for every event whose published
+      // identity still matches the overlay's original_key. New picks go
+      // through publish-events and already store the edited shape there.
+      try {
+        const edits = await store.listEventEdits();
+        events = applyEventEdits(events, edits);
+      } catch (err) {
+        console.warn('[admin] published-events overlay skipped:', err.message);
+      }
       res.json({
         ok: true,
-        events: Array.isArray(published.events) ? published.events : [],
+        events,
         last_updated: published.last_updated || null
       });
     } catch (err) {
@@ -670,12 +740,18 @@ export async function createApp(opts = {}) {
   // appending them to the candidate list before publishing.
   app.get('/api/admin/approved-events', requireAdmin, async (req, res) => {
     const rows = await store.list({ status: 'approved' });
-    const events = rows.map(r => ({
+    let events = rows.map(r => ({
       ...r.payload,
       _source: r.source || 'submission',
       _source_id: r.id,
       _submitter_kind: r.submitter_kind || null
     }));
+    try {
+      const edits = await store.listEventEdits();
+      events = applyEventEdits(events, edits);
+    } catch (err) {
+      console.warn('[admin] approved-events overlay skipped:', err.message);
+    }
     res.json({ ok: true, events });
   });
 
@@ -690,7 +766,18 @@ export async function createApp(opts = {}) {
       const published = await store.getPublished();
       if (published) {
         res.set('Cache-Control', 'no-store');
-        return res.json(published);
+        // Apply the admin event-edits overlay so a correction made between
+        // publishes is reflected on the live site without forcing the admin
+        // to hit Save & Publish again. The published payload keeps original
+        // event identities; the overlay maps original_key -> corrected shape.
+        let events = Array.isArray(published.events) ? published.events : [];
+        try {
+          const edits = await store.listEventEdits();
+          events = applyEventEdits(events, edits);
+        } catch (err) {
+          console.warn('[events] overlay skipped:', err.message);
+        }
+        return res.json({ ...published, events });
       }
     } catch (err) {
       console.warn('[events] published lookup failed:', err.message);
