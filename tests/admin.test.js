@@ -162,8 +162,84 @@ describe('admin Sources tab rendering', () => {
     });
     const btn = document.getElementById('sources-trigger');
     expect(btn.disabled).toBe(true);
-    expect(document.getElementById('sources-trigger-help').textContent)
-      .toContain('GITHUB_TOKEN');
+    // Help copy reassures the user that Save & Publish is unaffected and
+    // points them at the GitHub Actions manual fallback.
+    const help = document.getElementById('sources-trigger-help').textContent;
+    expect(help).toMatch(/Save & Publish/);
+    expect(help).toMatch(/manually|GitHub/i);
+  });
+
+  it('renderSources reveals the GitHub Actions fallback link when actions_url is set', () => {
+    api.renderSources({
+      ok: true,
+      last_run_at: null,
+      next_run_at: '2026-05-03T23:00:00.000Z',
+      trigger_enabled: false,
+      actions_url: 'https://github.com/Tmpalori/thevic361/actions/workflows/weekly-collect.yml',
+      sources: []
+    });
+    const link = document.getElementById('sources-actions-link');
+    expect(link).not.toBeNull();
+    expect(link.hidden).toBe(false);
+    expect(link.getAttribute('href'))
+      .toBe('https://github.com/Tmpalori/thevic361/actions/workflows/weekly-collect.yml');
+  });
+});
+
+describe('admin Sources tab error messaging', () => {
+  let api;
+  beforeEach(() => { api = bootDom(); });
+  afterEach(() => { delete window.__vic361Admin; });
+
+  it('describeTriggerError returns a friendly message and actions_url for github-token-invalid', () => {
+    const desc = api.describeTriggerError({
+      ok: false,
+      error: 'github-token-invalid',
+      github_status: 401,
+      message: 'The server\'s GITHUB_TOKEN is invalid or expired',
+      actions_url: 'https://github.com/Tmpalori/thevic361/actions/workflows/weekly-collect.yml',
+      save_publish_unaffected: true
+    }, 401);
+    expect(desc.kind).toBe('error');
+    // Message must explicitly tell the user that Save & Publish is OK and that
+    // they can run the workflow manually.
+    expect(desc.text).toMatch(/Save & Publish/);
+    expect(desc.text).toMatch(/manual|manually/i);
+    // Must NOT show the raw "Bad credentials" error string.
+    expect(desc.text).not.toMatch(/Bad credentials/);
+    expect(desc.actionsUrl).toBe('https://github.com/Tmpalori/thevic361/actions/workflows/weekly-collect.yml');
+  });
+
+  it('describeTriggerError handles a bare 401 (no error code) as token-invalid', () => {
+    const desc = api.describeTriggerError({ message: 'Bad credentials' }, 401);
+    expect(desc.kind).toBe('error');
+    expect(desc.text).toMatch(/invalid or expired/i);
+    expect(desc.text).not.toMatch(/Bad credentials/);
+  });
+
+  it('describeTriggerError surfaces github-not-configured with Save & Publish reassurance', () => {
+    const desc = api.describeTriggerError({
+      ok: false,
+      error: 'github-not-configured',
+      actions_url: 'https://github.com/Tmpalori/thevic361/actions/workflows/weekly-collect.yml'
+    }, 503);
+    expect(desc.text).toMatch(/Save & Publish/);
+    expect(desc.actionsUrl).toMatch(/weekly-collect\.yml$/);
+  });
+
+  it('setSourcesMessage renders a fallback link when actions_url is provided', () => {
+    api.setSourcesMessage('Pull now failed.', 'error', {
+      actionsUrl: 'https://github.com/Tmpalori/thevic361/actions/workflows/weekly-collect.yml'
+    });
+    const el = document.getElementById('sources-message');
+    expect(el.classList.contains('is-error')).toBe(true);
+    const a = el.querySelector('a');
+    expect(a).not.toBeNull();
+    expect(a.getAttribute('href'))
+      .toBe('https://github.com/Tmpalori/thevic361/actions/workflows/weekly-collect.yml');
+    expect(a.getAttribute('target')).toBe('_blank');
+    // Body still carries the descriptive text alongside the link.
+    expect(el.textContent).toContain('Pull now failed.');
   });
 });
 

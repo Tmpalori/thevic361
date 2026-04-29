@@ -110,8 +110,15 @@ export async function createApp(opts = {}) {
       github_branch: github.branch,
       // The Sources tab uses this to enable or disable the manual-pull button.
       // We piggyback on github_publish_enabled because both gates require a
-      // GITHUB_TOKEN. The actual trigger endpoint also enforces this.
-      sources_trigger_enabled: github.isConfigured()
+      // GITHUB_TOKEN. The actual trigger endpoint also enforces this. Note:
+      // this is presence-only — the token may be present but invalid; the UI
+      // surfaces that distinction via the trigger-collect response.
+      sources_trigger_enabled: github.isConfigured(),
+      // GitHub Actions page for the Weekly Collect workflow. The admin Sources
+      // tab links to this as a manual fallback when one-click Pull Now isn't
+      // available (no token, invalid token, etc.).
+      sources_actions_url: `https://github.com/${github.owner}/${github.repo}` +
+        `/actions/workflows/${WEEKLY_COLLECT_WORKFLOW}`
     });
   });
 
@@ -569,6 +576,14 @@ export async function createApp(opts = {}) {
   // candidates.json by collect_events.py). If the file is missing — e.g.
   // before the first weekly run after this code ships — we still return a
   // useful payload with placeholder rows + the next scheduled run time.
+  // Public Actions URL for the Weekly Collect workflow. Used both as a
+  // graceful fallback in 401/503 responses and as a help link the UI can
+  // always show ("Run workflow on GitHub").
+  function actionsUrl() {
+    return `https://github.com/${github.owner}/${github.repo}` +
+      `/actions/workflows/${WEEKLY_COLLECT_WORKFLOW}`;
+  }
+
   const metadataFile = opts.collectionMetadataFile || COLLECTION_METADATA_FILE;
   app.get('/api/admin/sources', requireAdmin, async (req, res) => {
     try {
@@ -578,6 +593,7 @@ export async function createApp(opts = {}) {
         mtime: read ? read.mtime : null,
         now: new Date(),
         githubConfigured: github.isConfigured(),
+        actionsUrl: actionsUrl(),
       });
       res.json(payload);
     } catch (err) {
@@ -592,12 +608,22 @@ export async function createApp(opts = {}) {
   // Requires GITHUB_TOKEN with `actions:write` scope. Degrades clearly when
   // the token is missing (503 + diagnostic message) so the UI can disable
   // the button instead of silently failing.
+  //
+  // Failure-mode contract (consumed by the admin Sources tab):
+  //   error: 'github-not-configured'  -> no token at all (503)
+  //   error: 'github-token-invalid'   -> 401 Bad credentials (token stale/revoked)
+  //   error: 'dispatch-failed'        -> 403/404/etc, original github_status returned
+  // In every case we include `actions_url` so the UI can offer a manual fallback,
+  // and a `save_publish_unaffected: true` flag so the UI never implies that the
+  // public site failed to publish — Save & Publish does not depend on this token.
   app.post('/api/admin/trigger-collect', requireAdmin, async (req, res) => {
     if (!github.isConfigured()) {
       return res.status(503).json({
         ok: false,
         error: 'github-not-configured',
-        message: 'GITHUB_TOKEN is not set on the server. The Weekly Collect workflow can only be triggered manually from the GitHub Actions tab.'
+        message: 'No server-side GitHub token is configured, so one-click Pull Now is disabled. You can still run the Weekly Collect workflow manually on GitHub. Save & Publish is unaffected.',
+        actions_url: actionsUrl(),
+        save_publish_unaffected: true
       });
     }
     try {
@@ -606,10 +632,24 @@ export async function createApp(opts = {}) {
         ok: true,
         workflow: WEEKLY_COLLECT_WORKFLOW,
         ref: github.branch,
-        message: 'Weekly Collect workflow dispatched. Refresh in a minute or two to see updated counts.'
+        message: 'Weekly Collect workflow dispatched. Refresh in a minute or two to see updated counts.',
+        actions_url: actionsUrl()
       });
     } catch (err) {
       console.error('[admin] trigger-collect failed:', err.message);
+      // 401 = the GITHUB_TOKEN on the server is invalid/expired/revoked. Surface
+      // this as a recognizable "token-invalid" state so the UI can render
+      // friendly copy and a fallback link instead of a raw "Bad credentials".
+      if (err.status === 401) {
+        return res.status(401).json({
+          ok: false,
+          error: 'github-token-invalid',
+          github_status: 401,
+          message: 'The server\'s GITHUB_TOKEN is invalid or expired, so one-click Pull Now can\'t dispatch the workflow. You can still run the Weekly Collect workflow manually on GitHub using your normal login. Save & Publish is unaffected — only the one-click Pull Now button needs this token.',
+          actions_url: actionsUrl(),
+          save_publish_unaffected: true
+        });
+      }
       // 403 typically means the token lacks `actions:write`. 404 = workflow
       // file not found on the configured branch. Both are useful to surface.
       const status = (err.status === 403 || err.status === 404) ? err.status : 502;
@@ -617,7 +657,9 @@ export async function createApp(opts = {}) {
         ok: false,
         error: 'dispatch-failed',
         github_status: err.status || null,
-        message: err.detail || err.message
+        message: err.detail || err.message,
+        actions_url: actionsUrl(),
+        save_publish_unaffected: true
       });
     }
   });

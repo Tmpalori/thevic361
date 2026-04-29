@@ -849,13 +849,67 @@
   // without re-fetching.
   state.sources = null;
 
-  function setSourcesMessage(text, kind) {
+  function setSourcesMessage(text, kind, opts) {
     const el = document.getElementById('sources-message');
     if (!el) return;
-    el.textContent = text || '';
     el.classList.remove('is-success', 'is-error');
     if (kind === 'success') el.classList.add('is-success');
     if (kind === 'error') el.classList.add('is-error');
+    // When opts.actionsUrl is provided, render an inline link so the user
+    // can open the GitHub Actions page and run the workflow manually.
+    el.innerHTML = '';
+    if (text) {
+      const span = document.createElement('span');
+      span.textContent = text;
+      el.appendChild(span);
+    }
+    if (opts && opts.actionsUrl) {
+      const a = document.createElement('a');
+      a.href = opts.actionsUrl;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.className = 'sources-message__link';
+      a.textContent = 'Open GitHub Actions →';
+      if (text) el.appendChild(document.createTextNode(' '));
+      el.appendChild(a);
+    }
+  }
+
+  // Pulls a friendly message + optional actions_url out of the trigger-collect
+  // response. Falls back to the raw `message` field for unknown error codes.
+  function describeTriggerError(json, status) {
+    const actionsUrl = (json && json.actions_url) || null;
+    const errCode = json && json.error;
+    if (errCode === 'github-token-invalid' || status === 401) {
+      return {
+        kind: 'error',
+        text: 'The server\'s GitHub token is invalid or expired, so one-click Pull Now can\'t dispatch the workflow. Save & Publish is unaffected — only this button needs the token. You can still run the Weekly Collect workflow manually using your normal GitHub login.',
+        actionsUrl
+      };
+    }
+    if (errCode === 'github-not-configured') {
+      return {
+        kind: 'error',
+        text: 'No server-side GitHub token is configured, so one-click Pull Now is disabled. Save & Publish is unaffected. You can still run the Weekly Collect workflow manually on GitHub.',
+        actionsUrl
+      };
+    }
+    if (errCode === 'dispatch-failed') {
+      const ghStatus = json && json.github_status;
+      let prefix = 'GitHub rejected the workflow dispatch';
+      if (ghStatus === 403) prefix = 'The server\'s GitHub token is missing the actions:write permission';
+      if (ghStatus === 404) prefix = 'The Weekly Collect workflow file wasn\'t found on the configured branch';
+      return {
+        kind: 'error',
+        text: prefix + '. Save & Publish is unaffected — you can still run the workflow manually on GitHub.',
+        actionsUrl
+      };
+    }
+    return {
+      kind: 'error',
+      text: (json && json.message) || ('Pull now failed (HTTP ' + status + '). Save & Publish is unaffected.'),
+      actionsUrl
+    };
   }
 
   function formatSourceTime(iso) {
@@ -890,11 +944,23 @@
     }
     const triggerBtn = document.getElementById('sources-trigger');
     const triggerHelp = document.getElementById('sources-trigger-help');
+    const actionsLink = document.getElementById('sources-actions-link');
     if (triggerBtn) triggerBtn.disabled = !payload.trigger_enabled;
     if (triggerHelp) {
       triggerHelp.textContent = payload.trigger_enabled
-        ? ''
-        : 'Manual pull is disabled until GITHUB_TOKEN with actions:write is configured on the server.';
+        ? 'One-click Pull Now uses the server\'s GitHub token. Save & Publish does not.'
+        : 'One-click Pull Now is disabled (no server-side GitHub token). Save & Publish is unaffected — you can still run the Weekly Collect workflow manually on GitHub.';
+    }
+    // Always show the GitHub Actions fallback link when we have a URL,
+    // regardless of whether one-click is enabled. This gives the user a
+    // dependable manual path even when the server token is stale or absent.
+    if (actionsLink) {
+      if (payload.actions_url) {
+        actionsLink.href = payload.actions_url;
+        actionsLink.hidden = false;
+      } else {
+        actionsLink.hidden = true;
+      }
     }
     const listEl = document.getElementById('sources-list');
     const emptyEl = document.getElementById('sources-empty');
@@ -981,18 +1047,30 @@
     }
     if (btn) btn.disabled = true;
     setSourcesMessage('Dispatching workflow…');
+    let succeeded = false;
     try {
       const { res, json } = await adminFetch('/api/admin/trigger-collect', {
         method: 'POST'
       });
       if (!res.ok || !json || !json.ok) {
-        const m = (json && (json.message || json.error)) || ('Trigger failed (HTTP ' + res.status + ').');
-        throw new Error(m);
+        const desc = describeTriggerError(json, res.status);
+        setSourcesMessage(desc.text, desc.kind, { actionsUrl: desc.actionsUrl });
+        return;
       }
-      setSourcesMessage(json.message || 'Workflow dispatched.', 'success');
+      succeeded = true;
+      setSourcesMessage(json.message || 'Workflow dispatched.', 'success',
+        json.actions_url ? { actionsUrl: json.actions_url } : null);
     } catch (err) {
       console.error(err);
-      setSourcesMessage(err.message || 'Trigger failed.', 'error');
+      // Network-level failure (no JSON body). Surface a clear, non-alarming
+      // message and still show the manual fallback if we know the URL from
+      // the most recent /api/admin/sources payload.
+      const fallbackUrl = state.sources && state.sources.actions_url;
+      setSourcesMessage(
+        'Could not reach the server to trigger Pull Now. Save & Publish is unaffected. You can run the workflow manually on GitHub.',
+        'error',
+        fallbackUrl ? { actionsUrl: fallbackUrl } : null
+      );
     } finally {
       // Always re-enable the button; the server config drives whether it stays
       // disabled in renderSources.
@@ -1002,6 +1080,7 @@
       // a follow-up Refresh after a couple of minutes shows new counts.
       loadSources();
     }
+    return succeeded;
   }
 
   // ─── INIT ───
@@ -1283,6 +1362,7 @@
     getStoredTheme, setStoredTheme, effectiveTheme, applyTheme, toggleTheme,
     initTheme, updateThemeToggleUi,
     renderSources, loadSources, triggerCollect, formatSourceTime,
+    setSourcesMessage, describeTriggerError,
     _state: state,
     _constants: {
       WEEKDAY_TARGET_MIN, WEEKDAY_TARGET_MAX,

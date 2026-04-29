@@ -80,7 +80,7 @@ export async function readMetadataFile(metadataPath) {
 
 // Builds the response payload the /api/admin/sources route returns. Pure
 // function over its inputs so it's easy to test.
-export function buildSourcesPayload({ metadata, mtime, now, githubConfigured }) {
+export function buildSourcesPayload({ metadata, mtime, now, githubConfigured, actionsUrl }) {
   const next = nextWeeklyRunUtc(now);
   const seenNames = new Set();
   const rows = [];
@@ -143,6 +143,15 @@ export function buildSourcesPayload({ metadata, mtime, now, githubConfigured }) 
       ? metadata.candidates_only : null,
     trigger_enabled: Boolean(githubConfigured),
     trigger_workflow_file: 'weekly-collect.yml',
+    // Always provide the GitHub Actions URL so the UI can show a manual
+    // "Run workflow" fallback link regardless of whether one-click Pull Now
+    // is enabled. The user can run the workflow with their normal GitHub
+    // login even if no server-side token is configured.
+    actions_url: actionsUrl || null,
+    // Save & Publish does NOT depend on the GITHUB_TOKEN required for
+    // workflow_dispatch. Surface this so the UI can reassure the user when
+    // Pull Now fails.
+    save_publish_unaffected: true,
     sources: rows,
   };
 }

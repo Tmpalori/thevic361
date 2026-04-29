@@ -48,13 +48,16 @@ describe('buildSourcesPayload', () => {
       metadata: null,
       mtime: null,
       now: new Date(Date.UTC(2026, 3, 27, 12, 0, 0)),
-      githubConfigured: false
+      githubConfigured: false,
+      actionsUrl: 'https://github.com/Tmpalori/thevic361/actions/workflows/weekly-collect.yml'
     });
     expect(payload.ok).toBe(true);
     expect(payload.metadata_present).toBe(false);
     expect(payload.last_run_at).toBeNull();
     expect(payload.next_run_at).toBe('2026-05-03T23:00:00.000Z');
     expect(payload.trigger_enabled).toBe(false);
+    expect(payload.actions_url).toBe('https://github.com/Tmpalori/thevic361/actions/workflows/weekly-collect.yml');
+    expect(payload.save_publish_unaffected).toBe(true);
     // Every known source should be represented as 'unknown' status.
     const names = payload.sources.map(s => s.name).sort();
     const expected = KNOWN_SOURCES_FOR_TESTS.map(s => s.name).sort();
@@ -178,6 +181,12 @@ describe('GET /api/admin/sources', () => {
     expect(Array.isArray(r.json.sources)).toBe(true);
     expect(r.json.sources.length).toBeGreaterThan(0);
     expect(r.json.sources.every(s => s.status === 'unknown')).toBe(true);
+    // Manual GitHub Actions fallback URL must always be exposed so the UI
+    // can offer it whether or not one-click Pull Now is enabled.
+    expect(r.json.actions_url).toMatch(
+      /github\.com\/Tmpalori\/thevic361\/actions\/workflows\/weekly-collect\.yml$/
+    );
+    expect(r.json.save_publish_unaffected).toBe(true);
   });
 
   it('hydrates from collection_metadata.json on disk', async () => {
@@ -243,6 +252,56 @@ describe('POST /api/admin/trigger-collect', () => {
     } finally { await stopApp(); }
   });
 
+  it('surfaces a 401 Bad credentials as github-token-invalid with actions_url fallback', async () => {
+    await startApp({
+      githubToken: 'gh-test-stale',
+      fetch: async (url, init) => {
+        if (init && init.method === 'POST') {
+          return {
+            ok: false, status: 401,
+            json: async () => ({ message: 'Bad credentials' })
+          };
+        }
+        return { ok: false, status: 404, json: async () => ({}) };
+      }
+    });
+    try {
+      const tok = await loginToken();
+      const r = await fetchJson('POST', '/api/admin/trigger-collect', {},
+        { Authorization: 'Bearer ' + tok });
+      expect(r.status).toBe(401);
+      expect(r.json.error).toBe('github-token-invalid');
+      expect(r.json.github_status).toBe(401);
+      // Friendly message must mention that Save & Publish is unaffected and
+      // that the user can still run the workflow manually.
+      expect(r.json.message).toMatch(/Save & Publish/);
+      expect(r.json.message).toMatch(/manually/i);
+      // Must NOT leak the raw "Bad credentials" string to the user-facing message.
+      expect(r.json.message).not.toMatch(/^Bad credentials/);
+      // Fallback link to GitHub Actions for manual run.
+      expect(r.json.actions_url).toMatch(
+        /github\.com\/Tmpalori\/thevic361\/actions\/workflows\/weekly-collect\.yml$/
+      );
+      expect(r.json.save_publish_unaffected).toBe(true);
+    } finally { await stopApp(); }
+  });
+
+  it('includes actions_url and save_publish_unaffected on github-not-configured 503', async () => {
+    await startApp(); // no githubToken
+    try {
+      const tok = await loginToken();
+      const r = await fetchJson('POST', '/api/admin/trigger-collect', {},
+        { Authorization: 'Bearer ' + tok });
+      expect(r.status).toBe(503);
+      expect(r.json.error).toBe('github-not-configured');
+      expect(r.json.actions_url).toMatch(
+        /github\.com\/Tmpalori\/thevic361\/actions\/workflows\/weekly-collect\.yml$/
+      );
+      expect(r.json.save_publish_unaffected).toBe(true);
+      expect(r.json.message).toMatch(/Save & Publish/);
+    } finally { await stopApp(); }
+  });
+
   it('surfaces a 403 from GitHub as a 403 (token lacks actions:write)', async () => {
     await startApp({
       githubToken: 'gh-test',
@@ -284,6 +343,11 @@ describe('GET /api/config exposes sources_trigger_enabled', () => {
     const r = await fetchJson('GET', '/api/config');
     expect(r.status).toBe(200);
     expect(r.json.sources_trigger_enabled).toBe(false);
+    // Even when no token is configured, we still surface the manual Actions
+    // URL so the admin UI can offer a "Run on GitHub" fallback link.
+    expect(r.json.sources_actions_url).toMatch(
+      /github\.com\/.+\/.+\/actions\/workflows\/weekly-collect\.yml$/
+    );
   });
 
   it('true when GITHUB_TOKEN is present', async () => {
@@ -291,5 +355,8 @@ describe('GET /api/config exposes sources_trigger_enabled', () => {
     const r = await fetchJson('GET', '/api/config');
     expect(r.status).toBe(200);
     expect(r.json.sources_trigger_enabled).toBe(true);
+    expect(r.json.sources_actions_url).toMatch(
+      /github\.com\/.+\/.+\/actions\/workflows\/weekly-collect\.yml$/
+    );
   });
 });
