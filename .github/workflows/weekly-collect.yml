@@ -19,6 +19,21 @@
 # honors timezones (e.g. Railway cron). Do NOT silently "fix" the cron each
 # DST switch — that's an unsignalled drift the audit flagged.
 # Also runs on manual trigger (workflow_dispatch).
+#
+# Timeout budget (job-level 25 min, with per-step caps):
+#   - The Apr-29 manual run was killed at the previous 10-min cap after a
+#     single 4-minute Apify discovery timeout left the collector with too
+#     little budget to finish. The healthy Apr-26 scheduled run took 8m16s,
+#     i.e. there was effectively no slack at all.
+#   - Apify and Perplexity each use a 240s per-call timeout, and the
+#     collector chains several of them; 25 minutes gives room for a couple
+#     of those to time out without killing the whole run.
+#   - Per-step timeouts cap each phase so a single hung dependency can't
+#     swallow the entire budget — the failed step gets a clean "timed out"
+#     annotation instead of the whole job being cancelled mid-write.
+#   - PYTHONUNBUFFERED=1 + `python -u` flush stdout line-by-line so that if
+#     a step does stall, the workflow log shows where it got stuck instead
+#     of the silent gap we saw in run 25121385371.
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: Weekly Collect
@@ -36,7 +51,15 @@ permissions:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Healthy runs are ~8 min; per-step timeouts below keep any single phase
+    # bounded. 25 min is the overall safety net — see header comment.
+    timeout-minutes: 25
+    env:
+      # Force line-buffered stdout for every Python step so progress logs
+      # appear in real time. The Apr-29 cancellation showed nothing between
+      # collector start and kill — that was buffering, not a true hang in
+      # the early scrapers.
+      PYTHONUNBUFFERED: '1'
 
     steps:
       - name: Checkout repo
@@ -60,13 +83,28 @@ jobs:
         # `|| echo` here any more — the script already exits 0 on
         # expected failures, and masking exit codes would re-introduce
         # the double-silencing the audit flagged.
+        #
+        # Step-level timeout: the in-script Apify call uses a 240s read
+        # timeout, plus a small overhead for normalize/merge/write. 6 min
+        # is a hard ceiling — if the Apify SDK or the network ever stalls
+        # past that, this step alone fails instead of eating the whole
+        # job budget like it did on Apr-29.
+        timeout-minutes: 6
         env:
           APIFY_TOKEN:        ${{ secrets.APIFY_TOKEN }}
           SENTRY_DSN:         ${{ secrets.SENTRY_DSN }}
           SENTRY_ENVIRONMENT: production
-        run: python discover_venues.py
+        run: python -u discover_venues.py
 
       - name: Run event collector
+        # Step-level timeout: collector chains several scrapers (city
+        # calendar, library, theatre victoria, allevents, Apify FB events,
+        # optionally FB/IG posts, Perplexity sonar discovery, AI review).
+        # Each remote call has its own 240s ceiling. 15 min lets a couple
+        # of slow remotes time out without killing the whole job — but
+        # caps a stuck step so the workflow fails loudly instead of being
+        # silently cancelled at the job-level timeout.
+        timeout-minutes: 15
         env:
           OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
@@ -86,7 +124,10 @@ jobs:
           # --candidates-only: write candidates.json but DO NOT overwrite
           # docs/events.json. The curated fallback at docs/events.json is
           # owned exclusively by the admin Save & Publish flow.
-          python collect_events.py \
+          # `python -u` is belt-and-braces with PYTHONUNBUFFERED at the
+          # job env — leaves no room for a buffered-stdout regression to
+          # hide a future stall.
+          python -u collect_events.py \
             --output ./docs/events.json \
             --candidates ./candidates.json \
             --local-dir . \
