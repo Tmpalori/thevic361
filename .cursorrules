@@ -1,0 +1,44 @@
+# Cursor rules — The Vic 361
+
+The full agent guide lives in AGENTS.md. Read it before making changes.
+
+## Project in one paragraph
+The Vic 361 is a weekly community-events website for Victoria, TX. It runs a Sunday-night Python collector (collect_events.py, 3.3k LOC monolith) that writes candidates.json and collection_metadata.json. An Express server in server/ (flat layout, not server/routes/) serves the static site under docs/ and exposes /api/admin/* for the Sunday-night admin curation. Live data is in Railway Postgres (table published_events, single row id=1). The repo is Tmpalori/thevic361. Live site is thevic361.com on Railway.
+
+## Hard rules
+1. The weekly workflow runs `collect_events.py --candidates-only`. CI must NEVER overwrite docs/events.json. test_collect_events_safety.py pins this — do not break it.
+2. docs/events.json is a curated bundled FALLBACK, not the source of truth. Only the admin Save & Publish flow may write it.
+3. The legacy ADMIN_TOKEN fallback in server/index.js stays. The browser-side GitHub PAT path in docs/admin.js stays. Both are documented bypasses.
+4. weekly-collect.yml's `0 23 * * 0` cron drifts 1 hour with US DST. That drift is intentional and documented in the workflow header. Do not "fix" it.
+5. server/auth.js uses a custom HMAC-SHA256 token format with no `alg` header. Don't replace with a JWT library.
+
+## Conventions
+- Python: stdlib + requests + bs4 + pyyaml + sentry-sdk. No async. 4-space indent.
+- JavaScript: ES modules. No TypeScript. No bundler. 2-space indent.
+- Comments explain WHY. Match the existing density.
+- Errors that wrap an HTTP response carry a `.status` property — branch on it, don't string-match the message.
+- New deps need a real reason. This is a Sunday cron + small Express app.
+
+## Run / test
+```
+npm install && npm test           # vitest, runs every tests/*.test.js
+pip install -r requirements.txt -r requirements-dev.txt
+pytest -q                          # tests live AT THE REPO ROOT, not in tests/
+```
+
+There is no PR-gating CI for the test suites. Run them locally before pushing.
+
+## Don't touch
+- candidates.json, collection_metadata.json (CI artifacts)
+- .last-published-digest-* (legacy markers)
+- approve_events.py (decommissioned legacy)
+- pending_venues.json (Google Maps discovery decommissioned)
+
+## Environment variables — quick map
+DATABASE_URL, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_SESSION_SECRET (required for prod server)
+OPENAI_API_KEY, PERPLEXITY_API_KEY, APIFY_TOKEN, SENTRY_DSN (collector)
+GITHUB_TOKEN (optional — enables docs/events.json commits + workflow_dispatch from admin)
+TURNSTILE_SECRET_KEY, TURNSTILE_SITE_KEY (optional — when set, submissions require a token)
+FB_POSTS_ENABLED, IG_POSTS_ENABLED (repo variables, =1 to enable in CI)
+
+Full reference in RAILWAY.md.
