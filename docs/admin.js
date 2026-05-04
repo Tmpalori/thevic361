@@ -60,6 +60,39 @@
     return SOURCE_LABEL[key] || (key ? String(key) : 'Unknown');
   }
 
+  // Only http(s) URLs are allowed as a clickable source link — anything else
+  // (javascript:, data:, mailto:, blank) is rendered as plain text or hidden.
+  // We rely on the URL constructor to reject malformed input rather than
+  // hand-rolling a regex.
+  function isHttpUrl(value) {
+    if (!value) return false;
+    const s = String(value).trim();
+    if (!s) return false;
+    try {
+      const u = new URL(s);
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Compact display form for a URL in the picker row. Keeps the host plus a
+  // short tail of the path so the operator can tell which page it points at
+  // without the row blowing up to two lines.
+  function shortenUrl(value) {
+    const s = String(value || '').trim();
+    if (!s) return '';
+    try {
+      const u = new URL(s);
+      const host = u.hostname.replace(/^www\./, '');
+      const path = u.pathname.replace(/\/+$/, '');
+      const display = host + (path && path !== '/' ? path : '');
+      return display.length > 48 ? display.slice(0, 45) + '…' : display;
+    } catch (_) {
+      return s.length > 48 ? s.slice(0, 45) + '…' : s;
+    }
+  }
+
   const WEEKDAY_TARGET_MIN = 4;
   const WEEKDAY_TARGET_MAX = 8;
   const WEEKEND_TARGET_MIN = 8;
@@ -498,23 +531,49 @@
               ? 'Organizer' : ev._submitter_kind === 'found_online'
               ? 'Found online' : 'Submitter: ' + ev._submitter_kind) + '</span>'
           : '';
+        // Clickable source URL. Rendered OUTSIDE the parent <label> so a
+        // click opens the link instead of toggling the row checkbox, and
+        // text-drag selects the URL text instead of being intercepted by
+        // the label. data-act="open-source" lets the click handler stop
+        // propagation so the surrounding label never sees it.
+        const sourceLink = isHttpUrl(ev.url)
+          ? '<a class="event-row__source-link" data-act="open-source" ' +
+              'href="' + escapeHtml(ev.url) + '" ' +
+              'target="_blank" rel="noopener noreferrer" ' +
+              'title="Open source: ' + escapeHtml(ev.url) + '">' +
+              escapeHtml(shortenUrl(ev.url)) + ' ↗</a>'
+          : '';
+        // The Edit button is rendered alongside the checkbox label so the
+        // operator can correct AI mistakes on a candidate (typos, missing
+        // times, wrong venue) without touching the checkbox state. It lives
+        // outside the <label> so clicking it doesn't toggle the checkbox.
+        const editBtn = (publishMode() === 'server')
+          ? '<button type="button" class="btn btn--outline event-row__edit-btn" ' +
+              'data-act="edit-event" data-key="' + escapeHtml(k) + '">Edit</button>'
+          : '';
+        const actionsHtml = (editBtn || sourceLink)
+          ? '<div class="event-row__actions">' + editBtn + sourceLink + '</div>'
+          : '';
         return (
-          '<label class="event-row">' +
-            '<input type="checkbox" data-key="' + escapeHtml(k) + '" ' + checked + '>' +
-            '<div class="event-row__main">' +
-              '<p class="event-row__name">' + escapeHtml(ev.name || '(untitled)') +
-                ' ' + srcPill + publishedPill + submitterMeta + '</p>' +
-              '<div class="event-row__meta">' +
-                (ev.time ? '<span>🕒 ' + escapeHtml(ev.time) + '</span>' : '') +
-                (ev.venue ? '<span>📍 ' + escapeHtml(ev.venue) + '</span>' : '') +
-                (ev.free ? '<span>🆓 Free</span>' : '') +
+          '<div class="event-row-wrap">' +
+            '<label class="event-row">' +
+              '<input type="checkbox" data-key="' + escapeHtml(k) + '" ' + checked + '>' +
+              '<div class="event-row__main">' +
+                '<p class="event-row__name">' + escapeHtml(ev.name || '(untitled)') +
+                  ' ' + srcPill + publishedPill + submitterMeta + '</p>' +
+                '<div class="event-row__meta">' +
+                  (ev.time ? '<span>🕒 ' + escapeHtml(ev.time) + (ev.end_time ? ' – ' + escapeHtml(ev.end_time) : '') + '</span>' : '') +
+                  (ev.venue ? '<span>📍 ' + escapeHtml(ev.venue) + '</span>' : '') +
+                  (ev.free ? '<span>🆓 Free</span>' : '') +
+                '</div>' +
+                (ev.description
+                  ? '<p class="event-row__desc">' + escapeHtml(ev.description) + '</p>'
+                  : '') +
+                actionsHtml +
               '</div>' +
-              (ev.description
-                ? '<p class="event-row__desc">' + escapeHtml(ev.description) + '</p>'
-                : '') +
-            '</div>' +
-            '<div class="event-row__icons" aria-hidden="true">' + icons + '</div>' +
-          '</label>'
+              '<div class="event-row__icons" aria-hidden="true">' + icons + '</div>' +
+            '</label>' +
+          '</div>'
         );
       }).join('');
 
@@ -539,6 +598,29 @@
         persistSelections();
         updateCounts();
         renderPicker();
+      });
+    });
+
+    listEl.querySelectorAll('button[data-act="edit-event"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const k = btn.getAttribute('data-key');
+        const ev = state.candidates.find(c => eventKey(c) === k);
+        if (ev) openEventEditModal(ev);
+      });
+    });
+
+    // Source link click must not toggle the row's checkbox or "select" the
+    // label. We stop propagation but DON'T preventDefault — the browser
+    // still follows the href into a new tab via target="_blank".
+    listEl.querySelectorAll('a[data-act="open-source"]').forEach(a => {
+      a.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      // Same for keyboard activation (Enter on a focused link).
+      a.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
       });
     });
 
@@ -753,6 +835,329 @@
       }
     } catch (err) {
       setStatus('Copy failed: ' + (err && err.message), 'error');
+    }
+  }
+
+  // ─── EVENT EDIT MODAL (PR #22) ───
+  // The admin Edit button on a picker row opens this modal so an operator can
+  // correct details an AI scraper got wrong (typos, missing times, wrong
+  // venue) without re-running the weekly collector. Edits are persisted on
+  // the server in an overlay keyed by the original eventKey, then merged into
+  // /api/admin/candidates and /api/admin/published-events automatically.
+  // Save & Publish still owns the actual write to the public site, so the
+  // admin approval/publish workflow stays intact.
+  const ICON_KEYS = [
+    'food', 'music', 'family', 'drinks', 'arts',
+    'shopping', 'outdoors', 'community', 'free'
+  ];
+
+  // The candidate event currently being edited. Used by the save handler to
+  // derive the original_key the server expects.
+  let editingEvent = null;
+
+  function setEditFormStatus(text, kind) {
+    const el = document.getElementById('event-edit-status');
+    if (!el) return;
+    el.classList.remove('is-error', 'is-success');
+    if (kind === 'error') el.classList.add('is-error');
+    if (kind === 'success') el.classList.add('is-success');
+    el.textContent = text || '';
+  }
+
+  function clearEditFormErrors() {
+    const errEl = document.getElementById('event-edit-form-error');
+    if (errEl) { errEl.hidden = true; errEl.textContent = ''; }
+    document.querySelectorAll('.event-edit-form__field-error').forEach(s => {
+      s.textContent = '';
+    });
+  }
+
+  function showEditFormErrors(errors) {
+    if (!errors) return;
+    const errEl = document.getElementById('event-edit-form-error');
+    if (errors._form && errEl) {
+      errEl.textContent = errors._form;
+      errEl.hidden = false;
+    }
+    Object.entries(errors).forEach(([field, msg]) => {
+      if (field === '_form') return;
+      const span = document.querySelector(
+        '.event-edit-form__field-error[data-error-for="' + field + '"]'
+      );
+      if (span) span.textContent = msg;
+    });
+    if (errEl && !errors._form) {
+      errEl.textContent = 'Please fix the highlighted fields and try again.';
+      errEl.hidden = false;
+    }
+  }
+
+  // Keep the modal's "Open ↗" link, "Copy full URL" button, and read-only
+  // <code> display in sync with whatever's typed in the URL field. The Open
+  // link is hidden when the input is empty or doesn't parse as http(s) so we
+  // never let the admin click through to a javascript: URL or similar. The
+  // Copy button + display show whenever there's any URL text at all (even a
+  // partial URL the admin is fixing) so it's always copy-able.
+  function syncEditUrlOpenLink() {
+    const input = document.getElementById('event-edit-url');
+    const link = document.getElementById('event-edit-url-open');
+    const copyBtn = document.getElementById('event-edit-url-copy');
+    const display = document.getElementById('event-edit-url-display');
+    const copied = document.getElementById('event-edit-url-copied');
+    if (!input) return;
+    const raw = (input.value || '').trim();
+    if (link) {
+      if (isHttpUrl(raw)) {
+        link.href = raw;
+        link.hidden = false;
+      } else {
+        link.removeAttribute('href');
+        link.hidden = true;
+      }
+    }
+    if (copyBtn) copyBtn.hidden = !raw;
+    if (display) {
+      if (raw) {
+        display.textContent = raw;
+        display.hidden = false;
+      } else {
+        display.textContent = '';
+        display.hidden = true;
+      }
+    }
+    // Hide the "Copied!" flash whenever the URL changes — it's only shown
+    // briefly after a successful copy.
+    if (copied) copied.hidden = true;
+  }
+
+  // Copies the full URL to the clipboard. Falls back to the legacy
+  // execCommand path on browsers without navigator.clipboard. We surface a
+  // brief "Copied!" flash so the admin gets immediate confirmation; if the
+  // copy fails we set a status message instead of leaving the user wondering.
+  async function copyEditUrl() {
+    const input = document.getElementById('event-edit-url');
+    const copied = document.getElementById('event-edit-url-copied');
+    if (!input) return false;
+    const raw = (input.value || '').trim();
+    if (!raw) return false;
+    let ok = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(raw);
+        ok = true;
+      }
+    } catch (_) { /* fall through to legacy path */ }
+    if (!ok) {
+      try {
+        // Legacy path: select the input contents and run execCommand('copy').
+        // Works even when navigator.clipboard is unavailable (older Safari,
+        // insecure contexts).
+        input.focus();
+        input.select();
+        ok = document.execCommand && document.execCommand('copy');
+      } catch (_) { ok = false; }
+    }
+    if (ok && copied) {
+      copied.hidden = false;
+      setTimeout(() => { copied.hidden = true; }, 1500);
+    } else if (!ok) {
+      setEditFormStatus('Could not copy — please select the URL text manually.', 'error');
+    }
+    return ok;
+  }
+
+  function openEventEditModal(ev) {
+    if (!ev) return;
+    editingEvent = ev;
+    const modal = document.getElementById('event-edit-modal');
+    const form = document.getElementById('event-edit-form');
+    if (!modal || !form) return;
+    clearEditFormErrors();
+    setEditFormStatus('');
+    // Prefill fields from the current event shape.
+    form.elements['name'].value = ev.name || '';
+    form.elements['date'].value = ev.date || '';
+    form.elements['time'].value = ev.time || '';
+    form.elements['end_time'].value = ev.end_time || '';
+    form.elements['venue'].value = ev.venue || '';
+    form.elements['address'].value = ev.address || '';
+    form.elements['description'].value = ev.description || '';
+    form.elements['url'].value = ev.url || '';
+    syncEditUrlOpenLink();
+    form.elements['free'].checked = Boolean(ev.free);
+    const haveIcons = new Set(Array.isArray(ev.icons) ? ev.icons : []);
+    form.querySelectorAll('input[name="icons"]').forEach(cb => {
+      cb.checked = haveIcons.has(cb.value);
+    });
+    modal.hidden = false;
+    // Focus the first field for keyboard users.
+    setTimeout(() => {
+      try { form.elements['name'].focus(); } catch (_) {}
+    }, 0);
+  }
+
+  function closeEventEditModal() {
+    const modal = document.getElementById('event-edit-modal');
+    if (modal) modal.hidden = true;
+    editingEvent = null;
+    clearEditFormErrors();
+    setEditFormStatus('');
+    setSaving(false);
+    syncEditUrlOpenLink();
+  }
+
+  function setSaving(on) {
+    const btn = document.getElementById('event-edit-save-btn');
+    const form = document.getElementById('event-edit-form');
+    if (!form || !btn) return;
+    btn.disabled = !!on;
+    btn.textContent = on ? 'Saving…' : 'Save changes';
+    form.querySelectorAll('input, textarea, button[data-act="close"]').forEach(el => {
+      if (el.id === 'event-edit-save-btn') return;
+      el.disabled = !!on;
+    });
+  }
+
+  function readEditFormPayload() {
+    const form = document.getElementById('event-edit-form');
+    if (!form) return null;
+    const icons = Array.from(form.querySelectorAll('input[name="icons"]:checked'))
+      .map(cb => cb.value);
+    return {
+      name: (form.elements['name'].value || '').trim(),
+      date: (form.elements['date'].value || '').trim(),
+      time: (form.elements['time'].value || '').trim(),
+      end_time: (form.elements['end_time'].value || '').trim(),
+      venue: (form.elements['venue'].value || '').trim(),
+      address: (form.elements['address'].value || '').trim(),
+      description: (form.elements['description'].value || '').trim(),
+      url: (form.elements['url'].value || '').trim(),
+      icons,
+      free: Boolean(form.elements['free'].checked)
+    };
+  }
+
+  // Apply an edited event to local state.candidates so the picker, preview,
+  // and newsletter all reflect the correction immediately without a reload.
+  // We replace the row matching the original key with the new shape, then
+  // dedupe by the new key so we never end up with two rows for one event.
+  function applyEditToLocalState(originalKey, edited) {
+    const newKey = [edited.date || '', edited.name || '', edited.venue || ''].join('|');
+    const next = [];
+    const seen = new Set();
+    let replaced = false;
+    for (const ev of state.candidates) {
+      const k = eventKey(ev);
+      if (k === originalKey) {
+        const merged = { ...ev, ...edited };
+        const mk = eventKey(merged);
+        if (!seen.has(mk)) { seen.add(mk); next.push(merged); }
+        replaced = true;
+        continue;
+      }
+      if (replaced && k === newKey) continue; // collide with new key — drop
+      if (seen.has(k)) continue;
+      seen.add(k);
+      next.push(ev);
+    }
+    state.candidates = next;
+    // Keep selection state in sync — if the original was selected, the new
+    // key carries that forward.
+    if (state.selected.has(originalKey) && originalKey !== newKey) {
+      state.selected.delete(originalKey);
+      state.selected.add(newKey);
+      persistSelections();
+    }
+    if (state.publishedKeys.has(originalKey) && originalKey !== newKey) {
+      state.publishedKeys.delete(originalKey);
+      state.publishedKeys.add(newKey);
+    }
+  }
+
+  async function saveEventEdit(e) {
+    if (e) e.preventDefault();
+    if (!editingEvent) return;
+    if (publishMode() !== 'server') {
+      setEditFormStatus('Editing requires a server session — sign in first.', 'error');
+      return;
+    }
+    clearEditFormErrors();
+    const payload = readEditFormPayload();
+    if (!payload) return;
+    const originalKey = eventKey(editingEvent);
+    setSaving(true);
+    setEditFormStatus('Saving…');
+    try {
+      const { res, json } = await adminFetch('/api/admin/event-edits', {
+        method: 'POST',
+        body: JSON.stringify({ original_key: originalKey, payload })
+      });
+      if (res.status === 400 && json && json.errors) {
+        showEditFormErrors(json.errors);
+        setEditFormStatus('Fix the errors and save again.', 'error');
+        return;
+      }
+      if (!res.ok || !json || !json.ok) {
+        const msg = (json && (json.message || json.error))
+          || ('Save failed (HTTP ' + res.status + ').');
+        setEditFormStatus(msg, 'error');
+        return;
+      }
+      // Server stores `payload` as the canonical edited shape. Apply it to
+      // local state so the UI updates without a full reload.
+      applyEditToLocalState(originalKey, json.edit && json.edit.payload || payload);
+      populateFilters();
+      renderPicker();
+      setStatus('Event updated. Save & Publish to push the change live.', 'success');
+      closeEventEditModal();
+    } catch (err) {
+      console.error('[admin] event edit save failed:', err);
+      setEditFormStatus(err.message || 'Save failed.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function wireEventEditModal() {
+    const modal = document.getElementById('event-edit-modal');
+    const form = document.getElementById('event-edit-form');
+    if (!modal || !form) return;
+    modal.querySelectorAll('[data-act="close"]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        closeEventEditModal();
+      });
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modal.hidden) closeEventEditModal();
+    });
+    form.addEventListener('submit', saveEventEdit);
+    // Live-update the "Open ↗" link, copy button, and full-URL display as
+    // the admin edits the URL field.
+    const urlInput = document.getElementById('event-edit-url');
+    if (urlInput) {
+      urlInput.addEventListener('input', syncEditUrlOpenLink);
+      urlInput.addEventListener('change', syncEditUrlOpenLink);
+    }
+    const copyBtn = document.getElementById('event-edit-url-copy');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        copyEditUrl();
+      });
+    }
+    // The read-only <code> display is selectable. When the admin clicks it,
+    // select the entire URL so a single click + Cmd/Ctrl+C is enough to copy.
+    const display = document.getElementById('event-edit-url-display');
+    if (display) {
+      display.addEventListener('click', () => {
+        try {
+          const r = document.createRange();
+          r.selectNodeContents(display);
+          const sel = window.getSelection();
+          if (sel) { sel.removeAllRanges(); sel.addRange(r); }
+        } catch (_) { /* ignore — fallback is the Copy button */ }
+      });
     }
   }
 
@@ -1287,6 +1692,8 @@
 
     document.querySelectorAll('#theme-toggle, #theme-toggle-auth')
       .forEach(btn => btn.addEventListener('click', toggleTheme));
+
+    wireEventEditModal();
   }
 
   async function init() {
@@ -1363,6 +1770,10 @@
     initTheme, updateThemeToggleUi,
     renderSources, loadSources, triggerCollect, formatSourceTime,
     setSourcesMessage, describeTriggerError,
+    openEventEditModal, closeEventEditModal, applyEditToLocalState,
+    readEditFormPayload, showEditFormErrors, syncEditUrlOpenLink,
+    copyEditUrl,
+    isHttpUrl, shortenUrl,
     _state: state,
     _constants: {
       WEEKDAY_TARGET_MIN, WEEKDAY_TARGET_MAX,

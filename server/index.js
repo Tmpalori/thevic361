@@ -17,8 +17,8 @@ import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { createStore, normalizePayload, newId, nowIso } from './db.js';
-import { validateSubmission, checkBotSignals } from './validate.js';
+import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf } from './db.js';
+import { validateSubmission, validateEventEdit, checkBotSignals } from './validate.js';
 import { verifyTurnstile } from './turnstile.js';
 import { createRateLimiter } from './rateLimit.js';
 import { createAuth } from './auth.js';
@@ -349,6 +349,7 @@ export async function createApp(opts = {}) {
   // Approved submissions from the local store are *always* merged in so the
   // editor sees them in the picker without needing a separate "Pull approved"
   // round trip.
+  const candidatesFile = opts.candidatesFile || CANDIDATES_FILE;
   app.get('/api/admin/candidates', requireAdmin, async (req, res) => {
     let sha = null;
     let events = [];
@@ -369,7 +370,7 @@ export async function createApp(opts = {}) {
 
     if (source !== 'github') {
       try {
-        const local = await readJsonFile(CANDIDATES_FILE);
+        const local = await readJsonFile(candidatesFile);
         events = Array.isArray(local && local.events) ? local.events : [];
         source = 'local-file';
       } catch (err) {
@@ -407,6 +408,17 @@ export async function createApp(opts = {}) {
       console.warn('[admin] approved submissions merge skipped:', err.message);
     }
 
+    // Apply admin event-edits overlay last so the editor sees the corrected
+    // version of every candidate, regardless of source. Failures here are
+    // best-effort — without overlays the admin still sees the raw events.
+    let edits = [];
+    try {
+      edits = await store.listEventEdits();
+    } catch (err) {
+      console.warn('[admin] event_edits list failed:', err.message);
+    }
+    events = applyEventEdits(events, edits);
+
     res.json({
       ok: true,
       sha,
@@ -414,6 +426,54 @@ export async function createApp(opts = {}) {
       warning,
       data: { events }
     });
+  });
+
+  // ─── Admin: edit a candidate event ────────────────────────────────────
+  // POST /api/admin/event-edits
+  // Body: { original_key, payload: { name, date, time, end_time, venue,
+  //         address, description, url, icons, free } }
+  //
+  // The original_key is the eventKey (date|name|venue) of the candidate row
+  // the admin is correcting; the server uses it to attach the edit to the
+  // right source row even when the admin changes the date/name/venue. The
+  // overlay is applied automatically in /api/admin/candidates and
+  // /api/admin/published-events so the picker, preview, newsletter, and
+  // published shape all stay in sync — without duplicating the row.
+  //
+  // This endpoint never publishes to the public site by itself. The admin
+  // still has to hit Save & Publish to push the corrected event live, which
+  // preserves the existing approval/publish workflow.
+  app.post('/api/admin/event-edits', requireAdmin, async (req, res) => {
+    const body = req.body || {};
+    const original_key = typeof body.original_key === 'string'
+      ? body.original_key.trim().slice(0, 600)
+      : '';
+    if (!original_key || original_key.split('|').length !== 3) {
+      return res.status(400).json({
+        ok: false,
+        error: 'bad-original-key',
+        message: 'original_key must be "date|name|venue".'
+      });
+    }
+    const v = validateEventEdit(body.payload || {});
+    if (!v.ok) return res.status(400).json({ ok: false, errors: v.errors });
+
+    try {
+      const row = await store.upsertEventEdit({
+        original_key,
+        payload: v.data
+      });
+      res.json({
+        ok: true,
+        edit: row,
+        new_key: eventKeyOf(v.data)
+      });
+    } catch (err) {
+      console.error('[admin] event-edit upsert failed:', err.message);
+      res.status(500).json({
+        ok: false, error: 'event-edit-failed', message: err.message
+      });
+    }
   });
 
   // ─── Admin: publish events.json ───────────────────────────────────────
@@ -538,24 +598,68 @@ export async function createApp(opts = {}) {
     res.json(result);
   });
 
+  const eventsFile = opts.eventsFile || EVENTS_FILE;
   // ─── Admin: currently-published events ───
-  // Returns the events payload that is currently being served on /events.json,
-  // pulled from the local store (Railway/Postgres). The admin UI uses this to
-  // pre-check candidates that are already live, so a fresh login still shows
-  // what was previously published instead of every checkbox starting empty.
-  // If nothing has been published locally yet (rare on a fresh deploy), we
-  // return an empty events list — the admin treats that the same as "nothing
-  // currently live."
+  // Returns the events payload that is currently being served on /events.json
+  // so the admin picker can pre-check rows that are already live. Source
+  // priority:
+  //   1. Local store (Railway/Postgres). This is what the public site is
+  //      actually serving for any session that has hit Save & Publish since
+  //      Railway took over publishing.
+  //   2. Bundled docs/events.json on disk. This is the source of truth when
+  //      the admin hasn't published since PR #47 deployed (so the local store
+  //      is empty), but the public site still shows whatever the most recent
+  //      GitHub publish committed to docs/events.json.
+  // Without the file fallback, a fresh deploy with a non-empty docs/events.json
+  // and an empty Railway store would show every published event as unchecked
+  // in the admin — which is exactly what the user reported.
   app.get('/api/admin/published-events', requireAdmin, async (req, res) => {
     try {
-      const published = await store.getPublished();
+      let published = null;
+      let source = 'store';
+      try {
+        published = await store.getPublished();
+      } catch (err) {
+        console.warn('[admin] published-events store lookup failed:', err.message);
+      }
       if (!published) {
-        return res.json({ ok: true, events: [], last_updated: null });
+        // Fall back to the bundled events.json snapshot. This is the file
+        // GitHub Pages / Railway statically served before Railway took over
+        // publishing, and it remains a faithful picture of "currently live"
+        // until the admin hits Save & Publish under the new flow.
+        try {
+          const bundled = await readJsonFile(eventsFile);
+          if (bundled && Array.isArray(bundled.events)) {
+            published = bundled;
+            source = 'docs-file';
+          }
+        } catch (err) {
+          if (err.code !== 'ENOENT') {
+            console.warn('[admin] published-events file fallback failed:', err.message);
+          }
+        }
+      }
+      if (!published) {
+        return res.json({
+          ok: true, events: [], last_updated: null, source: 'empty'
+        });
+      }
+      let events = Array.isArray(published.events) ? published.events : [];
+      // Apply the same admin edits overlay so a correction made in the editor
+      // shows up immediately on the live site for every event whose published
+      // identity still matches the overlay's original_key. New picks go
+      // through publish-events and already store the edited shape there.
+      try {
+        const edits = await store.listEventEdits();
+        events = applyEventEdits(events, edits);
+      } catch (err) {
+        console.warn('[admin] published-events overlay skipped:', err.message);
       }
       res.json({
         ok: true,
-        events: Array.isArray(published.events) ? published.events : [],
-        last_updated: published.last_updated || null
+        events,
+        last_updated: published.last_updated || null,
+        source
       });
     } catch (err) {
       console.error('[admin] published-events lookup failed:', err.message);
@@ -670,12 +774,18 @@ export async function createApp(opts = {}) {
   // appending them to the candidate list before publishing.
   app.get('/api/admin/approved-events', requireAdmin, async (req, res) => {
     const rows = await store.list({ status: 'approved' });
-    const events = rows.map(r => ({
+    let events = rows.map(r => ({
       ...r.payload,
       _source: r.source || 'submission',
       _source_id: r.id,
       _submitter_kind: r.submitter_kind || null
     }));
+    try {
+      const edits = await store.listEventEdits();
+      events = applyEventEdits(events, edits);
+    } catch (err) {
+      console.warn('[admin] approved-events overlay skipped:', err.message);
+    }
     res.json({ ok: true, events });
   });
 
@@ -690,7 +800,18 @@ export async function createApp(opts = {}) {
       const published = await store.getPublished();
       if (published) {
         res.set('Cache-Control', 'no-store');
-        return res.json(published);
+        // Apply the admin event-edits overlay so a correction made between
+        // publishes is reflected on the live site without forcing the admin
+        // to hit Save & Publish again. The published payload keeps original
+        // event identities; the overlay maps original_key -> corrected shape.
+        let events = Array.isArray(published.events) ? published.events : [];
+        try {
+          const edits = await store.listEventEdits();
+          events = applyEventEdits(events, edits);
+        } catch (err) {
+          console.warn('[events] overlay skipped:', err.message);
+        }
+        return res.json({ ...published, events });
       }
     } catch (err) {
       console.warn('[events] published lookup failed:', err.message);

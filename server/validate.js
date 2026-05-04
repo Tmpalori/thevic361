@@ -174,6 +174,76 @@ export function validateSubmission(input, opts = {}) {
   };
 }
 
+// Validate an admin-applied event edit. The admin event editor (PR #22) lets
+// an operator correct details on a candidate or already-picked event without
+// pushing those edits through the public submission shape (no submitter
+// contact info needed). Required: name, date, time, venue, description.
+// Optional: end_time, address, url, icons[], free.
+//
+// Returns { ok, data } on success or { ok: false, errors } with a per-field
+// error map suitable for surfacing in the admin UI.
+export function validateEventEdit(input) {
+  const errors = {};
+  if (!input || typeof input !== 'object') {
+    return { ok: false, errors: { _form: 'Invalid request body.' } };
+  }
+
+  const name = clean(input.name, MAX_NAME);
+  if (!name) errors.name = 'Event name is required.';
+  else if (name.length < 3) errors.name = 'Event name is too short.';
+
+  const date = clean(input.date, 10);
+  if (!date) errors.date = 'Date is required.';
+  else if (!ISO_DATE.test(date)) errors.date = 'Date must look like YYYY-MM-DD.';
+  else {
+    const d = new Date(date + 'T12:00:00Z');
+    if (isNaN(d.getTime())) errors.date = 'Date is invalid.';
+  }
+
+  const time = clean(input.time, MAX_TIME);
+  if (!time) errors.time = 'Start time is required.';
+
+  const end_time = clean(input.end_time, MAX_TIME);
+
+  const venue = clean(input.venue, MAX_VENUE);
+  if (!venue) errors.venue = 'Venue is required.';
+
+  const address = clean(input.address, MAX_ADDRESS);
+
+  const description = clean(input.description, MAX_DESC);
+  if (!description) errors.description = 'Description is required.';
+
+  const rawUrl = clean(input.url, MAX_URL);
+  let url = '';
+  if (rawUrl) {
+    url = normalizeUrl(rawUrl);
+    if (!URL_RE.test(url)) {
+      errors.url = 'Link must be a valid website (e.g. example.com).';
+    }
+  }
+
+  let icons = [];
+  if (Array.isArray(input.icons)) {
+    icons = input.icons
+      .map(c => clean(c, 32).toLowerCase())
+      .filter(c => ALLOWED_ICONS.has(c));
+    icons = Array.from(new Set(icons)).slice(0, 8);
+  }
+
+  const free = Boolean(input.free);
+  if (free && !icons.includes('free')) icons.push('free');
+
+  if (Object.keys(errors).length) return { ok: false, errors };
+
+  return {
+    ok: true,
+    data: {
+      name, date, time, end_time, venue, address, description, url,
+      icons, free
+    }
+  };
+}
+
 // Honeypot: a hidden field named "company" no real user fills. Combined with
 // elapsed_ms (time from form render to submit), we get a cheap bot filter.
 export function checkBotSignals(input, opts = {}) {
