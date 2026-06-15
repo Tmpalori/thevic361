@@ -1,116 +1,116 @@
 {
-  "last_run_at": "2026-06-08T00:20:21",
-  "window_start": "2026-06-08",
-  "window_end": "2026-06-22",
+  "last_run_at": "2026-06-15T00:28:48",
+  "window_start": "2026-06-15",
+  "window_end": "2026-06-29",
   "days_ahead": 14,
   "candidates_only": true,
-  "merged_count": 113,
-  "raw_count": 165,
+  "merged_count": 108,
+  "raw_count": 176,
   "sources": [
     {
       "name": "local_events",
       "count": 36,
       "status": "ok",
-      "started_at": "2026-06-08T00:07:17",
-      "finished_at": "2026-06-08T00:07:17"
+      "started_at": "2026-06-15T00:08:16",
+      "finished_at": "2026-06-15T00:08:16"
     },
     {
       "name": "google_sheet",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-06-08T00:07:17",
-      "finished_at": "2026-06-08T00:07:18"
+      "started_at": "2026-06-15T00:08:16",
+      "finished_at": "2026-06-15T00:08:17"
     },
     {
       "name": "city_calendar",
-      "count": 19,
+      "count": 29,
       "status": "ok",
-      "started_at": "2026-06-08T00:07:18",
-      "finished_at": "2026-06-08T00:07:38"
+      "started_at": "2026-06-15T00:08:17",
+      "finished_at": "2026-06-15T00:08:39"
     },
     {
       "name": "chamber",
       "count": 10,
       "status": "ok",
-      "started_at": "2026-06-08T00:07:38",
-      "finished_at": "2026-06-08T00:07:40"
+      "started_at": "2026-06-15T00:08:39",
+      "finished_at": "2026-06-15T00:08:46"
     },
     {
       "name": "library",
-      "count": 30,
+      "count": 33,
       "status": "ok",
-      "started_at": "2026-06-08T00:07:40",
-      "finished_at": "2026-06-08T00:07:42"
+      "started_at": "2026-06-15T00:08:46",
+      "finished_at": "2026-06-15T00:08:47"
     },
     {
       "name": "moonshine",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-06-08T00:07:42",
-      "finished_at": "2026-06-08T00:07:43"
+      "started_at": "2026-06-15T00:08:47",
+      "finished_at": "2026-06-15T00:08:49"
     },
     {
       "name": "vtx_artwalk",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-06-08T00:07:43",
-      "finished_at": "2026-06-08T00:07:44"
+      "started_at": "2026-06-15T00:08:49",
+      "finished_at": "2026-06-15T00:08:49"
     },
     {
       "name": "jwelch",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-06-08T00:07:44",
-      "finished_at": "2026-06-08T00:07:48"
+      "started_at": "2026-06-15T00:08:49",
+      "finished_at": "2026-06-15T00:08:52"
     },
     {
       "name": "theatre_victoria",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-06-08T00:07:48",
-      "finished_at": "2026-06-08T00:07:48"
+      "started_at": "2026-06-15T00:08:52",
+      "finished_at": "2026-06-15T00:08:56"
     },
     {
       "name": "generals",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-06-08T00:07:48",
-      "finished_at": "2026-06-08T00:07:49"
+      "started_at": "2026-06-15T00:08:56",
+      "finished_at": "2026-06-15T00:08:57"
     },
     {
       "name": "allevents",
-      "count": 18,
+      "count": 15,
       "status": "ok",
-      "started_at": "2026-06-08T00:07:49",
-      "finished_at": "2026-06-08T00:07:49"
+      "started_at": "2026-06-15T00:08:57",
+      "finished_at": "2026-06-15T00:08:57"
     },
     {
       "name": "apify_facebook",
-      "count": 11,
+      "count": 8,
       "status": "ok",
-      "started_at": "2026-06-08T00:07:49",
-      "finished_at": "2026-06-08T00:08:35"
+      "started_at": "2026-06-15T00:08:57",
+      "finished_at": "2026-06-15T00:10:08"
     },
     {
       "name": "apify_facebook_posts",
-      "count": 16,
+      "count": 18,
       "status": "ok",
-      "started_at": "2026-06-08T00:08:35",
-      "finished_at": "2026-06-08T00:14:42"
+      "started_at": "2026-06-15T00:10:08",
+      "finished_at": "2026-06-15T00:19:15"
     },
     {
       "name": "apify_instagram_posts",
-      "count": 23,
+      "count": 20,
       "status": "ok",
-      "started_at": "2026-06-08T00:14:42",
-      "finished_at": "2026-06-08T00:19:10"
+      "started_at": "2026-06-15T00:19:15",
+      "finished_at": "2026-06-15T00:27:21"
     },
     {
       "name": "perplexity",
-      "count": 2,
+      "count": 7,
       "status": "ok",
-      "started_at": "2026-06-08T00:19:10",
-      "finished_at": "2026-06-08T00:19:30"
+      "started_at": "2026-06-15T00:27:21",
+      "finished_at": "2026-06-15T00:27:45"
     }
   ]
 }
