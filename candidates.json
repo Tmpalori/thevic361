@@ -1,545 +1,50 @@
 {
-  "last_updated": "2026-08-23T23:37:36-05:00",
+  "last_updated": "2026-08-31T01:18:46-05:00",
   "events": [
     {
-      "date": "2026-08-17",
-      "name": "Volunteer Time",
-      "time": "10:00AM \u2013 12:00PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
-      "description": "Volunteer with library programs and community support activities.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://victoriapl.librarycalendar.com/event/volunteer-time-pending-9255"
-    },
-    {
-      "date": "2026-08-17",
-      "name": "Palace Bingo \u2014 Monday",
-      "time": "5:30 PM \u2013 10:30 PM",
-      "venue": "Palace Bingo",
-      "address": "5306 Houston Hwy",
-      "description": "Classic bingo night with cash prizes and cards available at the door.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://palacebingo.org"
-    },
-    {
-      "date": "2026-08-17",
-      "name": "VARRA Monday Night Run",
-      "time": "6:30 PM",
-      "venue": "Riverside Stadium Parking Lot",
-      "address": "Memorial Dr.",
-      "description": "Join a casual group run or walk open to all fitness levels.",
-      "icons": [
-        "outdoors",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://runsignup.com/MemberOrg/VictoriaAreaRoadRunnersAssociation"
-    },
-    {
-      "date": "2026-08-18",
-      "name": "Pool Shark Tuesdays \u2014 Free Pool",
-      "time": "5:00 PM \u2013 8:00 PM",
-      "venue": "Dodge City Saloon",
-      "address": "205 N Star Dr, Suite H",
-      "description": "Enjoy free pool games with drink specials in a laid-back evening setting.",
-      "icons": [
-        "free",
-        "drinks"
-      ],
-      "free": true,
-      "url": "https://dcsaloon.com"
-    },
-    {
-      "date": "2026-08-18",
-      "name": "Palace Bingo \u2014 Tuesday",
-      "time": "5:30 PM \u2013 10:30 PM",
-      "venue": "Palace Bingo",
-      "address": "5306 Houston Hwy",
-      "description": "Bingo night with multiple games and cash prizes.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://palacebingo.org"
-    },
-    {
-      "date": "2026-08-19",
-      "name": "No Pressure Book Club",
-      "time": "6:00PM \u2013 7:00PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
-      "description": "A relaxed book club for readers who want low-key discussion.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://victoriapl.librarycalendar.com/event/no-pressure-book-club-9151"
-    },
-    {
-      "date": "2026-08-19",
-      "name": "VARRA Wednesday Night Run",
-      "time": "6:30 PM",
-      "venue": "Riverside Stadium Parking Lot",
-      "address": "Memorial Dr.",
-      "description": "Midweek group run or walk for all paces and experience levels.",
-      "icons": [
-        "outdoors",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://runsignup.com/MemberOrg/VictoriaAreaRoadRunnersAssociation"
-    },
-    {
-      "date": "2026-08-19",
-      "name": "VAMA Rock & Blues Open Mic",
-      "time": "7:00 PM \u2013 10:00 PM",
-      "venue": "Aero Crafters",
-      "address": "309 E. Crestwood Dr.",
-      "description": "Open mic night for rock and blues players of all skill levels.",
-      "icons": [
-        "music",
-        "drinks",
-        "free"
-      ],
-      "free": true,
-      "url": "https://aerocrafters.pub"
-    },
-    {
-      "date": "2026-08-19",
-      "name": "Karaoke + Cantina Night",
-      "time": "7:00 PM \u2013 close",
-      "venue": "La Cantina Tacos & Tequila",
-      "address": "212 S Main St.",
-      "description": "Weekly karaoke with margarita and drink specials in the downtown dining room.",
-      "icons": [
-        "drinks",
-        "music",
-        "food"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/lacantinavictoria/"
-    },
-    {
-      "date": "2026-08-19",
-      "name": "Victoria Farmers' Market",
-      "time": "9:00 AM \u2013 1:00 PM",
-      "venue": "Victoria Farmers Market",
-      "address": "2805 N. Navarro St.",
-      "description": "Shop local produce, meats, honey, baked goods, and other seasonal goods from area vendors.",
-      "icons": [
-        "food",
-        "shopping",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket"
-    },
-    {
-      "date": "2026-08-19",
-      "name": "Wednesday Night Karaoke",
-      "time": "9:30 PM \u2013 2:00 AM",
-      "venue": "Shooters Bar",
-      "address": "4705 N Navarro St.",
-      "description": "Late-night karaoke with a dance floor and drink specials.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/groups/384603922014986/posts/2419507071857984/"
-    },
-    {
-      "date": "2026-08-20",
-      "name": "Austin Attilio at Moonshine",
-      "time": "",
-      "venue": "Moonshine Drinkery",
-      "address": "",
-      "description": "Live acoustic performance in a relaxed drinkery setting.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcNHi5OIM5S/"
-    },
-    {
-      "date": "2026-08-20",
-      "name": "Pop Up Storytime",
-      "time": "10:00AM \u2013 11:00AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
-      "description": "Story time for young children and caregivers.",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://victoriapl.librarycalendar.com/event/pop-storytime-9396"
-    },
-    {
-      "date": "2026-08-20",
-      "name": "Victoria County Animal Services Adoptable Dogs at The Texas Zoo",
-      "time": "11:00 AM",
-      "venue": "The Texas Zoo",
-      "address": "",
-      "description": "Meet adoptable dogs and enjoy face painting during the zoo visit.",
-      "icons": [
-        "family",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/TheTexasZoo/posts/pfbid02vvqTh718MnSjnHkAHMm8fL3bk7vWhQKsHXmUFV1s5kAfMkLmvHv3E9wEmuhCVqTXl"
-    },
-    {
-      "date": "2026-08-20",
-      "name": "Victoria County Animal Services Adoption Event",
-      "time": "11:00 AM to 3:00 PM",
-      "venue": "The Texas Zoo",
-      "address": "",
-      "description": "Meet adoptable dogs and enjoy a family-friendly day at the zoo.",
-      "icons": [
-        "family",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcO7aLhFBw6/"
-    },
-    {
-      "date": "2026-08-20",
-      "name": "Story Strolls \u2014 Audiobook Walking Group",
-      "time": "5:30 PM \u2013 6:30 PM",
-      "venue": "Riverside Park",
-      "address": "405 Memorial Drive",
-      "description": "A guided walking group that pairs an audiobook with a stroll by the river.",
-      "icons": [
-        "outdoors",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
-    },
-    {
-      "date": "2026-08-20",
-      "name": "Gray Prukop LIVE",
-      "time": "7:00 PM",
-      "venue": "Victoria Main Street Program",
-      "address": "",
-      "description": "Live acoustic set with a laid-back downtown vibe.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcRDseRH99N/"
-    },
-    {
-      "date": "2026-08-20",
-      "name": "Thursday Night Acoustic featuring Austin Attilio",
-      "time": "8:00 PM",
-      "venue": "Victoria Main Street Program",
-      "address": "",
-      "description": "Sing along at this weekly karaoke night with drinks and a casual crowd.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcRDseRH99N/"
-    },
-    {
-      "date": "2026-08-20",
-      "name": "Thursday Night Karaoke at 5D Tavern",
-      "time": "8:00 PM \u2013 11:00 PM",
-      "venue": "5D Tavern",
-      "address": "213 S Main St.",
-      "description": "Weekly karaoke with craft cocktails and late-night drink specials.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/victoriamainstreet/posts/-music-on-main-street-vtxthis-weekend-turn-up-the-volume-in-downtown-victoria-ga/1386079576888644/"
-    },
-    {
-      "date": "2026-08-20",
-      "name": "Karaoke Thursday with DJ Rocketman",
-      "time": "8:00 PM \u2013 2:00 AM",
-      "venue": "Dodge City Saloon",
-      "address": "205 N Star Dr, Suite H",
-      "description": "Join the zoo team and help support daily care, education, and events.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://dcsaloon.com"
-    },
-    {
-      "date": "2026-08-21",
-      "name": "Volunteer Opportunities at The Texas Zoo",
-      "time": "",
-      "venue": "The Texas Zoo",
-      "address": "",
-      "description": "Live music in the biergarden with a relaxed brewery setting.",
-      "icons": [
-        "music",
-        "drinks",
-        "outdoors"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/TheTexasZoo/posts/pfbid02famqqMuv9NMXgotsnPqqjDDYCPTANugJEgV1rMznhEkUTRZc9MoKm72PXjWm75pAl"
-    },
-    {
-      "date": "2026-08-21",
-      "name": "My Electrical Romance",
-      "time": "",
-      "venue": "Weber Brewing",
-      "address": "",
-      "description": "Enjoy live music, drinks, and a farm setting made for an easy night out.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcPRAtpHNT0/"
-    },
-    {
-      "date": "2026-08-21",
-      "name": "Live Music with Tyler Cannon",
-      "time": "7:00 PM",
-      "venue": "J Welch Farms",
-      "address": "",
-      "description": "Live music from local performers in a casual brewery setting.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcUCfGZCC19/"
-    },
-    {
-      "date": "2026-08-21",
-      "name": "Live Music at Aero Crafters",
-      "time": "7:00 PM \u2013 10:00 PM",
-      "venue": "Aero Crafters",
-      "address": "309 E. Crestwood Dr.",
-      "description": "Friday night live music with rotating bands and solo acts.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://aerocrafters.pub"
-    },
-    {
-      "date": "2026-08-22",
-      "name": "Bluebird Brunch sell out",
-      "time": "",
-      "venue": "Victoria Farmers Market",
-      "address": "",
-      "description": "Brunch is sold out for this pop-up market favorite.",
-      "icons": [
-        "food"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid0WzZLx1iEMdwkV4povzjX6wCjS4mhhWv8AVZHKs9c8Lv1J7pX9EytmoK22wPoyaw1l"
-    },
-    {
-      "date": "2026-08-22",
-      "name": "Chess Club",
-      "time": "12:00 PM \u2013 2:30 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
-      "description": "Casual chess games for players of all ages and skill levels.",
-      "icons": [
-        "family",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriapubliclibrary.org"
-    },
-    {
-      "date": "2026-08-22",
-      "name": "Palace Bingo \u2014 Saturday Evening",
-      "time": "5:30 PM \u2013 11:00 PM",
-      "venue": "Palace Bingo",
-      "address": "5306 Houston Hwy",
-      "description": "An evening bingo session with cash prizes and several rounds of play.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://palacebingo.org"
-    },
-    {
-      "date": "2026-08-22",
-      "name": "Live Music with Triple Threat",
-      "time": "7:00 PM",
-      "venue": "J Welch Farms",
-      "address": "",
-      "description": "Country and rock music with drinks and table reservations available.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcWnRVJj7_7/"
-    },
-    {
-      "date": "2026-08-22",
-      "name": "Live Music at Aero Crafters",
-      "time": "7:00 PM \u2013 10:00 PM",
-      "venue": "Aero Crafters",
-      "address": "309 E. Crestwood Dr.",
-      "description": "Live bands and drinks make for an easy Saturday night out.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://aerocrafters.pub"
-    },
-    {
-      "date": "2026-08-22",
-      "name": "Saving Kelly",
-      "time": "7:30 PM",
-      "venue": "Weber Brewing",
-      "address": "",
-      "description": "Live music in the biergarden as the sun sets over the brewery.",
-      "icons": [
-        "music",
-        "drinks",
-        "outdoors"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcTUIlXjVMz/"
-    },
-    {
-      "date": "2026-08-22",
-      "name": "Victoria Farmers' Market",
-      "time": "9:00 AM \u2013 1:00 PM",
-      "venue": "Victoria Farmers Market",
-      "address": "2805 N. Navarro St.",
-      "description": "Shop fresh produce, meats, honey, and baked goods from local vendors.",
-      "icons": [
-        "food",
-        "shopping"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket"
-    },
-    {
-      "date": "2026-08-23",
-      "name": "South Texas Blood & Tissue blood drive",
-      "time": "",
-      "venue": "Victoria Farmers Market",
-      "address": "",
-      "description": "Give blood and receive a thank-you gift card while supplies last.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid027nDSGJSTyz8meUKe97mEGdZxTbzoMCz87GPjMGWqNca9sUUqfvEfiKJG7G8pRykpl"
-    },
-    {
-      "date": "2026-08-23",
-      "name": "Champagne Sundaze brunch",
-      "time": "",
-      "venue": "Moonshine Drinkery",
-      "address": "",
-      "description": "A soulful brunch with good food, music, and laid-back weekend vibes.",
-      "icons": [
-        "food",
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcMC6YWgQMl/"
-    },
-    {
-      "date": "2026-08-23",
+      "date": "2026-08-31",
       "name": "Sunday Brunch",
       "time": "",
-      "venue": "J Welch Farms",
+      "venue": "The PumpHouse Riverside Restaurant & Bar",
       "address": "",
-      "description": "A relaxed brunch surrounded by the farm setting and a Sunday crowd.",
+      "description": "Weekend brunch featuring breakfast favorites, lunch plates, and drinks in a relaxed riverfront setting.",
       "icons": [
         "food",
+        "drinks",
         "outdoors"
       ],
       "free": false,
-      "url": "https://www.instagram.com/p/DcYwon_GqB1/"
+      "url": "https://www.facebook.com/VictoriaPumpHouse/posts/pfbid02c8GXMcci4AwuVw6Ac4bPdpTARQJwbpbqu9eLWEXYnrKZvTTN5Aty8SQcKYGNqBael"
     },
     {
-      "date": "2026-08-23",
-      "name": "Sunday Soul Supper",
-      "time": "02:30 PM",
-      "venue": "Moonshine Drinkery",
-      "address": "103 West Santa Rosa Street",
-      "description": "An easygoing supper spot with drinks and a lively social atmosphere.",
-      "icons": [
-        "drinks",
-        "food"
-      ],
-      "free": false,
-      "url": "https://allevents.in/victoria/sunday-soul-supper/100001996364841983"
-    },
-    {
-      "date": "2026-08-23",
-      "name": "ffcKIDS Donut Day",
-      "time": "09:00 AM",
-      "venue": "2002 E Mockingbird Ln, Victoria, TX, United States, Texas 77904",
-      "address": "2002 E Mockingbird Ln",
-      "description": "A family event with donuts and activities for kids of all ages.",
-      "icons": [
-        "family",
-        "food",
-        "free"
-      ],
-      "free": true,
-      "url": "https://allevents.in/victoria/ffckids-donut-day/200030510784323"
-    },
-    {
-      "date": "2026-08-23",
-      "name": "Victoria Farmers Market",
-      "time": "9:00 AM",
-      "venue": "Victoria Farmers Market",
-      "address": "",
-      "description": "Fresh local produce, baked goods, and seasonal market finds from area vendors.",
-      "icons": [
-        "food",
-        "shopping",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket/videos/1384589936382908/"
-    },
-    {
-      "date": "2026-08-24",
-      "name": "Arthritis Seminars",
-      "time": "",
-      "venue": "110 Medical Dr, Victoria, TX 77904-3127, United States",
-      "address": "110 Medical Dr",
-      "description": "A public seminar focused on arthritis education and health information.",
+      "date": "2026-08-31",
+      "name": "Grand Opening and Ribbon Cutting",
+      "time": "11:30 AM",
+      "venue": "3506 N Ben Wilson, Ste H, Victoria, TX 77901",
+      "address": "3506 N Ben Wilson St",
+      "description": "A public celebration marking a new business opening with remarks and a ribbon cutting.",
       "icons": [
         "community"
       ],
       "free": false,
-      "url": "https://allevents.in/victoria/arthritis-seminars/200030249250005"
+      "url": "https://allevents.in/victoria/grand-opening-and-ribbon-cutting/200030561263411"
     },
     {
-      "date": "2026-08-24",
+      "date": "2026-08-31",
+      "name": "Volunteer Information Session",
+      "time": "2:00 PM",
+      "venue": "The Nave Museum",
+      "address": "",
+      "description": "Learn about docent and event support roles and how to get involved at the museum.",
+      "icons": [
+        "arts",
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/TheNaveMuseum/posts/pfbid02qQdsfEWvmqyXXzMffvTu9YUXkA4Vbx2W5tKUbo5QaeWNnwAHrHLphWyvxxhXnJchl"
+    },
+    {
+      "date": "2026-08-31",
       "name": "Palace Bingo \u2014 Monday",
       "time": "5:30 PM \u2013 10:30 PM",
       "venue": "Palace Bingo",
@@ -552,573 +57,12 @@
       "url": "https://palacebingo.org"
     },
     {
-      "date": "2026-08-24",
-      "name": "Healthy South Texas: Harvest for Health",
-      "time": "5:30 PM \u2013 6:30 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St",
-      "description": "A garden-focused program that shares simple ways to grow healthier habits.",
-      "icons": [
-        "outdoors",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://business.victoriachamber.org/events/details/healthy-south-texas-harvest-for-health-4502"
-    },
-    {
-      "date": "2026-08-24",
-      "name": "VARRA Monday Night Run",
-      "time": "6:30 PM",
-      "venue": "Riverside Stadium Parking Lot",
-      "address": "Memorial Dr.",
-      "description": "Free weekly run or walk open to all fitness levels. A simple way to get active with a local group.",
-      "icons": [
-        "outdoors",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://runsignup.com/MemberOrg/VictoriaAreaRoadRunnersAssociation"
-    },
-    {
-      "date": "2026-08-25",
-      "name": "Young Adults - Back 2 School Bash",
-      "time": "07:00 PM",
-      "venue": "2002 E Mockingbird Ln, Victoria, TX, United States, Texas 77904",
-      "address": "2002 E Mockingbird Ln",
-      "description": "A public back-to-school gathering for young adults. Expect a community-focused kickoff to the school year.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://allevents.in/victoria/young-adults-back-2-school-bash/200030498231745"
-    },
-    {
-      "date": "2026-08-25",
-      "name": "Pool Shark Tuesdays \u2014 Free Pool",
-      "time": "5:00 PM \u2013 8:00 PM",
-      "venue": "Dodge City Saloon",
-      "address": "205 N Star Dr, Suite H",
-      "description": "Free pool and drink specials make this a laid-back weeknight stop. Come play a few rounds with friends.",
-      "icons": [
-        "drinks",
-        "free"
-      ],
-      "free": true,
-      "url": "https://dcsaloon.com"
-    },
-    {
-      "date": "2026-08-25",
-      "name": "Palace Bingo \u2014 Tuesday",
-      "time": "5:30 PM \u2013 10:30 PM",
-      "venue": "Palace Bingo",
-      "address": "5306 Houston Hwy",
-      "description": "Evening bingo with multiple games and cash prizes. Cards are available at the door.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://palacebingo.org"
-    },
-    {
-      "date": "2026-08-26",
-      "name": "VARRA Wednesday Night Run",
-      "time": "6:30 PM",
-      "venue": "Riverside Stadium Parking Lot",
-      "address": "Memorial Dr.",
-      "description": "Midweek run or walk for all levels. Join a welcoming local group for an active evening outdoors.",
-      "icons": [
-        "outdoors",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://runsignup.com/MemberOrg/VictoriaAreaRoadRunnersAssociation"
-    },
-    {
-      "date": "2026-08-26",
-      "name": "VAMA Rock & Blues Open Mic",
-      "time": "7:00 PM \u2013 10:00 PM",
-      "venue": "Aero Crafters",
-      "address": "309 E. Crestwood Dr.",
-      "description": "An open mic night featuring local rock and blues performers. All skill levels are welcome to join in.",
-      "icons": [
-        "music",
-        "drinks",
-        "free"
-      ],
-      "free": true,
-      "url": "https://aerocrafters.pub"
-    },
-    {
-      "date": "2026-08-26",
-      "name": "Karaoke + Cantina Night",
-      "time": "7:00 PM \u2013 close",
-      "venue": "La Cantina Tacos & Tequila",
-      "address": "212 S Main St.",
-      "description": "Karaoke night with drink and margarita specials. A casual spot for singing and a late-night bite.",
-      "icons": [
-        "music",
-        "drinks",
-        "food"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/lacantinavictoria/"
-    },
-    {
-      "date": "2026-08-26",
-      "name": "Victoria Farmers Market",
-      "time": "9:00 AM",
-      "venue": "Victoria Farmers Market",
-      "address": "",
-      "description": "A small local market with fresh goods and a few vendors. A quick stop for produce and neighborhood finds.",
-      "icons": [
-        "food",
-        "shopping"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid036HPz7gucixSa8fDYBxXEh6GZcPJBiD8LRcyaxADVLZ2pidgdfMtaMDLgQwY9REDl"
-    },
-    {
-      "date": "2026-08-26",
-      "name": "Victoria Farmers' Market",
-      "time": "9:00 AM \u2013 1:00 PM",
-      "venue": "Victoria Farmers Market",
-      "address": "2805 N. Navarro St.",
-      "description": "Shop local produce, meats, honey, baked goods and more from area vendors.",
-      "icons": [
-        "food",
-        "shopping"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket"
-    },
-    {
-      "date": "2026-08-26",
-      "name": "Wednesday Night Karaoke",
-      "time": "9:30 PM \u2013 2:00 AM",
-      "venue": "Shooters Bar",
-      "address": "4705 N Navarro St.",
-      "description": "Sing along with DJ-hosted karaoke and enjoy a lively late-night crowd.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/groups/384603922014986/posts/2419507071857984/"
-    },
-    {
-      "date": "2026-08-27",
-      "name": "Old Victoria Bourbon Society August Mixer",
-      "time": "",
-      "venue": "Moonshine Drinkery",
-      "address": "",
-      "description": "A bourbon-focused social mixer for members and guests.",
-      "icons": [
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcMC6YWgQMl/"
-    },
-    {
-      "date": "2026-08-27",
-      "name": "Cold Fashioneds Launch Party",
-      "time": "",
-      "venue": "Weber Brewing",
-      "address": "",
-      "description": "Celebrate the launch with a cocktail event featuring a local brewing collaboration.",
-      "icons": [
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcO38Methdq/"
-    },
-    {
-      "date": "2026-08-27",
-      "name": "Pop Up Storytime",
-      "time": "10:00AM \u2013 11:00AM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
-      "description": "Drop in for a classic library storytime for young children and caregivers.",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://victoriapl.librarycalendar.com/index.php/event/pop-storytime-9397"
-    },
-    {
-      "date": "2026-08-27",
-      "name": "Victoria Civic Chorus rehearsal",
-      "time": "11:30 PM",
-      "venue": "2200 E. Red River St., Victoria, TX",
-      "address": "",
-      "description": "The chorus resumes rehearsals; singers of all levels are welcome.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/events/1331481458751236/"
-    },
-    {
-      "date": "2026-08-27",
-      "name": "August Meeting",
-      "time": "2:30 PM",
-      "venue": "Victoria, Texas",
-      "address": "",
-      "description": "Bring your machine and unfinished projects for a casual sew day with fellow crafters.",
-      "icons": [
-        "arts",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1585785602926521/"
-    },
-    {
-      "date": "2026-08-27",
-      "name": "Story Strolls \u2014 Audiobook Walking Group",
-      "time": "5:30 PM \u2013 6:30 PM",
-      "venue": "Riverside Park",
-      "address": "405 Memorial Drive",
-      "description": "Walk the river trail while listening to an audiobook with the group.",
-      "icons": [
-        "outdoors",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
-    },
-    {
-      "date": "2026-08-27",
-      "name": "Thursday Night Karaoke at 5D Tavern",
-      "time": "8:00 PM \u2013 11:00 PM",
-      "venue": "5D Tavern",
-      "address": "213 S Main St.",
-      "description": "Weekly karaoke with craft cocktails and no cover.",
-      "icons": [
-        "music",
-        "drinks",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/victoriamainstreet/posts/-music-on-main-street-vtxthis-weekend-turn-up-the-volume-in-downtown-victoria-ga/1386079576888644/"
-    },
-    {
-      "date": "2026-08-27",
-      "name": "Karaoke Thursday with DJ Rocketman",
-      "time": "8:00 PM \u2013 2:00 AM",
-      "venue": "Dodge City Saloon",
-      "address": "205 N Star Dr, Suite H",
-      "description": "Sing along with DJ Rocketman and enjoy late-night drink specials.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://dcsaloon.com"
-    },
-    {
-      "date": "2026-08-28",
-      "name": "Staudt Bros performance",
-      "time": "",
-      "venue": "Moonshine Drinkery",
-      "address": "",
-      "description": "Local favorites bring a night of live music.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcMC6YWgQMl/"
-    },
-    {
-      "date": "2026-08-28",
-      "name": "DOCPAC's Annual Clear the Shelters Adoption Event!",
-      "time": "10:00 AM",
-      "venue": "135 Progress Dr, Victoria, TX, United States, Texas 77905",
-      "address": "135 Progress Dr",
-      "description": "An adoption event welcoming the public to meet pets in need of homes.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://allevents.in/victoria/docpacs-annual-clear-the-shelters-adoption-event/200030403984037"
-    },
-    {
-      "date": "2026-08-28",
-      "name": "Art Experience: Teen Edition",
-      "time": "6:00 PM",
-      "venue": "The Nave Museum",
-      "address": "",
-      "description": "Teens can explore a hands-on clay project inspired by local art.",
-      "icons": [
-        "arts",
-        "family",
-        "community"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/TheNaveMuseum/posts/pfbid02ZiUYT5oHBu9msy11AffacDeQMkfpikVpzZw8NzoAqj7CNuLVUZmyBwyfXaP7KcC1l"
-    },
-    {
-      "date": "2026-08-28",
-      "name": "Adult-ish Book Club",
-      "time": "6:00 PM \u2013 7:00 PM",
-      "venue": "Gardenhouse Coffee and Espresso Bar",
-      "address": "104 Teakwood Dr Ste 100",
-      "description": "A book club meetup for readers looking for conversation and community.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3882"
-    },
-    {
-      "date": "2026-08-28",
-      "name": "Live Music at Aero Crafters",
-      "time": "7:00 PM \u2013 10:00 PM",
-      "venue": "Aero Crafters",
-      "address": "309 E. Crestwood Dr.",
-      "description": "Enjoy a rotating lineup of live bands and solo artists.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://aerocrafters.pub"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "PMOTPD \u201cPlay for Peace\u201d",
-      "time": "06:00 PM",
-      "venue": "905 S. Bridge St., Victoria, TX",
-      "address": "905 S Bridge St",
-      "description": "A community gathering focused on peace and connection.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://allevents.in/victoria/pmotpd-play-for-peace/200030196958524"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "Nordic Winds through Eastern Fire | Soo Bae, cello",
-      "time": "07:30 PM",
-      "venue": "1002 Sam Houston Dr, Victoria, TX 77901, United States",
-      "address": "1002 Sam Houston Dr",
-      "description": "A chamber-style performance featuring cello and dynamic repertoire from Nordic and Eastern traditions.",
-      "icons": [
-        "music",
-        "arts"
-      ],
-      "free": false,
-      "url": "https://allevents.in/victoria/nordic-winds-through-eastern-fire-soo-bae-cello/200030178986813"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "Workforce Solutions Golden Crescent 2026 Child Care Symposium",
-      "time": "08:00 AM",
-      "venue": "Victoria College Emerging Technology Complex",
-      "address": "7403 Lone Tree Road",
-      "description": "A public symposium focused on child care issues, resources, and workforce support.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://allevents.in/victoria/workforce-solutions-golden-crescent-2026-child-care-symposium/100001992828624060"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "A Wholehearted Marriage- One Day Marriage Conference at Northside Baptist Church",
-      "time": "08:15 AM",
-      "venue": "4100 N Laurent St, Victoria, TX, United States, Texas 77901",
-      "address": "4100 N Laurent St",
-      "description": "A marriage-focused conference with practical encouragement and teaching for couples.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://allevents.in/victoria/a-wholehearted-marriage-one-day-marriage-conference-at-northside-baptist-church/200030510754604"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "Jake Bush",
-      "time": "09:00 PM",
-      "venue": "Moonshine Drinkery",
-      "address": "103 W Santa Rosa St",
-      "description": "Live country music and a relaxed night out at the drinkery.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://allevents.in/victoria/jake-bush/200030011002636"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "Children's Art Experience",
-      "time": "10:00 AM",
-      "venue": "The Nave Museum",
-      "address": "",
-      "description": "Kids create textured clay tiles in an art activity inspired by a museum exhibit.",
-      "icons": [
-        "arts",
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/TheNaveMuseum/posts/pfbid02ZiUYT5oHBu9msy11AffacDeQMkfpikVpzZw8NzoAqj7CNuLVUZmyBwyfXaP7KcC1l"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "Victoria Texas Metal Scene Resurrection",
-      "time": "10:00 PM",
-      "venue": "Lions Club Pavilion, Riverside Park, Victoria, Texas 77901",
-      "address": "",
-      "description": "A full day of heavy local bands, loud riffs, and community energy.",
-      "icons": [
-        "music",
-        "community",
-        "outdoors"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/3130121423844568/"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "Chess Club",
-      "time": "12:00 PM \u2013 2:30 PM",
-      "venue": "Victoria Public Library",
-      "address": "302 N. Main St.",
-      "description": "Casual chess games for players of all skill levels and ages.",
-      "icons": [
-        "family",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.victoriapubliclibrary.org"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "Palace Bingo \u2014 Saturday Evening",
-      "time": "5:30 PM \u2013 11:00 PM",
-      "venue": "Palace Bingo",
-      "address": "5306 Houston Hwy",
-      "description": "Classic bingo with multiple games and cash prizes.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://palacebingo.org"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "Live Music at Aero Crafters",
-      "time": "7:00 PM \u2013 10:00 PM",
-      "venue": "Aero Crafters",
-      "address": "309 E. Crestwood Dr.",
-      "description": "Live local bands keep Saturday nights lively with rotating lineups.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://aerocrafters.pub"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "Nordic Winds through Eastern Fire",
-      "time": "7:30 PM \u2013 9:30 PM",
-      "venue": "Victoria Fine Arts Center",
-      "address": "",
-      "description": "An evening of national music inspired by Finland, Russia, and China.",
-      "icons": [
-        "music",
-        "arts"
-      ],
-      "free": false,
-      "url": "https://business.victoriachamber.org/events/details/nordic-winds-through-eastern-fire-4426"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "Victoria Farmers Market",
-      "time": "9:00 AM",
-      "venue": "Victoria Farmers Market",
-      "address": "",
-      "description": "Fresh local produce, meats, honey, and baked goods from area vendors.",
-      "icons": [
-        "food",
-        "shopping",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid0jWoi2zLbrVdHzNzYgybMkxseddCWX4wxPD66J1rWFa6BU5fvaxfdmsVjzNxh21CPl"
-    },
-    {
-      "date": "2026-08-29",
-      "name": "Victoria Farmers' Market",
-      "time": "9:00 AM \u2013 1:00 PM",
-      "venue": "Victoria Farmers Market",
-      "address": "2805 N. Navarro St.",
-      "description": "Shop for fresh produce, meats, honey, and baked goods from local vendors.",
-      "icons": [
-        "food",
-        "shopping",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket"
-    },
-    {
-      "date": "2026-08-30",
-      "name": "Lived in Bronde- Victoria, Tx.",
-      "time": "09:00 AM",
-      "venue": "Top Avenue Salon",
-      "address": "106 Jason Street",
-      "description": "A public community gathering open to anyone interested in attending.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://allevents.in/victoria/lived-in-bronde-victoria-tx/100001994511550739"
-    },
-    {
-      "date": "2026-08-31",
-      "name": "Volunteer Information Session",
-      "time": "2:00 PM",
-      "venue": "The Nave Museum",
-      "address": "",
-      "description": "Learn about volunteer roles, ask questions, and pick up registration materials.",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/TheNaveMuseum/posts/pfbid0ouV2jcP2p5Z1SXESRvXneUvgNrbJnsSKn5HHMJkDy7YbszceM54Cg4BkxZQqNNVel"
-    },
-    {
-      "date": "2026-08-31",
-      "name": "Palace Bingo \u2014 Monday",
-      "time": "5:30 PM \u2013 10:30 PM",
-      "venue": "Palace Bingo",
-      "address": "5306 Houston Hwy",
-      "description": "An evening bingo session with cash prizes and cards sold at the door.",
-      "icons": [
-        "community"
-      ],
-      "free": false,
-      "url": "https://palacebingo.org"
-    },
-    {
       "date": "2026-08-31",
       "name": "True Crime Book Club",
       "time": "6:00 PM \u2013 7:00 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St",
-      "description": "Join a discussion of true crime titles with fellow readers.",
+      "description": "Join a lively book club discussion focused on true crime titles and cases.",
       "icons": [
         "community",
         "free"
@@ -1132,7 +76,7 @@
       "time": "6:30 PM",
       "venue": "Riverside Stadium Parking Lot",
       "address": "Memorial Dr.",
-      "description": "Weekly group run or walk for all levels. Just show up and join the pace that fits you.",
+      "description": "A weekly group run and walk for all experience levels. Just show up and join in.",
       "icons": [
         "outdoors",
         "community",
@@ -1143,38 +87,11 @@
     },
     {
       "date": "2026-09-01",
-      "name": "Geeks Who Drink Trivia",
-      "time": "",
-      "venue": "Weber Brewing",
-      "address": "",
-      "description": "Fast-paced trivia with music, movies, and general knowledge. A casual night out with drink specials.",
-      "icons": [
-        "drinks",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcZlAwTtGkB/"
-    },
-    {
-      "date": "2026-09-01",
-      "name": "The Mousetrap",
-      "time": "",
-      "venue": "Theatre Victoria",
-      "address": "",
-      "description": "Agatha Christie\u2019s classic mystery comes to the stage. Expect a suspenseful live theater performance.",
-      "icons": [
-        "arts"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcRM-b3oNz9/"
-    },
-    {
-      "date": "2026-09-01",
       "name": "\ud83e\ude77OPENING DAY EXTRAVAGANZA\ud83e\ude77",
       "time": "09:00 AM",
       "venue": "1207 N Wheeler St",
       "address": "1207 N Wheeler St",
-      "description": "A public community kickoff with activities and a welcoming local crowd.",
+      "description": "A public opening-day celebration for the community with a festive atmosphere.",
       "icons": [
         "community"
       ],
@@ -1183,26 +100,11 @@
     },
     {
       "date": "2026-09-01",
-      "name": "Safe Riders Education Class @ Victoria Municipal Court Public Safety Headquarters",
-      "time": "3:00 PM",
-      "venue": "2525 N Main St, Victoria, TX 77901, United States",
-      "address": "",
-      "description": "Learn proper car seat installation and child passenger safety from certified technicians. Eligible families may receive a free car seat.",
-      "icons": [
-        "family",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/events/1751995602660747/"
-    },
-    {
-      "date": "2026-09-01",
       "name": "Pool Shark Tuesdays \u2014 Free Pool",
       "time": "5:00 PM \u2013 8:00 PM",
       "venue": "Dodge City Saloon",
       "address": "205 N Star Dr, Suite H",
-      "description": "Free pool with drink specials and plenty of tables. A laid-back midweek hangout.",
+      "description": "Free pool night with drink specials and plenty of tables for casual play.",
       "icons": [
         "drinks",
         "free"
@@ -1216,7 +118,7 @@
       "time": "5:30 PM \u2013 10:30 PM",
       "venue": "Palace Bingo",
       "address": "5306 Houston Hwy",
-      "description": "Tuesday night bingo with cash prizes and multiple games. Cards are available at the door.",
+      "description": "Tuesday evening bingo with multiple games and cash prizes. Cards are available at the door.",
       "icons": [
         "community"
       ],
@@ -1225,17 +127,17 @@
     },
     {
       "date": "2026-09-01",
-      "name": "Alzheimer\u2019s Association: 10 Warning Signs of Alzheimer\u2019s Disease",
+      "name": "Alzheimer\u2019s Association: 10 Warning Signs of Alzh",
       "time": "5:30PM \u2013 6:30PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Learn the 10 warning signs of Alzheimer\u2019s disease in this health-focused community workshop.",
+      "description": "Learn the 10 warning signs of Alzheimer\u2019s in this health-focused workshop. A helpful session for caregivers and families.",
       "icons": [
         "community",
         "free"
       ],
       "free": true,
-      "url": "https://victoriapl.librarycalendar.com/index.php/event/alzheimers-workshop-10-warning-signs-8877"
+      "url": "https://victoriapl.librarycalendar.com/event/alzheimers-workshop-10-warning-signs-8877"
     },
     {
       "date": "2026-09-01",
@@ -1243,27 +145,26 @@
       "time": "6:00PM \u2013 7:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Join fellow readers for a relaxed discussion of the month\u2019s pick and a chance to share recommendations.",
+      "description": "Join fellow readers for a relaxed book discussion. A welcoming library program for local book lovers.",
       "icons": [
         "community",
         "free"
       ],
       "free": true,
-      "url": "https://victoriapl.librarycalendar.com/index.php/event/bookish-society-book-club-8994"
+      "url": "https://victoriapl.librarycalendar.com/event/bookish-society-book-club-8994"
     },
     {
       "date": "2026-09-02",
-      "name": "Geeks Who Drink Trivia",
+      "name": "Arthritis Seminars",
       "time": "",
-      "venue": "Weber Brewing",
-      "address": "",
-      "description": "Fast-paced trivia with rounds that mix pop culture, music, movies, and general knowledge.",
+      "venue": "110 Medical Dr, Victoria, TX 77904-3127, United States",
+      "address": "110 Medical Dr",
+      "description": "An open-to-the-public seminar on arthritis awareness and care. Expect practical information and health resources.",
       "icons": [
-        "music",
-        "drinks"
+        "community"
       ],
       "free": false,
-      "url": "https://www.instagram.com/p/DcZlAwTtGkB/"
+      "url": "https://allevents.in/victoria/arthritis-seminars/200030249250005"
     },
     {
       "date": "2026-09-02",
@@ -1271,7 +172,7 @@
       "time": "07:00 PM",
       "venue": "2002 E Mockingbird Ln, Victoria, TX, United States, Texas 77904",
       "address": "2002 E Mockingbird Ln",
-      "description": "An open community gathering centered on praise, prayer, and worship.",
+      "description": "A night of praise, prayer, and worship. Open to the public and centered on faith and fellowship.",
       "icons": [
         "community"
       ],
@@ -1284,14 +185,40 @@
       "time": "10:00AM \u2013 11:00AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "A practical workshop with tips and ideas for making family dinners easier and healthier.",
+      "description": "Get practical ideas for healthier family meals and home cooking. A family-friendly workshop with nutrition tips.",
       "icons": [
         "food",
         "family",
         "community"
       ],
       "free": true,
-      "url": "https://victoriapl.librarycalendar.com/index.php/event/hst-family-mealtime-8869"
+      "url": "https://victoriapl.librarycalendar.com/event/hst-family-mealtime-8869"
+    },
+    {
+      "date": "2026-09-02",
+      "name": "Geeks who Drink Trivia night",
+      "time": "12:00 AM",
+      "venue": "206 W. Water street, Victoria, TX",
+      "address": "",
+      "description": "A lively trivia night with prizes for clever teams and quick thinkers. Bring your best general knowledge.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1737718647376768/"
+    },
+    {
+      "date": "2026-09-02",
+      "name": "Geeks who Drink Small Batch Trivia",
+      "time": "12:00 AM",
+      "venue": "206 W. Water street, Victoria, TX",
+      "address": "",
+      "description": "A lively trivia night with prizes for clever teams and quick thinkers. Bring your best general knowledge.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/2279990932748984/"
     },
     {
       "date": "2026-09-02",
@@ -1299,13 +226,13 @@
       "time": "6:00PM \u2013 7:30PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "A casual pickleball session for players of all skill levels.",
+      "description": "Casual pickleball play for all skill levels. A friendly way to get moving and meet other players.",
       "icons": [
         "community",
         "free"
       ],
       "free": true,
-      "url": "https://victoriapl.librarycalendar.com/index.php/event/pickleball-games-9308"
+      "url": "https://victoriapl.librarycalendar.com/event/pickleball-games-9308"
     },
     {
       "date": "2026-09-02",
@@ -1313,7 +240,7 @@
       "time": "6:30 PM",
       "venue": "Riverside Stadium Parking Lot",
       "address": "Memorial Dr.",
-      "description": "A friendly group run and walk with options for all paces.",
+      "description": "Join a midweek group run or walk with VARRA. All levels are welcome.",
       "icons": [
         "outdoors",
         "community",
@@ -1328,10 +255,10 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Weekly open mic featuring local musicians and a laid-back jam atmosphere.",
+      "description": "Weekly rock and blues open mic with room for local musicians to jam. All skill levels welcome.",
       "icons": [
         "music",
-        "drinks"
+        "community"
       ],
       "free": false,
       "url": "https://aerocrafters.pub"
@@ -1342,10 +269,9 @@
       "time": "7:00 PM \u2013 close",
       "venue": "La Cantina Tacos & Tequila",
       "address": "212 S Main St.",
-      "description": "Karaoke night with food, drinks, and a lively sing-along crowd.",
+      "description": "Karaoke, drink specials, and a lively weeknight crowd. A fun stop for singing and socializing.",
       "icons": [
         "music",
-        "food",
         "drinks"
       ],
       "free": false,
@@ -1353,32 +279,16 @@
     },
     {
       "date": "2026-09-02",
-      "name": "Victoria Farmers Market",
-      "time": "9:00 AM",
-      "venue": "Victoria Farmers Market",
-      "address": "",
-      "description": "Weekly farmers market with fresh local produce and vendor goods.",
-      "icons": [
-        "food",
-        "shopping",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid0LoWkeQj3rtXihyK6RycGLqNZM9BM1RuCowUYmx41jH11AK7xv73R7uUrjUAESapDl"
-    },
-    {
-      "date": "2026-09-02",
       "name": "Victoria Farmers' Market",
       "time": "9:00 AM \u2013 1:00 PM",
       "venue": "Victoria Farmers Market",
       "address": "2805 N. Navarro St.",
-      "description": "Local vendors offer produce, meats, honey, baked goods, and other fresh items.",
+      "description": "Shop fresh produce, meats, baked goods, and other local goods from area vendors.",
       "icons": [
         "food",
-        "shopping",
-        "free"
+        "shopping"
       ],
-      "free": true,
+      "free": false,
       "url": "https://www.facebook.com/VictoriaFarmersMarket"
     },
     {
@@ -1387,7 +297,7 @@
       "time": "9:30 PM \u2013 2:00 AM",
       "venue": "Shooters Bar",
       "address": "4705 N Navarro St.",
-      "description": "Late-night karaoke with DJ Shane, plus a dance floor and drink specials.",
+      "description": "Sing along at a late-night karaoke session with drink specials and a big dance floor.",
       "icons": [
         "music",
         "drinks"
@@ -1401,7 +311,7 @@
       "time": "06:00 PM",
       "venue": "DeTar Hospital North",
       "address": "101 Medical Dr",
-      "description": "Educational classes covering pregnancy, labor, and newborn care.",
+      "description": "Prenatal and childbirth classes with practical guidance for expectant parents.",
       "icons": [
         "community"
       ],
@@ -1414,13 +324,14 @@
       "time": "4:00PM \u2013 5:00PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Hands-on LEGO fun for kids and families.",
+      "description": "Hands-on LEGO building for kids and families. A creative drop-in activity at the library.",
       "icons": [
         "family",
+        "arts",
         "free"
       ],
       "free": true,
-      "url": "https://victoriapl.librarycalendar.com/index.php/event/lego-lab-8986"
+      "url": "https://victoriapl.librarycalendar.com/event/lego-lab-8986"
     },
     {
       "date": "2026-09-03",
@@ -1428,10 +339,9 @@
       "time": "5:30 PM \u2013 6:30 PM",
       "venue": "Riverside Park",
       "address": "405 Memorial Drive",
-      "description": "Walk the trail while listening to an audiobook with the group.",
+      "description": "Join a laid-back group walk while listening to an audiobook along the river trail.",
       "icons": [
         "outdoors",
-        "community",
         "free"
       ],
       "free": true,
@@ -1443,7 +353,7 @@
       "time": "8:00 PM \u2013 11:00 PM",
       "venue": "5D Tavern",
       "address": "213 S Main St.",
-      "description": "Weekly karaoke in a cocktail-lounge setting with no cover charge.",
+      "description": "Weekly karaoke night with craft cocktails and a lively downtown crowd.",
       "icons": [
         "music",
         "drinks",
@@ -1458,7 +368,7 @@
       "time": "8:00 PM \u2013 2:00 AM",
       "venue": "Dodge City Saloon",
       "address": "205 N Star Dr, Suite H",
-      "description": "Karaoke night with DJ Rocketman and discounted shots and cocktails.",
+      "description": "Sing along at this weekly karaoke night hosted by DJ Rocketman.",
       "icons": [
         "music",
         "drinks"
@@ -1472,13 +382,13 @@
       "time": "9:30AM \u2013 10:00AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Songs, rhymes, and movement for toddlers and caregivers.",
+      "description": "A short, engaging story time designed for toddlers and their caregivers.",
       "icons": [
         "family",
         "free"
       ],
       "free": true,
-      "url": "https://victoriapl.librarycalendar.com/index.php/event/toddler-story-time-8960"
+      "url": "https://victoriapl.librarycalendar.com/event/toddler-story-time-8960"
     },
     {
       "date": "2026-09-04",
@@ -1486,13 +396,12 @@
       "time": "07:00 PM",
       "venue": "DeLeon Plaza",
       "address": "101 N Main St",
-      "description": "A free outdoor street-dance night with cumbia and Tejano music.",
+      "description": "Live music in a public gathering space with a rotating local lineup.",
       "icons": [
         "music",
-        "outdoors",
         "community"
       ],
-      "free": true,
+      "free": false,
       "url": "https://allevents.in/victoria/nite-tunes-featuring-grupo-lokura-and-amanda-solis/200030344228953"
     },
     {
@@ -1501,7 +410,7 @@
       "time": "11:00 PM",
       "venue": "Victoria, Texas",
       "address": "",
-      "description": "A festive community celebration for Labor Day weekend.",
+      "description": "Celebrate Labor Day with a local community gathering and holiday activities.",
       "icons": [
         "community"
       ],
@@ -1514,7 +423,7 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Live local bands and solo artists bring Friday-night entertainment.",
+      "description": "Enjoy Friday night live sets from local bands and solo performers.",
       "icons": [
         "music",
         "drinks"
@@ -1524,13 +433,12 @@
     },
     {
       "date": "2026-09-05",
-      "name": "Comedy Show with Dallas comedian Crux Crawford",
+      "name": "Comedy Show with Crux Crawford",
       "time": "",
       "venue": "Moonshine Drinkery",
       "address": "",
-      "description": "An evening of stand-up comedy with Dallas comic Crux Crawford.",
+      "description": "An adult comedy show featuring stand-up entertainment and a full bar.",
       "icons": [
-        "arts",
         "drinks"
       ],
       "free": false,
@@ -1542,7 +450,7 @@
       "time": "06:00 PM",
       "venue": "Z Venue",
       "address": "2804 N. Laurent",
-      "description": "A reunion gathering for Stroman graduates from multiple class years.",
+      "description": "Public reunion for Stroman alumni from the graduating classes of 1969-2000. A chance to reconnect and catch up with classmates.",
       "icons": [
         "community"
       ],
@@ -1555,10 +463,9 @@
       "time": "12:00 PM \u2013 2:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Casual chess for all ages and skill levels.",
+      "description": "Casual chess play for beginners and experienced players alike. A relaxed way to meet fellow players and sharpen your game.",
       "icons": [
         "family",
-        "community",
         "free"
       ],
       "free": true,
@@ -1570,7 +477,7 @@
       "time": "5:30 PM \u2013 11:00 PM",
       "venue": "Palace Bingo",
       "address": "5306 Houston Hwy",
-      "description": "Bingo with cash prizes and multiple games each session.",
+      "description": "Traditional bingo with multiple games and cash prizes. Expect a lively evening of cards, calls, and friendly competition.",
       "icons": [
         "community"
       ],
@@ -1583,7 +490,7 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Live bands on Saturday nights with craft beer, cocktails, and a laid-back patio vibe.",
+      "description": "Live bands bring a Saturday-night set of local music and a social atmosphere. Check ahead for the current lineup.",
       "icons": [
         "music",
         "drinks"
@@ -1593,40 +500,11 @@
     },
     {
       "date": "2026-09-05",
-      "name": "Vacant Wire",
-      "time": "7:30 PM",
-      "venue": "Weber Brewing",
-      "address": "",
-      "description": "High-energy rock with a lively crowd and a bar-side atmosphere.",
-      "icons": [
-        "music",
-        "drinks"
-      ],
-      "free": false,
-      "url": "https://www.instagram.com/p/DcYjDyhCAPd/"
-    },
-    {
-      "date": "2026-09-05",
-      "name": "Victoria Farmers Market",
-      "time": "9:00 AM",
-      "venue": "Victoria Farmers Market",
-      "address": "",
-      "description": "Fresh local produce, meats, honey, and baked goods from area vendors.",
-      "icons": [
-        "food",
-        "shopping",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid0jWoi2zLbrVdHzNzYgybMkxseddCWX4wxPD66J1rWFa6BU5fvaxfdmsVjzNxh21CPl"
-    },
-    {
-      "date": "2026-09-05",
       "name": "Victoria Farmers' Market",
       "time": "9:00 AM \u2013 1:00 PM",
       "venue": "Victoria Farmers Market",
       "address": "2805 N. Navarro St.",
-      "description": "Fresh local produce, meats, honey, and baked goods from area vendors.",
+      "description": "Shop fresh produce, meats, honey, and baked goods from local vendors. A popular stop for weekly groceries and specialty items.",
       "icons": [
         "food",
         "shopping",
@@ -1641,9 +519,8 @@
       "time": "9:00 PM",
       "venue": "Victoria, Texas",
       "address": "",
-      "description": "Family and friends gather to celebrate a new arrival with gifts and good wishes.",
+      "description": "A community baby shower celebrating the upcoming arrival of a new baby. Guests can stop by to share in the celebration.",
       "icons": [
-        "family",
         "community"
       ],
       "free": false,
@@ -1655,13 +532,554 @@
       "time": "09:00 PM",
       "venue": "Riverside Park",
       "address": "Riverside Park",
-      "description": "Outdoor entertainment with a family-friendly crowd and a relaxed park setting.",
+      "description": "An outdoor gathering at the park with a family-friendly vibe. Expect an open-air community event with space to relax and enjoy.",
       "icons": [
-        "outdoors",
-        "family"
+        "family",
+        "outdoors"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/la-mafia-in-victoria/3300030392084104"
+    },
+    {
+      "date": "2026-09-07",
+      "name": "Labor Day",
+      "time": "",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St.",
+      "description": "Public holiday observance at the library. Visitors can join in a simple community-minded program or visit during regular hours.",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://victoriapl.librarycalendar.com/event/labor-day-7282"
+    },
+    {
+      "date": "2026-09-07",
+      "name": "Palace Bingo \u2014 Monday",
+      "time": "5:30 PM \u2013 10:30 PM",
+      "venue": "Palace Bingo",
+      "address": "5306 Houston Hwy",
+      "description": "Evening bingo with cash prizes and cards available at the door.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://palacebingo.org"
+    },
+    {
+      "date": "2026-09-07",
+      "name": "VARRA Monday Night Run",
+      "time": "6:30 PM",
+      "venue": "Riverside Stadium Parking Lot",
+      "address": "Memorial Dr.",
+      "description": "Join a weekly group run or walk with VARRA. All levels are welcome.",
+      "icons": [
+        "outdoors",
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://runsignup.com/MemberOrg/VictoriaAreaRoadRunnersAssociation"
+    },
+    {
+      "date": "2026-09-08",
+      "name": "Baby Hour: Pages to Play",
+      "time": "10:00AM \u2013 11:00AM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St.",
+      "description": "Baby-friendly story time with songs, books, and early learning fun.",
+      "icons": [
+        "family",
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://victoriapl.librarycalendar.com/event/baby-hour-pages-play-8911"
+    },
+    {
+      "date": "2026-09-08",
+      "name": "Pool Shark Tuesdays \u2014 Free Pool",
+      "time": "5:00 PM \u2013 8:00 PM",
+      "venue": "Dodge City Saloon",
+      "address": "205 N Star Dr, Suite H",
+      "description": "Enjoy free pool and drink specials during this weekly bar night.",
+      "icons": [
+        "drinks",
+        "free"
+      ],
+      "free": true,
+      "url": "https://dcsaloon.com"
+    },
+    {
+      "date": "2026-09-08",
+      "name": "Palace Bingo \u2014 Tuesday",
+      "time": "5:30 PM \u2013 10:30 PM",
+      "venue": "Palace Bingo",
+      "address": "5306 Houston Hwy",
+      "description": "Evening bingo with cash prizes and multiple games. Cards sold at the door.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://palacebingo.org"
+    },
+    {
+      "date": "2026-09-08",
+      "name": "Adult Craft Night: Bedazzled Books",
+      "time": "5:30PM \u2013 7:00PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St.",
+      "description": "A hands-on craft night creating decorative book projects.",
+      "icons": [
+        "arts",
+        "free"
+      ],
+      "free": true,
+      "url": "https://victoriapl.librarycalendar.com/event/adult-program-9311"
+    },
+    {
+      "date": "2026-09-09",
+      "name": "Chamber Luncheon",
+      "time": "11:15 AM \u2013 1:00 PM",
+      "venue": "Texas A&M University - Galvan Hall 3006 N Ben Wilson",
+      "address": "",
+      "description": "Community luncheon featuring local leaders and sponsored remarks.",
+      "icons": [
+        "food",
+        "community"
+      ],
+      "free": false,
+      "url": "https://business.victoriachamber.org/events/details/chamber-luncheon-4515"
+    },
+    {
+      "date": "2026-09-09",
+      "name": "VARRA Wednesday Night Run",
+      "time": "6:30 PM",
+      "venue": "Riverside Stadium Parking Lot",
+      "address": "Memorial Dr.",
+      "description": "Join a midweek group run or walk with VARRA. All levels are welcome.",
+      "icons": [
+        "outdoors",
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://runsignup.com/MemberOrg/VictoriaAreaRoadRunnersAssociation"
+    },
+    {
+      "date": "2026-09-09",
+      "name": "VAMA Rock & Blues Open Mic",
+      "time": "7:00 PM \u2013 10:00 PM",
+      "venue": "Aero Crafters",
+      "address": "309 E. Crestwood Dr.",
+      "description": "Weekly rock and blues open mic jam for local musicians of all skill levels.",
+      "icons": [
+        "music",
+        "drinks",
+        "free"
+      ],
+      "free": true,
+      "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-09-09",
+      "name": "Karaoke + Cantina Night",
+      "time": "7:00 PM \u2013 close",
+      "venue": "La Cantina Tacos & Tequila",
+      "address": "212 S Main St.",
+      "description": "Weekly karaoke night with drink specials and a lively late-night crowd.",
+      "icons": [
+        "drinks",
+        "music",
+        "food"
+      ],
+      "free": true,
+      "url": "https://www.instagram.com/lacantinavictoria/"
+    },
+    {
+      "date": "2026-09-09",
+      "name": "Victoria Farmers' Market",
+      "time": "9:00 AM \u2013 1:00 PM",
+      "venue": "Victoria Farmers Market",
+      "address": "2805 N. Navarro St.",
+      "description": "Shop local produce, meats, baked goods, and other fresh market favorites.",
+      "icons": [
+        "food",
+        "shopping",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/VictoriaFarmersMarket"
+    },
+    {
+      "date": "2026-09-09",
+      "name": "Wednesday Night Karaoke",
+      "time": "9:30 PM \u2013 2:00 AM",
+      "venue": "Shooters Bar",
+      "address": "4705 N Navarro St.",
+      "description": "Late-night karaoke with a big dance floor and drink specials.",
+      "icons": [
+        "drinks",
+        "music",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/groups/384603922014986/posts/2419507071857984/"
+    },
+    {
+      "date": "2026-09-10",
+      "name": "John W. Stormont Lecture: The Origins of Texas\u2019 White Primary Election System, 1876-1906",
+      "time": "05:30 PM",
+      "venue": "Museum of the Coastal Bend - Victoria, TX",
+      "address": "2200 East Red River St.",
+      "description": "Lecture exploring the origins of Texas\u2019 White Primary Election System.",
+      "icons": [
+        "community",
+        "arts",
+        "free"
+      ],
+      "free": true,
+      "url": "https://allevents.in/victoria/john-w-stormont-lecture-the-origins-of-texas-white-primary-election-system-1876-1906/200030598203019"
+    },
+    {
+      "date": "2026-09-10",
+      "name": "Mahjong Open Play @ Vida Cafe & Market",
+      "time": "06:00 PM",
+      "venue": "Vida Cafe &amp; Market",
+      "address": "105 Spring Green Boulevard",
+      "description": "Open play for mahjong with a relaxed, social meetup atmosphere.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://allevents.in/victoria/mahjong-open-play-vida-cafe-and-market/100001998906645586"
+    },
+    {
+      "date": "2026-09-10",
+      "name": "Maker's Meetup: Decorate Jenga",
+      "time": "4:00PM \u2013 5:00PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St.",
+      "description": "A hands-on craft meetup where attendees decorate and customize a Jenga set.",
+      "icons": [
+        "arts",
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://victoriapl.librarycalendar.com/event/makers-meetup-paint-jenga-8988"
+    },
+    {
+      "date": "2026-09-10",
+      "name": "Story Strolls \u2014 Audiobook Walking Group",
+      "time": "5:30 PM \u2013 6:30 PM",
+      "venue": "Riverside Park",
+      "address": "405 Memorial Drive",
+      "description": "A guided audiobook walk through the park along the Guadalupe River.",
+      "icons": [
+        "outdoors",
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriatx.gov/government/departments/parks-recreation"
+    },
+    {
+      "date": "2026-09-10",
+      "name": "Thursday Night Karaoke at 5D Tavern",
+      "time": "8:00 PM \u2013 11:00 PM",
+      "venue": "5D Tavern",
+      "address": "213 S Main St.",
+      "description": "Weekly karaoke in an upscale downtown cocktail lounge with craft drinks and a no-cover vibe.",
+      "icons": [
+        "music",
+        "drinks",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/victoriamainstreet/posts/-music-on-main-street-vtxthis-weekend-turn-up-the-volume-in-downtown-victoria-ga/1386079576888644/"
+    },
+    {
+      "date": "2026-09-10",
+      "name": "Karaoke Thursday with DJ Rocketman",
+      "time": "8:00 PM \u2013 2:00 AM",
+      "venue": "Dodge City Saloon",
+      "address": "205 N Star Dr, Suite H",
+      "description": "Weekly karaoke with drink specials and a late-night bar crowd.",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://dcsaloon.com"
+    },
+    {
+      "date": "2026-09-10",
+      "name": "Toddler Story Time",
+      "time": "9:30AM \u2013 10:00AM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St.",
+      "description": "A library story time for toddlers with songs, stories, and age-appropriate fun.",
+      "icons": [
+        "family",
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://victoriapl.librarycalendar.com/event/toddler-story-time-8961"
+    },
+    {
+      "date": "2026-09-11",
+      "name": "Public Dance with Nashville Recording artist and Texas Music Singer David Adam Byrnes",
+      "time": "08:00 PM",
+      "venue": "15736 FM 1686, Dacosta, TX",
+      "address": "15736 FM-1686",
+      "description": "Live music event featuring a Texas artist and dance-night atmosphere.",
+      "icons": [
+        "music",
+        "community"
+      ],
+      "free": false,
+      "url": "https://allevents.in/victoria/public-dance-with-nashville-recording-artist-and-texas-music-singer-david-adam-byrnes/200030596652050"
+    },
+    {
+      "date": "2026-09-11",
+      "name": "Sara\u2019s 24th Bday Party!!",
+      "time": "12:00 AM",
+      "venue": "Victoria, Texas",
+      "address": "",
+      "description": "A casual birthday celebration with swimming, fishing, dinner, and late-night drinks.",
+      "icons": [
+        "community",
+        "food",
+        "outdoors"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1000080559753747/"
+    },
+    {
+      "date": "2026-09-11",
+      "name": "Live Music at Aero Crafters",
+      "time": "7:00 PM \u2013 10:00 PM",
+      "venue": "Aero Crafters",
+      "address": "309 E. Crestwood Dr.",
+      "description": "Weekly live music featuring local bands and solo performers.",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-09-12",
+      "name": "Corn Maze Season Mandatory Orientation",
+      "time": "",
+      "venue": "J Welch Farms",
+      "address": "",
+      "description": "Required orientation for corn maze seasonal staff, including the interview process.",
+      "icons": [
+        "community",
+        "outdoors"
+      ],
+      "free": false,
+      "url": "https://www.instagram.com/p/DcgdGMYlouD/"
+    },
+    {
+      "date": "2026-09-12",
+      "name": "Weber Brewing\ud83c\udf52Victoria, TX\ud83c\udf52Great Food & Desserts-Craft Beer-Live Music",
+      "time": "07:00 PM",
+      "venue": "Weber Brewing",
+      "address": "206 W. Water street",
+      "description": "Live music with food, desserts, and craft beer in a lively taproom setting.",
+      "icons": [
+        "music",
+        "food",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://allevents.in/victoria/weber-brewingvictoria-txgreat-food-and-desserts-craft-beer-live-music/200030249251512"
+    },
+    {
+      "date": "2026-09-12",
+      "name": "Gulf Bend Center's Friendship Fest Event",
+      "time": "10:00 AM",
+      "venue": "DeLeon Plaza",
+      "address": "101 North Main Street",
+      "description": "Friendly public gathering with activities and connection for the community.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://allevents.in/victoria/gulf-bend-centers-friendship-fest-event/100001989421450111"
+    },
+    {
+      "date": "2026-09-12",
+      "name": "Chess Club",
+      "time": "12:00 PM \u2013 2:30 PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St.",
+      "description": "Drop in for casual chess games for players of all skill levels and ages.",
+      "icons": [
+        "family",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.victoriapubliclibrary.org"
+    },
+    {
+      "date": "2026-09-12",
+      "name": "Coast Writers",
+      "time": "1:00PM \u2013 3:00PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main St.",
+      "description": "A relaxed writing group for local writers to share ideas and work in progress.",
+      "icons": [
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://victoriapl.librarycalendar.com/event/coast-writers-9210"
+    },
+    {
+      "date": "2026-09-12",
+      "name": "Victoria Fan Fest Year 2",
+      "time": "4:00 PM",
+      "venue": "2905 E North St, Victoria, TX, United States, Texas 77901",
+      "address": "",
+      "description": "Fan-focused event with pop culture fun, activities, and plenty to explore.",
+      "icons": [
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1596100018275666/"
+    },
+    {
+      "date": "2026-09-12",
+      "name": "Palace Bingo \u2014 Saturday Evening",
+      "time": "5:30 PM \u2013 11:00 PM",
+      "venue": "Palace Bingo",
+      "address": "5306 Houston Hwy",
+      "description": "Play bingo for a chance at cash prizes in a classic local hall setting.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://palacebingo.org"
+    },
+    {
+      "date": "2026-09-12",
+      "name": "Live Music at Aero Crafters",
+      "time": "7:00 PM \u2013 10:00 PM",
+      "venue": "Aero Crafters",
+      "address": "309 E. Crestwood Dr.",
+      "description": "Enjoy live bands and a lively Saturday-night atmosphere.",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://aerocrafters.pub"
+    },
+    {
+      "date": "2026-09-12",
+      "name": "Victoria Farmers' Market",
+      "time": "9:00 AM \u2013 1:00 PM",
+      "venue": "Victoria Farmers Market",
+      "address": "2805 N. Navarro St.",
+      "description": "Shop fresh local produce, meats, honey, and baked goods from area vendors.",
+      "icons": [
+        "food",
+        "shopping",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/VictoriaFarmersMarket"
+    },
+    {
+      "date": "2026-09-13",
+      "name": "VacAnT WiRe",
+      "time": "12:30 AM",
+      "venue": "206 W. Water street, Victoria, TX",
+      "address": "",
+      "description": "High-energy rock show with a loud, upbeat set from a Houston band.",
+      "icons": [
+        "music",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1834342131314255/"
+    },
+    {
+      "date": "2026-09-13",
+      "name": "Friends of the Victoria Public Library Book Membe",
+      "time": "2:00 PM \u2013 4:00 PM",
+      "venue": "Victoria Public Library",
+      "address": "302 N. Main Street",
+      "description": "Browse used books and support library programs through the Friends sale. Members get early access before the public sale.",
+      "icons": [
+        "community",
+        "shopping"
+      ],
+      "free": false,
+      "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3648"
+    },
+    {
+      "date": "2026-09-14",
+      "name": "Low-Cost Vaccination & Microchip Week at DOCPAC!",
+      "time": "10:00 AM",
+      "venue": "135 Progress Dr, Victoria, TX, United States, Texas 77905",
+      "address": "135 Progress Dr",
+      "description": "Low-cost pet vaccines and microchipping help keep pets healthy. Walk-ins are welcome.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://allevents.in/victoria/low-cost-vaccination-and-microchip-week-at-docpac/200030491808717"
+    },
+    {
+      "date": "2026-09-14",
+      "name": "VTX Art & Music Walk",
+      "time": "4:00 PM",
+      "venue": "The Nave Museum",
+      "address": "",
+      "description": "Self-guided stops for local art, live music, and community fun. A relaxed way to explore the creative side of town.",
+      "icons": [
+        "arts",
+        "music",
+        "community"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/TheNaveMuseum/posts/pfbid037MyQjCkF1faJEuzw6CUXzdqohFUKUK3mkmh12HTTMY47rqqmMKymyx5zMUS2j6Fhl"
+    },
+    {
+      "date": "2026-09-14",
+      "name": "Palace Bingo \u2014 Monday",
+      "time": "5:30 PM \u2013 10:30 PM",
+      "venue": "Palace Bingo",
+      "address": "5306 Houston Hwy",
+      "description": "Play a round of bingo and try for cash prizes. Cards are available at the door.",
+      "icons": [
+        "community"
+      ],
+      "free": false,
+      "url": "https://palacebingo.org"
+    },
+    {
+      "date": "2026-09-14",
+      "name": "VARRA Monday Night Run",
+      "time": "6:30 PM",
+      "venue": "Riverside Stadium Parking Lot",
+      "address": "Memorial Dr.",
+      "description": "Join a free weekly run or walk for all fitness levels. Just show up and go at your own pace.",
+      "icons": [
+        "outdoors",
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://runsignup.com/MemberOrg/VictoriaAreaRoadRunnersAssociation"
     }
   ]
 }
