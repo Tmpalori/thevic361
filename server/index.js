@@ -28,7 +28,12 @@ import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import {
   HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
+  , setSeasonalNav
 } from './seo.js';
+import {
+  buildVenues, venueFor, renderVenuePage, renderVenueIndex, venuesWithEvents,
+  SEASONS, activeSeasons, renderSeasonPage, renderIcs, eventActionsHtml
+} from './guides.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -36,6 +41,7 @@ const DOCS_DIR = path.join(REPO_ROOT, 'docs');
 const CANDIDATES_FILE = path.join(REPO_ROOT, 'candidates.json');
 const COLLECTION_METADATA_FILE = path.join(REPO_ROOT, 'collection_metadata.json');
 const EVENTS_FILE = path.join(DOCS_DIR, 'events.json');
+const VENUES_FILE = path.join(REPO_ROOT, 'venues.json');
 const WEEKLY_COLLECT_WORKFLOW = 'weekly-collect.yml';
 
 async function readJsonFile(file) {
@@ -902,10 +908,29 @@ export async function createApp(opts = {}) {
     res.type('html').send(html);
   }
 
+  // venues.json ships with the deploy; read once at boot.
+  let venues = [];
+  try {
+    venues = buildVenues(await readJsonFile(opts.venuesFile || VENUES_FILE));
+  } catch (err) {
+    console.warn('[venues] venues.json unreadable:', err.message);
+  }
+
+  async function listArchived() {
+    if (typeof store.listArchivedEvents !== 'function') return [];
+    try { return await store.listArchivedEvents(); } catch (err) {
+      console.warn('[events] archive list failed:', err.message);
+      return [];
+    }
+  }
+
   const pageHandler = render => async (req, res, next) => {
     try {
       const payload = await getPublicPayload();
-      await render(req, res, payload, { siteUrl, now: nowFn(), sponsor: payload.sponsor || null });
+      const archived = await listArchived();
+      const now = nowFn();
+      setSeasonalNav(activeSeasons(payload.events, archived, now));
+      await render(req, res, payload, { siteUrl, now, sponsor: payload.sponsor || null, archived });
     } catch (err) {
       next(err);
     }
@@ -929,15 +954,47 @@ export async function createApp(opts = {}) {
     }));
   }
 
-  app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
-    const page = `/events/${req.params.slug}`;
+  async function findEvent(payload, page) {
     let ev = payload.events.find(e => e.page === page);
     if (!ev && typeof store.getArchivedEvent === 'function') {
       ev = await store.getArchivedEvent(page);
     }
-    if (!ev) return sendHtml(res, renderNotFoundPage(ctx), 404);
-    sendHtml(res, renderEventPage(ev, payload.events, ctx));
+    return ev || null;
+  }
+
+  // Add-to-calendar file. Registered before /events/:slug, which would
+  // otherwise treat "<slug>.ics" as a slug.
+  app.get('/events/:slug.ics', pageHandler(async (req, res, payload, ctx) => {
+    const ev = await findEvent(payload, `/events/${req.params.slug}`);
+    if (!ev) return res.status(404).type('text/plain').send('Not found');
+    res.set('Content-Disposition', `attachment; filename="${req.params.slug}.ics"`);
+    res.type('text/calendar; charset=utf-8').send(renderIcs(ev, ctx));
   }));
+
+  app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
+    const ev = await findEvent(payload, `/events/${req.params.slug}`);
+    if (!ev) return sendHtml(res, renderNotFoundPage(ctx), 404);
+    const venue = venueFor(ev, venues);
+    sendHtml(res, renderEventPage(ev, payload.events, {
+      ...ctx, extras: eventActionsHtml(ev, siteUrl), venuePath: venue ? venue.path : null
+    }));
+  }));
+
+  app.get('/venues', pageHandler(async (req, res, payload, ctx) => {
+    sendHtml(res, renderVenueIndex(venues, payload.events, ctx.archived, ctx));
+  }));
+
+  app.get('/venues/:slug', pageHandler(async (req, res, payload, ctx) => {
+    const venue = venues.find(v => v.slug === req.params.slug);
+    if (!venue) return sendHtml(res, renderNotFoundPage(ctx), 404);
+    sendHtml(res, renderVenuePage(venue, payload.events, ctx.archived, ctx));
+  }));
+
+  for (const season of SEASONS) {
+    app.get(season.path, pageHandler(async (req, res, payload, ctx) => {
+      sendHtml(res, renderSeasonPage(season, payload.events, ctx.archived, ctx));
+    }));
+  }
 
   app.get('/advertise', pageHandler(async (req, res, payload, ctx) => {
     sendHtml(res, renderAdvertisePage({ ...ctx, email: advertiseEmail }));
@@ -949,12 +1006,21 @@ export async function createApp(opts = {}) {
 
   app.get('/sitemap.xml', pageHandler(async (req, res, payload, ctx) => {
     res.set('Cache-Control', 'public, max-age=300');
-    res.type('application/xml').send(renderSitemap(payload.events, { ...ctx, lastmod: payload.last_updated }));
+    const extraPaths = [
+      '/venues',
+      ...activeSeasons(payload.events, ctx.archived, ctx.now).map(s => s.path),
+      ...venuesWithEvents(venues, payload.events, ctx.archived, ctx.now).map(v => v.path)
+    ];
+    res.type('application/xml').send(renderSitemap(payload.events, { ...ctx, lastmod: payload.last_updated, extraPaths }));
   }));
 
   app.get('/llms.txt', pageHandler(async (req, res, payload, ctx) => {
     res.set('Cache-Control', 'public, max-age=300');
-    res.type('text/plain; charset=utf-8').send(renderLlmsTxt(payload.events, ctx));
+    const extraLinks = [
+      ['Event venues in Victoria, TX', '/venues', 'every venue we track, with its upcoming events'],
+      ...activeSeasons(payload.events, ctx.archived, ctx.now).map(s => [s.title, s.path, s.description])
+    ];
+    res.type('text/plain; charset=utf-8').send(renderLlmsTxt(payload.events, { ...ctx, extraLinks }));
   }));
 
   // ─── Static site ───

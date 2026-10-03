@@ -119,7 +119,8 @@
       ? '<div class="event-desc">' + escHtml(ev.description) + '</div>'
       : '';
 
-    return '<li class="event-entry' + (ev.featured ? ' event-entry--featured' : '') + '">' +
+    var iconAttr = (ev.icons || []).join(' ') + (ev.free === true ? ' free' : '');
+    return '<li class="event-entry' + (ev.featured ? ' event-entry--featured' : '') + '" data-icons="' + escHtml(iconAttr) + '">' +
       '<span class="event-icons" aria-hidden="true">' + iconHtml + '</span>' +
       '<div class="event-details">' +
         (ev.featured ? '<span class="badge badge--featured">Featured</span> ' : '') +
@@ -313,6 +314,7 @@
         }).join('');
 
         container.innerHTML = html;
+        applyFilter(currentFilter);
 
         // ─── SKIP TO TODAY BUTTON ───
         var todayStr = toLocalDateStr(new Date());
@@ -360,12 +362,86 @@
       });
   }
 
+  // ─── FILTERS ───
+  // Chips above the list hide events that don't match. Pure client-side:
+  // the server-rendered markup carries data-icons on every event.
+  var FILTERS = [
+    { key: 'all', label: 'All' },
+    { key: 'weekend', label: 'This weekend' },
+    { key: 'free', label: 'Free' },
+    { key: 'family', label: 'Kids & Family' },
+    { key: 'music', label: 'Music' },
+    { key: 'food drinks', label: 'Food & Drink' },
+    { key: 'arts', label: 'Arts' },
+    { key: 'outdoors', label: 'Outdoors' }
+  ];
+  var currentFilter = 'all';
+
+  function renderFilterBar() {
+    var container = document.getElementById('events-container');
+    if (!container || document.getElementById('event-filters')) return;
+    var bar = document.createElement('div');
+    bar.id = 'event-filters';
+    bar.className = 'event-filters';
+    bar.setAttribute('role', 'group');
+    bar.setAttribute('aria-label', 'Filter events');
+    bar.innerHTML = FILTERS.map(function (f) {
+      return '<button type="button" class="filter-chip" data-filter="' + f.key + '" aria-pressed="' +
+        (f.key === currentFilter) + '">' + f.label + '</button>';
+    }).join('');
+    container.parentNode.insertBefore(bar, container);
+    bar.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-filter]');
+      if (!btn) return;
+      applyFilter(btn.getAttribute('data-filter'));
+      if (typeof window.gtag === 'function') window.gtag('event', 'filter', { filter: currentFilter });
+    });
+  }
+
+  function applyFilter(key) {
+    currentFilter = key || 'all';
+    document.querySelectorAll('#event-filters [data-filter]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-filter') === currentFilter));
+    });
+    var wanted = currentFilter === 'all' || currentFilter === 'weekend' ? null : currentFilter.split(' ');
+    document.querySelectorAll('#events-container .day-section').forEach(function (sec, idx) {
+      // Day sections are Mon (0) … Sun (6); the weekend is Fri–Sun.
+      var dayHidden = currentFilter === 'weekend' && idx < 4;
+      var shown = 0;
+      sec.querySelectorAll('.event-entry').forEach(function (li) {
+        var icons = (li.getAttribute('data-icons') || '').split(' ');
+        var match = !wanted || wanted.some(function (w) { return icons.indexOf(w) !== -1; });
+        li.hidden = dayHidden || !match;
+        if (!li.hidden) shown++;
+      });
+      var empty = sec.querySelector('.filter-empty');
+      sec.hidden = dayHidden;
+      if (!dayHidden && wanted && shown === 0 && sec.querySelector('.event-entry')) {
+        if (!empty) {
+          empty = document.createElement('div');
+          empty.className = 'empty-state filter-empty';
+          empty.textContent = 'Nothing in this category today.';
+          sec.appendChild(empty);
+        }
+        empty.hidden = false;
+      } else if (empty) {
+        empty.hidden = true;
+      }
+    });
+  }
+
+  // Server-rendered events are on the page before app.js re-renders them,
+  // so the chips work immediately.
+  renderFilterBar();
+  applyFilter(currentFilter);
+
   // Expose a small surface for tests.
   if (typeof window !== 'undefined') {
     window.__vic361App = {
       readPreviewData: readPreviewData,
       showPreviewIndicator: showPreviewIndicator,
-      PREVIEW_STORAGE_PREFIX: PREVIEW_STORAGE_PREFIX
+      PREVIEW_STORAGE_PREFIX: PREVIEW_STORAGE_PREFIX,
+      applyFilter: applyFilter
     };
   }
 
