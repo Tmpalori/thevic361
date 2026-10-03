@@ -281,3 +281,28 @@ def test_facebook_events_runs_both_searches_and_dedupes(monkeypatch):
     with patch.object(ce.requests, "post", side_effect=fake_post):
         ce.fetch_apify_facebook_events()
     assert calls == [ce.APIFY_FB_ACTOR]
+
+
+# ─── Non-event filter (2026-10 auto-publish) ────────────────────────────────
+
+def test_non_event_reason_catches_listings_not_events():
+    assert ce.non_event_reason(ev("Internship Program", venue="The Texas Zoo"))
+    assert ce.non_event_reason(ev("Field Trip Booking", venue="J Welch Farms"))
+    assert ce.non_event_reason(ev("National Drink Beer Day", venue="La Cantina"))
+    assert ce.non_event_reason(ev("Now Hiring Bartenders"))
+    # A real event on an awareness day, with a time, stays.
+    assert ce.non_event_reason(ev("National Taco Day Party", time="6:00 PM")) is None
+    assert ce.non_event_reason(ev("Job Fair", time="10:00 AM")) is None
+    assert ce.non_event_reason(ev("Tejas Fest 2026")) is None
+
+
+def test_merge_drops_non_events_and_decodes_entities():
+    out = ce.merge_events([
+        ev("Field Trip Booking", venue="J Welch Farms", source="apify_instagram_posts"),
+        ev("Walk to End Alzheimer&#39;s", venue="Texas A&amp;M University-Victoria", source="allevents", time="9:00 AM"),
+        ev("Field Trip Booking", venue="Somewhere", source="local_events"),  # curated YAML is trusted
+    ], venues=[])
+    names = [e["name"] for e in out]
+    assert "Walk to End Alzheimer's" in names
+    assert any(e["venue"] == "Texas A&M University-Victoria" for e in out)
+    assert names.count("Field Trip Booking") == 1

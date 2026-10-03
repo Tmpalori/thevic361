@@ -54,6 +54,11 @@ on:
     # 23:00 UTC every Sunday. = 6 PM CDT (Mar–Nov) / 5 PM CST (Nov–Mar).
     # See header comment for why we accept this 1-hour DST drift.
     - cron: '0 23 * * 0'
+    # Midweek refresh (Wednesday, same time) so events announced after
+    # Sunday still make the site. Added alongside, not instead of, the
+    # Sunday cron above. Each run's candidates.json redeploys the site,
+    # which auto-publishes them (server/autopublish.js).
+    - cron: '0 23 * * 3'
   workflow_dispatch:       # Manual trigger from GitHub UI
 
 permissions:
@@ -166,7 +171,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           n=$(python3 -c "import json;d=json.load(open('candidates.json'));print(len(d.get('events',d) if isinstance(d,dict) else d))" 2>/dev/null || echo "?")
-          python3 scripts/slack_notify.py "🗓️ Weekly collect done: $n candidate events ready. Pick this week's in admin." --link "${{ vars.SITE_URL || 'https://www.thevic361.com' }}/admin.html"
+          python3 scripts/slack_notify.py "🗓️ Collect done: $n events found. They'll publish automatically in a minute; edit or remove any in admin." --link "${{ vars.SITE_URL || 'https://www.thevic361.com' }}/admin.html"
 
       - name: Tell Slack it failed
         if: failure()
