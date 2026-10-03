@@ -23,4 +23,4 @@ Disallow: /admin
 Disallow: /admin.html
 Disallow: /api/
 
-Sitemap: https://thevic361.com/sitemap.xml
+Sitemap: https://www.thevic361.com/sitemap.xml

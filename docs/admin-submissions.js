@@ -44,6 +44,11 @@
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
 
+  // Only http(s) links are clickable; a scraped `javascript:` URL renders as #.
+  function httpUrl(u) {
+    return typeof u === 'string' && /^https?:\/\//i.test(u.trim()) ? u.trim() : '#';
+  }
+
   function escapeHtml(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -222,7 +227,7 @@
           (p.free ? '<span>🆓 Free</span>' : '<span>🎟️ Paid</span>') +
         '</p>' +
         (p.description ? '<p class="submission-card__desc">' + escapeHtml(p.description) + '</p>' : '') +
-        (p.url ? '<p><a href="' + escapeHtml(p.url) + '" target="_blank" rel="noopener">' +
+        (p.url ? '<p><a href="' + escapeHtml(httpUrl(p.url)) + '" target="_blank" rel="noopener">' +
           escapeHtml(p.url) + '</a></p>' : '') +
         submitterBlock +
         editBlock +

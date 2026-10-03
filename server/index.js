@@ -13,6 +13,7 @@
  */
 
 import express from 'express';
+import compression from 'compression';
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +27,7 @@ import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import {
   HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
-  renderAboutPage, renderNotFoundPage, renderSitemap, renderLlmsTxt
+  renderAboutPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
 } from './seo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -50,6 +51,36 @@ export async function createApp(opts = {}) {
   const turnstileSiteKey = opts.turnstileSiteKey ?? process.env.TURNSTILE_SITE_KEY ?? null;
   const trustProxy = opts.trustProxy ?? true;
   if (trustProxy) app.set('trust proxy', true);
+
+  // Canonical host. www.thevic361.com is where Google already indexes the
+  // site and where all real traffic lands; the bare domain 301s to it so
+  // search engines see one site instead of two copies.
+  const siteUrl = (opts.siteUrl ?? process.env.SITE_URL ?? 'https://www.thevic361.com').replace(/\/+$/, '');
+  const canonicalHost = new URL(siteUrl).host;
+  const apexHost = canonicalHost.replace(/^www\./, '');
+  app.use((req, res, next) => {
+    if (apexHost !== canonicalHost && req.hostname === apexHost) {
+      return res.redirect(301, siteUrl + req.originalUrl);
+    }
+    next();
+  });
+
+  // Baseline security headers. No full script CSP yet: the site relies on
+  // inline scripts plus Google Analytics, Beehiiv and Turnstile, so the CSP
+  // only locks down framing, plugins and <base> hijacking for now.
+  app.use((req, res, next) => {
+    res.set({
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'X-Frame-Options': 'SAMEORIGIN',
+      'Strict-Transport-Security': 'max-age=31536000',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+      'Content-Security-Policy': "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+    });
+    next();
+  });
+
+  app.use(compression());
 
   // Username/password login + signed session tokens. Replaces the old
   // browser-side GitHub PAT flow. When ADMIN_USERNAME / ADMIN_PASSWORD /
@@ -545,6 +576,7 @@ export async function createApp(opts = {}) {
     // reflect the new picks regardless of GitHub state.
     try {
       await store.setPublished(payload);
+      archiveEvents(events);
     } catch (err) {
       console.error('[admin] local publish save failed:', err.message);
       return res.status(500).json({
@@ -827,6 +859,21 @@ export async function createApp(opts = {}) {
     }
   }
 
+  // Keep every published event's page alive after its week rotates out
+  // (see archiveEvents in db.js). Best-effort: a failure here must never
+  // block a publish or a page view.
+  function archiveEvents(events) {
+    if (typeof store.archiveEvents !== 'function') return Promise.resolve();
+    return store.archiveEvents(withPages(events))
+      .catch(err => console.warn('[events] archive skipped:', err.message));
+  }
+
+  // Backfill the archive with whatever is live at boot, so pages published
+  // before the archive existed are covered too.
+  const archiveReady = store.getPublished()
+    .then(p => p && archiveEvents(p.events))
+    .catch(err => console.warn('[events] archive backfill skipped:', err.message));
+
   async function serveEventsJson(req, res, next) {
     try {
       const { source, ...payload } = await getPublicPayload();
@@ -844,8 +891,8 @@ export async function createApp(opts = {}) {
   // ─── Server-rendered pages (SEO + AI crawlers) ───
   // See server/seo.js for why. Registered before express.static so "/"
   // gets the rendered homepage instead of the raw docs/index.html.
-  const siteUrl = (opts.siteUrl ?? process.env.SITE_URL ?? 'https://thevic361.com').replace(/\/+$/, '');
   const nowFn = opts.now || (() => new Date());
+  const advertiseEmail = opts.advertiseEmail ?? process.env.ADVERTISE_EMAIL ?? 'tristen.m.palori@gmail.com';
   let indexTemplate = null;
 
   function sendHtml(res, html, status = 200) {
@@ -858,7 +905,7 @@ export async function createApp(opts = {}) {
   const pageHandler = render => async (req, res, next) => {
     try {
       const payload = await getPublicPayload();
-      await render(req, res, payload, { siteUrl, now: nowFn() });
+      await render(req, res, payload, { siteUrl, now: nowFn(), sponsor: payload.sponsor || null });
     } catch (err) {
       next(err);
     }
@@ -883,9 +930,17 @@ export async function createApp(opts = {}) {
   }
 
   app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
-    const ev = payload.events.find(e => e.page === `/events/${req.params.slug}`);
+    const page = `/events/${req.params.slug}`;
+    let ev = payload.events.find(e => e.page === page);
+    if (!ev && typeof store.getArchivedEvent === 'function') {
+      ev = await store.getArchivedEvent(page);
+    }
     if (!ev) return sendHtml(res, renderNotFoundPage(ctx), 404);
     sendHtml(res, renderEventPage(ev, payload.events, ctx));
+  }));
+
+  app.get('/advertise', pageHandler(async (req, res, payload, ctx) => {
+    sendHtml(res, renderAdvertisePage({ ...ctx, email: advertiseEmail }));
   }));
 
   app.get('/about', pageHandler(async (req, res, payload, ctx) => {
@@ -921,6 +976,7 @@ export async function createApp(opts = {}) {
     res.status(500).type('text/plain').send('Server error');
   });
 
+  await archiveReady;
   return { app, store, storeBundle };
 }
 

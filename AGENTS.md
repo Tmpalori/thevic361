@@ -162,7 +162,7 @@ python collect_events.py --candidates-only --output ./docs/events.json --local-d
 pytest -q
 ```
 
-There is currently **no `tests.yml` workflow**. Run both suites locally before opening a PR.
+`.github/workflows/tests.yml` runs both suites on every PR and on pushes to `main`. Run them locally before opening a PR too.
 
 There is no linter configured. Match the existing style (4-space Python, 2-space JS, ES modules in `server/` and `tests/`).
 
@@ -170,7 +170,7 @@ There is no linter configured. Match the existing style (4-space Python, 2-space
 
 ## SEO / AI search
 
-Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` renders events into plain HTML from the same published payload as `/events.json`: the homepage (injected into `docs/index.html`), intent pages (`/today`, `/this-weekend`, `/free-things-to-do`, `/kids-and-family`, `/live-music`, `/food-and-drink`), one page per event at `/events/<date>-<slug>` with schema.org `Event` JSON-LD, `/about`, `/sitemap.xml`, and `/llms.txt`. `docs/app.js` still re-renders the homepage in the browser and powers admin preview. Keep the two event renderers' markup in sync.
+Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` renders events into plain HTML from the same published payload as `/events.json`: the homepage (injected into `docs/index.html`), intent pages (`/today`, `/this-weekend`, `/free-things-to-do`, `/kids-and-family`, `/live-music`, `/food-and-drink`), one page per event at `/events/<date>-<slug>` with schema.org `Event` JSON-LD, `/about`, `/sitemap.xml`, and `/llms.txt`. `docs/app.js` still re-renders the homepage in the browser and powers admin preview. Keep the two event renderers' markup in sync. Every published event is also written to an archive (`event_archive` table / `event_archive` key in the file store) so its page keeps working after the week rotates out. `featured: true` (set from the admin edit modal) pins an event to the top of its day; `/advertise` sells it.
 
 ## Conventions
 
@@ -235,6 +235,8 @@ Full reference is in [`RAILWAY.md`](./RAILWAY.md). Quick list:
 | `FB_POSTS_ENABLED`, `IG_POSTS_ENABLED` | — | Repo Variables (not secrets); `=1` to enable post-scrape pipelines in CI |
 | `FB_POSTS_MAX_VENUES`, `IG_POSTS_MAX_VENUES` | (collector defaults) | Caps to keep Apify costs bounded |
 | `OPENAI_MODEL` | `gpt-5-mini` | Repo Variable; overrides the collector's OpenAI model |
+| `SITE_URL` | `https://www.thevic361.com` | Canonical origin. Requests to the bare domain 301 here |
+| `ADVERTISE_EMAIL` | `tristen.m.palori@gmail.com` | Contact address on `/advertise` |
 | `PORT` | `3000` | Express listen port |
 
 PR/staging Railway environments do **not** automatically inherit `ADMIN_*` vars — set them per-environment or use Railway's shared variables feature.
@@ -263,9 +265,9 @@ PR previews: only `docs/**` changes auto-deploy a static preview. Server / colle
 
 A full audit was done on 2026-04-29 (`AUDIT_2026_04_29.md` in Tristen's workspace). The prioritized backlog is there — ask Tristen for it before starting any larger refactor work so you don't re-litigate already-considered tradeoffs. Highlights:
 
-- **P1:** Validate `sponsor.url` scheme in `app.js`; add a `tests.yml` PR-gating workflow; remove the legacy `?preview=<json>` URL path.
+- **P1 (done Oct 2026):** `sponsor.url` / event URLs are scheme-checked and escaped in `app.js`; `tests.yml` gates PRs; the legacy `?preview=<json>` path is removed.
 - **P2:** Split `collect_events.py` into a `collector/` package (do this on the next scraper-add PR rather than as a standalone refactor); move `test_*.py` to `tests/python/`; pin upper bounds in `requirements.txt`; delete `facebook_venues.backup.json`, `pending_venues.json`, `.last-published-digest-*`, `approve_events.py` (or move under `legacy/`).
-- **P3:** Tighten `trust proxy` config; add request logging; hoist `escapeHtml` into `docs/util.js`; add an end-to-end submit→approve→publish vitest; add a starter CSP.
+- **P3:** Tighten `trust proxy` config; add request logging; hoist `escapeHtml` into `docs/util.js`; add an end-to-end submit→approve→publish vitest; extend the starter CSP (currently framing/object/base only) to scripts.
 
 ---
 

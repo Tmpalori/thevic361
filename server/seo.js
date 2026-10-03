@@ -20,6 +20,7 @@
  */
 
 export const SITE_NAME = 'The Vic 361';
+const GA_ID = 'G-52YHD3X3C2';
 const TZ = 'America/Chicago';
 const UPCOMING_DAYS = 60;
 
@@ -253,9 +254,13 @@ export function withPages(events) {
     });
 }
 
+// By date, then featured (paid) events first within a day, then by time.
 function sortEvents(list) {
-  return list.slice().sort((a, b) =>
-    a.date === b.date ? timeKey(a) - timeKey(b) : (a.date < b.date ? -1 : 1));
+  return list.slice().sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    if (Boolean(a.featured) !== Boolean(b.featured)) return a.featured ? -1 : 1;
+    return timeKey(a) - timeKey(b);
+  });
 }
 
 export function eventsBetween(events, start, end, filter) {
@@ -319,9 +324,10 @@ export function renderEventItem(ev) {
       : escHtml(ev.venue);
     if (ev.address) venue += ', ' + escHtml(ev.address);
   }
-  return '<li class="event-entry">' +
+  return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}">` +
     `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
     '<div class="event-details">' +
+      (ev.featured ? '<span class="badge badge--featured">Featured</span> ' : '') +
       `<span class="event-time">${escHtml(ev.time)}</span> ` +
       `<span class="event-name"><a href="${escHtml(ev.page)}">${escHtml(ev.name)}</a></span>` +
       (venue ? ` — <span class="event-venue">${venue}</span>` : '') +
@@ -385,22 +391,23 @@ function footerHtml() {
     <div class="container">
       <div class="footer-grid">
         <div class="footer-section">
-          <h3>Stay in the loop</h3>
+          <h2>Stay in the loop</h2>
           <p>Get Victoria's best events in your inbox every week.</p>
           <a href="/#subscribe" class="btn btn--primary">Subscribe free</a>
         </div>
         <div class="footer-section">
-          <h3>Browse</h3>
+          <h2>Browse</h2>
           <ul class="footer-links" role="list">
             <li><a href="/">This week</a></li>
             ${HUB_PAGES.map(p => `<li><a href="${p.path}">${escHtml(p.nav)}</a></li>`).join('\n            ')}
           </ul>
         </div>
         <div class="footer-section">
-          <h3>About</h3>
+          <h2>About</h2>
           <ul class="footer-links" role="list">
             <li><a href="/about">About The Vic 361</a></li>
             <li><a href="/submit">Submit an event</a></li>
+            <li><a href="/advertise">Advertise</a></li>
           </ul>
         </div>
       </div>
@@ -424,6 +431,9 @@ export function layout({ siteUrl, path, title, description, body, ld = [], noind
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Google tag (gtag.js); same property as docs/index.html -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=${GA_ID}"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}');</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escHtml(title)}</title>
@@ -440,7 +450,9 @@ ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:opsz,wght@9..144,500..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
+<!-- Fonts load without blocking first paint; text shows in the fallback face until they arrive. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:opsz,wght@9..144,500..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:opsz,wght@9..144,500..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap"></noscript>
 <link rel="stylesheet" href="/base.css">
 <link rel="stylesheet" href="/style.css">
 ${ld.map(jsonLd).join('\n')}
@@ -454,8 +466,27 @@ ${body}
   </div>
 </main>
 ${footerHtml()}
+<script src="/track.js" defer></script>
 </body>
 </html>`;
+}
+
+// Mirrors renderSponsor() in docs/app.js so the paid sponsor slot shows on
+// every page, not just the homepage.
+export function sponsorHtml(sponsor) {
+  if (!sponsor || !sponsor.name) return '';
+  const href = safeUrl(sponsor.url);
+  const cta = sponsor.cta
+    ? (href
+      ? `<a href="${escHtml(href)}" class="btn btn--outline sponsor-cta" target="_blank" rel="noopener noreferrer">${escHtml(sponsor.cta)}</a>`
+      : `<span class="btn btn--outline" style="cursor:default; opacity:0.6">${escHtml(sponsor.cta)}</span>`)
+    : '';
+  return '<section class="sponsor-section"><div class="sponsor-block">' +
+    '<div class="sponsor-label">This week\'s sponsor</div>' +
+    `<div class="sponsor-name">${escHtml(sponsor.name)}</div>` +
+    (sponsor.text ? `<div class="sponsor-text">${escHtml(sponsor.text)}</div>` : '') +
+    (sponsor.address ? `<div class="sponsor-address">📍 ${escHtml(sponsor.address)}</div>` : '') +
+    cta + '</div></section>';
 }
 
 function ctaHtml() {
@@ -470,7 +501,7 @@ function including(list) {
   return `, including ${names.slice(0, -1).join(', ')}${names.length > 2 ? ',' : ''} and ${names[names.length - 1]}`;
 }
 
-export function renderHubPage(page, events, { siteUrl, now }) {
+export function renderHubPage(page, events, { siteUrl, now, sponsor }) {
   const today = localDateStr(now);
   const [start, end] = dateRange(page.range, today);
   const list = eventsBetween(events, start, end, page.filter);
@@ -482,6 +513,7 @@ export function renderHubPage(page, events, { siteUrl, now }) {
     ${list.length
       ? renderGrouped(list, today)
       : `<div class="empty-state">Check <a href="/">this week's full list</a>, or <a href="/submit">submit an event</a>.</div>`}
+    ${sponsorHtml(sponsor)}
     ${ctaHtml()}`;
   const ld = [
     breadcrumbLd(siteUrl, [{ name: SITE_NAME, path: '/' }, { name: page.nav, path: page.path }]),
@@ -490,7 +522,7 @@ export function renderHubPage(page, events, { siteUrl, now }) {
   return layout({ siteUrl, path: page.path, title: `${page.title} | ${SITE_NAME}`, description: page.description, body, ld });
 }
 
-export function renderEventPage(ev, events, { siteUrl, now }) {
+export function renderEventPage(ev, events, { siteUrl, now, sponsor }) {
   const today = localDateStr(now);
   const src = safeUrl(ev.url);
   const when = formatDay(ev.date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -504,6 +536,7 @@ export function renderEventPage(ev, events, { siteUrl, now }) {
     <p class="breadcrumbs"><a href="/">This week</a> › ${escHtml(ev.name)}</p>
     <h1 class="page-title">${escHtml(ev.name)}</h1>
     <p class="page-lead">${escHtml(lead)}</p>
+    ${ev.date < today ? `<p class="past-notice">This event has passed. <a href="/">See what's happening this week</a>.</p>` : ''}
     <dl class="event-facts">
       <dt>When</dt><dd>${escHtml(when)}${ev.time ? `, ${escHtml(ev.time)}` : ''}</dd>
       ${where ? `<dt>Where</dt><dd>${escHtml(where)}</dd>` : ''}
@@ -513,6 +546,7 @@ export function renderEventPage(ev, events, { siteUrl, now }) {
     ${src ? `<p class="page-actions"><a class="btn btn--primary" href="${escHtml(src)}" target="_blank" rel="noopener noreferrer">Event details</a></p>` : ''}
     ${sameDay.length ? `<h2 class="section-heading">Also on ${escHtml(formatDay(ev.date, { weekday: 'long' }))}</h2>
     <ul class="event-list" role="list">${sameDay.map(renderEventItem).join('')}</ul>` : ''}
+    ${sponsorHtml(sponsor)}
     ${ctaHtml()}`;
   const ld = [
     eventJsonLd(ev, siteUrl),
@@ -534,7 +568,7 @@ export function renderAboutPage({ siteUrl }) {
     <h2 class="section-heading">Get it every week</h2>
     <p><a href="/#subscribe">Subscribe to the newsletter</a> for the week's best events, every Monday.</p>
     <h2 class="section-heading">List your event or business</h2>
-    <p>Anyone can <a href="/submit">submit an event</a> for free. Venues and businesses interested in sponsoring the newsletter can reach out through the submission form.</p>`;
+    <p>Anyone can <a href="/submit">submit an event</a> for free. Venues and businesses can <a href="/advertise">sponsor the newsletter or feature an event</a>.</p>`;
   const ld = [{
     '@context': 'https://schema.org',
     '@type': 'Organization',
@@ -549,6 +583,61 @@ export function renderAboutPage({ siteUrl }) {
     title: `About | ${SITE_NAME}`,
     description: 'The Vic 361 is a free weekly guide to events and things to do in Victoria, Texas.',
     body, ld
+  });
+}
+
+// Packages and prices here are the starting offer; change them in one place.
+export const AD_PACKAGES = [
+  {
+    name: 'Weekly sponsor',
+    price: '$300 / week',
+    points: [
+      'Top sponsor block in the Monday newsletter',
+      'Sponsor block on every page of thevic361.com for the week',
+      'Click report at the end of the week'
+    ]
+  },
+  {
+    name: 'Venue partner',
+    price: '$150 / month',
+    points: [
+      'Every event at your venue marked Featured, every week',
+      'Pinned at the top of each day on the site and its event pages',
+      'Monthly click report'
+    ]
+  },
+  {
+    name: 'Featured event',
+    price: '$49 / event',
+    points: [
+      'Pinned at the top of its day on the site',
+      'Called out in the newsletter that week',
+      'Best for concerts, fundraisers, openings, and festivals'
+    ]
+  }
+];
+
+export function renderAdvertisePage({ siteUrl, email }) {
+  const subject = encodeURIComponent('Advertising on The Vic 361');
+  const body = `
+    <h1 class="page-title">Advertise on The Vic 361</h1>
+    <p class="page-lead">Reach people in Victoria, TX who are actively looking for something to do this week. Sponsor the newsletter, partner as a venue, or feature a single event.</p>
+    <div class="ad-packages">
+      ${AD_PACKAGES.map(p => `
+      <section class="ad-package">
+        <h2>${escHtml(p.name)}</h2>
+        <p class="ad-price">${escHtml(p.price)}</p>
+        <ul>${p.points.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul>
+      </section>`).join('')}
+    </div>
+    <h2 class="section-heading">Get started</h2>
+    <p>Email <a href="mailto:${escHtml(email)}?subject=${subject}">${escHtml(email)}</a> with your business name and what you'd like to promote. We'll reply with open dates and our latest audience numbers.</p>
+    <p>Listing a community event is always free: <a href="/submit">submit it here</a>.</p>`;
+  return layout({
+    siteUrl, path: '/advertise',
+    title: `Advertise | ${SITE_NAME}`,
+    description: 'Sponsor The Vic 361 newsletter, become a venue partner, or feature your event to reach people looking for things to do in Victoria, TX.',
+    body
   });
 }
 
@@ -591,6 +680,7 @@ export function renderSitemap(events, { siteUrl, now, lastmod }) {
     { loc: '/', freq: 'daily', pri: '1.0', mod },
     ...HUB_PAGES.map(p => ({ loc: p.path, freq: 'daily', pri: '0.8', mod })),
     { loc: '/about', freq: 'monthly', pri: '0.4' },
+    { loc: '/advertise', freq: 'monthly', pri: '0.3' },
     { loc: '/submit', freq: 'monthly', pri: '0.4' },
     ...events.filter(ev => ev.date >= today).map(ev => ({ loc: ev.page, freq: 'weekly', pri: '0.6', mod }))
   ];
@@ -619,6 +709,7 @@ export function renderLlmsTxt(events, { siteUrl, now }) {
     ...HUB_PAGES.map(p => `- [${p.title}](${siteUrl}${p.path}): ${p.description}`),
     `- [About](${siteUrl}/about): who runs The Vic 361 and how events are chosen`,
     `- [Submit an event](${siteUrl}/submit)`,
+    `- [Advertise](${siteUrl}/advertise): sponsorships and featured listings for local businesses`,
     '',
     `## Upcoming events (as of ${formatDay(today, { month: 'long', day: 'numeric', year: 'numeric' })})`,
     ''

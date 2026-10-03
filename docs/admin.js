@@ -175,6 +175,11 @@
     });
   }
 
+  // Only http(s) links are clickable; a scraped `javascript:` URL renders as #.
+  function httpUrl(u) {
+    return typeof u === 'string' && /^https?:\/\//i.test(u.trim()) ? u.trim() : '#';
+  }
+
   function escapeHtml(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
@@ -538,7 +543,7 @@
         // propagation so the surrounding label never sees it.
         const sourceLink = isHttpUrl(ev.url)
           ? '<a class="event-row__source-link" data-act="open-source" ' +
-              'href="' + escapeHtml(ev.url) + '" ' +
+              'href="' + escapeHtml(httpUrl(ev.url)) + '" ' +
               'target="_blank" rel="noopener noreferrer" ' +
               'title="Open source: ' + escapeHtml(ev.url) + '">' +
               escapeHtml(shortenUrl(ev.url)) + ' ↗</a>'
@@ -788,7 +793,7 @@
         parts.push('<div style="margin: 0 0 16px;">');
         const titleText = escapeHtml(ev.name || '(untitled)');
         const title = ev.url
-          ? '<a href="' + escapeHtml(ev.url) + '" style="color:#2d5b8a;">' + titleText + '</a>'
+          ? '<a href="' + escapeHtml(httpUrl(ev.url)) + '" style="color:#2d5b8a;">' + titleText + '</a>'
           : titleText;
         parts.push('<p style="margin:0; font-weight:bold; font-size:1.1em;">' + title + '</p>');
         const meta = [];
@@ -985,6 +990,7 @@
     form.elements['url'].value = ev.url || '';
     syncEditUrlOpenLink();
     form.elements['free'].checked = Boolean(ev.free);
+    if (form.elements['featured']) form.elements['featured'].checked = Boolean(ev.featured);
     const haveIcons = new Set(Array.isArray(ev.icons) ? ev.icons : []);
     form.querySelectorAll('input[name="icons"]').forEach(cb => {
       cb.checked = haveIcons.has(cb.value);
@@ -1033,7 +1039,8 @@
       description: (form.elements['description'].value || '').trim(),
       url: (form.elements['url'].value || '').trim(),
       icons,
-      free: Boolean(form.elements['free'].checked)
+      free: Boolean(form.elements['free'].checked),
+      featured: Boolean(form.elements['featured'] && form.elements['featured'].checked)
     };
   }
 

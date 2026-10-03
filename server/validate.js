@@ -29,7 +29,8 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 // Accepts http(s)://host/... — used to validate the URL after scheme
 // normalization (we add https:// when the user supplied a bare host like
 // example.com, so the stored value is always a usable absolute URL).
-const URL_RE = /^https?:\/\/[^\s]+$/i;
+// No quotes or angle brackets: the URL ends up inside an href attribute.
+const URL_RE = /^https?:\/\/[^\s"'<>]+$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Phone: at least 7 digits when punctuation/spaces are stripped. Permissive on
 // formatting (parentheses, dashes, dots, +, spaces) so users aren't forced into
@@ -233,13 +234,16 @@ export function validateEventEdit(input) {
   const free = Boolean(input.free);
   if (free && !icons.includes('free')) icons.push('free');
 
+  // Paid featured listing: pinned to the top of its day on the public site.
+  const featured = Boolean(input.featured);
+
   if (Object.keys(errors).length) return { ok: false, errors };
 
   return {
     ok: true,
     data: {
       name, date, time, end_time, venue, address, description, url,
-      icons, free
+      icons, free, featured
     }
   };
 }

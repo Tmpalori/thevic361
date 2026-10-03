@@ -122,14 +122,15 @@ class FileStore {
       const raw = await fs.readFile(this.file, 'utf8');
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') {
-        return { submissions: [], published: null, event_edits: [] };
+        return { submissions: [], published: null, event_edits: [], event_archive: {} };
       }
       if (!Array.isArray(parsed.submissions)) parsed.submissions = [];
+      if (!parsed.event_archive || typeof parsed.event_archive !== 'object') parsed.event_archive = {};
       if (!Array.isArray(parsed.event_edits)) parsed.event_edits = [];
       return parsed;
     } catch (err) {
       if (err.code === 'ENOENT') {
-        return { submissions: [], published: null, event_edits: [] };
+        return { submissions: [], published: null, event_edits: [], event_archive: {} };
       }
       throw err;
     }
@@ -200,6 +201,29 @@ class FileStore {
       await this._write(data);
       return payload;
     });
+  }
+
+  // Every event ever published, keyed by its public page path
+  // (/events/<date>-<slug>). Event pages stay up after their week rotates
+  // out of the live payload, so links and search rankings don't 404.
+  async archiveEvents(events) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      for (const ev of events) {
+        if (ev && ev.page) data.event_archive[ev.page] = ev;
+      }
+      await this._write(data);
+    });
+  }
+
+  async getArchivedEvent(page) {
+    const data = await this._read();
+    return data.event_archive[page] || null;
+  }
+
+  async listArchivedEvents() {
+    const data = await this._read();
+    return Object.values(data.event_archive);
   }
 
   // Lightweight duplicate detector: same date + normalized name + venue, status
@@ -303,6 +327,16 @@ class PgStore {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
         `);
+        // Every event ever published, keyed by its public page path, so
+        // /events/<slug> keeps working after the week rotates out.
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS event_archive (
+            page TEXT PRIMARY KEY,
+            event_date DATE,
+            payload JSONB NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `);
       })().catch(err => {
         this._readyPromise = null;
         throw err;
@@ -401,6 +435,31 @@ class PgStore {
         SET payload = EXCLUDED.payload, updated_at = NOW();
     `, [JSON.stringify(payload)]);
     return payload;
+  }
+
+  async archiveEvents(events) {
+    await this.ready();
+    const rows = events.filter(ev => ev && ev.page);
+    for (const ev of rows) {
+      await this.pool.query(`
+        INSERT INTO event_archive (page, event_date, payload, updated_at)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (page) DO UPDATE
+          SET event_date = EXCLUDED.event_date, payload = EXCLUDED.payload, updated_at = NOW();
+      `, [ev.page, /^\d{4}-\d{2}-\d{2}$/.test(ev.date || '') ? ev.date : null, JSON.stringify(ev)]);
+    }
+  }
+
+  async getArchivedEvent(page) {
+    await this.ready();
+    const r = await this.pool.query('SELECT payload FROM event_archive WHERE page = $1', [page]);
+    return r.rows[0] ? r.rows[0].payload : null;
+  }
+
+  async listArchivedEvents() {
+    await this.ready();
+    const r = await this.pool.query('SELECT payload FROM event_archive ORDER BY event_date DESC NULLS LAST');
+    return r.rows.map(row => row.payload);
   }
 
   async findDuplicate({ date, name, venue }) {
