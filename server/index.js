@@ -25,6 +25,8 @@ import { createRateLimiter } from './rateLimit.js';
 import { createAuth } from './auth.js';
 import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
+import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
+import crypto from 'node:crypto';
 import {
   HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
@@ -122,6 +124,10 @@ export async function createApp(opts = {}) {
     file: opts.storageFile
   });
   const store = storeBundle.store;
+
+  // Note crawler hits on public pages for the admin Traffic tab. Registered
+  // before every route so it sees the server-rendered pages too.
+  if (typeof store.recordTraffic === 'function') app.use(crawlerMiddleware(store));
 
   const submitLimiter = opts.submitLimiter || createRateLimiter({
     windowMs: 60 * 1000, max: 5
@@ -831,6 +837,46 @@ export async function createApp(opts = {}) {
     res.json({ ok: true, events });
   });
 
+  // ─── Traffic (admin Traffic tab, see server/analytics.js) ───
+  // Daily visitor hashes are salted with a server secret so they can't be
+  // reversed to an IP. A random salt (when no secret is set) just means
+  // visitor counts reset on restart.
+  const analyticsSecret = opts.analyticsSecret ?? process.env.ADMIN_SESSION_SECRET ?? crypto.randomBytes(16).toString('hex');
+  const trackLimiter = opts.trackLimiter || createRateLimiter({ windowMs: 60 * 1000, max: 120 });
+
+  app.post('/api/track', async (req, res) => {
+    // Always 204: the beacon never waits on or reacts to the answer.
+    res.status(204).end();
+    if (typeof store.recordTraffic !== 'function') return;
+    const ip = req.ip || req.socket.remoteAddress || '';
+    if (!trackLimiter.check(ip).ok) return;
+    let body = req.body;
+    if (typeof body === 'string') { try { body = JSON.parse(body); } catch { return; } }
+    const row = beaconRow(body, {
+      ip, ua: req.get('user-agent') || '', secret: analyticsSecret,
+      siteHost: new URL(siteUrl).host, now: nowFn()
+    });
+    if (!row) return;
+    try { await store.recordTraffic(row); } catch (err) {
+      console.warn('[traffic] record failed:', err.message);
+    }
+  });
+
+  app.get('/api/admin/traffic', requireAdmin, async (req, res) => {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 1), 365);
+    if (typeof store.listTraffic !== 'function') return res.json({ ok: false, error: 'not-supported' });
+    try {
+      const now = nowFn();
+      const since = new Date(now.getTime() - (days + 1) * 86400000).toISOString().slice(0, 10);
+      const rows = await store.listTraffic(since);
+      res.set('Cache-Control', 'no-store');
+      res.json(summarize(rows, { now, days }));
+    } catch (err) {
+      console.error('[traffic] summary failed:', err.message);
+      res.status(500).json({ ok: false, error: 'traffic-failed', message: err.message });
+    }
+  });
+
   // ─── Public events feed ───
   // The live payload is the published row in the store (with the admin
   // event-edits overlay applied). When nothing has been published yet we
@@ -1050,6 +1096,9 @@ export async function createApp(opts = {}) {
   });
 
   app.use((err, req, res, _next) => {
+    // A garbled tracking beacon (bad JSON from a browser extension, a bot)
+    // isn't worth a 500 or an error log line.
+    if (req.path === '/api/track') return res.status(204).end();
     console.error('[server] error:', err);
     if (req.path.startsWith('/api/')) {
       return res.status(500).json({ ok: false, error: 'server-error' });

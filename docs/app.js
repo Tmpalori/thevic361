@@ -394,7 +394,7 @@
       var btn = e.target.closest('[data-filter]');
       if (!btn) return;
       applyFilter(btn.getAttribute('data-filter'));
-      if (typeof window.gtag === 'function') window.gtag('event', 'filter', { filter: currentFilter });
+      if (typeof window.vic361Track === 'function') window.vic361Track('filter', { link_url: currentFilter });
     });
   }
 

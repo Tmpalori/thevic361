@@ -1260,7 +1260,8 @@
       submissions: document.getElementById('tab-submissions'),
       preview: document.getElementById('tab-preview'),
       newsletter: document.getElementById('tab-newsletter'),
-      sources: document.getElementById('tab-sources')
+      sources: document.getElementById('tab-sources'),
+      traffic: document.getElementById('tab-traffic')
     };
     Object.entries(panels).forEach(([k, el]) => {
       if (!el) return;
@@ -1270,6 +1271,77 @@
     if (name === 'preview') refreshPreview();
     if (name === 'newsletter') refreshNewsletter();
     if (name === 'sources') loadSources();
+    if (name === 'traffic') loadTraffic();
+  }
+
+  // ─── TRAFFIC TAB ─────────────────────────────────────────────────────
+  // First-party visitor stats from /api/admin/traffic (server/analytics.js).
+  function trafficRows(el, rows, emptyText, labelFn) {
+    if (!el) return;
+    if (!rows || !rows.length) {
+      el.innerHTML = '<tr><td class="traffic-empty">' + escapeHtml(emptyText) + '</td></tr>';
+      return;
+    }
+    const max = Math.max.apply(null, rows.map(r => r.count)) || 1;
+    el.innerHTML = rows.map(r =>
+      '<tr><td class="traffic-label">' + (labelFn ? labelFn(r) : escapeHtml(r.key)) + '</td>' +
+      '<td class="traffic-bar-cell"><span class="traffic-bar" style="width:' + Math.round(r.count / max * 100) + '%"></span></td>' +
+      '<td class="traffic-num">' + r.count + '</td></tr>').join('');
+  }
+
+  function renderTraffic(t) {
+    const totals = document.getElementById('traffic-totals');
+    const stat = (label, v) => '<div class="sources-summary__item"><span class="sources-summary__label">' +
+      escapeHtml(label) + '</span><span class="sources-summary__value">' + v.visitors +
+      ' visitors · ' + v.views + ' views</span></div>';
+    if (totals) totals.innerHTML = stat('Today', t.totals.today) + stat('Last 7 days', t.totals.week) +
+      stat('Last ' + Math.min(30, t.days) + ' days', t.totals.month);
+
+    const chart = document.getElementById('traffic-chart');
+    if (chart) {
+      const max = Math.max(1, ...t.daily.map(d => d.visitors));
+      chart.innerHTML = t.daily.map(d => {
+        const label = new Date(d.day + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return '<div class="traffic-col" title="' + escapeHtml(label + ': ' + d.visitors + ' visitors, ' + d.views + ' views') + '">' +
+          '<span class="traffic-col-bar" style="height:' + Math.round(d.visitors / max * 100) + '%"></span></div>';
+      }).join('');
+    }
+
+    const link = r => '<a href="' + escapeHtml(httpUrl(location.origin + r.key)) + '" target="_blank" rel="noopener">' + escapeHtml(r.key) + '</a>';
+    trafficRows(document.getElementById('traffic-pages'), t.top_pages, 'No page views yet.', link);
+    trafficRows(document.getElementById('traffic-sources'), t.sources, 'No visits yet.');
+    trafficRows(document.getElementById('traffic-clicks'), t.clicks, 'No clicks yet.', r => escapeHtml(r.label));
+    trafficRows(document.getElementById('traffic-top-clicked'), t.top_clicked, 'No event or sponsor clicks yet.',
+      r => escapeHtml(r.key.length > 60 ? r.key.slice(0, 57) + '…' : r.key));
+    trafficRows(document.getElementById('traffic-crawlers'), t.crawlers, 'No crawler visits yet.');
+    trafficRows(document.getElementById('traffic-referrers'), t.referrer_sites, 'None yet.');
+  }
+
+  async function loadTraffic() {
+    const loadEl = document.getElementById('traffic-loading');
+    const errEl = document.getElementById('traffic-error');
+    const body = document.getElementById('traffic-body');
+    const days = (document.getElementById('traffic-days') || {}).value || '30';
+    if (publishMode() !== 'server') {
+      if (errEl) { errEl.hidden = false; errEl.textContent = 'Sign in to the server to view traffic.'; }
+      return;
+    }
+    if (loadEl) loadEl.hidden = false;
+    if (errEl) errEl.hidden = true;
+    try {
+      const { res, json } = await adminFetch('/api/admin/traffic?days=' + encodeURIComponent(days));
+      if (!res.ok || !json || !json.ok) {
+        throw new Error((json && json.message) || ('Failed to load traffic (HTTP ' + res.status + ').'));
+      }
+      state.traffic = json;
+      renderTraffic(json);
+      if (body) body.hidden = false;
+    } catch (err) {
+      console.error(err);
+      if (errEl) { errEl.hidden = false; errEl.textContent = err.message || String(err); }
+    } finally {
+      if (loadEl) loadEl.hidden = true;
+    }
   }
 
   // ─── SOURCES TAB ─────────────────────────────────────────────────────
@@ -1677,6 +1749,11 @@
       btn.addEventListener('click', () => activateTab(btn.dataset.tab));
     });
 
+    const trafficDays = document.getElementById('traffic-days');
+    const trafficRefresh = document.getElementById('traffic-refresh');
+    if (trafficDays) trafficDays.addEventListener('change', loadTraffic);
+    if (trafficRefresh) trafficRefresh.addEventListener('click', loadTraffic);
+
     const search = document.getElementById('filter-search');
     const cat = document.getElementById('filter-category');
     const ven = document.getElementById('filter-venue');
@@ -1798,6 +1875,7 @@
     copyEditUrl,
     isHttpUrl, shortenUrl,
     _state: state,
+    renderTraffic: renderTraffic,
     _constants: {
       WEEKDAY_TARGET_MIN, WEEKDAY_TARGET_MAX,
       WEEKEND_TARGET_MIN, WEEKEND_TARGET_MAX,

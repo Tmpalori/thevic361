@@ -87,6 +87,7 @@ thevic361/
 │   ├── db.js                     # FileStore + PgStore + factory; inline schema
 │   ├── github.js                 # GitHub Contents API + workflow_dispatch
 │   ├── rateLimit.js              # in-memory sliding-window limiter
+│   ├── analytics.js              # first-party visitor stats for the admin Traffic tab
 │   ├── seo.js                    # server-rendered pages: home, intent pages, /events/:slug, /about, sitemap.xml, llms.txt
 │   ├── sources.js                # /api/admin/sources payload builder
 │   ├── turnstile.js              # Cloudflare Turnstile verify
@@ -179,6 +180,10 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 ## Venues, guides, social kit
 
 `server/guides.js` generates `/venues` + `/venues/<slug>` from `venues.json` (organizer accounts skipped) and the live + archived events, seasonal guides (`SEASONS`: Tejas Fest, Halloween, Thanksgiving, Christmas, New Year's Eve, July 4th, Bach Festival) that appear in the nav only while in season or when they have upcoming events, and `/events/<slug>.ics`. Event pages carry calendar and share buttons; the homepage has client-side filter chips (`docs/app.js`). `scripts/social_kit.py` runs Monday and Thursday (`social-kit.yml`) and commits slides + captions to `docs/social/latest/` (open `/social/latest/index.html`).
+
+## Traffic stats
+
+`server/analytics.js` powers the admin **Traffic** tab. People are counted from a `docs/track.js` beacon (`POST /api/track`: page views and sponsor/event/subscribe clicks; skipped in a browser signed into the admin); search and AI crawlers are counted server-side by user agent. Rows go to the `traffic` table (Postgres, ~400 days kept) with a daily salted visitor hash and no IPs or cookies. `GET /api/admin/traffic?days=N` returns the summary.
 
 ## Conventions
 
