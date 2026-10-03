@@ -193,6 +193,13 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 
 `server/sponsors.js`: `/advertise` → `/advertise/checkout?package=weekly|partner|featured` (one form) → Stripe Checkout → `POST /api/stripe/webhook` (signature-verified over the raw body, so it's registered before `express.json`). Weekly sponsor books one Mon–Sun week (held 35 min while someone pays) and replaces the sponsor slot; venue partner is a monthly subscription that marks every event at that venue Featured until it's cancelled in Stripe; featured event adds a `paid-feature` submission to the review queue and features the matching live event. Placements are applied in `getPublicPayload` at read time, never written into the published payload. Orders live in `sponsor_orders`; prices in `AD_PACKAGES` (`server/seo.js`). Admin Sponsors tab: orders, week calendar, hide/restore. Paid orders ping Slack. Off until both Stripe vars are set.
 
+## Traffic features
+
+- Search landing pages in `HUB_PAGES` with `hidden: true` (`/tonight`, `/date-night`, `/this-weekend-with-kids`) stay out of the top nav but are in the footer and sitemap.
+- Hub pages and the homepage hero have a "Share this list" button (handled by `docs/track.js`); `/this-weekend` and the homepage use the social-kit cover slides as link-preview images.
+- `docs/app.js` inserts a "Get this list every Monday" signup card after the day following today (hidden once subscribed on that device, via localStorage).
+- `server/widget.js`: `/widget/:slug` is an iframe-able "Upcoming at <venue>" box (framing allowed only on that route); `/for-venues` gives venues the embed code plus a plain backlink. Venue pages link to it.
+
 ## Auto-publish
 
 `server/autopublish.js`: each collector run commits `candidates.json`, which redeploys the site; on boot in production (`RAILWAY_ENVIRONMENT_NAME=production`, unless `AUTO_PUBLISH=0`) the upcoming candidates plus approved submissions are published to the store. Upcoming events already published are kept; events it added that the admin later removed are remembered (`auto_publish` in the published payload, hidden from `/events.json`) and not re-added. `POST /api/admin/auto-publish` forces a run. The collector drops non-events (`non_event_reason`: job/internship posts, booking ads, awareness-day posts) and decodes HTML entities; with `OPENAI_API_KEY`, the AI review also returns `keep: false` for non-events. `weekly-collect.yml` runs Sunday and Wednesday.

@@ -28,8 +28,19 @@ const UPCOMING_DAYS = 60;
 const ICON_KEYS = new Set(['food', 'music', 'family', 'drinks', 'arts', 'shopping', 'outdoors', 'community', 'free']);
 const iconSvg = k => `<svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-${k}"></use></svg>`;
 
+// Start hour (0-23) of an event, or null when it has no clock time.
+function startHour(ev) {
+  const m = /(\d{1,2})(?::\d{2})?\s*([ap])\.?m/i.exec(ev.time || '');
+  if (!m) return null;
+  return (Number(m[1]) % 12) + (m[2].toLowerCase() === 'p' ? 12 : 0);
+}
+const isEvening = ev => { const h = startHour(ev); return h !== null && h >= 16; };
+
 // Intent pages. `filter` picks events from the upcoming window; `range`
-// picks the date window. Order here is the nav order.
+// picks the date window. Order here is the nav order. `hidden` pages answer
+// specific searches ("things to do tonight", "date night") and stay out of
+// the top nav to keep it short; they're still in the footer and sitemap.
+// `image` is the link-preview image (the matching social-kit slide).
 export const HUB_PAGES = [
   {
     path: '/today',
@@ -49,6 +60,7 @@ export const HUB_PAGES = [
     h1: 'Things to do in Victoria, TX this weekend',
     description: 'Events in Victoria, Texas this weekend: concerts, festivals, family events, markets, and free things to do Friday through Sunday.',
     range: 'weekend',
+    image: '/social/latest/weekend-1.png',
     lead: (n, label) => n
       ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} in Victoria, TX this weekend (${label})`
       : `Nothing is listed in Victoria, TX for this weekend (${label}) yet`
@@ -100,6 +112,46 @@ export const HUB_PAGES = [
     lead: (n) => n
       ? `There ${n === 1 ? 'is 1 food and drink event' : `are ${n} food and drink events`} coming up in Victoria, TX`
       : 'No food and drink events are listed in Victoria, TX right now'
+  },
+  {
+    path: '/tonight',
+    nav: 'Tonight',
+    hidden: true,
+    title: 'Things To Do in Victoria, TX Tonight',
+    h1: 'Things to do in Victoria, TX tonight',
+    description: 'What\'s happening tonight in Victoria, Texas: live music, trivia, karaoke, shows, and late events starting this evening.',
+    range: 'today',
+    filter: isEvening,
+    lead: (n, label) => n
+      ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} tonight in Victoria, TX (${label})`
+      : `Nothing is listed for tonight in Victoria, TX (${label}) yet`
+  },
+  {
+    path: '/date-night',
+    nav: 'Date Night',
+    hidden: true,
+    title: 'Date Night Ideas in Victoria, TX',
+    h1: 'Date night ideas in Victoria, TX',
+    description: 'Date night in Victoria, Texas: live music, theatre, art nights, wine and beer, and dinner events this week.',
+    range: 'upcoming',
+    filter: ev => isEvening(ev) && (ev.icons || []).some(i => ['music', 'arts', 'drinks', 'food'].includes(i)) &&
+      !(ev.icons || []).includes('family'),
+    lead: (n) => n
+      ? `There ${n === 1 ? 'is 1 date-night pick' : `are ${n} date-night picks`} coming up in Victoria, TX`
+      : 'No date-night events are listed in Victoria, TX right now'
+  },
+  {
+    path: '/this-weekend-with-kids',
+    nav: 'Weekend with Kids',
+    hidden: true,
+    title: 'Things To Do With Kids in Victoria, TX This Weekend',
+    h1: 'Things to do with kids in Victoria, TX this weekend',
+    description: 'Kid-friendly events in Victoria, Texas this weekend: story times, festivals, the zoo, crafts, and family fun.',
+    range: 'weekend',
+    filter: ev => (ev.icons || []).includes('family'),
+    lead: (n, label) => n
+      ? `There ${n === 1 ? 'is 1 kid-friendly event' : `are ${n} kid-friendly events`} in Victoria, TX this weekend (${label})`
+      : `No kid-friendly events are listed for this weekend (${label}) yet`
   }
 ];
 
@@ -374,7 +426,7 @@ export function fillSeasonalNav(html, seasons, current) {
 }
 
 export function navHtml(current) {
-  const links = HUB_PAGES.map(p =>
+  const links = HUB_PAGES.filter(p => !p.hidden).map(p =>
     `<a href="${p.path}"${p.path === current ? ' aria-current="page"' : ''}>${escHtml(p.nav)}</a>`);
   return `<nav class="browse-nav" aria-label="Browse events"><div class="container browse-inner">${SEASONAL_NAV_SLOT}${links.join('')}</div></nav>`;
 }
@@ -422,6 +474,7 @@ function footerHtml() {
             <li><a href="/submit">Submit an event</a></li>
             <li><a href="/venues">Venues</a></li>
             <li><a href="/advertise">Advertise</a></li>
+            <li><a href="/for-venues">For venues</a></li>
             <li><a href="/contact">Contact</a></li>
           </ul>
         </div>
@@ -441,7 +494,7 @@ export function breadcrumbLd(siteUrl, trail) {
   };
 }
 
-export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path }) {
+export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = '/og-image.png' }) {
   const url = siteUrl + path;
   return `<!DOCTYPE html>
 <html lang="en">
@@ -459,7 +512,7 @@ ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <meta property="og:description" content="${escHtml(description)}">
 <meta property="og:url" content="${escHtml(url)}">
 <meta property="og:site_name" content="${SITE_NAME}">
-<meta property="og:image" content="${siteUrl}/og-image.png">
+<meta property="og:image" content="${siteUrl}${image}">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -525,6 +578,7 @@ export function renderHubPage(page, events, { siteUrl, now, sponsor }) {
   const body = `
     <h1 class="page-title">${escHtml(page.h1)}</h1>
     <p class="page-lead">${escHtml(lead)}</p>
+    ${list.length ? `<p class="share-row"><button type="button" class="share-btn share-btn--list" data-share-url="${escHtml(siteUrl + page.path)}" data-share-text="${escHtml(page.h1)}" data-track="share_list">Share this list</button></p>` : ''}
     ${list.length
       ? renderGrouped(list, today)
       : `<div class="empty-state">Check <a href="/">this week's full list</a>, or <a href="/submit">submit an event</a>.</div>`}
@@ -534,7 +588,7 @@ export function renderHubPage(page, events, { siteUrl, now, sponsor }) {
     breadcrumbLd(siteUrl, [{ name: SITE_NAME, path: '/' }, { name: page.nav, path: page.path }]),
     ...list.map(ev => eventJsonLd(ev, siteUrl))
   ];
-  return layout({ siteUrl, path: page.path, title: `${page.title} | ${SITE_NAME}`, description: page.description, body, ld });
+  return layout({ siteUrl, path: page.path, title: `${page.title} | ${SITE_NAME}`, description: page.description, body, ld, image: page.image });
 }
 
 export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = '', venuePath = null }) {
@@ -699,6 +753,9 @@ export function renderHome(template, events, { siteUrl, now, signupHtml = null }
   // The newsletter signup form (server/newsletter.js) fills the footer slot.
   if (signupHtml) page = page.replace(/<!--SIGNUP_START-->[\s\S]*?<!--SIGNUP_END-->/, signupHtml);
   return page
+    // Link previews show this week's list (the social-kit cover slide).
+    .replace(/(<meta (?:property="og:image"|name="twitter:image") content=")[^"]*"/g, `$1${siteUrl}/social/latest/week-1.png"`)
+    .replace(/<meta property="og:image:(?:width|height)"[^>]*>\n?/g, '')
     .replace('<p class="loading-message">Loading events...</p>', renderDays(week, events, today))
     .replace('<!--NAV-->', navHtml('/'))
     .replace('</head>', ld.map(jsonLd).join('\n') + '\n</head>');
@@ -713,6 +770,7 @@ export function renderSitemap(events, { siteUrl, now, lastmod, extraPaths = [] }
     { loc: '/about', freq: 'monthly', pri: '0.4' },
     { loc: '/advertise', freq: 'monthly', pri: '0.3' },
     { loc: '/contact', freq: 'yearly', pri: '0.2' },
+    { loc: '/for-venues', freq: 'monthly', pri: '0.3' },
     { loc: '/submit', freq: 'monthly', pri: '0.4' },
     ...extraPaths.map(loc => ({ loc, freq: 'weekly', pri: '0.5', mod })),
     ...events.filter(ev => ev.date >= today).map(ev => ({ loc: ev.page, freq: 'weekly', pri: '0.6', mod }))

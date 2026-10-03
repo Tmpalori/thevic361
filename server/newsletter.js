@@ -211,7 +211,7 @@ export function signupFormHtml() {
 f.addEventListener('submit',function(e){e.preventDefault();var b=f.querySelector('button');b.disabled=true;m.textContent='';
 fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value})})
 .then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});})
-.then(function(x){m.textContent=x.ok?(x.j.message||'Check your inbox to confirm.'):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';if(window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
+.then(function(x){m.textContent=x.ok?(x.j.message||'Check your inbox to confirm.'):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';try{localStorage.setItem('vic361-subscribed','1')}catch(e){}if(window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
 .catch(function(){m.textContent='Something went wrong. Try again.';}).then(function(){b.disabled=false;});});})();
 </script>`;
 }

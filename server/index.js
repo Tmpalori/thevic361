@@ -31,6 +31,7 @@ import { stripeConfig, createStripe, createSponsors } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
 import { createAutoPublish } from './autopublish.js';
+import { registerWidget } from './widget.js';
 import crypto from 'node:crypto';
 import {
   HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
@@ -1106,6 +1107,9 @@ export async function createApp(opts = {}) {
 
   // Contact form → Slack; replaces publishing an email address.
   registerContact(app, { siteUrl, slack, createRateLimiter, sendHtml });
+
+  // Venue widget + /for-venues (server/widget.js).
+  registerWidget(app, { siteUrl, getPublicPayload, getVenues: () => venues, nowFn, sendHtml });
 
   sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml });
 
