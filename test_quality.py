@@ -306,3 +306,16 @@ def test_merge_drops_non_events_and_decodes_entities():
     assert "Walk to End Alzheimer's" in names
     assert any(e["venue"] == "Texas A&M University-Victoria" for e in out)
     assert names.count("Field Trip Booking") == 1
+
+
+def test_listing_urls_are_not_event_links():
+    from collect_events import is_listing_url
+    for u in ("https://www.eventbrite.com/b/tx--victoria/music/",
+              "https://www.eventbrite.com/d/tx--victoria/events/",
+              "https://allevents.in/victoria", "https://allevents.in/victoria/all",
+              "https://www.facebook.com/events/"):
+        assert is_listing_url(u), u
+    for u in ("https://www.eventbrite.com/e/josh-abbott-acoustic-tickets-123456",
+              "https://allevents.in/victoria/tejas-fest-2026/200030008232138",
+              "https://www.facebook.com/events/1234567890/", ""):
+        assert not is_listing_url(u), u

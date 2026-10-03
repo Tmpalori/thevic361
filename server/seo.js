@@ -319,6 +319,16 @@ export function placeText(ev) {
   return `${venue} · ${addr}`;
 }
 
+// Search and category pages ("music in Victoria") aren't a link to the event.
+const LISTING_URL = [
+  /eventbrite\.[a-z.]+\/(b|d)\//i,
+  /allevents\.in\/[^/]+\/?(all|this-weekend|today|tomorrow|[a-z-]+-events)?\/?(\?|#|$)/i,
+  /facebook\.com\/events\/?(explore|search|discover)?\/?(\?|#|$)/i
+];
+export function isListingUrl(url) {
+  return typeof url === 'string' && LISTING_URL.some(re => re.test(url.trim()));
+}
+
 export function withPages(events) {
   const seen = new Map();
   return (Array.isArray(events) ? events : [])
@@ -332,6 +342,7 @@ export function withPages(events) {
       for (const k of ['name', 'venue', 'address', 'description', 'time']) {
         if (typeof ev[k] === 'string') clean[k] = decodeEntities(ev[k]);
       }
+      if (isListingUrl(ev.url)) clean.url = '';
       return Object.assign({}, ev, clean, { page: `/events/${n === 1 ? base : `${base}-${n}`}` });
     });
 }

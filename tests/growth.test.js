@@ -18,7 +18,9 @@ const EVENTS = [
   { date: '2026-10-10', name: 'Zoo Boo', time: '1:00 PM', venue: 'The Texas Zoo', icons: ['family', 'outdoors'] },
   { date: '2026-10-10', name: 'Art After Dark', time: '7:00 PM', venue: 'The Nave Museum', icons: ['arts'] },
   { date: '2026-10-12', name: 'Aero Open Mic', time: '7:00 PM', venue: 'Aero Crafters', icons: ['music'] },
-  { date: '2026-10-10', name: 'Texas A&amp;M Night', time: '6:00 PM', venue: '1907 N Ben Jordan St, Victoria, TX', address: '1907 N Ben Jordan St, Victoria, TX', icons: ['family'] }
+  { date: '2026-10-10', name: 'Texas A&amp;M Night', time: '6:00 PM', venue: '1907 N Ben Jordan St, Victoria, TX', address: '1907 N Ben Jordan St, Victoria, TX', icons: ['family'] },
+  { date: '2026-10-10', name: 'Josh Abbott Acoustic', time: '8:00 PM', venue: 'Aero Crafters', url: 'https://www.eventbrite.com/b/tx--victoria/music/', icons: ['music'] },
+  { date: '2026-10-10', name: 'Real Ticket Show', time: '9:00 PM', venue: 'Aero Crafters', url: 'https://www.eventbrite.com/e/real-ticket-show-tickets-123', icons: ['music'] }
 ];
 const VENUES = [
   { name: 'Aero Crafters', category: 'Bar / Live Music' },
@@ -92,5 +94,15 @@ describe('event text', () => {
     expect(html).toContain('Texas A&amp;M Night');
     const row = html.match(/<span class="event-venue">([^<]*)<\/span>/g).find(s => s.includes('Ben Jordan'));
     expect(row).toBe('<span class="event-venue">1907 N Ben Jordan St</span>');
+  });
+});
+
+describe('event links', () => {
+  it('drops search/category links but keeps real event links', async () => {
+    await start();
+    const d = await (await fetch(baseUrl + '/events.json')).json();
+    expect(d.events.find(e => e.name === 'Josh Abbott Acoustic').url).toBe('');
+    expect(d.events.find(e => e.name === 'Real Ticket Show').url).toContain('/e/real-ticket-show');
+    expect((await get('/')).html).not.toContain('eventbrite.com/b/');
   });
 });

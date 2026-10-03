@@ -1286,11 +1286,25 @@ def ai_review(events, batch_size=8):
     return events
 
 
+_LISTING_URL_RES = [
+    re.compile(r"eventbrite\.[a-z.]+/(b|d)/", re.I),
+    re.compile(r"allevents\.in/[^/]+/?(all|this-weekend|today|tomorrow|[a-z-]+-events)?/?([?#]|$)", re.I),
+    re.compile(r"facebook\.com/events/?(explore|search|discover)?/?([?#]|$)", re.I),
+]
+
+
+def is_listing_url(url):
+    """True for search/category pages that don't point at one event."""
+    return bool(url) and any(r.search(url.strip()) for r in _LISTING_URL_RES)
+
+
 # ─── FILL GAPS (description + url) ──────────────────────────────────────────
 
 def fill_gaps(events):
     """Fill missing descriptions and URLs using venue lookups and templates."""
     for ev in events:
+        if is_listing_url(ev.get("url")):
+            ev["url"] = ""
         # Fill URL from venue lookup if missing
         if not ev.get("url"):
             venue_lower = ev.get("venue", "").lower()
@@ -1570,7 +1584,7 @@ def merge_events(all_events, days_ahead=7, venues=None):
             "description": _clean_text(ev.get("description")),
             "icons": list(ev.get("icons") or []),
             "free": bool(ev.get("free", False)),
-            "url": (ev.get("url") or "").strip(),
+            "url": "" if is_listing_url(ev.get("url")) else (ev.get("url") or "").strip(),
         }
         if ev.get("_source"):
             new_entry["_source"] = ev["_source"]
