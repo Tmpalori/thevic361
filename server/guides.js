@@ -15,14 +15,15 @@
 import {
   SITE_NAME, escHtml, safeUrl, slugify, layout, renderEventItem, renderGrouped,
   eventJsonLd, breadcrumbLd, sponsorHtml, ctaHtml, localDateStr, formatDay,
-  sortEvents, parseTimes, addDays
+  sortEvents, parseTimes, addDays, chicagoOffset
 } from './seo.js';
 
 // ─── Venues ──────────────────────────────────────────────────────────────
 
 // Organizers rather than places (tourism accounts, promoters, festivals)
 // don't get a venue page; their events show on the real venue's page.
-const NON_PLACE = /aggregator|promoter|program|festival|media|hub|online/i;
+// Exact organizer words only: "Public Library / Community Programs" is a place.
+const NON_PLACE = /aggregator|promoter|\bfestival\b|\bmedia\b|events hub|online/i;
 
 function normName(s) {
   return String(s || '').toLowerCase()
@@ -46,25 +47,33 @@ export function buildVenues(venueList) {
   return out;
 }
 
-// True when an event's venue string refers to this venue. Exact match on
-// the normalized name, or containment for names of 5+ characters
-// ("Aero Crafters" vs "Aero Crafters Brewing").
+// True when an event's venue string could refer to this venue: an exact
+// match on the normalized name, or one name containing the other as whole
+// words when the shorter has 2+ words ("Leo J. Welder Center" inside "Leo J.
+// Welder Center for the Performing Arts"). A single shared word isn't
+// enough: "Theatre Victoria" and "Victoria Ballet Theatre" both normalize
+// to names containing "theatre".
 export function eventAtVenue(ev, venue) {
   const k = normName(ev.venue);
   if (!k || !venue.key) return false;
   if (k === venue.key) return true;
   const [a, b] = k.length < venue.key.length ? [k, venue.key] : [venue.key, k];
-  return a.length >= 5 && (` ${b} `).includes(` ${a} `);
+  return a.split(' ').length >= 2 && (` ${b} `).includes(` ${a} `);
 }
 
+// The single venue an event belongs to: an exact name match wins over a
+// partial one, so each event lands on exactly one venue page.
 export function venueFor(ev, venues) {
-  return venues.find(v => eventAtVenue(ev, v)) || null;
+  const k = normName(ev.venue);
+  if (!k) return null;
+  return venues.find(v => v.key === k) || venues.find(v => eventAtVenue(ev, v)) || null;
 }
 
-function venueEvents(venue, live, archived, today) {
+function venueEvents(venue, live, archived, today, venues) {
+  const candidates = venues || [venue];
   const byPage = new Map();
   for (const ev of [...archived, ...live]) {
-    if (ev && ev.page && eventAtVenue(ev, venue)) byPage.set(ev.page, ev);
+    if (ev && ev.page && venueFor(ev, candidates) === venue) byPage.set(ev.page, ev);
   }
   const all = [...byPage.values()];
   return {
@@ -78,9 +87,9 @@ function venueAddress(events) {
   return withAddr ? withAddr.address : '';
 }
 
-export function renderVenuePage(venue, live, archived, { siteUrl, now, sponsor }) {
+export function renderVenuePage(venue, live, archived, { siteUrl, now, sponsor, venues }) {
   const today = localDateStr(now);
-  const { upcoming, past } = venueEvents(venue, live, archived, today);
+  const { upcoming, past } = venueEvents(venue, live, archived, today, venues);
   const address = venueAddress([...upcoming, ...past]);
   const links = [
     ['Website', safeUrl(venue.website)],
@@ -135,7 +144,8 @@ export function renderVenuePage(venue, live, archived, { siteUrl, now, sponsor }
 
 export function renderVenueIndex(venues, live, archived, { siteUrl, now }) {
   const today = localDateStr(now);
-  const rows = venues.map(v => ({ v, n: venueEvents(v, live, archived, today).upcoming.length }))
+  const counts = upcomingCounts(venues, live, archived, today);
+  const rows = venues.map(v => ({ v, n: counts.get(v) || 0 }))
     .sort((a, b) => b.n - a.n || a.v.name.localeCompare(b.v.name));
   const body = `
     <h1 class="page-title">Event venues in Victoria, TX</h1>
@@ -154,13 +164,27 @@ export function renderVenueIndex(venues, live, archived, { siteUrl, now }) {
   });
 }
 
+// One pass over the events instead of one pass per venue.
+function upcomingCounts(venues, live, archived, today) {
+  const counts = new Map();
+  const seen = new Set();
+  for (const ev of [...live, ...archived]) {
+    if (!ev || !ev.page || seen.has(ev.page) || ev.date < today) continue;
+    seen.add(ev.page);
+    const v = venueFor(ev, venues);
+    if (v) counts.set(v, (counts.get(v) || 0) + 1);
+  }
+  return counts;
+}
+
 // Venues worth listing in the sitemap: the ones with something on them.
 export function venuesWithEvents(venues, live, archived, now) {
-  const today = localDateStr(now);
-  return venues.filter(v => {
-    const { upcoming, past } = venueEvents(v, live, archived, today);
-    return upcoming.length || past.length;
-  });
+  const withAny = new Set();
+  for (const ev of [...live, ...archived]) {
+    const v = ev && ev.page ? venueFor(ev, venues) : null;
+    if (v) withAny.add(v);
+  }
+  return venues.filter(v => withAny.has(v));
 }
 
 // ─── Seasonal guides ─────────────────────────────────────────────────────
@@ -194,14 +218,15 @@ export const SEASONS = [
     title: 'Christmas Events in Victoria, TX', h1: 'Christmas and holiday events in Victoria, TX',
     description: 'Christmas events in Victoria, TX: lighted parades, holiday markets, Santa visits, light displays, and holiday concerts.',
     intro: 'Lighted parades, holiday markets, Santa visits, light displays, and holiday concerts around Victoria.',
-    match: /christmas|holiday|santa|lighted\s*parade|light(s)?\s*(display|show|tour)|nutcracker|carol|winter\s*wonderland|jingle/i
+    match: /christmas|holiday\s*(market|parade|lights?|concert|bazaar|festival|party|show|open\s*house)|santa|lighted\s*parade|light(s)?\s*(display|show|tour)|nutcracker|carol(s|ing)\b|winter\s*wonderland|jingle/i
   },
   {
     path: '/new-years-eve', nav: "New Year's Eve", months: [12, 1],
     title: "New Year's Eve in Victoria, TX", h1: "New Year's Eve in Victoria, TX",
     description: "New Year's Eve parties and events in Victoria, TX.",
     intro: "Parties, countdowns, and live music to ring in the new year in Victoria.",
-    match: /new\s*year|nye\b/i
+    match: /new\s*year|nye\b/i,
+    exclude: /lunar|chinese|vietnamese|t[eế]t\b/i
   },
   {
     path: '/fourth-of-july', nav: 'July 4th', months: [6, 7],
@@ -219,8 +244,14 @@ export const SEASONS = [
   }
 ];
 
+// Keyword match, limited to events dated in the season's months, so a
+// "Holiday weekend BBQ" in September or New Year's fireworks don't land on
+// the July 4th page.
 export function seasonMatches(season, ev) {
-  return season.match.test(`${ev.name || ''} ${ev.description || ''}`);
+  const text = `${ev.name || ''} ${ev.description || ''}`;
+  if (!season.match.test(text) || (season.exclude && season.exclude.test(text))) return false;
+  const month = Number(String(ev.date || '').slice(5, 7));
+  return !month || season.months.includes(month);
 }
 
 export function inSeason(season, now) {
@@ -279,37 +310,52 @@ function icsEscape(s) {
 }
 
 // RFC 5545 lines must be ≤75 octets; continuation lines start with a space.
+// Split on whole characters so an emoji is never cut in half.
 function foldLine(line) {
   const out = [];
-  let rest = line;
-  while (Buffer.byteLength(rest) > 75) {
-    let cut = 75;
-    while (Buffer.byteLength(rest.slice(0, cut)) > 75) cut--;
-    out.push(rest.slice(0, cut));
-    rest = ' ' + rest.slice(cut);
+  let cur = '';
+  for (const ch of line) {
+    if (Buffer.byteLength(cur + ch) > 75) {
+      out.push(cur);
+      cur = ' ';
+    }
+    cur += ch;
   }
-  out.push(rest);
+  out.push(cur);
   return out.join('\r\n');
 }
 
 function compactDate(dateStr) { return dateStr.replace(/-/g, ''); }
 
-export function renderIcs(ev, { siteUrl, now }) {
+// Start/end as UTC instants. No end time → two hours; an end at or before
+// the start ("10pm - 1am") runs past midnight.
+function eventInstants(ev) {
   const times = parseTimes(ev.time);
-  const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+  if (!times[0]) return null;
+  const start = new Date(`${ev.date}T${times[0]}:00${chicagoOffset(ev.date)}`);
+  let end = times[1] ? new Date(`${ev.date}T${times[1]}:00${chicagoOffset(ev.date)}`) : null;
+  if (!end || end <= start) {
+    end = times[1] ? new Date(end.getTime() + 24 * 3600 * 1000) : new Date(start.getTime() + 2 * 3600 * 1000);
+  }
+  return { start, end };
+}
+
+function utcStamp(d) {
+  return d.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+}
+
+export function renderIcs(ev, { siteUrl, now }) {
+  const at = eventInstants(ev);
+  const stamp = utcStamp(now);
   const lines = [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//The Vic 361//Events//EN', 'CALSCALE:GREGORIAN',
     'BEGIN:VEVENT',
     `UID:${compactDate(ev.date)}-${ev.page.split('/').pop()}@thevic361.com`,
     `DTSTAMP:${stamp}`
   ];
-  if (times[0]) {
-    const start = `${compactDate(ev.date)}T${times[0].replace(':', '')}00`;
-    // Default to two hours when no end time was given.
-    const [h, m] = times[0].split(':').map(Number);
-    const endT = times[1] || `${String(Math.min(h + 2, 23)).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    lines.push(`DTSTART;TZID=America/Chicago:${start}`,
-      `DTEND;TZID=America/Chicago:${compactDate(ev.date)}T${endT.replace(':', '')}00`);
+  if (at) {
+    // UTC instants need no VTIMEZONE block, which Outlook requires for TZID.
+    lines.push(`DTSTART:${utcStamp(at.start)}`, `DTEND:${utcStamp(at.end)}`);
   } else {
     lines.push(`DTSTART;VALUE=DATE:${compactDate(ev.date)}`,
       `DTEND;VALUE=DATE:${compactDate(addDays(ev.date, 1))}`);
@@ -325,12 +371,10 @@ export function renderIcs(ev, { siteUrl, now }) {
 }
 
 export function googleCalendarUrl(ev, siteUrl) {
-  const times = parseTimes(ev.time);
+  const at = eventInstants(ev);
   let dates;
-  if (times[0]) {
-    const [h, m] = times[0].split(':').map(Number);
-    const endT = times[1] || `${String(Math.min(h + 2, 23)).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    dates = `${compactDate(ev.date)}T${times[0].replace(':', '')}00/${compactDate(ev.date)}T${endT.replace(':', '')}00`;
+  if (at) {
+    dates = `${utcStamp(at.start)}/${utcStamp(at.end)}`;
   } else {
     dates = `${compactDate(ev.date)}/${compactDate(addDays(ev.date, 1))}`;
   }

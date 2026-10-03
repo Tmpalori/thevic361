@@ -195,7 +195,7 @@ export function dateRange(kind, today) {
 
 // Chicago UTC offset ("-05:00" / "-06:00") for a given date, so JSON-LD
 // startDate carries an explicit offset as Google recommends.
-function chicagoOffset(dateStr) {
+export function chicagoOffset(dateStr) {
   const name = new Intl.DateTimeFormat('en-US', {
     timeZone: TZ, timeZoneName: 'shortOffset'
   }).formatToParts(parseYmd(dateStr)).find(p => p.type === 'timeZoneName');
@@ -360,18 +360,24 @@ export function renderGrouped(list, today) {
   return dates.map((d, i) => renderDay(d, list.filter(ev => ev.date === d), i, today)).join('');
 }
 
-// Seasonal guides currently in season (set per request by the server, see
-// guides.js activeSeasons). Rendering is synchronous, so a module-level list
-// set right before rendering is safe.
-let seasonalNav = [];
-export function setSeasonalNav(list) {
-  seasonalNav = Array.isArray(list) ? list : [];
+// In-season guides are request-specific, so pages carry a placeholder the
+// server fills per response (fillSeasonalNav) instead of sharing state
+// between concurrent requests.
+export const SEASONAL_NAV_SLOT = '<!--SEASONAL_NAV-->';
+
+export function seasonalNavLinks(seasons, current) {
+  return (seasons || []).map(p =>
+    `<a href="${p.path}"${p.path === current ? ' aria-current="page"' : ''}>${escHtml(p.nav)}</a>`).join('');
+}
+
+export function fillSeasonalNav(html, seasons, current) {
+  return html.split(SEASONAL_NAV_SLOT).join(seasonalNavLinks(seasons, current));
 }
 
 export function navHtml(current) {
-  const links = [...seasonalNav, ...HUB_PAGES].map(p =>
+  const links = HUB_PAGES.map(p =>
     `<a href="${p.path}"${p.path === current ? ' aria-current="page"' : ''}>${escHtml(p.nav)}</a>`);
-  return `<nav class="browse-nav" aria-label="Browse events"><div class="container browse-inner">${links.join('')}</div></nav>`;
+  return `<nav class="browse-nav" aria-label="Browse events"><div class="container browse-inner">${SEASONAL_NAV_SLOT}${links.join('')}</div></nav>`;
 }
 
 function headerHtml() {

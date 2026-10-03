@@ -6,7 +6,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
 import { withPages } from '../server/seo.js';
-import { buildVenues, eventAtVenue, renderIcs, googleCalendarUrl, SEASONS, seasonMatches } from '../server/guides.js';
+import { buildVenues, eventAtVenue, venueFor, renderIcs, googleCalendarUrl, SEASONS, seasonMatches } from '../server/guides.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,6 +15,9 @@ import http from 'node:http';
 const NOW = new Date('2026-10-07T17:00:00Z'); // Wed Oct 7, noon CDT
 
 const VENUES = [
+  { name: 'Victoria Public Library', category: 'Public Library / Community Programs' },
+  { name: 'Victoria Ballet Theatre', category: 'Arts / Performance' },
+  { name: 'Theatre Victoria', category: 'Theatre' },
   { name: 'Aero Crafters', category: 'Bar / Live Music', event_potential: 'Live music Fri/Sat',
     website: 'https://aerocrafters.pub', instagrams: ['aerocrafters'] },
   { name: 'Discover Victoria Texas', category: 'Tourism / Events Aggregator' },
@@ -62,11 +65,22 @@ const get = async p => {
 describe('venue matching', () => {
   it('skips organizer accounts and matches venue names loosely', () => {
     const venues = buildVenues(VENUES);
-    expect(venues.map(v => v.slug)).toEqual(['aero-crafters', 'empty-hall']);
-    const aero = venues[0];
+    expect(venues.map(v => v.slug)).toEqual([
+      'victoria-public-library', 'victoria-ballet-theatre', 'theatre-victoria', 'aero-crafters', 'empty-hall']);
+    const aero = venues.find(v => v.slug === 'aero-crafters');
     expect(eventAtVenue({ venue: 'Aero Crafters' }, aero)).toBe(true);
     expect(eventAtVenue({ venue: 'The Aero Crafters Brewing' }, aero)).toBe(true);
     expect(eventAtVenue({ venue: 'Aero' }, aero)).toBe(false);
+  });
+});
+
+describe('venue ownership', () => {
+  it('a single shared word does not claim another venue\'s events', () => {
+    const venues = buildVenues(VENUES);
+    const ballet = venues.find(v => v.slug === 'victoria-ballet-theatre');
+    const theatre = venues.find(v => v.slug === 'theatre-victoria');
+    expect(eventAtVenue({ venue: 'Theatre Victoria' }, ballet)).toBe(false);
+    expect(venueFor({ venue: 'Theatre Victoria' }, venues)).toBe(theatre);
   });
 });
 
@@ -82,6 +96,13 @@ describe('venue pages', () => {
     expect(r.text).toContain('309 E Crestwood Dr, Victoria, TX');
     expect(r.text).toContain('"@type":"Place"');
     expect(r.text).not.toContain('noindex');
+  });
+
+  it('the library gets a page and the ballet page excludes Theatre Victoria shows', async () => {
+    await startApp({ archive: [{ date: '2026-10-08', name: 'Little Shop', venue: 'Theatre Victoria' }] });
+    expect((await get('/venues/victoria-public-library')).status).toBe(200);
+    expect((await get('/venues/victoria-ballet-theatre')).text).not.toContain('Little Shop');
+    expect((await get('/venues/theatre-victoria')).text).toContain('Little Shop');
   });
 
   it('noindexes venues with nothing listed and 404s unknown or organizer slugs', async () => {
@@ -111,8 +132,17 @@ describe('venue pages', () => {
 describe('seasonal guides', () => {
   it('matches keywords', () => {
     const halloween = SEASONS.find(s => s.path === '/halloween-events');
-    expect(seasonMatches(halloween, { name: 'Downtown Trunk or Treat' })).toBe(true);
-    expect(seasonMatches(halloween, { name: 'Jazz Night' })).toBe(false);
+    expect(seasonMatches(halloween, { name: 'Downtown Trunk or Treat', date: '2026-10-31' })).toBe(true);
+    expect(seasonMatches(halloween, { name: 'Jazz Night', date: '2026-10-31' })).toBe(false);
+  });
+
+  it('ignores keyword matches outside the season', () => {
+    const by = p => SEASONS.find(s => s.path === p);
+    expect(seasonMatches(by('/christmas-events'), { name: 'Labor Day Holiday BBQ', date: '2026-09-07' })).toBe(false);
+    expect(seasonMatches(by('/christmas-events'), { name: 'Holiday Inn job fair', date: '2026-12-02' })).toBe(false);
+    expect(seasonMatches(by('/christmas-events'), { name: 'Holiday Market', date: '2026-12-05' })).toBe(true);
+    expect(seasonMatches(by('/fourth-of-july'), { name: 'New Year fireworks', date: '2026-12-31' })).toBe(false);
+    expect(seasonMatches(by('/new-years-eve'), { name: 'Lunar New Year festival', date: '2027-01-29' })).toBe(false);
   });
 
   it('in-season guide lists matching events and shows in the nav', async () => {
@@ -146,17 +176,39 @@ describe('seasonal guides', () => {
 describe('calendar files', () => {
   const [ev] = withPages([EVENTS[0]]);
 
-  it('renders a valid ICS with Central times and a default end', async () => {
+  it('renders a valid ICS in UTC', async () => {
     const ics = renderIcs(ev, { siteUrl: 'https://www.thevic361.com', now: NOW });
     expect(ics).toContain('BEGIN:VCALENDAR\r\n');
-    expect(ics).toContain('DTSTART;TZID=America/Chicago:20261009T200000');
-    expect(ics).toContain('DTEND;TZID=America/Chicago:20261009T230000');
+    // 8–11 PM CDT on Oct 9 = 01:00–04:00Z on Oct 10.
+    expect(ics).toContain('DTSTART:20261010T010000Z');
+    expect(ics).toContain('DTEND:20261010T040000Z');
+    expect(ics).not.toContain('TZID');
     expect(ics).toContain('SUMMARY:Friday Live Music');
     expect(ics).toContain('LOCATION:Aero Crafters\\, 309 E Crestwood Dr\\, Victoria\\, TX');
     for (const line of ics.split('\r\n')) expect(Buffer.byteLength(line)).toBeLessThanOrEqual(75);
     const untimed = renderIcs(withPages([EVENTS[2]])[0], { siteUrl: 'https://www.thevic361.com', now: NOW });
     expect(untimed).toContain('DTSTART;VALUE=DATE:20261024');
     expect(untimed).toContain('DTEND;VALUE=DATE:20261025');
+  });
+
+  it('defaults to two hours and handles shows past midnight', () => {
+    const at = t => renderIcs(withPages([{ date: '2026-12-05', name: 'X', time: t }])[0],
+      { siteUrl: 's', now: NOW }).split('\r\n').filter(l => /^DT(START|END):/.test(l));
+    // 11:30 PM CST = 05:30Z next day; default end two hours later.
+    expect(at('11:30 PM')).toEqual(['DTSTART:20261206T053000Z', 'DTEND:20261206T073000Z']);
+    // "10pm - 1am" ends the next morning.
+    expect(at('10pm - 1am')).toEqual(['DTSTART:20261206T040000Z', 'DTEND:20261206T070000Z']);
+  });
+
+  it('never splits an emoji when folding long lines', () => {
+    for (let pad = 0; pad < 10; pad++) {
+      const e = withPages([{ date: '2026-10-09', name: 'x'.repeat(60 + pad) + '🍂🍂🍂🍂🍂🍂', time: '7 PM' }])[0];
+      const lines = renderIcs(e, { siteUrl: 's', now: NOW }).split('\r\n');
+      for (const l of lines) {
+        expect(/[\uD800-\uDBFF]$/.test(l)).toBe(false);
+        expect(Buffer.byteLength(l)).toBeLessThanOrEqual(75);
+      }
+    }
   });
 
   it('serves the ICS file', async () => {
@@ -169,7 +221,7 @@ describe('calendar files', () => {
 
   it('builds a Google Calendar link', () => {
     const u = new URL(googleCalendarUrl(ev, 'https://www.thevic361.com'));
-    expect(u.searchParams.get('dates')).toBe('20261009T200000/20261009T230000');
+    expect(u.searchParams.get('dates')).toBe('20261010T010000Z/20261010T040000Z');
     expect(u.searchParams.get('ctz')).toBe('America/Chicago');
   });
 });

@@ -37,6 +37,7 @@ ACTORS = {
     "codingfrontend/google-events-scraper": {"maxRequestRetries": 3, "dateFilter": "this_month",
                                              "location": "Victoria, Texas, United States", "gl": "us", "hl": "en"},
     # Round 2: alfalfa/facebook-events-scraper 40 items, 31 Victoria, different set from apify's.
+    # Round 3: codingfrontend/google-events-scraper 4 items; muhammadafzal/google-events 0. Not worth adding.
 }
 
 VICTORIA_RE = re.compile(r"victoria,?\s*(tx|texas)|\b7790[145]\b", re.I)

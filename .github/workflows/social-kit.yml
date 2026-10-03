@@ -44,4 +44,6 @@ jobs:
             exit 0
           fi
           git commit -m "📣 Social kit $(date +'%Y-%m-%d')"
+          # main may have moved while the kit built (weekly collect, a merge).
+          git pull --rebase origin main
           git push

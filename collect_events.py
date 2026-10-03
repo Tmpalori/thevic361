@@ -1448,7 +1448,9 @@ SOURCE_RANK = {
 # venues.json entries that are organizers rather than places ("Discover
 # Victoria Texas", promoters, festivals). Their posts name the account, not
 # where the event happens, so a real venue from another source wins.
-_NON_PLACE_CATEGORY = re.compile(r"aggregator|promoter|program|festival|media|hub|online", re.IGNORECASE)
+# Exact organizer words only: "Public Library / Community Programs" is a
+# place, so a bare "program" match is wrong.
+_NON_PLACE_CATEGORY = re.compile(r"aggregator|promoter|\bfestival\b|\bmedia\b|events hub|online", re.IGNORECASE)
 _NON_PLACE_NAMES = set()
 
 

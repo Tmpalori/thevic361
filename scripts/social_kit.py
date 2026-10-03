@@ -42,13 +42,15 @@ def today_central():
 
 
 def week_bounds(today):
+    """Rest of this week: today (or Monday) through Sunday. The Thursday
+    run shouldn't post Monday–Wednesday events that already happened."""
     monday = today - timedelta(days=today.weekday())
-    return monday, monday + timedelta(days=6)
+    return max(monday, today), monday + timedelta(days=6)
 
 
 def weekend_bounds(today):
-    monday, sunday = week_bounds(today)
-    friday = monday + timedelta(days=4)
+    monday = today - timedelta(days=today.weekday())
+    friday, sunday = monday + timedelta(days=4), monday + timedelta(days=6)
     return max(friday, today), sunday
 
 

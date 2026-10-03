@@ -20,7 +20,8 @@ EVENTS = [
 
 
 def test_bounds():
-    assert sk.week_bounds(date(2026, 10, 7)) == (date(2026, 10, 5), date(2026, 10, 11))
+    assert sk.week_bounds(date(2026, 10, 5)) == (date(2026, 10, 5), date(2026, 10, 11))  # Monday run
+    assert sk.week_bounds(date(2026, 10, 8)) == (date(2026, 10, 8), date(2026, 10, 11))  # Thursday run
     assert sk.weekend_bounds(date(2026, 10, 7)) == (date(2026, 10, 9), date(2026, 10, 11))
     assert sk.weekend_bounds(date(2026, 10, 10)) == (date(2026, 10, 10), date(2026, 10, 11))
 

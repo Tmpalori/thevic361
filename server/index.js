@@ -28,7 +28,7 @@ import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import {
   HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
-  , setSeasonalNav
+  , fillSeasonalNav
 } from './seo.js';
 import {
   buildVenues, venueFor, renderVenuePage, renderVenueIndex, venuesWithEvents,
@@ -865,12 +865,19 @@ export async function createApp(opts = {}) {
     }
   }
 
+  // In-memory copy of the archive (see listArchived). Declared before the
+  // boot backfill below, which clears it.
+  const ARCHIVE_TTL_MS = 5 * 60 * 1000;
+  let archiveCache = null;
+
   // Keep every published event's page alive after its week rotates out
   // (see archiveEvents in db.js). Best-effort: a failure here must never
   // block a publish or a page view.
   function archiveEvents(events) {
     if (typeof store.archiveEvents !== 'function') return Promise.resolve();
+    archiveCache = null;
     return store.archiveEvents(withPages(events))
+      .then(() => { archiveCache = null; })
       .catch(err => console.warn('[events] archive skipped:', err.message));
   }
 
@@ -902,6 +909,7 @@ export async function createApp(opts = {}) {
   let indexTemplate = null;
 
   function sendHtml(res, html, status = 200) {
+    html = fillSeasonalNav(html, res.locals.seasons || [], res.req.path);
     // Short public cache: a new publish shows up within minutes, and a
     // burst of crawler traffic doesn't hit Postgres on every request.
     res.status(status).set('Cache-Control', status === 200 ? 'public, max-age=300' : 'no-store');
@@ -916,11 +924,18 @@ export async function createApp(opts = {}) {
     console.warn('[venues] venues.json unreadable:', err.message);
   }
 
+  // The archive only changes on publish, so keep it in memory for a few
+  // minutes instead of reading every archived event on every page view.
   async function listArchived() {
     if (typeof store.listArchivedEvents !== 'function') return [];
-    try { return await store.listArchivedEvents(); } catch (err) {
+    if (archiveCache && Date.now() - archiveCache.at < ARCHIVE_TTL_MS) return archiveCache.events;
+    try {
+      const events = await store.listArchivedEvents();
+      archiveCache = { at: Date.now(), events };
+      return events;
+    } catch (err) {
       console.warn('[events] archive list failed:', err.message);
-      return [];
+      return archiveCache ? archiveCache.events : [];
     }
   }
 
@@ -929,8 +944,8 @@ export async function createApp(opts = {}) {
       const payload = await getPublicPayload();
       const archived = await listArchived();
       const now = nowFn();
-      setSeasonalNav(activeSeasons(payload.events, archived, now));
-      await render(req, res, payload, { siteUrl, now, sponsor: payload.sponsor || null, archived });
+      res.locals.seasons = activeSeasons(payload.events, archived, now);
+      await render(req, res, payload, { siteUrl, now, sponsor: payload.sponsor || null, archived, venues });
     } catch (err) {
       next(err);
     }
