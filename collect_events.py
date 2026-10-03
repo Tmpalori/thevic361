@@ -1017,8 +1017,10 @@ GEMINI_CATEGORIES = [
     "arts, theatre, museums, galleries and film screenings",
     "food and drink events, trivia nights, bar and brewery events",
     "sports, runs, rodeos, outdoor and recreation events",
-    "Texas A&M University-Victoria and Victoria College public events",
-    "church, charity, fundraiser and civic events open to the public",
+    "Texas A&M University-Victoria and Victoria College events open to the general public "
+    "(concerts, plays, lectures, exhibits, games); not student-only, recruiting, orientation or club events",
+    "charity fundraisers, galas, benefit concerts and civic events open to the public "
+    "(not worship services or church meetings)",
 ]
 
 
@@ -1031,8 +1033,8 @@ def _gemini_prompt(category, start, end):
         '"description": one factual sentence, "url": the event\'s own page (venue site, ticket page, '
         'Facebook event, or official calendar entry; never a search or category page), "free": true/false/null}.\n'
         "Only include an event if a web page you found states that exact date. One item per date for "
-        "repeating events. Exclude business hours, sales, job postings, online-only events and anything "
-        "outside Victoria County. If you find none, return []."
+        "repeating events. Exclude business hours, sales, job postings, online-only events, worship services, "
+        "members- or students-only events, and anything outside Victoria County. If you find none, return []."
     )
 
 
@@ -1075,8 +1077,31 @@ def _host_matches(host, grounded):
     return any(host == g or host.endswith("." + g) or g.endswith("." + host) for g in grounded)
 
 
-def fetch_gemini_events(days_ahead=14, post=None, categories=None):
+_PAGE_STOP = {"the", "and", "with", "for", "victoria", "texas", "event", "events", "night", "live", "annual", "2026", "2027"}
+
+
+def _page_mentions(url, name, get=None, timeout=10):
+    """True when the page at url loads and names the event (most of its
+    distinctive words). Used for links on sites Gemini didn't cite."""
+    get = get or (lambda u: requests.get(u, headers=HEADERS, timeout=timeout))
+    words = [w for w in re.findall(r"[a-z0-9]+", (name or "").lower()) if len(w) >= 4 and w not in _PAGE_STOP]
+    if not words:
+        return False
+    try:
+        r = get(url)
+        if getattr(r, "status_code", 0) != 200:
+            return False
+        text = (getattr(r, "text", "") or "")[:500000].lower()
+    except Exception:
+        return False
+    hits = sum(1 for w in set(words) if w in text)
+    return hits >= max(1, round(len(set(words)) * 0.6))
+
+
+def fetch_gemini_events(days_ahead=14, post=None, categories=None, get=None, workers=4):
     """Events found by Gemini with Google Search grounding."""
+    from concurrent.futures import ThreadPoolExecutor
+
     events = []
     key = os.environ.get("GEMINI_API_KEY", "").strip()
     if os.environ.get("GEMINI_ENABLED", "1").strip().lower() in ("0", "false", "no"):
@@ -1092,9 +1117,12 @@ def fetch_gemini_events(days_ahead=14, post=None, categories=None):
     if end < start:
         return events
 
-    seen = set()
     dropped = Counter()
-    for category in categories or GEMINI_CATEGORIES:
+    bad_key = []
+
+    def ask(category):
+        if bad_key:
+            return None
         body = {
             "contents": [{"role": "user", "parts": [{"text": _gemini_prompt(category, start, end)}]}],
             "tools": [{"google_search": {}}],
@@ -1107,14 +1135,32 @@ def fetch_gemini_events(days_ahead=14, post=None, categories=None):
                 print(f"  [Gemini] HTTP {resp.status_code} for {category[:30]}: {resp.text[:200]}")
                 dropped["http"] += 1
                 if resp.status_code in (401, 403):
-                    break  # bad key: every call would fail the same way
-                continue
-            data = resp.json()
+                    bad_key.append(resp.status_code)  # every call would fail the same way
+                return None
+            return resp.json()
         except Exception as e:  # network, timeout, bad JSON
             print(f"  [Gemini] {category[:30]} failed: {e}")
             dropped["error"] += 1
-            continue
+            return None
 
+    cats = list(categories or GEMINI_CATEGORIES)
+    if workers > 1 and len(cats) > 1:
+        # Searches run in parallel: eight grounded calls one after another
+        # take ~4 minutes of the collect's time budget.
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            replies = list(pool.map(ask, cats))
+    else:
+        replies = []
+        for c in cats:
+            replies.append(ask(c))
+            if bad_key:
+                break
+
+    seen = set()
+    unverified = []  # (event, url, name): link on a site Gemini didn't cite
+    for data in replies:
+        if not data:
+            continue
         cand = (data.get("candidates") or [{}])[0]
         text = "".join(p.get("text", "") for p in ((cand.get("content") or {}).get("parts") or []))
         grounded = _grounded_hosts(cand)
@@ -1138,9 +1184,6 @@ def fetch_gemini_events(days_ahead=14, post=None, categories=None):
             if "google." in host or "vertexaisearch" in host:
                 dropped["no event link"] += 1
                 continue
-            if not grounded or not _host_matches(host, grounded):
-                dropped["link not from a cited site"] += 1
-                continue
             k = (d.isoformat(), name.lower())
             if k in seen:
                 continue
@@ -1148,7 +1191,7 @@ def fetch_gemini_events(days_ahead=14, post=None, categories=None):
             venue = _clean_text(item.get("venue"))
             desc = _clean_text(item.get("description"))[:280]
             free = item.get("free")
-            events.append({
+            ev = {
                 "date": d.isoformat(),
                 "name": name,
                 "time": _clean_text(item.get("time")),
@@ -1158,7 +1201,23 @@ def fetch_gemini_events(days_ahead=14, post=None, categories=None):
                 "icons": classify_icons(name, desc, venue),
                 "free": bool(free) if isinstance(free, bool) else guess_free(name, desc, venue),
                 "url": url,
-            })
+            }
+            if grounded and _host_matches(host, grounded):
+                events.append(ev)
+            else:
+                unverified.append(ev)
+
+    # A link on a site Gemini didn't cite is kept only if the page loads and
+    # names the event; that catches made-up or wrong links.
+    if unverified:
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            ok = list(pool.map(lambda e: _page_mentions(e["url"], e["name"], get=get), unverified[:60]))
+        for ev, good in zip(unverified, ok):
+            if good:
+                events.append(ev)
+            else:
+                dropped["link didn't check out"] += 1
+        dropped["link didn't check out"] += max(0, len(unverified) - 60)
 
     print(f"  [Gemini] {len(events)} events"
           + (" (dropped: " + ", ".join(f"{v} {k}" for k, v in dropped.items()) + ")" if dropped else ""))
@@ -1795,6 +1854,21 @@ _NON_EVENT_RE = re.compile(
     re.IGNORECASE,
 )
 _NATIONAL_DAY_RE = re.compile(r"^\s*national\b.*\bday\b", re.IGNORECASE)
+# Regular worship and church business: real, but not a "thing to do" for the
+# general public. Church festivals, concerts and fish fries still pass.
+_WORSHIP_RE = re.compile(
+    r"\b(mass|misa|masses|confessions?|baptism(?:al)? class|communion(?: service)?|rosary|adoration"
+    r"|worship service|sunday service|bible study|prayer (?:service|meeting|group)|novena|vespers"
+    r"|(?:charities|second) collection|catechism|rcia|ccd)\b", re.IGNORECASE)
+# Worship words inside a public event's name ("Christmas Mass Choir Concert").
+_PUBLIC_EVENT_RE = re.compile(r"\b(concert|choir|festival|fest|fair|fish fry|carnival|bazaar|gala|market|5k|run)\b", re.IGNORECASE)
+# Members/students only: club meetings, orientations, recruiting visits.
+_MEMBERS_ONLY_RE = re.compile(
+    r"\b(board meeting|members? meeting|chapter meeting|(?:monthly|regular|general) meeting|meeting of the"
+    r"|orientation|transfer (?:day|tuesdays?|event)|admissions|registration deadline|advising"
+    r"|meet (?:&|and) sweets|tuesdays? at vc|pinning|white coat|color (?:guard )?ceremony"
+    r"|commencement|graduation|program (?:color|pinning|ceremony|celebration))\b"
+    r"|\bmeeting\s*$", re.IGNORECASE)
 
 
 def non_event_reason(ev):
@@ -1802,6 +1876,10 @@ def non_event_reason(ev):
     name = ev.get("name") or ""
     if _NON_EVENT_RE.search(name):
         return "not an event"
+    if _WORSHIP_RE.search(name) and not _PUBLIC_EVENT_RE.search(name):
+        return "worship service"
+    if _MEMBERS_ONLY_RE.search(name):
+        return "members or students only"
     # "National Drink Beer Day" with no time is a social post, not a party.
     if _NATIONAL_DAY_RE.search(name) and not (ev.get("time") or "").strip():
         return "awareness day"

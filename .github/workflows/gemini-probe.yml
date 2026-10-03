@@ -1,0 +1,40 @@
+# Gemini Probe — manual, or on a push to a claude/* branch that edits the
+# probe. Runs only the Gemini + Google Search source and prints what it finds
+# (kept events, drops per reason, cited sites). Commits nothing and touches
+# no site data.
+
+name: Gemini Probe
+
+on:
+  push:
+    branches: ['claude/**']
+    paths:
+      - scripts/gemini_probe.py
+      - .github/workflows/gemini-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Run probe
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          PYTHONUNBUFFERED: 1
+        run: python scripts/gemini_probe.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gemini-probe
+          path: gemini_probe.json
+          if-no-files-found: ignore

@@ -409,8 +409,18 @@ def test_gemini_keeps_only_grounded_in_window_events(monkeypatch):
         calls.append((url, json, headers))
         return _gemini_reply(items, hosts=("facebook.com", "victoriatx.gov", "eventbrite.com"))
 
-    out = ce.fetch_gemini_events(14, post=post, categories=["music"])
-    assert [e["name"] for e in out] == ["Fall Fest", "Band Night"]
+    class Page:
+        def __init__(self, code, text=""):
+            self.status_code, self.text = code, text
+
+    def get(url):
+        if "invented" in url:
+            return Page(404)
+        return Page(200, "<h1>Pumpkin Patch Party</h1> Oct at the farm")
+
+    items.append({"name": "Pumpkin Patch Party", "date": d, "venue": "Farm", "url": "https://somefarm.example/events/pumpkin"})
+    out = ce.fetch_gemini_events(14, post=post, categories=["music"], get=get)
+    assert [e["name"] for e in out] == ["Fall Fest", "Band Night", "Pumpkin Patch Party"]
     assert out[0]["free"] is True and out[0]["time"] == "6:00 PM"
     assert calls[0][1]["tools"] == [{"google_search": {}}]
     assert calls[0][2]["x-goog-api-key"] == "k"
@@ -432,5 +442,18 @@ def test_gemini_skips_without_key_and_stops_on_bad_key(monkeypatch):
     def post(*a, **k):
         n.append(1)
         return R()
-    assert ce.fetch_gemini_events(14, post=post) == []
+    assert ce.fetch_gemini_events(14, post=post, workers=1) == []
     assert len(n) == 1
+
+
+def test_worship_and_members_only_are_filtered_but_church_festivals_stay():
+    import collect_events as ce
+    drop = ["Confessions", "Mass in English at Our Lady of Sorrows", "Santa Misa en Espanol", "Baptism Class",
+            "Communion Service", "Cathedral Charities Collection", "Rosary Congress",
+            "Catholic Daughters of the Americas Meeting", "Victoria Rotary Club Board Meeting",
+            "Way Truth Life (WTL) Meet & Sweets",
+            "Victoria College Physical Therapist Assistant Program Color Ceremony"]
+    keep = ["Our Lady of Victory's 2026 Fall Festival", "Christmas Mass Choir Concert", "Church Fish Fry",
+            "Massive Garage Sale", "Meet and Greet with Santa", "Bingo Night", "Symphonic Spooktacular"]
+    assert all(ce.non_event_reason({"name": n}) for n in drop), [n for n in drop if not ce.non_event_reason({"name": n})]
+    assert not any(ce.non_event_reason({"name": n}) for n in keep), [n for n in keep if ce.non_event_reason({"name": n})]
