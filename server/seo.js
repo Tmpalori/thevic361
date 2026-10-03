@@ -696,12 +696,8 @@ export function renderHome(template, events, { siteUrl, now, signupHtml = null }
     ...sortEvents(weekEvents).map(ev => eventJsonLd(ev, siteUrl))
   ];
   let page = template;
-  // When the Resend newsletter is on, our own form replaces the Beehiiv embed.
-  if (signupHtml) {
-    page = page
-      .replace(/<!--SIGNUP_START-->[\s\S]*?<!--SIGNUP_END-->/, signupHtml)
-      .replace(/<!--BEEHIIV_SCRIPTS_START-->[\s\S]*?<!--BEEHIIV_SCRIPTS_END-->/, '');
-  }
+  // The newsletter signup form (server/newsletter.js) fills the footer slot.
+  if (signupHtml) page = page.replace(/<!--SIGNUP_START-->[\s\S]*?<!--SIGNUP_END-->/, signupHtml);
   return page
     .replace('<p class="loading-message">Loading events...</p>', renderDays(week, events, today))
     .replace('<!--NAV-->', navHtml('/'))

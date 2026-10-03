@@ -73,23 +73,6 @@
     </div>
   </header>
 
-  <!-- ═══ ICON LEGEND ═══ -->
-  <div class="icon-legend">
-    <div class="container">
-      <div class="legend-inner">
-        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-food"></use></svg> Food</span>
-        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-music"></use></svg> Music</span>
-        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-family"></use></svg> Family</span>
-        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-drinks"></use></svg> 21+</span>
-        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-arts"></use></svg> Arts</span>
-        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-shopping"></use></svg> Shopping</span>
-        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-outdoors"></use></svg> Outdoors</span>
-        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-community"></use></svg> Community</span>
-        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-free"></use></svg> Free</span>
-      </div>
-    </div>
-  </div>
-
   <!-- ═══ BROWSE NAV ═══ (filled in by the server; see server/seo.js) -->
   <!--NAV-->
 
@@ -100,7 +83,8 @@
       <h1 class="hero-title">Things to do in <mark>Victoria, TX</mark> this week</h1>
       <p class="hero-sub">Live music, festivals, markets, and family fun, all in one place.</p>
     </div>
-    <img class="hero-art" src="./skyline.svg" width="2800" height="260" alt="" aria-hidden="true">
+    <img class="hero-art hero-art--day" src="./skyline.svg" width="2800" height="260" alt="" aria-hidden="true">
+    <img class="hero-art hero-art--night" src="./skyline-night.svg" width="2800" height="260" alt="" aria-hidden="true" loading="lazy">
   </section>
 
   <!-- ═══ MAIN ═══ -->
@@ -112,6 +96,22 @@
 
       <!-- Skip to today (shown by JS when today isn't Monday) -->
       <div id="skip-today-bar" style="display:none; margin-bottom:1rem;"></div>
+
+      <!-- Icon guide: tucked away so it doesn't crowd the top of the page -->
+      <details class="icon-guide">
+        <summary>What do the icons mean?</summary>
+        <div class="legend-inner">
+          <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-food"></use></svg> Food</span>
+          <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-music"></use></svg> Music</span>
+          <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-family"></use></svg> Family</span>
+          <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-drinks"></use></svg> 21+</span>
+          <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-arts"></use></svg> Arts</span>
+          <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-shopping"></use></svg> Shopping</span>
+          <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-outdoors"></use></svg> Outdoors</span>
+          <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-community"></use></svg> Community</span>
+          <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-free"></use></svg> Free</span>
+        </div>
+      </details>
 
       <!-- Events rendered here by JS -->
       <div id="events-container">
@@ -147,9 +147,7 @@
           <h3>Stay in the loop</h3>
           <p>Get Victoria's best events delivered to your inbox every week. No spam, just the good stuff.</p>
           <!--SIGNUP_START-->
-          <div style="width:100%;max-width:480px;overflow:hidden;">
-            <iframe src="https://subscribe-forms.beehiiv.com/f7c64f6b-f563-4f5a-a5fe-d80d26b1332a" class="beehiiv-embed" title="Subscribe to The Vic 361 newsletter" data-test-id="beehiiv-embed" frameborder="0" scrolling="no" style="width:100%;max-width:100%;height:80px;margin:0;border-radius:0;background-color:transparent;display:block;"></iframe>
-          </div>
+          <a href="/#subscribe" class="btn btn--primary">Subscribe free</a>
           <!--SIGNUP_END-->
         </div>
 
@@ -180,22 +178,7 @@
     </div>
   </footer>
 
-  <!--BEEHIIV_SCRIPTS_START-->
-  <script async src="https://subscribe-forms.beehiiv.com/embed.js"></script>
-  <script type="text/javascript" async src="https://subscribe-forms.beehiiv.com/attribution.js"></script>
-  <!--BEEHIIV_SCRIPTS_END-->
   <script src="./app.js"></script>
   <script src="./track.js" defer></script>
-  <script>
-    function setLegendTop() {
-      var header = document.querySelector('.site-header');
-      var legend = document.querySelector('.icon-legend');
-      if (header && legend) {
-        legend.style.top = header.offsetHeight + 'px';
-      }
-    }
-    setLegendTop();
-    window.addEventListener('resize', setLegendTop);
-  </script>
 </body>
 </html>

@@ -49,7 +49,7 @@ Production hosting:
                                  │
                                  ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│  Monday — Tristen sends Beehiiv newsletter manually.               │
+│  Monday — newsletter sends (Resend; newsletter.yml).               │
 │  Public site renders Postgres-backed /events.json continuously.    │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -187,7 +187,7 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 
 ## Newsletter
 
-`server/newsletter.js`: double opt-in signup (`POST /api/subscribe` → confirmation email → `/subscribe/confirm`), unsubscribe (`GET` shows a button, `POST /unsubscribe` also serves RFC 8058 one-click), the weekly issue rendered from the published events, and Resend batch sends with one send per week (`newsletter_sends`). Admin Newsletter tab: status, preview, test send, send, import (Beehiiv export). Subscribers live in the `subscribers` table.
+`server/newsletter.js`: double opt-in signup (`POST /api/subscribe` → confirmation email → `/subscribe/confirm`), unsubscribe (`GET` shows a button, `POST /unsubscribe` also serves RFC 8058 one-click), the weekly issue rendered from the published events, and Resend batch sends with one send per week (`newsletter_sends`). Admin Newsletter tab: status, preview, test send, send, import. Subscribers live in the `subscribers` table.
 
 ## Sponsor checkout
 
@@ -262,7 +262,7 @@ Full reference is in [`RAILWAY.md`](./RAILWAY.md). Quick list:
 | `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` | — | When set, `/api/submissions` requires a Turnstile token |
 | `FB_POSTS_ENABLED`, `IG_POSTS_ENABLED` | — | Repo Variables (not secrets); `=1` to enable post-scrape pipelines in CI |
 | `FB_POSTS_MAX_VENUES`, `IG_POSTS_MAX_VENUES` | (collector defaults) | Caps to keep Apify costs bounded |
-| `RESEND_API_KEY` | — | Turns on the email newsletter (server/newsletter.js); until set, the homepage keeps the Beehiiv form |
+| `RESEND_API_KEY` | — | Turns on the email newsletter (server/newsletter.js); until set, signups are saved but nothing is emailed |
 | `NEWSLETTER_FROM` | `The Vic 361 <news@thevic361.com>` | Sender; the domain must be verified in Resend |
 | `NEWSLETTER_ADDRESS` | — | Mailing address shown in every email (CAN-SPAM) |
 | `NEWSLETTER_REPLY_TO`, `NEWSLETTER_TEST_TO` | — | Reply-to address; default test recipient |

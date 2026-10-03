@@ -667,12 +667,6 @@
   overflow-x: hidden;
 }
 
-.beehiiv-embed {
-  width: 100% !important;
-  max-width: 100% !important;
-  min-width: 0 !important;
-}
-
 .footer-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -1169,10 +1163,10 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
   box-shadow: 2px 2px 0 var(--ink);
   transform: rotate(-3deg);
 }
-/* Dark mode: a Texas-sunset sky, so the ink outlines still read. */
-[data-theme="dark"] .hero { background: linear-gradient(180deg, #2B2370 0%, #6B46B0 55%, #FF9F6E 100%); }
+/* Dark mode: a night sky, and the skyline swaps the sun for the moon. */
+[data-theme="dark"] .hero { background: linear-gradient(180deg, #1B1640 0%, #2E2766 60%, #4A3D96 100%); }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) .hero { background: linear-gradient(180deg, #2B2370 0%, #6B46B0 55%, #FF9F6E 100%); }
+  :root:not([data-theme]) .hero { background: linear-gradient(180deg, #1B1640 0%, #2E2766 60%, #4A3D96 100%); }
 }
 [data-theme="dark"] .hero-sub { color: #F6F1FF; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme]) .hero-sub { color: #F6F1FF; } }
@@ -1497,4 +1491,50 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 @media (max-width: 639px) {
   .event-icons { width: 3rem; }
   .event-icons .ico { width: 22px; height: 22px; }
+}
+
+/* ─── Day / night skyline ─── */
+.hero-art--night { display: none; }
+[data-theme="dark"] .hero-art--day { display: none; }
+[data-theme="dark"] .hero-art--night { display: block; }
+[data-theme="dark"] .site-footer::before { background-image: url("/skyline-night.svg"); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .hero-art--day { display: none; }
+  :root:not([data-theme]) .hero-art--night { display: block; }
+  :root:not([data-theme]) .site-footer::before { background-image: url("/skyline-night.svg"); }
+}
+
+/* ─── Calmer top of the page ───
+   The icon key lives in a collapsible note above the list instead of a
+   sticky bar, and the browse links are quieter than the action buttons. */
+.icon-guide {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.icon-guide summary { cursor: pointer; font-weight: 700; width: fit-content; }
+.icon-guide .legend-inner { margin-top: var(--space-3); justify-content: flex-start; }
+.icon-guide .legend-inner::before { content: none; }
+
+.browse-nav { background: var(--color-bg); border-bottom: 2px solid var(--color-divider); }
+.browse-inner { padding-block: var(--space-2); gap: var(--space-1); }
+.browse-nav a {
+  font-size: var(--text-sm);
+  border-width: 2px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-text-muted);
+}
+.browse-nav a:hover { background: var(--sun-light); border-color: var(--ink); transform: none; box-shadow: none; }
+.browse-nav a[aria-current="page"] { box-shadow: none; }
+
+@media (max-width: 639px) {
+  /* Phones: the title says enough; keep the header to one tidy row. */
+  .tagline { display: none; }
+  .site-title { font-size: 1.5rem; }
+  .hero-kicker, .hero-sub { display: none; }
+  .hero-inner { padding-top: var(--space-5); }
+  .hero-title { font-size: 1.75rem; margin-bottom: 0; }
+  .header-actions .btn { padding: 0.35em 0.9em; }
 }

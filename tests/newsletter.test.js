@@ -128,18 +128,16 @@ describe('signup flow', () => {
     expect(res.skipped_unsubscribed).toBe(1);
   });
 
-  it('homepage swaps Beehiiv for the form only when Resend is configured', async () => {
-    await startApp();
-    const on = await (await fetch(baseUrl + '/')).text();
-    expect(on).toContain('id="signup-form"');
-    expect(on).not.toContain('subscribe-forms.beehiiv.com');
-    await new Promise(r => server.close(r)); server = null;
-    await fs.rm(tmpDir, { recursive: true, force: true });
+  it('homepage always shows our form; without Resend, signups are saved directly', async () => {
     await startApp({ resendApiKey: '' });
-    const off = await (await fetch(baseUrl + '/')).text();
-    expect(off).toContain('subscribe-forms.beehiiv.com');
-    expect(off).not.toContain('id="signup-form"');
-    expect((await post('/api/subscribe', { email: 'x@example.com' })).status).toBe(503);
+    const html = await (await fetch(baseUrl + '/')).text();
+    expect(html).toContain('id="signup-form"');
+    expect(html).not.toContain('beehiiv');
+    const r = await post('/api/subscribe', { email: 'x@example.com' });
+    expect(r.status).toBe(200);
+    expect((await r.json()).message).toContain('on the list');
+    expect(sent.single).toHaveLength(0);
+    expect((await store.countSubscribers()).active).toBe(1);
   });
 });
 

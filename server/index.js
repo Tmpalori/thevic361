@@ -80,7 +80,7 @@ export async function createApp(opts = {}) {
   });
 
   // Baseline security headers. No full script CSP yet: the site relies on
-  // inline scripts plus Google Analytics, Beehiiv and Turnstile, so the CSP
+  // inline scripts plus Google Analytics and Turnstile, so the CSP
   // only locks down framing, plugins and <base> hijacking for now.
   app.use((req, res, next) => {
     res.set({
@@ -1046,7 +1046,7 @@ export async function createApp(opts = {}) {
       indexTemplate = await fsp.readFile(path.join(DOCS_DIR, 'index.html'), 'utf8');
     }
     sendHtml(res, renderHome(indexTemplate, payload.events, {
-      ...ctx, signupHtml: newsletter.enabled ? signupFormHtml() : null
+      ...ctx, signupHtml: signupFormHtml()
     }));
   }));
 

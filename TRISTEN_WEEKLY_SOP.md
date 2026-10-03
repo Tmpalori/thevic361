@@ -19,7 +19,7 @@ The system handles ~70% of event collection automatically:
 | Sun 6 PM | `weekly-collect.yml` runs the event collector and writes `candidates.json` (plus `collection_metadata.json` for the admin Sources tab). It does **not** overwrite `docs/events.json` — that's the admin Save & Publish flow's job. | Automated |
 | Sun 9 PM | `weekly-digest.yml` emails an **informational** summary of what was collected, with a link to the admin review page | Automated |
 | Sun 10 PM | Open `/admin.html`, pick the events you want to publish, save your selection. Admin commits go directly to `main`. | **You** |
-| Mon morning | Send the Beehiiv newsletter manually | **You** |
+| Mon morning | Newsletter sends automatically (or press Send in admin) | Automatic |
 
 The Sunday digest email is for awareness only — there is **no reply-to-email approval anymore**. Picking events happens on `/admin.html` (landing in a follow-up PR; until then publish via direct edits to `docs/events.json`).
 
