@@ -39,7 +39,10 @@ def main():
         seen_replies.append(info)
         return r
 
+    import time
+    t0 = time.time()
     events = ce.fetch_gemini_events(14, post=post)
+    print(f"Took {time.time() - t0:.0f}s")
     print("\n=== Per category ===")
     for info in seen_replies:
         print(json.dumps(info))
