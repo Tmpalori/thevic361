@@ -152,6 +152,59 @@ export const HUB_PAGES = [
     lead: (n, label) => n
       ? `There ${n === 1 ? 'is 1 kid-friendly event' : `are ${n} kid-friendly events`} in Victoria, TX this weekend (${label})`
       : `No kid-friendly events are listed for this weekend (${label}) yet`
+  },
+  {
+    path: '/free-this-weekend',
+    nav: 'Free This Weekend',
+    hidden: true,
+    title: 'Free Things To Do in Victoria, TX This Weekend',
+    h1: 'Free things to do in Victoria, TX this weekend',
+    description: 'Free events in Victoria, Texas this weekend: markets, library programs, festivals, outdoor fun, and community events.',
+    range: 'weekend',
+    filter: ev => ev.free === true || (ev.icons || []).includes('free'),
+    lead: (n, label) => n
+      ? `There ${n === 1 ? 'is 1 free event' : `are ${n} free events`} in Victoria, TX this weekend (${label})`
+      : `No free events are listed for this weekend (${label}) yet`
+  },
+  {
+    path: '/nightlife',
+    nav: 'Nightlife',
+    hidden: true,
+    title: 'Nightlife in Victoria, TX: Bars, Live Music & Karaoke',
+    h1: 'Nightlife in Victoria, TX',
+    description: 'Nightlife in Victoria, Texas this week: bar shows, live bands, karaoke, trivia, and late events.',
+    range: 'upcoming',
+    filter: ev => isEvening(ev) && (ev.icons || []).some(i => ['music', 'drinks'].includes(i)) &&
+      !(ev.icons || []).includes('family'),
+    lead: (n) => n
+      ? `There ${n === 1 ? 'is 1 nightlife event' : `are ${n} nightlife events`} coming up in Victoria, TX`
+      : 'No nightlife events are listed in Victoria, TX right now'
+  },
+  {
+    path: '/arts-and-culture',
+    nav: 'Arts & Culture',
+    hidden: true,
+    title: 'Arts & Culture Events in Victoria, TX',
+    h1: 'Arts and culture events in Victoria, TX',
+    description: 'Art, theatre, museums, and culture in Victoria, Texas: gallery nights, plays, concerts, and exhibits coming up.',
+    range: 'upcoming',
+    filter: ev => (ev.icons || []).includes('arts'),
+    lead: (n) => n
+      ? `There ${n === 1 ? 'is 1 arts event' : `are ${n} arts and culture events`} coming up in Victoria, TX`
+      : 'No arts events are listed in Victoria, TX right now'
+  },
+  {
+    path: '/outdoor-events',
+    nav: 'Outdoors',
+    hidden: true,
+    title: 'Outdoor Events in Victoria, TX',
+    h1: 'Outdoor events in Victoria, TX',
+    description: 'Outdoor things to do in Victoria, Texas: parks, runs, markets, festivals, and events at Riverside Park and around town.',
+    range: 'upcoming',
+    filter: ev => (ev.icons || []).includes('outdoors'),
+    lead: (n) => n
+      ? `There ${n === 1 ? 'is 1 outdoor event' : `are ${n} outdoor events`} coming up in Victoria, TX`
+      : 'No outdoor events are listed in Victoria, TX right now'
   }
 ];
 

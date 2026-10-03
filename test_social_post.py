@@ -125,3 +125,34 @@ def test_social_kit_writes_manifest(tmp_path):
     assert m["generated_for"] == "2026-10-08"
     assert m["kits"]["weekend"]["events"] == 1
     assert m["kits"]["weekend"]["slides"][0] == "weekend-1.png"
+
+
+def test_weekend_reel_posts_to_instagram_and_photos_to_facebook(tmp_path, monkeypatch):
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.setenv("IG_USER_ID", "ig7")
+    monkeypatch.setattr(sp.time, "sleep", lambda s: None)
+    kit = write_kit(tmp_path, slides=4)
+    m = json.loads((kit / "kit.json").read_text())
+    m["kits"]["weekend"]["reel"] = "weekend.mp4"
+    (kit / "kit.json").write_text(json.dumps(m))
+    sess = FakeSession()
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=sess) == 0
+    reel = next(c for c in sess.calls if c[1] == "ig7/media")
+    assert reel[2]["media_type"] == "REELS"
+    assert reel[2]["video_url"] == "https://www.thevic361.com/social/latest/weekend.mp4"
+    assert not any(c[2].get("media_type") == "CAROUSEL" for c in sess.calls)
+    assert len([c for c in sess.calls if c[1] == "page9/photos"]) == 4
+    assert any(c[1] == "ig7/media_publish" for c in sess.calls)
+
+
+def test_today_kind_posts(tmp_path, monkeypatch):
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+    (tmp_path / "kit.json").write_text(json.dumps({"generated_for": "2026-10-09", "kits": {
+        "today": {"slides": ["today-1.png", "today-2.png"], "events": 2,
+                  "captions": {"facebook": "Today FB", "instagram": "Today IG"}}}}))
+    sess = FakeSession()
+    assert sp.main(["--kind", "today", "--kit-dir", str(tmp_path), "--no-wait"], session=sess) == 0
+    assert next(c for c in sess.calls if c[1] == "page9/feed")[2]["message"] == "Today FB"

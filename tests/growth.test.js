@@ -125,3 +125,20 @@ describe('link audit helpers', async () => {
     expect(linkLabel('https://allevents.in/victoria/tejas-fest-2026/200030008232138')).toBe('Event details');
   });
 });
+
+describe('more landing pages', () => {
+  it('free this weekend, nightlife, arts and outdoors filter and are in the sitemap', async () => {
+    await start();
+    const free = (await get('/free-this-weekend')).html;
+    expect(free).toContain('Free things to do in Victoria, TX this weekend');
+    const night = (await get('/nightlife')).html;
+    expect(night).toContain('Friday Live Music');
+    expect(night).not.toContain('Morning Story Time');
+    expect((await get('/arts-and-culture')).html).toContain('Art After Dark');
+    const out = (await get('/outdoor-events')).html;
+    expect(out).toContain('Zoo Boo');
+    expect(out).not.toContain('Art After Dark');
+    const map = (await get('/sitemap.xml')).html;
+    for (const p of ['/free-this-weekend', '/nightlife', '/arts-and-culture', '/outdoor-events']) expect(map).toContain(p);
+  });
+});
