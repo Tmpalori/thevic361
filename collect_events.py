@@ -24,7 +24,8 @@ Data sources (in priority order):
   1. local_events.yaml — manually curated + recurring events (BACKBONE)
   2. City of Victoria calendar — individual event pages scraped
   3. Victoria Chamber of Commerce — event detail pages
-  4. OpenAI API — cleans/deduplicates the merged data (optional)
+  4. OpenAI API — extracts events from FB/IG posts and polishes
+     descriptions + icons on the merged data (optional)
 
 Usage:
   pip install -r requirements.txt
@@ -948,24 +949,74 @@ def fetch_moonshine_events(days_ahead=8):
     return events
 
 
-# ─── SOURCE: PERPLEXITY EVENT DISCOVERY ─────────────────────────────────────
+# ─── OPENAI (shared LLM helper) ─────────────────────────────────────────────
+#
+# Every LLM call in the collector (AI review + FB/IG post extraction) goes
+# through _openai_chat. Perplexity Sonar was removed in Oct 2026, and its
+# web-search discovery source went with it: OpenAI chat completions don't
+# search the web, and the scrapers + Apify already cover the same venues.
+#
+# The payload sticks to fields every current chat model accepts: no
+# temperature (gpt-5-family models reject non-default values) and
+# max_completion_tokens instead of the deprecated max_tokens. Reasoning
+# models spend part of that budget thinking before they answer, so the
+# callers' limits are generous and reasoning_effort is pinned low to keep
+# the ~80 weekly calls inside the workflow step timeout.
+#
+# Set OPENAI_MODEL to try another model without a code change.
 
-def _parse_sonar_json(content):
-    """Parse Perplexity sonar output that should contain a JSON array.
+OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
+_OPENAI_DEFAULT_MODEL = "gpt-5-mini"
+
+
+def _openai_model():
+    return os.environ.get("OPENAI_MODEL", "").strip() or _OPENAI_DEFAULT_MODEL
+
+
+def _openai_chat(api_key, messages, max_tokens, timeout=60):
+    """POST a chat completion and return the reply text.
+
+    Raises requests.HTTPError on a non-2xx so callers can log the status.
+    """
+    model = _openai_model()
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_completion_tokens": max_tokens,
+    }
+    # reasoning_effort is rejected by non-reasoning models (gpt-4o, gpt-4.1),
+    # so only send it to the families that accept it.
+    if model.startswith(("gpt-5", "o")):
+        payload["reasoning_effort"] = "low"
+    resp = requests.post(
+        OPENAI_CHAT_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    return (resp.json()["choices"][0]["message"].get("content") or "").strip()
+
+
+def _parse_ai_json_array(content):
+    """Parse LLM output that should contain a JSON array.
 
     Tries multiple strategies in order. Returns the first list-of-dicts that
     parses cleanly, or None on total failure.
 
-    Why this exists: sonar sometimes prepends a citation footnote like "[1]"
-    or wraps the answer in prose like "Here are the events: [...]". The old
-    single greedy regex couldn't handle either case and silently dropped the
-    entire query's results, costing us ~10 events per run.
+    Why this exists: models sometimes prepend a footnote like "[1]" or wrap
+    the answer in prose like "Here are the events: [...]". A single greedy
+    regex couldn't handle either case and silently dropped the entire
+    response, costing us ~10 events per run back when Sonar was the model.
     """
     if not content:
         return None
     content = content.strip()
 
-    # Strategy 1: direct json.loads (cleanest case — sonar followed instructions)
+    # Strategy 1: direct json.loads (cleanest case — model followed instructions)
     try:
         parsed = json.loads(content)
         if isinstance(parsed, list):
@@ -1002,310 +1053,10 @@ def _parse_sonar_json(content):
     return None
 
 
-# ─── SONAR QUERY BUILDER (venue-grounded, PR #18) ────────────────────────────
-#
-# We replaced the original 10 generic queries (e.g. "what live music is in
-# Victoria TX") with 8 venue-grounded buckets that name actual venues from
-# ``venues.json``. The four worst offenders from the old set — q1 aero,
-# q6 trivia, q7 music, q10 food — were silently failing to return events for
-# weeks because Sonar had nothing concrete to ground on. Naming HIGH-tier
-# venues directly turns each query into a venue-roll-up instead of a prayer.
-#
-# Bucket map (label → categories matched in venues.json):
-#   q1 music             → "Bar / Live Music", "Bar / Music", "Theatre",
-#                          "Entertainment" venues with music keywords
-#   q2 bar weekly        → all "Bar*" venues (trivia / karaoke / open mic)
-#   q3 family            → family-friendly venues (museum, theatre, arcade,
-#                          attraction, zoo)
-#   q4 restaurant        → "Restaurant*" venues (specials / pop-ups / trucks)
-#   q5 cultural          → "Arts*", "Museum*", "Theatre" venues
-#   q6 community / civic → no venue list (churches, civic clubs, library)
-#   q7 markets           → "Market", "Farm / Venue", festivals (no venue list)
-#   q8 catch-all         → Eventbrite / AllEvents.in (no venue list)
-#
-# We cap each bucket's named venues at 6, preferring HIGH-confidence venues so
-# the prompt stays short and Sonar isn't drowned by 47 names. If a category
-# has no matching venues, the prompt falls back to a category-wide phrasing
-# rather than producing an empty bucket.
-
-# Cap how many venue names we paste into a single prompt. 6 is enough to
-# anchor Sonar without bloating the token count or pushing the JSON instruction
-# out of attention.
-_SONAR_VENUES_PER_BUCKET = 6
-
-# Confidence ordering — HIGH first, then MEDIUM, then LOW. Anything else
-# (missing field, "unknown") sorts last.
-_CONFIDENCE_RANK = {"high": 0, "medium": 1, "low": 2}
-
-
-def _confidence_key(venue):
-    return _CONFIDENCE_RANK.get((venue.get("confidence") or "").lower(), 99)
-
-
-def _category_lc(venue):
-    return (venue.get("category") or "").lower()
-
-
-def _matches_any(venue, keywords):
-    """True if the venue's category or event_potential mentions any keyword."""
-    haystack = (_category_lc(venue) + " " + (venue.get("event_potential") or "").lower())
-    return any(k in haystack for k in keywords)
-
-
-def _select_venues(venues, predicate, prefer_high_only=False, limit=_SONAR_VENUES_PER_BUCKET):
-    """Filter ``venues`` by ``predicate``, sort HIGH→MEDIUM→LOW, then truncate.
-
-    If ``prefer_high_only`` is True we drop the bucket back to category-only
-    fallback (returning []) when there are zero HIGH-confidence matches —
-    the bucket spec asks for HIGH venues, so a list of LOW-tier bars is worse
-    than no list at all.
-    """
-    matches = [v for v in venues if predicate(v) and v.get("name")]
-    matches.sort(key=_confidence_key)
-    if prefer_high_only and not any(_confidence_key(v) == 0 for v in matches):
-        return []
-    return matches[:limit]
-
-
-def _format_venue_names(venues):
-    """Comma-joined venue names, oxford-style, suitable for inline prompt use."""
-    names = [v["name"] for v in venues]
-    if len(names) <= 1:
-        return names[0] if names else ""
-    return ", ".join(names[:-1]) + ", and " + names[-1]
-
-
-def _build_sonar_queries(venues, date_range_str):
-    """Build the 8 venue-grounded Sonar query buckets.
-
-    Returns a list of (label, query_text) tuples. ``venues`` may be empty —
-    each bucket falls back to category-wide phrasing rather than crashing.
-    """
-    music_venues = _select_venues(
-        venues,
-        lambda v: ("live music" in _category_lc(v)
-                   or "music" in _category_lc(v)
-                   or "theatre" in _category_lc(v)
-                   or _matches_any(v, ["live music", "open mic", "concert"])),
-        prefer_high_only=True,
-    )
-    bar_venues = _select_venues(
-        venues,
-        lambda v: _category_lc(v).startswith("bar") or "bar" in _category_lc(v).split("/")[0],
-        prefer_high_only=True,
-    )
-    family_venues = _select_venues(
-        venues,
-        lambda v: _matches_any(v, [
-            "museum", "theatre", "arcade", "zoo", "attraction",
-            "family", "kids", "bowling",
-        ]) or _category_lc(v) in ("museum / arts", "theatre", "attraction", "entertainment"),
-        prefer_high_only=True,
-    )
-    restaurant_venues = _select_venues(
-        venues,
-        lambda v: _category_lc(v).startswith("restaurant"),
-        prefer_high_only=False,  # there are no HIGH restaurants today; allow MEDIUM
-    )
-    cultural_venues = _select_venues(
-        venues,
-        lambda v: _matches_any(v, ["arts", "museum", "theatre", "gallery", "ballet"])
-                  or _category_lc(v) in ("arts", "arts / performance", "museum / arts", "theatre"),
-        prefer_high_only=True,
-    )
-
-    def _q(label, fallback_phrasing, named_phrasing, named):
-        # named_phrasing(named_str) is called only when ``named`` is non-empty.
-        if named:
-            return (label, named_phrasing(_format_venue_names(named)))
-        return (label, fallback_phrasing)
-
-    queries = [
-        _q(
-            "music (HIGH venues)",
-            f"What live music shows are happening at music venues in Victoria, TX from {date_range_str}? "
-            f"List specific concerts, bands, and artist names with dates.",
-            lambda names: (
-                f"What live music is happening this week at {names} in Victoria, TX from {date_range_str}? "
-                f"For each show, give the date, artist or band name, and start time. "
-                f"Check each venue's Facebook events page and website."
-            ),
-            music_venues,
-        ),
-        _q(
-            "bar weekly (HIGH bars)",
-            f"What trivia, karaoke, and open mic nights are happening at bars in Victoria, TX from {date_range_str}? "
-            f"Include weekly recurring bar events.",
-            lambda names: (
-                f"What trivia nights, karaoke, and open mic nights are happening this week at {names} "
-                f"in Victoria, TX from {date_range_str}? Check each bar's Facebook events page."
-            ),
-            bar_venues,
-        ),
-        _q(
-            "family (HIGH family venues)",
-            f"What family-friendly events and kids activities are happening in Victoria, TX from {date_range_str}? "
-            f"Check museums, theaters, arcades, and family attractions.",
-            lambda names: (
-                f"What family events and kids activities are happening this week at {names} "
-                f"in Victoria, TX from {date_range_str}? Include story times, kids workshops, and "
-                f"all-ages shows."
-            ),
-            family_venues,
-        ),
-        _q(
-            "restaurant specials (HIGH restaurants)",
-            f"What restaurant specials, pop-ups, and food truck rallies are happening in Victoria, TX "
-            f"from {date_range_str}? Include themed dinners and chef collaborations.",
-            lambda names: (
-                f"What restaurant specials, pop-ups, themed dinners, or food truck visits are happening "
-                f"this week at {names} in Victoria, TX from {date_range_str}? Check each restaurant's "
-                f"Facebook page and website."
-            ),
-            restaurant_venues,
-        ),
-        _q(
-            "cultural (HIGH cultural venues)",
-            f"What arts, theater, and museum events are happening in Victoria, TX from {date_range_str}? "
-            f"Include gallery openings, exhibits, and stage performances.",
-            lambda names: (
-                f"What cultural events — gallery openings, exhibits, plays, ballets, classes — are "
-                f"happening this week at {names} in Victoria, TX from {date_range_str}?"
-            ),
-            cultural_venues,
-        ),
-        ("community / civic", (
-            f"What community and civic events are happening in Victoria, TX from {date_range_str}? "
-            f"Include church events, civic clubs (Rotary, Lions, Kiwanis), Victoria Public Library "
-            f"programs, fundraisers, galas, and nonprofit gatherings."
-        )),
-        ("markets / fairs / festivals", (
-            f"What markets, fairs, and festivals are happening this week in Victoria, TX from "
-            f"{date_range_str}? Include Victoria Farmers Market, craft fairs, vendor markets, "
-            f"holiday festivals, and outdoor pop-up markets."
-        )),
-        ("eventbrite / allevents catch-all", (
-            f"List events in Victoria, Texas (77901) from {date_range_str} that are posted on "
-            f"Eventbrite (eventbrite.com) or AllEvents.in (allevents.in/victoria-tx). Include all "
-            f"categories. For each event, give the date, name, venue, and source URL."
-        )),
-    ]
-    return queries
-
-
-def fetch_perplexity_events(days_ahead=8):
-    """Use Perplexity sonar to search the web for Victoria TX events.
-
-    Runs 8 venue-grounded query buckets (see ``_build_sonar_queries``) seeded
-    from ``venues.json`` so each prompt names actual HIGH-tier venues instead
-    of asking generically about the city.
-    """
-    api_key = os.environ.get("PERPLEXITY_API_KEY")
-    if not api_key:
-        print("  [Perplexity] No PERPLEXITY_API_KEY — skipping")
-        return []
-
-    today = _WINDOW_START
-    end_date = _WINDOW_END
-    date_range_str = f"{today.strftime('%B %d')} through {end_date.strftime('%B %d, %Y')}"
-    today_str = today.strftime('%Y-%m-%d')
-    end_str = end_date.strftime('%Y-%m-%d')
-
-    venues, venues_path = _load_venue_list()
-    if not venues:
-        print("  [Perplexity] venues.json missing/empty — using category-only fallback prompts")
-    query_pairs = _build_sonar_queries(venues, date_range_str)
-    queries = [text for _, text in query_pairs]
-    query_labels = [label for label, _ in query_pairs]
-
-    json_instruction = f"""
-Return ONLY a valid JSON array. No markdown fences, no explanation, just the array.
-Each object:
-{{"date":"YYYY-MM-DD","name":"Event Name","time":"7:00 PM or empty string","venue":"Venue Name or empty string","description":"One sentence or empty string","free":true_or_false,"url":"source URL or empty string"}}
-
-Rules:
-- Only include events with a confirmed specific date between {today_str} and {end_str}
-- Victoria, TX (77901) only — exclude events in other cities
-- If you cannot confirm a date, omit the event
-- Return [] if nothing found"""
-
-    all_raw = []
-    query_stats = []  # for the summary log
-    for i, query in enumerate(queries):
-        label = query_labels[i] if i < len(query_labels) else f"q{i+1}"
-        try:
-            resp = requests.post(
-                "https://api.perplexity.ai/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "sonar-pro",
-                    "messages": [{"role": "user", "content": query + json_instruction}],
-                    "temperature": 0.1,
-                    "max_tokens": 4000,
-                },
-                timeout=45,
-            )
-            resp.raise_for_status()
-            content = resp.json()["choices"][0]["message"]["content"].strip()
-            # Strip markdown fences (```json ... ```)
-            content = re.sub(r'^```\w*\s*', '', content)
-            content = re.sub(r'\s*```\s*$', '', content)
-            raw = _parse_sonar_json(content)
-            if raw is None:
-                query_stats.append(f"q{i+1} {label}: PARSE_FAIL ({len(content)}c)")
-                _sentry_warn(
-                    "Perplexity sonar JSON parse failed",
-                    query_index=i, query_label=label,
-                    sample=content[:200],
-                )
-                continue
-            n = len(raw)
-            query_stats.append(f"q{i+1} {label}: {n}")
-            all_raw.extend(raw)
-        except requests.HTTPError as e:
-            query_stats.append(f"q{i+1} {label}: HTTP_{e.response.status_code if e.response else '?'}")
-            _sentry_warn("Perplexity sonar HTTP error", query_index=i, query_label=label, status=str(e))
-        except Exception as e:
-            query_stats.append(f"q{i+1} {label}: ERROR ({type(e).__name__})")
-            _sentry_warn("Perplexity sonar exception", query_index=i, query_label=label, error=str(e)[:200])
-
-    # Parse and validate
-    events = []
-    for ev in all_raw:
-        if not ev.get("date") or not ev.get("name"):
-            continue
-        try:
-            ev_date = datetime.strptime(ev["date"], "%Y-%m-%d").date()
-            if ev_date < today or ev_date > end_date:
-                continue
-        except ValueError:
-            continue
-
-        events.append({
-            "date": ev["date"],
-            "name": ev.get("name", "").strip(),
-            "time": ev.get("time", "").strip(),
-            "venue": ev.get("venue", "").strip(),
-            "address": "",
-            "description": ev.get("description", "").strip()[:150],
-            "icons": classify_icons(ev.get("name", ""), ev.get("description", ""), ev.get("venue", "")),
-            "free": bool(ev.get("free", False)),
-            "url": ev.get("url", "").strip(),
-        })
-
-    print(f"  [Perplexity] {len(queries)} queries → {len(all_raw)} raw, {len(events)} in-window")
-    for stat in query_stats:
-        print(f"    • {stat}")
-    return events
-
-
 # ─── AI REVIEW (description + icons polish) ─────────────────────────────────
 #
 # What this does:
-#   For every collected event, ask Perplexity sonar to:
+#   For every collected event, ask OpenAI to:
 #     1. Rewrite the description as ≤160 chars, max 2 short sentences,
 #        no emojis, no venue/date repetition, neutral local-newsletter tone.
 #     2. Pick 1–3 icons from the canonical set, ranked by relevance.
@@ -1318,8 +1069,8 @@ Rules:
 # API calls per daily run instead of one giant prompt or one-call-per-event.
 #
 # Degrades gracefully:
-#   - No PERPLEXITY_API_KEY → skip, return events untouched.
-#   - Sonar returns malformed JSON for a batch → keep that batch's originals.
+#   - No OPENAI_API_KEY → skip, return events untouched.
+#   - The model returns malformed JSON for a batch → keep that batch's originals.
 #   - Per-event response missing fields → keep that event's original values.
 
 VALID_ICONS = {"food", "music", "family", "drinks", "arts",
@@ -1375,7 +1126,7 @@ def _strip_emojis(text):
 
 
 def _ai_review_batch(api_key, batch):
-    """Send a single batch of events to sonar; return list of {description, icons, free} dicts (same length as batch) or None on failure."""
+    """Send a single batch of events to OpenAI; return list of {description, icons, free} dicts (same length as batch) or None on failure."""
     # Build a slim payload — only the fields the AI needs to make decisions.
     payload = [
         {
@@ -1394,25 +1145,17 @@ def _ai_review_batch(api_key, batch):
     )
 
     try:
-        resp = requests.post(
-            "https://api.perplexity.ai/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "sonar",
-                "messages": [
-                    {"role": "system", "content": _AI_REVIEW_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_msg},
-                ],
-                "temperature": 0.2,
-                "max_tokens": 2000,
-            },
+        content = _openai_chat(
+            api_key,
+            [
+                {"role": "system", "content": _AI_REVIEW_SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+            # 8 events × ~60 output tokens is small, but reasoning tokens
+            # count against this limit too. Too low returns an empty reply.
+            max_tokens=8000,
             timeout=60,
         )
-        resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"  [AI Review] Batch request failed: {e}")
         _sentry_warn("ai_review_request_failed", error=str(e)[:200])
@@ -1423,7 +1166,7 @@ def _ai_review_batch(api_key, batch):
         content = re.sub(r"^```\w*\n?", "", content)
         content = re.sub(r"\n?```$", "", content)
 
-    # Some sonar responses include reasoning before the JSON — extract array.
+    # Some responses include prose before the JSON — extract the array.
     match = re.search(r"\[\s*\{.*\}\s*\]", content, re.DOTALL)
     if match:
         content = match.group(0)
@@ -1445,7 +1188,7 @@ def _ai_review_batch(api_key, batch):
 
 
 def ai_review(events, batch_size=8):
-    """Polish descriptions + reassign icons via Perplexity sonar.
+    """Polish descriptions + reassign icons via OpenAI.
 
     Mutates events in place AND returns the list. Each event:
       - description: rewritten to ≤160 chars, no emojis
@@ -1455,9 +1198,9 @@ def ai_review(events, batch_size=8):
     Falls back to the original event values when AI is unavailable or
     a batch fails.
     """
-    api_key = os.environ.get("PERPLEXITY_API_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
-        print("  [AI Review] No PERPLEXITY_API_KEY — skipping")
+        print("  [AI Review] No OPENAI_API_KEY — skipping")
         return events
     if not events:
         return events
@@ -2215,7 +1958,7 @@ def fetch_allevents_events(days_ahead=14):
 #   2. apify/facebook-posts-scraper   → posts from our high-confidence venue
 #      list. This is the gap-filler for bars/restaurants that announce events
 #      as posts ("Live music tonight 7pm") rather than formal Events. Posts
-#      are funneled through a sonar prompt that extracts dated events.
+#      are funneled through an OpenAI prompt that extracts dated events.
 #
 # Both actors share APIFY_TOKEN and the same hard-limit detection. If the
 # monthly cap is hit, we set a tombstone in the workspace so subsequent calls
@@ -2418,18 +2161,18 @@ def fetch_apify_facebook_events(days_ahead=14):
     return events
 
 
-# ─── SOURCE: APIFY (Facebook posts → sonar event extraction) ────────────────
+# ─── SOURCE: APIFY (Facebook posts → OpenAI event extraction) ───────────────
 #
 # Why this exists: many Victoria bars/restaurants announce events as Facebook
 # *posts* ("Live music tonight 8pm with Donny Edwards") rather than formal
 # Event pages. The events-scraper actor never sees those, so weeknight density
 # at venues like Aero Crafters / Moonshine / The Hideaway / Lone Star is
 # systematically thin. This scraper pulls recent posts from each
-# high-confidence venue, then asks Perplexity sonar to extract any
+# high-confidence venue, then asks OpenAI to extract any
 # specific-dated events from the post text.
 #
 # Cost shape (rough): Apify $2/1000 posts × ~9 venues × 25 posts each
-#   ≈ 225 posts ≈ $0.45 per run. Plus 1 sonar call per venue with posts
+#   ≈ 225 posts ≈ $0.45 per run. Plus 1 OpenAI call per venue with posts
 #   (≈10 calls, ~$0.005 each) ≈ $0.05. Total ≤ $0.50/run, ~$15/mo daily.
 #
 # Toggle with FB_POSTS_ENABLED=1 (default off until Apify cap resets).
@@ -2441,7 +2184,7 @@ def fetch_apify_facebook_events(days_ahead=14):
 # ("Live music every Friday" remains useful even when 20 days old).
 _POSTS_PER_VENUE = 50
 
-# Lookback for posts. Bumped 14 → 30 days for the same reason. The sonar
+# Lookback for posts. Bumped 14 → 30 days for the same reason. The extraction
 # prompt still constrains *event dates* to the collection window, so older
 # posts are only kept when they describe a future-dated or recurring event.
 _POSTS_LOOKBACK_DAYS = 30
@@ -2486,13 +2229,13 @@ def _venue_high_confidence(venues):
     return [v for v in venues if (v.get("confidence") or "").lower() == "high"]
 
 
-def _extract_events_from_posts_via_sonar(venue_name, posts):
-    """Send a venue's recent posts to Perplexity sonar and parse out events.
+def _extract_events_from_posts_via_ai(venue_name, posts):
+    """Send a venue's recent posts to OpenAI and parse out events.
 
     Returns a list of event dicts (date/name/time/description/url) — venue is
     filled in by the caller.
     """
-    api_key = os.environ.get("PERPLEXITY_API_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key or not posts:
         return []
 
@@ -2532,30 +2275,21 @@ Rules:
 - Return [] if no events found. No prose, no markdown fences."""
 
     try:
-        resp = requests.post(
-            "https://api.perplexity.ai/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "sonar",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.1,
-                # Recurring expansion ("every Wednesday" × 3 weeks) can produce
-                # 4–8 entries per post × ~50 posts, so leave plenty of headroom.
-                "max_tokens": 4000,
-            },
+        content = _openai_chat(
+            api_key,
+            [{"role": "user", "content": prompt}],
+            # Recurring expansion ("every Wednesday" × 3 weeks) can produce
+            # 4–8 entries per post × ~50 posts, and reasoning tokens share
+            # this budget, so leave plenty of headroom.
+            max_tokens=12000,
             timeout=60,
         )
-        resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"].strip()
         content = re.sub(r"^```\w*\s*", "", content)
         content = re.sub(r"\s*```\s*$", "", content)
-        raw = _parse_sonar_json(content)
+        raw = _parse_ai_json_array(content)
         if raw is None:
             _sentry_warn(
-                "FB posts sonar parse failed",
+                "FB posts AI parse failed",
                 venue=venue_name,
                 sample=content[:200],
             )
@@ -2563,19 +2297,19 @@ Rules:
         return raw
     except requests.HTTPError as e:
         status = e.response.status_code if e.response else "?"
-        _sentry_warn("FB posts sonar HTTP error", venue=venue_name, status=str(status))
+        _sentry_warn("FB posts AI HTTP error", venue=venue_name, status=str(status))
         return []
     except Exception as e:
-        _sentry_warn("FB posts sonar exception", venue=venue_name, error=str(e)[:200])
+        _sentry_warn("FB posts AI exception", venue=venue_name, error=str(e)[:200])
         return []
 
 
 def fetch_apify_facebook_posts(days_ahead=14):
-    """Pull recent posts from each high-confidence venue page and ask sonar to
+    """Pull recent posts from each high-confidence venue page and ask OpenAI to
     extract dated events. Off by default — set FB_POSTS_ENABLED=1 to turn on.
 
     Pipeline per venue:
-      Apify posts-scraper → last 25 posts (≤ 14 days old) → sonar event
+      Apify posts-scraper → last 25 posts (≤ 14 days old) → OpenAI event
       extraction → normalized event dicts.
     """
     global _APIFY_LIMIT_TRIPPED
@@ -2592,8 +2326,8 @@ def fetch_apify_facebook_posts(days_ahead=14):
     if _APIFY_LIMIT_TRIPPED:
         print("  [Apify FB Posts] Monthly hard limit already tripped this run — skipping")
         return events
-    if not os.environ.get("PERPLEXITY_API_KEY"):
-        print("  [Apify FB Posts] No PERPLEXITY_API_KEY — cannot extract events from posts")
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("  [Apify FB Posts] No OPENAI_API_KEY — cannot extract events from posts")
         return events
 
     all_venues, venues_path = _load_venue_list()
@@ -2688,8 +2422,8 @@ def fetch_apify_facebook_posts(days_ahead=14):
             venue_stats.append(f"{venue_name}: unexpected type {type(posts).__name__}")
             continue
 
-        # Hand the posts to sonar for event extraction
-        raw = _extract_events_from_posts_via_sonar(venue_name, posts)
+        # Hand the posts to OpenAI for event extraction
+        raw = _extract_events_from_posts_via_ai(venue_name, posts)
         kept = 0
         for r in raw:
             if not isinstance(r, dict):
@@ -2705,7 +2439,7 @@ def fetch_apify_facebook_posts(days_ahead=14):
             if not in_window(d_obj):
                 continue
 
-            # Try to attach a source URL: prefer the post's URL when sonar
+            # Try to attach a source URL: prefer the post's URL when the model
             # tagged source_post_index, otherwise fall back to the venue page.
             source_url = page_url
             idx = r.get("source_post_index")
@@ -2743,9 +2477,9 @@ def fetch_apify_facebook_posts(days_ahead=14):
     return events
 
 
-# ─── INSTAGRAM POSTS → SONAR ─────────────────────────────────────────────────
+# ─── INSTAGRAM POSTS → OPENAI ────────────────────────────────────────────────
 #
-# Mirror of fetch_apify_facebook_posts but against Instagram. Same Sonar prompt
+# Mirror of fetch_apify_facebook_posts but against Instagram. Same OpenAI prompt
 # is reused (captions and FB post text look similar enough — many Victoria
 # venues just cross-post). Tier-aware so we burn fewer credits on lower-tier
 # discoveries:
@@ -2754,7 +2488,7 @@ def fetch_apify_facebook_posts(days_ahead=14):
 #   MEDIUM tier → 15 posts each, 14-day lookback
 #
 # Cost shape (rough): Apify $2/1000 posts × ~9 HIGH × 25 + ~10 MEDIUM × 15
-#   ≈ 375 posts ≈ $0.75 per run. Plus ~1 Sonar call per venue with posts
+#   ≈ 375 posts ≈ $0.75 per run. Plus ~1 OpenAI call per venue with posts
 #   (≈15 calls, ~$0.005 each) ≈ $0.08. Total ≤ $0.85/run.
 #
 # Toggle with IG_POSTS_ENABLED=1 (default off until production-validated).
@@ -2879,7 +2613,7 @@ def _venue_instagram_username(venue):
 
 
 def fetch_apify_instagram_posts(days_ahead=14):
-    """Pull recent Instagram posts from each tiered venue and ask sonar to
+    """Pull recent Instagram posts from each tiered venue and ask OpenAI to
     extract dated events. Off by default — set IG_POSTS_ENABLED=1 to turn on.
 
     Tier-aware:
@@ -2887,9 +2621,9 @@ def fetch_apify_instagram_posts(days_ahead=14):
       MEDIUM → 15 posts, 14-day lookback
 
     Pipeline per venue:
-      Apify instagram-post-scraper → recent posts → sonar event extraction →
-      normalized event dicts. The Sonar prompt is shared with the Facebook
-      pipeline (``_extract_events_from_posts_via_sonar``); IG captions are
+      Apify instagram-post-scraper → recent posts → OpenAI event extraction →
+      normalized event dicts. The extraction prompt is shared with the Facebook
+      pipeline (``_extract_events_from_posts_via_ai``); IG captions are
       close enough to FB post text that the same prompt extracts cleanly.
     """
     global _APIFY_LIMIT_TRIPPED
@@ -2906,8 +2640,8 @@ def fetch_apify_instagram_posts(days_ahead=14):
     if _APIFY_LIMIT_TRIPPED:
         print("  [Apify IG Posts] Monthly hard limit already tripped this run — skipping")
         return events
-    if not os.environ.get("PERPLEXITY_API_KEY"):
-        print("  [Apify IG Posts] No PERPLEXITY_API_KEY — cannot extract events from posts")
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("  [Apify IG Posts] No OPENAI_API_KEY — cannot extract events from posts")
         return events
 
     all_venues, venues_path = _load_venue_list()
@@ -3033,7 +2767,7 @@ def fetch_apify_instagram_posts(days_ahead=14):
             continue
 
         # IG actor field names: caption, url, timestamp. Normalize into the
-        # shape the shared Sonar helper expects (text/url/time).
+        # shape the shared extraction helper expects (text/url/time).
         normalized = []
         for p in posts:
             if not isinstance(p, dict):
@@ -3047,7 +2781,7 @@ def fetch_apify_instagram_posts(days_ahead=14):
         if not normalized:
             n_zero_post_venues += 1
 
-        raw = _extract_events_from_posts_via_sonar(venue_name, normalized)
+        raw = _extract_events_from_posts_via_ai(venue_name, normalized)
         kept = 0
         ig_profile_url = f"https://www.instagram.com/{username}/"
         for r in raw:
@@ -3098,8 +2832,8 @@ def fetch_apify_instagram_posts(days_ahead=14):
         print(f"    • {s}")
 
     # Surface "ran but extracted nothing" the same way discover_venues does.
-    # If we burned Apify credits for posts and Sonar reads but ended up with
-    # zero events, that's almost always a regression — a Sonar prompt drift,
+    # If we burned Apify credits for posts and OpenAI reads but ended up with
+    # zero events, that's almost always a regression — a prompt drift,
     # an actor schema bump, or every venue handle going stale at once. Easier
     # to spot a Sentry ping than to diff weekly digests for missing events.
     actor_succeeded = n_http_errors + n_request_errors < len(targets)
@@ -3205,24 +2939,18 @@ def main():
         all_events.extend(safe_fetch("apify_facebook", fetch_apify_facebook_events,
                                      args=(args.days,), expect_events=False))
 
-        # Apify Facebook *posts* → sonar event extraction. Off by default;
+        # Apify Facebook *posts* → OpenAI event extraction. Off by default;
         # set FB_POSTS_ENABLED=1 to enable. Pulls from each high-confidence
         # venue page so we catch events announced as posts ("live music
         # tonight 7pm") that never become formal Event pages.
         all_events.extend(safe_fetch("apify_facebook_posts", fetch_apify_facebook_posts,
                                      args=(args.days,), expect_events=False))
 
-        # Apify Instagram *posts* → sonar event extraction. Off by default;
+        # Apify Instagram *posts* → OpenAI event extraction. Off by default;
         # set IG_POSTS_ENABLED=1 to enable. Mirrors the FB-posts pipeline but
         # tier-aware (HIGH=25 posts, MEDIUM=15 posts) and pulls from each
         # tiered venue's Instagram handle when one is known.
         all_events.extend(safe_fetch("apify_instagram_posts", fetch_apify_instagram_posts,
-                                     args=(args.days,), expect_events=False))
-
-    # 4. Perplexity AI discovery
-    if not args.skip_ai:
-        print("\n🤖 Perplexity event discovery...")
-        all_events.extend(safe_fetch("perplexity", fetch_perplexity_events,
                                      args=(args.days,), expect_events=False))
 
     # 5. Merge + deduplicate
@@ -3236,7 +2964,7 @@ def main():
     # 6. Fill missing descriptions + URLs
     merged = fill_gaps(merged)
 
-    # 7. AI review — polish descriptions + assign icons via Perplexity sonar
+    # 7. AI review — polish descriptions + assign icons via OpenAI
     if not args.skip_ai and merged:
         print("\n🤖 AI review (descriptions + icons)…")
         merged = ai_review(merged)

@@ -1,12 +1,13 @@
 """Offline tests for ai_review sanitization & fallback paths.
 
-These tests don't hit the Perplexity API \u2014 they monkey-patch _ai_review_batch
+These tests don't hit the OpenAI API \u2014 they monkey-patch _ai_review_batch
 to return synthetic responses so we can verify:
   1. Description gets clamped + emoji-stripped
   2. Icons are validated, deduped, and capped at 3
   3. free flag stays in sync with the `free` icon
   4. Bad batches preserve original event values
-  5. Missing PERPLEXITY_API_KEY skips cleanly
+  5. Missing OPENAI_API_KEY skips cleanly
+  6. The OpenAI request payload is shaped for current chat models
 """
 import os
 import sys
@@ -94,7 +95,7 @@ class TestAIReviewSanitization(unittest.TestCase):
                 },
             ][:len(batch)]
 
-        with patch.dict(os.environ, {"PERPLEXITY_API_KEY": "x"}):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "x"}):
             with patch.object(ce, "_ai_review_batch", side_effect=fake_batch):
                 result = ce.ai_review(events, batch_size=8)
 
@@ -125,7 +126,7 @@ class TestAIReviewSanitization(unittest.TestCase):
                 "free": False,
             }]
 
-        with patch.dict(os.environ, {"PERPLEXITY_API_KEY": "x"}):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "x"}):
             with patch.object(ce, "_ai_review_batch", side_effect=fake_batch):
                 result = ce.ai_review(events)
 
@@ -141,7 +142,7 @@ class TestAIReviewSanitization(unittest.TestCase):
         def fake_batch(api_key, batch):
             return None  # simulate parse failure
 
-        with patch.dict(os.environ, {"PERPLEXITY_API_KEY": "x"}):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "x"}):
             with patch.object(ce, "_ai_review_batch", side_effect=fake_batch):
                 result = ce.ai_review(events)
 
@@ -154,7 +155,7 @@ class TestAIReviewSanitization(unittest.TestCase):
         def fake_batch(api_key, batch):
             return [{"description": long, "icons": ["community"], "free": False}]
 
-        with patch.dict(os.environ, {"PERPLEXITY_API_KEY": "x"}):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "x"}):
             with patch.object(ce, "_ai_review_batch", side_effect=fake_batch):
                 result = ce.ai_review(events)
 
@@ -172,7 +173,7 @@ class TestAIReviewSanitization(unittest.TestCase):
                 "free": False,
             }]
 
-        with patch.dict(os.environ, {"PERPLEXITY_API_KEY": "x"}):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "x"}):
             with patch.object(ce, "_ai_review_batch", side_effect=fake_batch):
                 result = ce.ai_review(events)
 
@@ -190,11 +191,74 @@ class TestAIReviewSanitization(unittest.TestCase):
             return [{"description": f"Polished {i}", "icons": ["community"], "free": False}
                     for i in range(len(batch))]
 
-        with patch.dict(os.environ, {"PERPLEXITY_API_KEY": "x"}):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "x"}):
             with patch.object(ce, "_ai_review_batch", side_effect=fake_batch):
                 ce.ai_review(events, batch_size=5)
 
         self.assertEqual(call_count["n"], 4)
+
+
+class _FakeResp:
+    def __init__(self, content):
+        self._content = content
+    def raise_for_status(self):
+        pass
+    def json(self):
+        return {"choices": [{"message": {"content": self._content}}]}
+
+
+class TestOpenAIChat(unittest.TestCase):
+
+    def _capture(self, env, content="[]"):
+        calls = []
+
+        def fake_post(url, headers=None, json=None, timeout=None):
+            calls.append({"url": url, "headers": headers, "json": json})
+            return _FakeResp(content)
+
+        with patch.dict(os.environ, env, clear=True):
+            with patch.object(ce.requests, "post", side_effect=fake_post):
+                out = ce._openai_chat("sk-test", [{"role": "user", "content": "hi"}], max_tokens=100)
+        return out, calls[0]
+
+    def test_default_model_and_payload(self):
+        out, call = self._capture({}, content="  [1]  ")
+        self.assertEqual(out, "[1]")
+        self.assertEqual(call["url"], "https://api.openai.com/v1/chat/completions")
+        self.assertEqual(call["headers"]["Authorization"], "Bearer sk-test")
+        body = call["json"]
+        self.assertEqual(body["model"], ce._OPENAI_DEFAULT_MODEL)
+        self.assertEqual(body["max_completion_tokens"], 100)
+        self.assertEqual(body["reasoning_effort"], "low")
+        # gpt-5-family models reject non-default temperature and max_tokens.
+        self.assertNotIn("temperature", body)
+        self.assertNotIn("max_tokens", body)
+
+    def test_model_override_without_reasoning(self):
+        _, call = self._capture({"OPENAI_MODEL": "gpt-4.1-mini"})
+        self.assertEqual(call["json"]["model"], "gpt-4.1-mini")
+        self.assertNotIn("reasoning_effort", call["json"])
+
+    def test_null_content_returns_empty_string(self):
+        out, _ = self._capture({}, content=None)
+        self.assertEqual(out, "")
+
+    def test_review_batch_routes_through_openai(self):
+        events = [dict(SAMPLE_EVENTS[0])]
+        reply = '[{"description": "Songs for babies.", "icons": ["family"], "free": true}]'
+        seen = []
+
+        def fake_post(url, headers=None, json=None, timeout=None):
+            seen.append(url)
+            return _FakeResp(reply)
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "x"}, clear=True):
+            with patch.object(ce.requests, "post", side_effect=fake_post):
+                result = ce.ai_review(events)
+
+        self.assertEqual(seen, [ce.OPENAI_CHAT_URL])
+        self.assertEqual(result[0]["description"], "Songs for babies.")
+        self.assertTrue(result[0]["free"])
 
 
 if __name__ == "__main__":

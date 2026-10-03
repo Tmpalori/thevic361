@@ -8,7 +8,7 @@ The companion files `CLAUDE.md` and `.cursorrules` redirect to this document so 
 
 ## What this is
 
-**The Vic 361** is a weekly community-events website for Victoria, TX (population ~65k). It collects events from public calendars, Apify-scraped Facebook/Instagram, and Perplexity Sonar venue-grounded prompts; an admin curates the candidate list each Sunday; the curated list is served from Railway Postgres at [thevic361.com](https://thevic361.com).
+**The Vic 361** is a weekly community-events website for Victoria, TX (population ~65k). It collects events from public calendars and Apify-scraped Facebook/Instagram (OpenAI extracts events from posts and polishes descriptions); an admin curates the candidate list each Sunday; the curated list is served from Railway Postgres at [thevic361.com](https://thevic361.com).
 
 - **Live site:** [thevic361.com](https://thevic361.com) — Railway (Express + Postgres)
 - **Repo:** `Tmpalori/thevic361` (this repo)
@@ -109,7 +109,7 @@ thevic361/
 │   ├── test_collect_events_safety.py    # ⚠️  PINS the --candidates-only invariant
 │   ├── test_discover_venues.py
 │   ├── test_fb_posts.py, test_ig_posts.py
-│   ├── test_library_cap.py, test_sonar_prompts.py, test_venues_seed.py
+│   ├── test_library_cap.py, test_venues_seed.py
 │
 ├── .github/workflows/
 │   ├── weekly-collect.yml        # Sun 23:00 UTC — collector → candidates.json
@@ -212,8 +212,7 @@ Full reference is in [`RAILWAY.md`](./RAILWAY.md). Quick list:
 
 | Var | Used by |
 |---|---|
-| `OPENAI_API_KEY` | `collect_events.py` AI review |
-| `PERPLEXITY_API_KEY` | `collect_events.py` Sonar discovery |
+| `OPENAI_API_KEY` | `collect_events.py` AI review + FB/IG post extraction |
 | `APIFY_TOKEN` | `collect_events.py` Facebook events + posts, Instagram posts |
 | `SENTRY_DSN`, `SENTRY_ENVIRONMENT` | Both collector and server |
 
@@ -230,6 +229,7 @@ Full reference is in [`RAILWAY.md`](./RAILWAY.md). Quick list:
 | `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` | — | When set, `/api/submissions` requires a Turnstile token |
 | `FB_POSTS_ENABLED`, `IG_POSTS_ENABLED` | — | Repo Variables (not secrets); `=1` to enable post-scrape pipelines in CI |
 | `FB_POSTS_MAX_VENUES`, `IG_POSTS_MAX_VENUES` | (collector defaults) | Caps to keep Apify costs bounded |
+| `OPENAI_MODEL` | `gpt-5-mini` | Repo Variable; overrides the collector's OpenAI model |
 | `PORT` | `3000` | Express listen port |
 
 PR/staging Railway environments do **not** automatically inherit `ADMIN_*` vars — set them per-environment or use Railway's shared variables feature.

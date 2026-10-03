@@ -1,4 +1,4 @@
-"""Tests for cap_library_events, the fuzzy merge_events dedupe, and _parse_sonar_json.
+"""Tests for cap_library_events, the fuzzy merge_events dedupe, and _parse_ai_json_array.
 
 These tests don't hit the network — they construct synthetic event lists and
 verify the deterministic logic.
@@ -34,32 +34,32 @@ def _other(date, name, venue="Aero Crafters"):
     }
 
 
-class TestParseSonarJson(unittest.TestCase):
+class TestParseAiJsonArray(unittest.TestCase):
     def test_clean_array(self):
-        out = ce._parse_sonar_json('[{"date":"2026-05-01","name":"X"}]')
+        out = ce._parse_ai_json_array('[{"date":"2026-05-01","name":"X"}]')
         self.assertEqual(out, [{"date": "2026-05-01", "name": "X"}])
 
     def test_prose_wrapped(self):
-        out = ce._parse_sonar_json('Here are the events: [{"date":"2026-05-01","name":"X"}] cheers!')
+        out = ce._parse_ai_json_array('Here are the events: [{"date":"2026-05-01","name":"X"}] cheers!')
         self.assertEqual(out, [{"date": "2026-05-01", "name": "X"}])
 
     def test_citation_prefix_picks_largest_array(self):
-        # Sonar sometimes prepends "[1]" — should not be treated as the result
-        out = ce._parse_sonar_json('[1] These events: [{"date":"2026-05-01","name":"Y"},{"date":"2026-05-02","name":"Z"}]')
+        # Models sometimes prepend "[1]" — should not be treated as the result
+        out = ce._parse_ai_json_array('[1] These events: [{"date":"2026-05-01","name":"Y"},{"date":"2026-05-02","name":"Z"}]')
         self.assertEqual(len(out), 2)
 
     def test_dict_with_events_key(self):
-        out = ce._parse_sonar_json('{"events":[{"date":"2026-05-01","name":"X"}]}')
+        out = ce._parse_ai_json_array('{"events":[{"date":"2026-05-01","name":"X"}]}')
         self.assertEqual(out, [{"date": "2026-05-01", "name": "X"}])
 
     def test_garbage_returns_none(self):
-        self.assertIsNone(ce._parse_sonar_json("No events found."))
+        self.assertIsNone(ce._parse_ai_json_array("No events found."))
 
     def test_empty_string(self):
-        self.assertIsNone(ce._parse_sonar_json(""))
+        self.assertIsNone(ce._parse_ai_json_array(""))
 
     def test_empty_array_is_valid(self):
-        self.assertEqual(ce._parse_sonar_json("[]"), [])
+        self.assertEqual(ce._parse_ai_json_array("[]"), [])
 
 
 class TestLibraryCap(unittest.TestCase):
