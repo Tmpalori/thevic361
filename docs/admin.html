@@ -81,18 +81,20 @@
         <span class="admin-header__tag">Admin</span>
       </div>
       <nav class="admin-tabs" role="tablist">
-        <button class="tab-btn is-active" data-tab="picker" role="tab">Pick events</button>
+        <button class="tab-btn is-active" data-tab="home" role="tab">Home</button>
+        <button class="tab-btn" data-tab="picker" role="tab">Events</button>
         <button class="tab-btn" data-tab="submissions" role="tab">
           Submissions <span id="submissions-pending-badge" class="tab-badge" hidden>0</span>
         </button>
-        <button class="tab-btn" data-tab="preview" role="tab">Preview</button>
         <button class="tab-btn" data-tab="newsletter" role="tab">Newsletter</button>
-        <button class="tab-btn" data-tab="sources" role="tab">Sources</button>
-        <button class="tab-btn" data-tab="traffic" role="tab">Traffic</button>
         <button class="tab-btn" data-tab="sponsors" role="tab">Sponsors</button>
+        <button class="tab-btn" data-tab="traffic" role="tab">Traffic</button>
+        <button class="tab-btn" data-tab="sources" role="tab">Event sources</button>
+        <button class="tab-btn" data-tab="preview" role="tab">Preview</button>
       </nav>
       <div class="admin-header__actions">
-        <a class="btn btn--outline" href="/social/latest/index.html" target="_blank" rel="noopener">Social kit</a>
+        <a class="btn btn--outline" href="/" target="_blank" rel="noopener">View site</a>
+        <a class="btn btn--outline" href="/social/latest/index.html" target="_blank" rel="noopener">Social posts</a>
         <button id="theme-toggle" type="button" class="theme-toggle"
                 aria-pressed="false"
                 aria-label="Toggle dark mode">
@@ -105,17 +107,24 @@
 
     <!-- Status / counts bar -->
     <div class="status-bar">
-      <span id="count-summary" class="count-summary" aria-live="polite">
-        0 selected
-      </span>
-      <span id="count-guidance" class="count-guidance">
-        Target: 4–8 weekday · 8–12 weekend
-      </span>
+      <span id="count-summary" class="count-summary" aria-live="polite" hidden></span>
       <span id="status-message" class="status-message" role="status" aria-live="polite"></span>
     </div>
 
-    <!-- ─── PICKER TAB ─── -->
-    <section id="tab-picker" class="tab-panel is-active" role="tabpanel">
+    <!-- ─── HOME TAB ─── -->
+    <section id="tab-home" class="tab-panel is-active" role="tabpanel">
+      <p class="tab-intro">The site runs itself: events are collected Sunday and Wednesday nights and go live automatically. Check here for anything that needs you.</p>
+      <div id="home-error" class="empty-state empty-state--error" hidden></div>
+      <div id="home-body" hidden>
+        <div id="home-tiles" class="home-tiles"></div>
+        <h2 class="traffic-h">Setup <span id="home-setup-count" class="home-setup-count"></span></h2>
+        <ul id="home-checks" class="home-checks" role="list"></ul>
+      </div>
+    </section>
+
+    <!-- ─── EVENTS TAB (picker) ─── -->
+    <section id="tab-picker" class="tab-panel" role="tabpanel" hidden>
+      <p class="tab-intro">Checked events are on the site. Uncheck one to take it down, check a new one to add it, or press Edit to fix details. Then press <strong>Save &amp; Publish</strong>. Edits save on their own.</p>
       <div class="filters">
         <label class="filter">
           <span>Week</span>
@@ -143,7 +152,7 @@
         </label>
         <div class="filter-actions">
           <button id="reload-btn" type="button" class="btn btn--outline">
-            Reload candidates
+            Reload
           </button>
           <button id="publish-btn" type="button" class="btn btn--primary">
             Save &amp; Publish
@@ -151,7 +160,7 @@
         </div>
       </div>
 
-      <div id="picker-loading" class="empty-state">Loading candidates…</div>
+      <div id="picker-loading" class="empty-state">Loading events…</div>
       <div id="picker-empty" class="empty-state" hidden>No events match.</div>
       <div id="picker-error" class="empty-state empty-state--error" hidden></div>
       <div id="picker-list" class="picker-list" aria-live="polite"></div>
@@ -159,6 +168,7 @@
 
     <!-- ─── SUBMISSIONS TAB ─── -->
     <section id="tab-submissions" class="tab-panel" role="tabpanel" hidden>
+      <p class="tab-intro">Events people sent in through the Submit form. Approve good ones; approved events go live with the next automatic update, or press "Add approved to Events" and Save &amp; Publish to post them now.</p>
       <div class="submissions-toolbar">
         <!-- Legacy per-tab config inputs. Hidden by default — the unified
              login flow shares the same session token with the picker tab. We
@@ -180,7 +190,7 @@
             Save
           </button>
         </div>
-        <div class="submissions-config-toggle">
+        <div class="submissions-config-toggle" hidden>
           <button id="submissions-config-toggle" type="button"
                   class="btn btn--link">Override API / token…</button>
         </div>
@@ -199,7 +209,7 @@
             Refresh
           </button>
           <button id="submissions-pull-approved" type="button" class="btn btn--primary">
-            Pull approved into picker
+            Add approved to Events
           </button>
         </div>
       </div>
@@ -217,9 +227,7 @@
           Refresh preview
         </button>
         <span class="preview-help">
-          Renders <code>index.html</code> with current picks via
-          <code>?previewKey=&lt;key&gt;</code> (events stored in sessionStorage
-          to keep the URL short).
+          How the homepage will look with the events checked on the Events tab, before you publish.
         </span>
       </div>
       <iframe id="preview-frame" class="preview-frame" title="Site preview"></iframe>
@@ -227,20 +235,10 @@
 
     <!-- ─── NEWSLETTER TAB ─── -->
     <section id="tab-newsletter" class="tab-panel" role="tabpanel" hidden>
-      <div class="newsletter-actions">
-        <button id="newsletter-refresh" type="button" class="btn btn--outline">
-          Regenerate
-        </button>
-        <button id="newsletter-copy" type="button" class="btn btn--primary">
-          Copy to clipboard
-        </button>
-        <span id="newsletter-copied" class="newsletter-copied" hidden>Copied!</span>
-      </div>
-      <textarea id="newsletter-html" class="newsletter-textarea"
-                spellcheck="false" readonly></textarea>
 
       <div class="email-nl" id="email-nl">
-        <h3 class="traffic-h">Email newsletter (Resend)</h3>
+        <p class="tab-intro">The weekly email goes out Monday mornings on its own once set up. Preview it or send yourself a test here.</p>
+        <h3 class="traffic-h">Email newsletter</h3>
         <div id="email-nl-status" class="sources-summary"></div>
         <p id="email-nl-warning" class="email-nl-warning" hidden></p>
         <div class="newsletter-actions">
@@ -258,10 +256,24 @@
         </details>
         <h3 class="traffic-h">Recent sends</h3>
         <table class="traffic-table" id="email-nl-sends"></table>
+        <details class="email-nl-import">
+          <summary>Copy the list as HTML (for another email tool)</summary>
+            <div class="newsletter-actions">
+        <button id="newsletter-refresh" type="button" class="btn btn--outline">
+          Regenerate
+        </button>
+        <button id="newsletter-copy" type="button" class="btn btn--primary">
+          Copy to clipboard
+        </button>
+        <span id="newsletter-copied" class="newsletter-copied" hidden>Copied!</span>
+      </div>
+      <textarea id="newsletter-html" class="newsletter-textarea"
+                spellcheck="false" readonly></textarea>
+        </details>
       </div>
     </section>
 
-    <!-- ─── SOURCES TAB ─── -->
+    <!-- ─── TRAFFIC TAB ─── -->
     <section id="tab-traffic" class="tab-panel" role="tabpanel" hidden>
       <div class="traffic-head">
         <label for="traffic-days">Show</label>
@@ -307,6 +319,7 @@
     </section>
 
     <section id="tab-sources" class="tab-panel" role="tabpanel" hidden>
+      <p class="tab-intro">Where events come from and how the last automatic pull went. "Pull now" collects fresh events right away instead of waiting for Sunday or Wednesday night.</p>
       <div class="sources-summary" id="sources-summary">
         <div class="sources-summary__item">
           <span class="sources-summary__label">Last collected</span>

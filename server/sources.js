@@ -42,26 +42,18 @@ const KNOWN_SOURCES = [
 
 const KNOWN_BY_NAME = new Map(KNOWN_SOURCES.map(s => [s.name, s]));
 
-// Compute the next Sunday at 23:00 UTC strictly AFTER `now`. The workflow
-// cron is `0 23 * * 0` so this is the next scheduled trigger; the actual
-// Central-time equivalent shifts an hour around DST switches but the UTC
-// instant is exact.
+// Next scheduled collect strictly AFTER `now`: weekly-collect.yml runs at
+// 23:00 UTC on Sunday (`0 23 * * 0`) and Wednesday (`0 23 * * 3`). The
+// Central-time equivalent shifts an hour around DST but the UTC instant is
+// exact.
+const RUN_DAYS = [0, 3];
 export function nextWeeklyRunUtc(now) {
   const ref = now ? new Date(now.getTime()) : new Date();
-  // Build today's 23:00 UTC as the candidate.
-  const next = new Date(Date.UTC(
-    ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate(), 23, 0, 0, 0
-  ));
-  const dow = next.getUTCDay(); // 0 = Sunday
-  let addDays;
-  if (dow === 0) {
-    addDays = next.getTime() > ref.getTime() ? 0 : 7;
-  } else {
-    addDays = (7 - dow) % 7;
-    if (addDays === 0) addDays = 7;
+  for (let add = 0; add <= 7; add++) {
+    const t = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate() + add, 23, 0, 0, 0));
+    if (RUN_DAYS.includes(t.getUTCDay()) && t.getTime() > ref.getTime()) return t;
   }
-  next.setUTCDate(next.getUTCDate() + addDays);
-  return next;
+  return null;
 }
 
 // Reads `collection_metadata.json` from disk if present. Returns null on
@@ -130,8 +122,8 @@ export function buildSourcesPayload({ metadata, mtime, now, githubConfigured, ac
     ok: true,
     last_run_at: lastRunAt,
     next_run_at: next.toISOString(),
-    next_run_cron: '0 23 * * 0',
-    next_run_note: 'Sundays 23:00 UTC (≈ 6 PM Central CDT / 5 PM Central CST)',
+    next_run_cron: '0 23 * * 0,3',
+    next_run_note: 'Sundays and Wednesdays, about 6 PM Central',
     metadata_present: Boolean(metadata),
     merged_count: metadata && typeof metadata.merged_count === 'number'
       ? metadata.merged_count : null,

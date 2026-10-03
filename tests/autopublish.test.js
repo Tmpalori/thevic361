@@ -131,3 +131,21 @@ describe('auto-publish', () => {
     expect(await store.getPublished()).toBeNull();
   });
 });
+
+describe('admin setup checklist', () => {
+  it('needs a login and reports presence only', async () => {
+    await start({ candidates: CANDIDATES });
+    expect((await fetch(baseUrl + '/api/admin/setup')).status).toBe(401);
+    await runNow();
+    const r = await (await fetch(baseUrl + '/api/admin/setup', { headers: await auth() })).json();
+    expect(r.ok).toBe(true);
+    const byKey = Object.fromEntries(r.checks.map(c => [c.key, c]));
+    expect(byKey.login.ok).toBe(true);
+    expect(byKey.slack.ok).toBe(true);
+    expect(byKey.database.ok).toBe(false);
+    expect(byKey.social.ok).toBeNull();
+    expect(r.status.upcoming_events).toBe(3);
+    expect(r.status.collected_at).toBe(CANDIDATES.last_updated);
+    expect(JSON.stringify(r)).not.toMatch(/"b"|"c"/); // no password/secret values
+  });
+});

@@ -81,7 +81,7 @@ describe('admin.html static structure', () => {
       'reload-btn', 'publish-btn',
       'preview-frame', 'preview-refresh',
       'newsletter-html', 'newsletter-copy', 'newsletter-refresh',
-      'count-summary', 'count-guidance', 'status-message',
+      'count-summary', 'status-message',
       'picker-list', 'picker-loading', 'picker-empty', 'picker-error'
     ];
     for (const id of ids) {
@@ -89,12 +89,12 @@ describe('admin.html static structure', () => {
     }
   });
 
-  it('exposes the seven admin tab buttons', () => {
+  it('exposes the eight admin tab buttons, Home first', () => {
     bootDom();
     const tabs = document.querySelectorAll('.tab-btn');
-    expect(tabs.length).toBe(7);
+    expect(tabs.length).toBe(8);
     expect(Array.from(tabs).map(t => t.dataset.tab).sort())
-      .toEqual(['newsletter', 'picker', 'preview', 'sources', 'sponsors', 'submissions', 'traffic']);
+      .toEqual(['home', 'newsletter', 'picker', 'preview', 'sources', 'sponsors', 'submissions', 'traffic']);
   });
 
   it('exposes the Sources tab structure', () => {
@@ -635,5 +635,59 @@ describe('admin preview mode (PR #20)', () => {
     const src = api.buildPreviewSrc({ last_updated: 'x', events: [] });
     expect(src.startsWith('index.html?previewKey=')).toBe(true);
     expect(src.length).toBeLessThan(200);
+  });
+});
+
+describe('Events tab starts from the live site', () => {
+  afterEach(() => { delete window.__vic361Admin; });
+
+  it('lists live events missing from candidates and checks exactly what is live', async () => {
+    const api = bootDom();
+    const live = [
+      { date: '2099-01-02', name: 'Kept From Last Week', time: '7 PM', venue: 'A' },
+      { date: '2099-01-03', name: 'In Both', time: '8 PM', venue: 'B' }
+    ];
+    const cands = [
+      { date: '2099-01-03', name: 'In Both', time: '8 PM', venue: 'B' },
+      { date: '2099-01-04', name: 'New This Week', time: '9 PM', venue: 'C' }
+    ];
+    window.fetch = vi.fn(async (url) => {
+      const u = String(url);
+      if (u.includes('/api/admin/candidates')) return { ok: true, status: 200, json: async () => ({ ok: true, data: { events: cands } }) };
+      if (u.includes('/api/admin/published-events')) return { ok: true, status: 200, json: async () => ({ ok: true, events: live }) };
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+    window.localStorage.setItem('vic361_admin_picks', JSON.stringify(['2099-01-04|New This Week|C']));
+    api._state.session = 'tok';
+    await api.loadCandidates();
+    const names = api._state.candidates.map(e => e.name);
+    expect(names).toEqual(['Kept From Last Week', 'In Both', 'New This Week']);
+    const picked = api.buildEventsPayload().events.map(e => e.name);
+    expect(picked).toEqual(['Kept From Last Week', 'In Both']);
+    expect(document.getElementById('count-summary').textContent).toContain('matches the live site');
+  });
+});
+
+describe('Home tab', () => {
+  afterEach(() => { delete window.__vic361Admin; });
+
+  it('renders the setup checklist with unfinished items first', async () => {
+    const api = bootDom();
+    window.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({
+      ok: true,
+      status: { upcoming_events: 42, pending_submissions: 3, subscribers: 10, collected_at: null },
+      checks: [
+        { key: 'database', label: 'Database', ok: true, level: 'required', fix: '' },
+        { key: 'slack', label: 'Slack alerts', ok: false, level: 'recommended', fix: 'Set SLACK_WEBHOOK_URL' },
+        { key: 'social', label: 'Auto-post', ok: null, level: 'recommended', fix: 'In GitHub', link: 'https://github.com/x' }
+      ]
+    }) }));
+    api._state.session = 'tok';
+    await api.loadHome();
+    expect(document.getElementById('home-tiles').textContent).toContain('42');
+    expect(document.getElementById('home-setup-count').textContent).toBe('1 of 3 set up');
+    const items = Array.from(document.querySelectorAll('.home-check strong')).map(n => n.textContent);
+    expect(items[items.length - 1]).toBe('Database');
+    expect(document.getElementById('home-checks').textContent).toContain('Set SLACK_WEBHOOK_URL');
   });
 });
