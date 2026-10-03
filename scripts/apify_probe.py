@@ -19,7 +19,7 @@ import requests
 
 TOKEN = os.environ.get("APIFY_TOKEN", "").strip()
 API = "https://api.apify.com/v2"
-MAX_ITEMS = int(os.environ.get("PROBE_MAX_ITEMS", "40"))
+MAX_ITEMS = int(os.environ.get("PROBE_MAX_ITEMS") or "40")
 
 QUERY = "events in Victoria, TX"
 CITY = "Victoria, TX"
