@@ -13,11 +13,14 @@
     <path d="M760 38a14 14 0 0 1 27-6a18 18 0 0 1 32 6a11 11 0 0 1 0 22h-59a11 11 0 0 1 0-22z" fill="#fff"/>
     <!-- hills -->
     <path d="M-810 192Q-620 150 -420 180T-10 188Q150 148 300 178T600 172T900 178T1210 188Q1420 150 1620 182T2010 186V216H-810Z" fill="#7ED6A8"/>
-    <!-- water tower -->
-    <path d="M102 212l14-90M158 212l-14-90M108 180h44M112 152h36M108 180l40-28M152 180l-40-28" fill="none"/>
-    <rect x="82" y="72" width="96" height="56" rx="24" fill="#8FD3FF"/>
-    <path d="M86 84Q130 38 174 84" fill="#4B3FD1"/>
-    <text x="130" y="113" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="28" fill="#1F1A3D" stroke="none">Vic</text>
+    <!-- water tower: one color, same shape as the logo -->
+    <path d="M102 212l14-82M158 212l-14-82M130 134v78M106 184h48M110 160h40M106 184l42-24M154 184l-42-24" fill="none"/>
+    <path d="M84 92Q92 60 130 57Q168 60 176 92V112Q176 136 130 136Q84 136 84 112Z" fill="#FFC93C"/>
+    <path d="M130 57v-9" fill="none"/>
+    <circle cx="130" cy="44" r="5" fill="#FFC93C"/>
+    <path d="M84 92Q130 101 176 92" fill="none" stroke-width="4"/>
+    <path d="M98 82Q104 70 118 66" fill="none" stroke="#FFFFFF" stroke-width="5" opacity="0.8"/>
+    <text x="130" y="126" text-anchor="middle" font-family="Fredoka, 'Arial Black', Arial, sans-serif" font-weight="900" font-size="28" fill="#1F1A3D" stroke="none">Vic</text>
     <!-- left shops -->
     <rect x="216" y="128" width="72" height="84" fill="#FF9F6E"/>
     <rect x="296" y="104" width="62" height="108" fill="#FFC93C"/>

@@ -1866,7 +1866,8 @@ _PUBLIC_EVENT_RE = re.compile(r"\b(concert|choir|festival|fest|fair|fish fry|car
 _MEMBERS_ONLY_RE = re.compile(
     r"\b(board meeting|members? meeting|chapter meeting|(?:monthly|regular|general) meeting|meeting of the"
     r"|orientation|transfer (?:day|tuesdays?|event)|admissions|registration deadline|advising"
-    r"|meet (?:&|and) sweets|tuesdays? at vc|pinning|white coat|color (?:guard )?ceremony)\b"
+    r"|meet (?:&|and) sweets|tuesdays? at vc|pinning|white coat|color (?:guard )?ceremony"
+    r"|commencement|graduation|program (?:color|pinning|ceremony|celebration))\b"
     r"|\bmeeting\s*$", re.IGNORECASE)
 
 

@@ -451,7 +451,8 @@ def test_worship_and_members_only_are_filtered_but_church_festivals_stay():
     drop = ["Confessions", "Mass in English at Our Lady of Sorrows", "Santa Misa en Espanol", "Baptism Class",
             "Communion Service", "Cathedral Charities Collection", "Rosary Congress",
             "Catholic Daughters of the Americas Meeting", "Victoria Rotary Club Board Meeting",
-            "Way Truth Life (WTL) Meet & Sweets"]
+            "Way Truth Life (WTL) Meet & Sweets",
+            "Victoria College Physical Therapist Assistant Program Color Ceremony"]
     keep = ["Our Lady of Victory's 2026 Fall Festival", "Christmas Mass Choir Concert", "Church Fish Fry",
             "Massive Garage Sale", "Meet and Greet with Santa", "Bingo Night", "Symphonic Spooktacular"]
     assert all(ce.non_event_reason({"name": n}) for n in drop), [n for n in drop if not ce.non_event_reason({"name": n})]
