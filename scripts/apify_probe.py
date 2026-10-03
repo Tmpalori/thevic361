@@ -25,20 +25,18 @@ QUERY = "events in Victoria, TX"
 CITY = "Victoria, TX"
 
 # actor id → extra input overrides (applied after the generic guesses)
+# Round 1 (run 37127809936) measured, kept for reference:
+#   apify/facebook-events-scraper   40 items, 39 Victoria, $0.39
+#   khadinakbar/eventbrite-events-scraper  40 items, 26 Victoria, $0.20, rich fields
+#   datapilot/eventbrite-events-scraper    20 items, 20 Victoria, $0.04, title/date/link only
+#   bandsintown actors: artist-only, no city search. Dropped.
+# actor id → extra input overrides (applied after the generic guesses)
 ACTORS = {
-    # Baseline: what the collector uses today.
-    "apify/facebook-events-scraper": {"searchQueries": ["Victoria Texas"], "maxEvents": MAX_ITEMS},
-    # Google Events aggregates Eventbrite, venue sites, Facebook, ticketing.
-    "muhammadafzal/google-events": {},
-    "codingfrontend/google-events-scraper": {},
-    # Eventbrite by city.
-    "datapilot/eventbrite-events-scraper": {},
-    "khadinakbar/eventbrite-events-scraper": {},
-    # Facebook events search by city, no login.
-    "alfalfa/facebook-events-scraper": {"searchQueries": ["Victoria, Texas", "events Victoria TX"]},
-    # Live music by city.
-    "parseforge/bandsintown-concerts-scraper": {},
-    "automation-lab/bandsintown-events-scraper": {},
+    "muhammadafzal/google-events": {"searchQueries": ["events in Victoria TX", "things to do in Victoria Texas"],
+                                    "location": "Victoria, Texas, United States", "dateFilter": "month"},
+    "codingfrontend/google-events-scraper": {"maxRequestRetries": 3, "dateFilter": "month",
+                                             "location": "Victoria, Texas, United States", "gl": "us", "hl": "en"},
+    "alfalfa/facebook-events-scraper": {"searchQueries": ["Victoria, Texas"], "maxConcurrency": 10},
 }
 
 VICTORIA_RE = re.compile(r"victoria,?\s*(tx|texas)|\b7790[145]\b", re.I)
@@ -55,8 +53,9 @@ def guess_input(schema):
     for name, spec in props.items():
         n = name.lower()
         typ = spec.get("type")
-        if re.search(r"max|limit|count|results", n) and typ == "integer":
-            inp[name] = MAX_ITEMS
+        if re.search(r"items|events|results|limit", n) and typ == "integer" \
+                and not re.search(r"retr|concurr|delay|timeout", n):
+            inp[name] = min(MAX_ITEMS, spec.get("maximum", MAX_ITEMS))
         elif re.search(r"quer|search|keyword|term", n):
             inp[name] = [QUERY] if typ == "array" else QUERY
         elif re.search(r"city|location|place|near|where", n) and typ in ("string", None):
