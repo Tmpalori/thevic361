@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>Social kit | The Vic 361</title>
+<style>
+body{font:16px/1.5 system-ui,sans-serif;background:#FAF5E4;color:#1E1B33;margin:0;padding:16px;max-width:900px;margin-inline:auto}
+h1{font-size:1.5rem;margin:0 0 4px} .meta{color:#5C5878;margin:0 0 16px}
+.slides{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px} .slides img{height:260px;border-radius:6px;border:1px solid #CFC9B2}
+textarea{width:100%;min-height:180px;font:14px/1.4 ui-monospace,monospace;box-sizing:border-box;padding:8px;border:1px solid #CFC9B2;border-radius:6px}
+button{font:inherit;margin:6px 0 16px;padding:8px 14px;border-radius:999px;border:0;background:#4E47B8;color:#fff}
+</style></head><body>
+<h1>Social kit</h1><p class="meta">Generated Sat Oct 03, 09:32 AM CT from the published events. Tap a slide to save it, then copy a caption.</p>
+<section><h2>This week</h2><div class="slides"><a href="week-1.png" download><img src="week-1.png" alt="week slide 1" loading="lazy"></a><a href="week-2.png" download><img src="week-2.png" alt="week slide 2" loading="lazy"></a></div><h3>Facebook</h3><textarea id="week-facebook" readonly>This week in Victoria, TX (Oct 3–4)
+
+Nothing listed yet. Know something happening? Submit it at thevic361.com/submit
+
+Full list and details: https://www.thevic361.com/
+
+#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361
+</textarea><button type="button" data-copy="week-facebook">Copy Facebook caption</button><h3>Instagram</h3><textarea id="week-instagram" readonly>This week in Victoria, TX (Oct 3–4)
+
+Nothing listed yet. Know something happening? Submit it at thevic361.com/submit
+
+Full list: link in bio (thevic361.com)
+
+#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361
+</textarea><button type="button" data-copy="week-instagram">Copy Instagram caption</button></section><section><h2>This weekend</h2><div class="slides"><a href="weekend-1.png" download><img src="weekend-1.png" alt="weekend slide 1" loading="lazy"></a><a href="weekend-2.png" download><img src="weekend-2.png" alt="weekend slide 2" loading="lazy"></a></div><h3>Facebook</h3><textarea id="weekend-facebook" readonly>This weekend in Victoria, TX (Oct 3–4)
+
+Nothing listed yet. Know something happening? Submit it at thevic361.com/submit
+
+Full list and details: https://www.thevic361.com/this-weekend
+
+#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361
+</textarea><button type="button" data-copy="weekend-facebook">Copy Facebook caption</button><h3>Instagram</h3><textarea id="weekend-instagram" readonly>This weekend in Victoria, TX (Oct 3–4)
+
+Nothing listed yet. Know something happening? Submit it at thevic361.com/submit
+
+Full list: link in bio (thevic361.com)
+
+#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361
+</textarea><button type="button" data-copy="weekend-instagram">Copy Instagram caption</button></section>
+<script>
+document.addEventListener('click',function(e){var b=e.target.closest('[data-copy]');if(!b)return;
+var t=document.getElementById(b.getAttribute('data-copy'));t.select();
+(navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(function(){b.textContent='Copied';},function(){document.execCommand('copy');b.textContent='Copied';});});
+</script></body></html>
