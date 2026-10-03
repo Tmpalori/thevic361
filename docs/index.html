@@ -9,28 +9,17 @@
  gtag('js', new Date());
  gtag('config', 'G-52YHD3X3C2');
 </script>
-<!--
-   ______                            __
-  / ____/___  ____ ___  ____  __  __/ /____  _____
- / /   / __ \/ __ `__ \/ __ \/ / / / __/ _ \/ ___/
-/ /___/ /_/ / / / / / / /_/ / /_/ / /_/  __/ /
-\____/\____/_/ /_/ /_/ .___/\__,_/\__/\___/_/
-                    /_/
-        Created with Perplexity Computer
-        https://www.perplexity.ai/computer
--->
-
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Vic 361 — Events & Things To Do in Victoria, TX</title>
 <meta name="description" content="Find events and things to do in Victoria, TX. Live music, family activities, farmers markets, art shows, new restaurants, and more happening this week in the 361.">
-<link rel="canonical" href="https://thevic361.com/">
+<link rel="canonical" href="https://www.thevic361.com/">
 
 <!-- Open Graph -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="The Vic 361 — Events & Things To Do in Victoria, TX">
 <meta property="og:description" content="Your guide to what's happening in Victoria, TX this week. Live music, family events, markets, art shows, and more.">
-<meta property="og:url" content="https://thevic361.com/">
+<meta property="og:url" content="https://www.thevic361.com/">
 <meta property="og:site_name" content="The Vic 361">
 <meta property="og:locale" content="en_US">
 
@@ -38,8 +27,8 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="The Vic 361 — Events & Things To Do in Victoria, TX">
 <meta name="twitter:description" content="Your guide to what's happening in Victoria, TX this week.">
-<meta name="twitter:image" content="https://thevic361.com/og-image.png">
-<meta property="og:image" content="https://thevic361.com/og-image.png">
+<meta name="twitter:image" content="https://www.thevic361.com/og-image.png">
+<meta property="og:image" content="https://www.thevic361.com/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 
@@ -51,7 +40,9 @@
 <!-- Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:opsz,wght@9..144,500..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
+<!-- Fonts load without blocking first paint; text shows in the fallback face until they arrive. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:opsz,wght@9..144,500..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:opsz,wght@9..144,500..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap"></noscript>
 
 <!-- Styles -->
 <link rel="stylesheet" href="./base.css">
@@ -99,6 +90,9 @@
     </div>
   </div>
 
+  <!-- ═══ BROWSE NAV ═══ (filled in by the server; see server/seo.js) -->
+  <!--NAV-->
+
   <!-- ═══ MAIN ═══ -->
   <main class="main-content">
     <div class="container container--narrow">
@@ -143,7 +137,7 @@
           <h3>Stay in the loop</h3>
           <p>Get Victoria's best events delivered to your inbox every week. No spam, just the good stuff.</p>
           <div style="width:100%;max-width:480px;overflow:hidden;">
-            <iframe src="https://subscribe-forms.beehiiv.com/f7c64f6b-f563-4f5a-a5fe-d80d26b1332a" class="beehiiv-embed" data-test-id="beehiiv-embed" frameborder="0" scrolling="no" style="width:100%;max-width:100%;height:80px;margin:0;border-radius:0;background-color:transparent;display:block;"></iframe>
+            <iframe src="https://subscribe-forms.beehiiv.com/f7c64f6b-f563-4f5a-a5fe-d80d26b1332a" class="beehiiv-embed" title="Subscribe to The Vic 361 newsletter" data-test-id="beehiiv-embed" frameborder="0" scrolling="no" style="width:100%;max-width:100%;height:80px;margin:0;border-radius:0;background-color:transparent;display:block;"></iframe>
           </div>
         </div>
 
@@ -156,7 +150,10 @@
         <div class="footer-section">
           <h3>About</h3>
           <ul class="footer-links" role="list">
-            <li><a href="#">The Vic 361 is a community events board for Victoria, Texas.</a></li>
+            <li><a href="/about">The Vic 361 is a community events board for Victoria, Texas.</a></li>
+            <li><a href="/this-weekend">This weekend in Victoria</a></li>
+            <li><a href="/free-things-to-do">Free things to do</a></li>
+            <li><a href="/advertise">Advertise with us</a></li>
 
           </ul>
         </div>
@@ -173,6 +170,7 @@
   <script async src="https://subscribe-forms.beehiiv.com/embed.js"></script>
   <script type="text/javascript" async src="https://subscribe-forms.beehiiv.com/attribution.js"></script>
   <script src="./app.js"></script>
+  <script src="./track.js" defer></script>
   <script>
     function setLegendTop() {
       var header = document.querySelector('.site-header');

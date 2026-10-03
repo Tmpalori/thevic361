@@ -13,6 +13,7 @@
  */
 
 import express from 'express';
+import compression from 'compression';
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +25,10 @@ import { createRateLimiter } from './rateLimit.js';
 import { createAuth } from './auth.js';
 import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
+import {
+  HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
+  renderAboutPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
+} from './seo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -46,6 +51,36 @@ export async function createApp(opts = {}) {
   const turnstileSiteKey = opts.turnstileSiteKey ?? process.env.TURNSTILE_SITE_KEY ?? null;
   const trustProxy = opts.trustProxy ?? true;
   if (trustProxy) app.set('trust proxy', true);
+
+  // Canonical host. www.thevic361.com is where Google already indexes the
+  // site and where all real traffic lands; the bare domain 301s to it so
+  // search engines see one site instead of two copies.
+  const siteUrl = (opts.siteUrl ?? process.env.SITE_URL ?? 'https://www.thevic361.com').replace(/\/+$/, '');
+  const canonicalHost = new URL(siteUrl).host;
+  const apexHost = canonicalHost.replace(/^www\./, '');
+  app.use((req, res, next) => {
+    if (apexHost !== canonicalHost && req.hostname === apexHost) {
+      return res.redirect(301, siteUrl + req.originalUrl);
+    }
+    next();
+  });
+
+  // Baseline security headers. No full script CSP yet: the site relies on
+  // inline scripts plus Google Analytics, Beehiiv and Turnstile, so the CSP
+  // only locks down framing, plugins and <base> hijacking for now.
+  app.use((req, res, next) => {
+    res.set({
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'X-Frame-Options': 'SAMEORIGIN',
+      'Strict-Transport-Security': 'max-age=31536000',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+      'Content-Security-Policy': "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+    });
+    next();
+  });
+
+  app.use(compression());
 
   // Username/password login + signed session tokens. Replaces the old
   // browser-side GitHub PAT flow. When ADMIN_USERNAME / ADMIN_PASSWORD /
@@ -541,6 +576,7 @@ export async function createApp(opts = {}) {
     // reflect the new picks regardless of GitHub state.
     try {
       await store.setPublished(payload);
+      archiveEvents(events);
     } catch (err) {
       console.error('[admin] local publish save failed:', err.message);
       return res.status(500).json({
@@ -789,21 +825,19 @@ export async function createApp(opts = {}) {
     res.json({ ok: true, events });
   });
 
-  // ─── Public events feed ───────────────────────────────────────────────
-  // The static site at /index.html fetches `./events.json`. When the admin
-  // publishes via /api/admin/publish-events we always save to the local
-  // store (regardless of whether the GitHub commit also succeeded), so this
-  // route serves the freshest copy if one exists. Otherwise we fall through
-  // to the bundled docs/events.json from the deploy.
-  async function serveEventsJson(req, res, next) {
+  // ─── Public events feed ───
+  // The live payload is the published row in the store (with the admin
+  // event-edits overlay applied). When nothing has been published yet we
+  // fall back to the bundled docs/events.json from the deploy. Both the
+  // JSON feed and the server-rendered pages below read through here so
+  // they always agree.
+  async function getPublicPayload() {
     try {
       const published = await store.getPublished();
       if (published) {
-        res.set('Cache-Control', 'no-store');
-        // Apply the admin event-edits overlay so a correction made between
-        // publishes is reflected on the live site without forcing the admin
-        // to hit Save & Publish again. The published payload keeps original
-        // event identities; the overlay maps original_key -> corrected shape.
+        // The published payload keeps original event identities; the
+        // overlay maps original_key -> corrected shape so a correction made
+        // between publishes shows up without another Save & Publish.
         let events = Array.isArray(published.events) ? published.events : [];
         try {
           const edits = await store.listEventEdits();
@@ -811,24 +845,120 @@ export async function createApp(opts = {}) {
         } catch (err) {
           console.warn('[events] overlay skipped:', err.message);
         }
-        return res.json({ ...published, events });
+        return { ...published, events: withPages(events), source: 'store' };
       }
     } catch (err) {
       console.warn('[events] published lookup failed:', err.message);
     }
-    next();
+    try {
+      const bundled = await readJsonFile(eventsFile);
+      return { ...bundled, events: withPages(bundled.events), source: 'bundled' };
+    } catch (err) {
+      console.warn('[events] bundled events.json unreadable:', err.message);
+      return { events: [], source: 'empty' };
+    }
+  }
+
+  // Keep every published event's page alive after its week rotates out
+  // (see archiveEvents in db.js). Best-effort: a failure here must never
+  // block a publish or a page view.
+  function archiveEvents(events) {
+    if (typeof store.archiveEvents !== 'function') return Promise.resolve();
+    return store.archiveEvents(withPages(events))
+      .catch(err => console.warn('[events] archive skipped:', err.message));
+  }
+
+  // Backfill the archive with whatever is live at boot, so pages published
+  // before the archive existed are covered too.
+  const archiveReady = store.getPublished()
+    .then(p => p && archiveEvents(p.events))
+    .catch(err => console.warn('[events] archive backfill skipped:', err.message));
+
+  async function serveEventsJson(req, res, next) {
+    try {
+      const { source, ...payload } = await getPublicPayload();
+      if (source === 'empty') return next();
+      // Store-backed payloads change on publish; the bundled file only on deploy.
+      if (source === 'store') res.set('Cache-Control', 'no-store');
+      return res.json(payload);
+    } catch (err) {
+      next(err);
+    }
   }
   app.get('/events.json', serveEventsJson);
   app.get('/docs/events.json', serveEventsJson);
 
-  // ─── Static site ───
-  app.use(express.static(DOCS_DIR, { extensions: ['html'] }));
+  // ─── Server-rendered pages (SEO + AI crawlers) ───
+  // See server/seo.js for why. Registered before express.static so "/"
+  // gets the rendered homepage instead of the raw docs/index.html.
+  const nowFn = opts.now || (() => new Date());
+  const advertiseEmail = opts.advertiseEmail ?? process.env.ADVERTISE_EMAIL ?? 'tristen.m.palori@gmail.com';
+  let indexTemplate = null;
 
-  app.get('/', (req, res, next) => {
-    res.sendFile(path.join(DOCS_DIR, 'index.html'), err => {
-      if (err) next(err);
-    });
-  });
+  function sendHtml(res, html, status = 200) {
+    // Short public cache: a new publish shows up within minutes, and a
+    // burst of crawler traffic doesn't hit Postgres on every request.
+    res.status(status).set('Cache-Control', status === 200 ? 'public, max-age=300' : 'no-store');
+    res.type('html').send(html);
+  }
+
+  const pageHandler = render => async (req, res, next) => {
+    try {
+      const payload = await getPublicPayload();
+      await render(req, res, payload, { siteUrl, now: nowFn(), sponsor: payload.sponsor || null });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  app.get(['/', '/index.html'], pageHandler(async (req, res, payload, ctx) => {
+    // Admin preview loads the homepage with ?preview / ?previewKey and
+    // renders its own unpublished picks client-side; serve it untouched.
+    if (req.query.preview || req.query.previewKey) {
+      return res.sendFile(path.join(DOCS_DIR, 'index.html'));
+    }
+    if (!indexTemplate || opts.reloadTemplates) {
+      indexTemplate = await fsp.readFile(path.join(DOCS_DIR, 'index.html'), 'utf8');
+    }
+    sendHtml(res, renderHome(indexTemplate, payload.events, ctx));
+  }));
+
+  for (const page of HUB_PAGES) {
+    app.get(page.path, pageHandler(async (req, res, payload, ctx) => {
+      sendHtml(res, renderHubPage(page, payload.events, ctx));
+    }));
+  }
+
+  app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
+    const page = `/events/${req.params.slug}`;
+    let ev = payload.events.find(e => e.page === page);
+    if (!ev && typeof store.getArchivedEvent === 'function') {
+      ev = await store.getArchivedEvent(page);
+    }
+    if (!ev) return sendHtml(res, renderNotFoundPage(ctx), 404);
+    sendHtml(res, renderEventPage(ev, payload.events, ctx));
+  }));
+
+  app.get('/advertise', pageHandler(async (req, res, payload, ctx) => {
+    sendHtml(res, renderAdvertisePage({ ...ctx, email: advertiseEmail }));
+  }));
+
+  app.get('/about', pageHandler(async (req, res, payload, ctx) => {
+    sendHtml(res, renderAboutPage(ctx));
+  }));
+
+  app.get('/sitemap.xml', pageHandler(async (req, res, payload, ctx) => {
+    res.set('Cache-Control', 'public, max-age=300');
+    res.type('application/xml').send(renderSitemap(payload.events, { ...ctx, lastmod: payload.last_updated }));
+  }));
+
+  app.get('/llms.txt', pageHandler(async (req, res, payload, ctx) => {
+    res.set('Cache-Control', 'public, max-age=300');
+    res.type('text/plain; charset=utf-8').send(renderLlmsTxt(payload.events, ctx));
+  }));
+
+  // ─── Static site ───
+  app.use(express.static(DOCS_DIR, { extensions: ['html'], index: false }));
 
   // ─── 404 + error handlers ───
   app.use((req, res) => {
@@ -846,6 +976,7 @@ export async function createApp(opts = {}) {
     res.status(500).type('text/plain').send('Server error');
   });
 
+  await archiveReady;
   return { app, store, storeBundle };
 }
 

@@ -108,7 +108,7 @@ describe('buildSourcesPayload', () => {
     expect(byName.apify_facebook.message).toBe('APIFY_TOKEN missing');
 
     // Sources not in metadata still appear, marked unknown.
-    expect(byName.perplexity.status).toBe('unknown');
+    expect(byName.allevents.status).toBe('unknown');
     expect(byName.local_events.status).toBe('unknown');
   });
 });

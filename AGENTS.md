@@ -8,7 +8,7 @@ The companion files `CLAUDE.md` and `.cursorrules` redirect to this document so 
 
 ## What this is
 
-**The Vic 361** is a weekly community-events website for Victoria, TX (population ~65k). It collects events from public calendars, Apify-scraped Facebook/Instagram, and Perplexity Sonar venue-grounded prompts; an admin curates the candidate list each Sunday; the curated list is served from Railway Postgres at [thevic361.com](https://thevic361.com).
+**The Vic 361** is a weekly community-events website for Victoria, TX (population ~65k). It collects events from public calendars and Apify-scraped Facebook/Instagram (OpenAI extracts events from posts and polishes descriptions); an admin curates the candidate list each Sunday; the curated list is served from Railway Postgres at [thevic361.com](https://thevic361.com).
 
 - **Live site:** [thevic361.com](https://thevic361.com) — Railway (Express + Postgres)
 - **Repo:** `Tmpalori/thevic361` (this repo)
@@ -87,6 +87,7 @@ thevic361/
 │   ├── db.js                     # FileStore + PgStore + factory; inline schema
 │   ├── github.js                 # GitHub Contents API + workflow_dispatch
 │   ├── rateLimit.js              # in-memory sliding-window limiter
+│   ├── seo.js                    # server-rendered pages: home, intent pages, /events/:slug, /about, sitemap.xml, llms.txt
 │   ├── sources.js                # /api/admin/sources payload builder
 │   ├── turnstile.js              # Cloudflare Turnstile verify
 │   └── validate.js               # submission validation + bot signals
@@ -96,20 +97,20 @@ thevic361/
 │   ├── admin.html, admin.js, admin-submissions.js, admin.css   # admin UI
 │   ├── submit.html, submit.js, submit.css        # public submission form
 │   ├── events.json               # CURATED FALLBACK — see source-of-truth note above
-│   ├── og-image.png, favicon.svg, sitemap.xml, robots.txt
+│   ├── og-image.png, favicon.svg, robots.txt   # sitemap.xml + llms.txt are served by server/seo.js
 │
 ├── tests/                        # vitest (server + admin/submit pages)
 │   ├── admin.test.js, admin_login.test.js, admin_submissions.test.js
 │   ├── app_preview.test.js, candidates_fallback.test.js
 │   ├── publish_preserves_extras.test.js, published_events.test.js
-│   ├── sources.test.js, submissions_api.test.js, submit_form.test.js
+│   ├── seo.test.js, sources.test.js, submissions_api.test.js, submit_form.test.js
 │
 ├── test_*.py                     # pytest, currently AT REPO ROOT (not /tests/python/)
 │   ├── test_ai_review.py
 │   ├── test_collect_events_safety.py    # ⚠️  PINS the --candidates-only invariant
 │   ├── test_discover_venues.py
 │   ├── test_fb_posts.py, test_ig_posts.py
-│   ├── test_library_cap.py, test_sonar_prompts.py, test_venues_seed.py
+│   ├── test_library_cap.py, test_venues_seed.py
 │
 ├── .github/workflows/
 │   ├── weekly-collect.yml        # Sun 23:00 UTC — collector → candidates.json
@@ -161,11 +162,15 @@ python collect_events.py --candidates-only --output ./docs/events.json --local-d
 pytest -q
 ```
 
-There is currently **no `tests.yml` workflow**. Run both suites locally before opening a PR.
+`.github/workflows/tests.yml` runs both suites on every PR and on pushes to `main`. Run them locally before opening a PR too.
 
 There is no linter configured. Match the existing style (4-space Python, 2-space JS, ES modules in `server/` and `tests/`).
 
 ---
+
+## SEO / AI search
+
+Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` renders events into plain HTML from the same published payload as `/events.json`: the homepage (injected into `docs/index.html`), intent pages (`/today`, `/this-weekend`, `/free-things-to-do`, `/kids-and-family`, `/live-music`, `/food-and-drink`), one page per event at `/events/<date>-<slug>` with schema.org `Event` JSON-LD, `/about`, `/sitemap.xml`, and `/llms.txt`. `docs/app.js` still re-renders the homepage in the browser and powers admin preview. Keep the two event renderers' markup in sync. Every published event is also written to an archive (`event_archive` table / `event_archive` key in the file store) so its page keeps working after the week rotates out. `featured: true` (set from the admin edit modal) pins an event to the top of its day; `/advertise` sells it.
 
 ## Conventions
 
@@ -212,8 +217,7 @@ Full reference is in [`RAILWAY.md`](./RAILWAY.md). Quick list:
 
 | Var | Used by |
 |---|---|
-| `OPENAI_API_KEY` | `collect_events.py` AI review |
-| `PERPLEXITY_API_KEY` | `collect_events.py` Sonar discovery |
+| `OPENAI_API_KEY` | `collect_events.py` AI review + FB/IG post extraction |
 | `APIFY_TOKEN` | `collect_events.py` Facebook events + posts, Instagram posts |
 | `SENTRY_DSN`, `SENTRY_ENVIRONMENT` | Both collector and server |
 
@@ -230,6 +234,9 @@ Full reference is in [`RAILWAY.md`](./RAILWAY.md). Quick list:
 | `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` | — | When set, `/api/submissions` requires a Turnstile token |
 | `FB_POSTS_ENABLED`, `IG_POSTS_ENABLED` | — | Repo Variables (not secrets); `=1` to enable post-scrape pipelines in CI |
 | `FB_POSTS_MAX_VENUES`, `IG_POSTS_MAX_VENUES` | (collector defaults) | Caps to keep Apify costs bounded |
+| `OPENAI_MODEL` | `gpt-5-mini` | Repo Variable; overrides the collector's OpenAI model |
+| `SITE_URL` | `https://www.thevic361.com` | Canonical origin. Requests to the bare domain 301 here |
+| `ADVERTISE_EMAIL` | `tristen.m.palori@gmail.com` | Contact address on `/advertise` |
 | `PORT` | `3000` | Express listen port |
 
 PR/staging Railway environments do **not** automatically inherit `ADMIN_*` vars — set them per-environment or use Railway's shared variables feature.
@@ -258,9 +265,9 @@ PR previews: only `docs/**` changes auto-deploy a static preview. Server / colle
 
 A full audit was done on 2026-04-29 (`AUDIT_2026_04_29.md` in Tristen's workspace). The prioritized backlog is there — ask Tristen for it before starting any larger refactor work so you don't re-litigate already-considered tradeoffs. Highlights:
 
-- **P1:** Validate `sponsor.url` scheme in `app.js`; add a `tests.yml` PR-gating workflow; remove the legacy `?preview=<json>` URL path.
+- **P1 (done Oct 2026):** `sponsor.url` / event URLs are scheme-checked and escaped in `app.js`; `tests.yml` gates PRs; the legacy `?preview=<json>` path is removed.
 - **P2:** Split `collect_events.py` into a `collector/` package (do this on the next scraper-add PR rather than as a standalone refactor); move `test_*.py` to `tests/python/`; pin upper bounds in `requirements.txt`; delete `facebook_venues.backup.json`, `pending_venues.json`, `.last-published-digest-*`, `approve_events.py` (or move under `legacy/`).
-- **P3:** Tighten `trust proxy` config; add request logging; hoist `escapeHtml` into `docs/util.js`; add an end-to-end submit→approve→publish vitest; add a starter CSP.
+- **P3:** Tighten `trust proxy` config; add request logging; hoist `escapeHtml` into `docs/util.js`; add an end-to-end submit→approve→publish vitest; extend the starter CSP (currently framing/object/base only) to scripts.
 
 ---
 

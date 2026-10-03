@@ -1,0 +1,725 @@
+/* server/seo.js — Server-rendered pages for search engines and AI crawlers.
+ *
+ * Why this exists: the public site renders events in the browser from
+ * /events.json. Google renders JS late and unreliably, and AI crawlers
+ * (GPTBot, ClaudeBot, PerplexityBot) don't run JS at all, so they saw a
+ * page that said "Loading events..." and nothing else. Everything here
+ * turns the same published payload into plain HTML that any crawler can
+ * read without executing a script:
+ *
+ *   - the homepage with this week's events baked into the markup
+ *   - intent pages that match how people search ("this weekend",
+ *     "free things to do", "live music") with an answer-first intro
+ *   - one page per event, with schema.org Event JSON-LD so the event is
+ *     eligible for Google's event results
+ *   - /about, /sitemap.xml and /llms.txt built from the same data
+ *
+ * All functions are pure over (payload, now) so tests can pin dates.
+ * Dates are computed in America/Chicago because that's where Victoria is;
+ * the server itself runs in UTC on Railway.
+ */
+
+export const SITE_NAME = 'The Vic 361';
+const GA_ID = 'G-52YHD3X3C2';
+const TZ = 'America/Chicago';
+const UPCOMING_DAYS = 60;
+
+const ICON_EMOJI = {
+  food: '🍔', music: '🎵', family: '🧑‍🧑‍🧒', drinks: '🍺', arts: '🎨',
+  shopping: '🛍️', outdoors: '🏃', community: '📣', free: '🆓'
+};
+
+// Intent pages. `filter` picks events from the upcoming window; `range`
+// picks the date window. Order here is the nav order.
+export const HUB_PAGES = [
+  {
+    path: '/today',
+    nav: 'Today',
+    title: 'Things To Do in Victoria, TX Today',
+    h1: 'Things to do in Victoria, TX today',
+    description: 'Events happening today in Victoria, Texas: live music, family activities, markets, and more.',
+    range: 'today',
+    lead: (n, label) => n
+      ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} in Victoria, TX today (${label})`
+      : `Nothing is listed in Victoria, TX for today (${label}) yet`
+  },
+  {
+    path: '/this-weekend',
+    nav: 'This Weekend',
+    title: 'Things To Do in Victoria, TX This Weekend',
+    h1: 'Things to do in Victoria, TX this weekend',
+    description: 'Events in Victoria, Texas this weekend: concerts, festivals, family events, markets, and free things to do Friday through Sunday.',
+    range: 'weekend',
+    lead: (n, label) => n
+      ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} in Victoria, TX this weekend (${label})`
+      : `Nothing is listed in Victoria, TX for this weekend (${label}) yet`
+  },
+  {
+    path: '/free-things-to-do',
+    nav: 'Free',
+    title: 'Free Things To Do in Victoria, TX',
+    h1: 'Free things to do in Victoria, TX',
+    description: 'Upcoming free events in Victoria, Texas: library programs, community events, outdoor activities, and more.',
+    range: 'upcoming',
+    filter: ev => ev.free === true || (ev.icons || []).includes('free'),
+    lead: (n) => n
+      ? `There ${n === 1 ? 'is 1 free event' : `are ${n} free events`} coming up in Victoria, TX`
+      : 'No free events are listed in Victoria, TX right now'
+  },
+  {
+    path: '/kids-and-family',
+    nav: 'Kids & Family',
+    title: 'Kids & Family Events in Victoria, TX',
+    h1: 'Kids and family events in Victoria, TX',
+    description: 'Family-friendly things to do in Victoria, Texas: story times, kids activities, all-ages shows, and outdoor fun.',
+    range: 'upcoming',
+    filter: ev => (ev.icons || []).includes('family'),
+    lead: (n) => n
+      ? `There ${n === 1 ? 'is 1 family-friendly event' : `are ${n} family-friendly events`} coming up in Victoria, TX`
+      : 'No family events are listed in Victoria, TX right now'
+  },
+  {
+    path: '/live-music',
+    nav: 'Live Music',
+    title: 'Live Music in Victoria, TX This Week',
+    h1: 'Live music in Victoria, TX',
+    description: 'Live music in Victoria, Texas: concerts, bands, open mics, and karaoke at local bars and venues.',
+    range: 'upcoming',
+    filter: ev => (ev.icons || []).includes('music'),
+    lead: (n) => n
+      ? `There ${n === 1 ? 'is 1 live music event' : `are ${n} live music events`} coming up in Victoria, TX`
+      : 'No live music is listed in Victoria, TX right now'
+  },
+  {
+    path: '/food-and-drink',
+    nav: 'Food & Drink',
+    title: 'Food & Drink Events in Victoria, TX',
+    h1: 'Food and drink events in Victoria, TX',
+    description: 'Food and drink events in Victoria, Texas: farmers markets, food trucks, tastings, brunches, and happy hours.',
+    range: 'upcoming',
+    filter: ev => (ev.icons || []).some(i => i === 'food' || i === 'drinks'),
+    lead: (n) => n
+      ? `There ${n === 1 ? 'is 1 food and drink event' : `are ${n} food and drink events`} coming up in Victoria, TX`
+      : 'No food and drink events are listed in Victoria, TX right now'
+  }
+];
+
+// ─── Escaping ────────────────────────────────────────────────────────────
+
+export function escHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Event URLs come from scrapers and public submissions; only http(s) is
+// ever rendered as a link so a `javascript:` URL can't ride along.
+export function safeUrl(url) {
+  if (typeof url !== 'string') return '';
+  const u = url.trim();
+  return /^https?:\/\//i.test(u) ? u : '';
+}
+
+// JSON-LD lives inside a <script> tag, so "</script>" in an event name
+// would end it early. Escaping "<" keeps the JSON valid and inert.
+function jsonLd(obj) {
+  return '<script type="application/ld+json">' +
+    JSON.stringify(obj).replace(/</g, '\\u003c') +
+    '</script>';
+}
+
+// ─── Dates (America/Chicago) ─────────────────────────────────────────────
+
+// YYYY-MM-DD for `now` as seen in Victoria.
+export function localDateStr(now) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(now);
+  return parts; // en-CA formats as YYYY-MM-DD
+}
+
+function parseYmd(s) {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12)); // noon UTC dodges DST edges
+}
+
+function ymd(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(s, n) {
+  const d = parseYmd(s);
+  d.setUTCDate(d.getUTCDate() + n);
+  return ymd(d);
+}
+
+function weekday(s) {
+  return parseYmd(s).getUTCDay(); // 0 = Sunday
+}
+
+function formatDay(s, opts) {
+  return parseYmd(s).toLocaleDateString('en-US', Object.assign({ timeZone: 'UTC' }, opts));
+}
+
+function formatRange(start, end) {
+  const a = formatDay(start, { month: 'short', day: 'numeric' });
+  if (start === end) return formatDay(start, { weekday: 'long', month: 'long', day: 'numeric' });
+  const b = formatDay(end, { month: 'short', day: 'numeric' });
+  return `${a} to ${b}`;
+}
+
+// Monday–Sunday of the current week, matching what docs/app.js renders.
+export function currentWeek(today) {
+  const dow = weekday(today);
+  const monday = addDays(today, dow === 0 ? -6 : 1 - dow);
+  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+}
+
+export function dateRange(kind, today) {
+  if (kind === 'today') return [today, today];
+  if (kind === 'weekend') {
+    // Mon–Thu: the coming Fri–Sun. Fri–Sun: from today through Sunday.
+    const dow = weekday(today);
+    if (dow === 0) return [today, today];
+    if (dow >= 5) return [today, addDays(today, 7 - dow)];
+    return [addDays(today, 5 - dow), addDays(today, 7 - dow)];
+  }
+  // Everything published from today on. The payload is curated and
+  // usually covers ~2 weeks, but a festival added early should still show.
+  return [today, addDays(today, UPCOMING_DAYS)];
+}
+
+// Chicago UTC offset ("-05:00" / "-06:00") for a given date, so JSON-LD
+// startDate carries an explicit offset as Google recommends.
+function chicagoOffset(dateStr) {
+  const name = new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ, timeZoneName: 'shortOffset'
+  }).formatToParts(parseYmd(dateStr)).find(p => p.type === 'timeZoneName');
+  const m = name && name.value.match(/GMT([+-]\d+)/);
+  const h = m ? Number(m[1]) : -6;
+  return (h < 0 ? '-' : '+') + String(Math.abs(h)).padStart(2, '0') + ':00';
+}
+
+// Pull "7:00 PM" / "10am" style times out of free-form strings like
+// "10:00AM – 11:00AM" or "10am - 3pm". Returns ["HH:MM", ...] (24h).
+export function parseTimes(time) {
+  if (!time) return [];
+  const out = [];
+  const re = /(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?/gi;
+  let m;
+  while ((m = re.exec(time)) && out.length < 2) {
+    let h = Number(m[1]) % 12;
+    if (m[3].toLowerCase() === 'p') h += 12;
+    out.push(String(h).padStart(2, '0') + ':' + (m[2] || '00'));
+  }
+  return out;
+}
+
+// Sort key in minutes; untimed events sort last, like the client.
+function timeKey(ev) {
+  const t = parseTimes(ev.time)[0];
+  if (!t) return 9999;
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+// ─── Events ──────────────────────────────────────────────────────────────
+
+export function slugify(str) {
+  return String(str || '')
+    .toLowerCase()
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+    .replace(/-+$/g, '');
+}
+
+// Attach a stable `page` path to each event: /events/<date>-<name-slug>.
+// Same date + name twice gets -2, -3 in payload order so links stay unique.
+export function withPages(events) {
+  const seen = new Map();
+  return (Array.isArray(events) ? events : [])
+    .filter(ev => ev && ev.date && ev.name)
+    .map(ev => {
+      const base = `${ev.date}-${slugify(ev.name) || 'event'}`;
+      const n = (seen.get(base) || 0) + 1;
+      seen.set(base, n);
+      return Object.assign({}, ev, { page: `/events/${n === 1 ? base : `${base}-${n}`}` });
+    });
+}
+
+// By date, then featured (paid) events first within a day, then by time.
+function sortEvents(list) {
+  return list.slice().sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    if (Boolean(a.featured) !== Boolean(b.featured)) return a.featured ? -1 : 1;
+    return timeKey(a) - timeKey(b);
+  });
+}
+
+export function eventsBetween(events, start, end, filter) {
+  return sortEvents(events.filter(ev =>
+    ev.date >= start && ev.date <= end && (!filter || filter(ev))));
+}
+
+export function eventJsonLd(ev, siteUrl) {
+  const times = parseTimes(ev.time);
+  const offset = chicagoOffset(ev.date);
+  const startDate = times[0] ? `${ev.date}T${times[0]}:00${offset}` : ev.date;
+  const obj = {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: ev.name,
+    startDate,
+    eventStatus: 'https://schema.org/EventScheduled',
+    eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+    location: {
+      '@type': 'Place',
+      name: ev.venue || 'Victoria, TX',
+      address: {
+        '@type': 'PostalAddress',
+        ...(ev.address ? { streetAddress: ev.address } : {}),
+        addressLocality: 'Victoria',
+        addressRegion: 'TX',
+        addressCountry: 'US'
+      }
+    },
+    image: [`${siteUrl}/og-image.png`],
+    url: `${siteUrl}${ev.page}`
+  };
+  if (times[1]) obj.endDate = `${ev.date}T${times[1]}:00${offset}`;
+  if (ev.description) obj.description = ev.description;
+  if (ev.free === true) {
+    obj.isAccessibleForFree = true;
+    obj.offers = {
+      '@type': 'Offer', price: 0, priceCurrency: 'USD',
+      availability: 'https://schema.org/InStock',
+      url: safeUrl(ev.url) || `${siteUrl}${ev.page}`
+    };
+  }
+  return obj;
+}
+
+// ─── HTML pieces ─────────────────────────────────────────────────────────
+
+function icons(ev) {
+  return (ev.icons || []).map(k => ICON_EMOJI[k] || '').filter(Boolean).join(' ');
+}
+
+// Mirrors renderEvent() in docs/app.js so the server markup and the
+// client re-render look identical. The name links to our event page (the
+// crawlable, internal link); the venue keeps the external source link.
+export function renderEventItem(ev) {
+  const src = safeUrl(ev.url);
+  let venue = '';
+  if (ev.venue) {
+    venue = src
+      ? `<a href="${escHtml(src)}" target="_blank" rel="noopener noreferrer">${escHtml(ev.venue)}</a>`
+      : escHtml(ev.venue);
+    if (ev.address) venue += ', ' + escHtml(ev.address);
+  }
+  return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}">` +
+    `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
+    '<div class="event-details">' +
+      (ev.featured ? '<span class="badge badge--featured">Featured</span> ' : '') +
+      `<span class="event-time">${escHtml(ev.time)}</span> ` +
+      `<span class="event-name"><a href="${escHtml(ev.page)}">${escHtml(ev.name)}</a></span>` +
+      (venue ? ` — <span class="event-venue">${venue}</span>` : '') +
+      (ev.description ? `<div class="event-desc">${escHtml(ev.description)}</div>` : '') +
+    '</div>' +
+  '</li>';
+}
+
+function renderDay(dateStr, list, idx, today) {
+  const badge = dateStr === today ? ' <span class="today-badge">Today</span>' : '';
+  const body = list.length
+    ? `<ul class="event-list" role="list">${list.map(renderEventItem).join('')}</ul>`
+    : '<div class="empty-state">Nothing listed yet — know something happening? <a href="/submit">Submit an event.</a></div>';
+  return `<section class="day-section" id="day-${idx}">` +
+    '<div class="day-header">' +
+      `<h2 class="day-name">${formatDay(dateStr, { weekday: 'long' })}${badge}</h2>` +
+      `<span class="day-date">${formatDay(dateStr, { month: 'long', day: 'numeric' })}</span>` +
+    '</div>' + body +
+  '</section>';
+}
+
+// Day sections for an arbitrary list of dates (homepage = Mon–Sun).
+export function renderDays(dates, events, today) {
+  return dates.map((d, i) => renderDay(d, sortEvents(events.filter(ev => ev.date === d)), i, today)).join('');
+}
+
+// Day sections only for dates that have events (intent pages).
+function renderGrouped(list, today) {
+  const dates = [...new Set(list.map(ev => ev.date))];
+  return dates.map((d, i) => renderDay(d, list.filter(ev => ev.date === d), i, today)).join('');
+}
+
+export function navHtml(current) {
+  const links = HUB_PAGES.map(p =>
+    `<a href="${p.path}"${p.path === current ? ' aria-current="page"' : ''}>${escHtml(p.nav)}</a>`);
+  return `<nav class="browse-nav" aria-label="Browse events"><div class="container browse-inner">${links.join('')}</div></nav>`;
+}
+
+function headerHtml() {
+  return `<header class="site-header" id="site-header">
+    <div class="container header-inner">
+      <a class="logo-group" href="/">
+        <img src="/logo.png" width="48" height="48" alt="The Vic 361 logo" class="site-logo site-logo--light" />
+        <img src="/logo-dark.png" width="48" height="48" alt="" aria-hidden="true" class="site-logo site-logo--dark" />
+        <div>
+          <div class="site-title">The Vic <span>361</span></div>
+          <div class="tagline">Events &amp; Things To Do in <span class="tagline-accent">Victoria, TX</span></div>
+        </div>
+      </a>
+      <div class="header-actions">
+        <a href="/submit" class="btn btn--outline desktop-submit">Submit an Event</a>
+        <a href="/#subscribe" class="btn btn--primary">Subscribe</a>
+      </div>
+    </div>
+  </header>`;
+}
+
+function footerHtml() {
+  const year = new Date().getUTCFullYear();
+  return `<footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-section">
+          <h2>Stay in the loop</h2>
+          <p>Get Victoria's best events in your inbox every week.</p>
+          <a href="/#subscribe" class="btn btn--primary">Subscribe free</a>
+        </div>
+        <div class="footer-section">
+          <h2>Browse</h2>
+          <ul class="footer-links" role="list">
+            <li><a href="/">This week</a></li>
+            ${HUB_PAGES.map(p => `<li><a href="${p.path}">${escHtml(p.nav)}</a></li>`).join('\n            ')}
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h2>About</h2>
+          <ul class="footer-links" role="list">
+            <li><a href="/about">About The Vic 361</a></li>
+            <li><a href="/submit">Submit an event</a></li>
+            <li><a href="/advertise">Advertise</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom"><span>&copy; ${year} The Vic 361 · Victoria, TX</span></div>
+    </div>
+  </footer>`;
+}
+
+function breadcrumbLd(siteUrl, trail) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: trail.map((t, i) => ({
+      '@type': 'ListItem', position: i + 1, name: t.name, item: siteUrl + t.path
+    }))
+  };
+}
+
+export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path }) {
+  const url = siteUrl + path;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js); same property as docs/index.html -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=${GA_ID}"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}');</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escHtml(title)}</title>
+<meta name="description" content="${escHtml(description)}">
+${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" href="${escHtml(url)}">`}
+<meta property="og:type" content="website">
+<meta property="og:title" content="${escHtml(title)}">
+<meta property="og:description" content="${escHtml(description)}">
+<meta property="og:url" content="${escHtml(url)}">
+<meta property="og:site_name" content="${SITE_NAME}">
+<meta property="og:image" content="${siteUrl}/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Fonts load without blocking first paint; text shows in the fallback face until they arrive. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:opsz,wght@9..144,500..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:opsz,wght@9..144,500..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap"></noscript>
+<link rel="stylesheet" href="/base.css">
+<link rel="stylesheet" href="/style.css">
+${ld.map(jsonLd).join('\n')}
+</head>
+<body>
+${headerHtml()}
+${navHtml(nav)}
+<main class="main-content">
+  <div class="container container--narrow">
+${body}
+  </div>
+</main>
+${footerHtml()}
+<script src="/track.js" defer></script>
+</body>
+</html>`;
+}
+
+// Mirrors renderSponsor() in docs/app.js so the paid sponsor slot shows on
+// every page, not just the homepage.
+export function sponsorHtml(sponsor) {
+  if (!sponsor || !sponsor.name) return '';
+  const href = safeUrl(sponsor.url);
+  const cta = sponsor.cta
+    ? (href
+      ? `<a href="${escHtml(href)}" class="btn btn--outline sponsor-cta" target="_blank" rel="noopener noreferrer">${escHtml(sponsor.cta)}</a>`
+      : `<span class="btn btn--outline" style="cursor:default; opacity:0.6">${escHtml(sponsor.cta)}</span>`)
+    : '';
+  return '<section class="sponsor-section"><div class="sponsor-block">' +
+    '<div class="sponsor-label">This week\'s sponsor</div>' +
+    `<div class="sponsor-name">${escHtml(sponsor.name)}</div>` +
+    (sponsor.text ? `<div class="sponsor-text">${escHtml(sponsor.text)}</div>` : '') +
+    (sponsor.address ? `<div class="sponsor-address">📍 ${escHtml(sponsor.address)}</div>` : '') +
+    cta + '</div></section>';
+}
+
+function ctaHtml() {
+  return `<p class="page-cta">Get the full list every week: <a href="/#subscribe">subscribe to The Vic 361 newsletter</a>. Know something we missed? <a href="/submit">Submit an event</a>.</p>`;
+}
+
+// Short "including A, B, and C" clause from the first few names.
+function including(list) {
+  const names = [...new Set(list.map(ev => ev.name))].slice(0, 3);
+  if (!names.length) return '';
+  if (names.length === 1) return `, including ${names[0]}`;
+  return `, including ${names.slice(0, -1).join(', ')}${names.length > 2 ? ',' : ''} and ${names[names.length - 1]}`;
+}
+
+export function renderHubPage(page, events, { siteUrl, now, sponsor }) {
+  const today = localDateStr(now);
+  const [start, end] = dateRange(page.range, today);
+  const list = eventsBetween(events, start, end, page.filter);
+  const label = formatRange(start, end);
+  const lead = page.lead(list.length, label) + (list.length ? including(list) : '') + '.';
+  const body = `
+    <h1 class="page-title">${escHtml(page.h1)}</h1>
+    <p class="page-lead">${escHtml(lead)}</p>
+    ${list.length
+      ? renderGrouped(list, today)
+      : `<div class="empty-state">Check <a href="/">this week's full list</a>, or <a href="/submit">submit an event</a>.</div>`}
+    ${sponsorHtml(sponsor)}
+    ${ctaHtml()}`;
+  const ld = [
+    breadcrumbLd(siteUrl, [{ name: SITE_NAME, path: '/' }, { name: page.nav, path: page.path }]),
+    ...list.map(ev => eventJsonLd(ev, siteUrl))
+  ];
+  return layout({ siteUrl, path: page.path, title: `${page.title} | ${SITE_NAME}`, description: page.description, body, ld });
+}
+
+export function renderEventPage(ev, events, { siteUrl, now, sponsor }) {
+  const today = localDateStr(now);
+  const src = safeUrl(ev.url);
+  const when = formatDay(ev.date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const where = [ev.venue, ev.address].filter(Boolean).join(', ');
+  const lead = `${ev.name} ${ev.date < today ? 'was' : 'is'} on ${when}${ev.time ? ` at ${ev.time}` : ''}` +
+    `${where ? ` at ${where}` : ''} in Victoria, TX.` + (ev.free === true ? ' Free to attend.' : '');
+  const sameDay = sortEvents(events.filter(o => o.date === ev.date && o.page !== ev.page)).slice(0, 6);
+  const description = (ev.description ? ev.description + ' ' : '') +
+    `${when}${where ? ` at ${where}` : ''}, Victoria, TX.`;
+  const body = `
+    <p class="breadcrumbs"><a href="/">This week</a> › ${escHtml(ev.name)}</p>
+    <h1 class="page-title">${escHtml(ev.name)}</h1>
+    <p class="page-lead">${escHtml(lead)}</p>
+    ${ev.date < today ? `<p class="past-notice">This event has passed. <a href="/">See what's happening this week</a>.</p>` : ''}
+    <dl class="event-facts">
+      <dt>When</dt><dd>${escHtml(when)}${ev.time ? `, ${escHtml(ev.time)}` : ''}</dd>
+      ${where ? `<dt>Where</dt><dd>${escHtml(where)}</dd>` : ''}
+      <dt>Cost</dt><dd>${ev.free === true ? 'Free' : 'See event details'}</dd>
+    </dl>
+    ${ev.description ? `<p class="event-about">${escHtml(ev.description)}</p>` : ''}
+    ${src ? `<p class="page-actions"><a class="btn btn--primary" href="${escHtml(src)}" target="_blank" rel="noopener noreferrer">Event details</a></p>` : ''}
+    ${sameDay.length ? `<h2 class="section-heading">Also on ${escHtml(formatDay(ev.date, { weekday: 'long' }))}</h2>
+    <ul class="event-list" role="list">${sameDay.map(renderEventItem).join('')}</ul>` : ''}
+    ${sponsorHtml(sponsor)}
+    ${ctaHtml()}`;
+  const ld = [
+    eventJsonLd(ev, siteUrl),
+    breadcrumbLd(siteUrl, [{ name: SITE_NAME, path: '/' }, { name: ev.name, path: ev.page }])
+  ];
+  return layout({
+    siteUrl, path: ev.page, nav: null,
+    title: `${ev.name} · ${formatDay(ev.date, { month: 'short', day: 'numeric' })} | ${SITE_NAME}`,
+    description: description.slice(0, 300), body, ld
+  });
+}
+
+export function renderAboutPage({ siteUrl }) {
+  const body = `
+    <h1 class="page-title">About The Vic 361</h1>
+    <p class="page-lead">The Vic 361 is a free weekly guide to events and things to do in Victoria, Texas. Every week we collect concerts, festivals, family activities, markets, and community events from across Victoria and publish them in one list, on this site and in our email newsletter.</p>
+    <h2 class="section-heading">How we build the list</h2>
+    <p>We gather events from the City of Victoria, the Victoria Public Library, the Chamber of Commerce, local venues, and community submissions. A local editor reviews every event before it's published.</p>
+    <h2 class="section-heading">Get it every week</h2>
+    <p><a href="/#subscribe">Subscribe to the newsletter</a> for the week's best events, every Monday.</p>
+    <h2 class="section-heading">List your event or business</h2>
+    <p>Anyone can <a href="/submit">submit an event</a> for free. Venues and businesses can <a href="/advertise">sponsor the newsletter or feature an event</a>.</p>`;
+  const ld = [{
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: SITE_NAME,
+    url: siteUrl + '/',
+    logo: siteUrl + '/logo.png',
+    description: 'Weekly guide to events and things to do in Victoria, Texas.',
+    areaServed: { '@type': 'City', name: 'Victoria, Texas' }
+  }];
+  return layout({
+    siteUrl, path: '/about',
+    title: `About | ${SITE_NAME}`,
+    description: 'The Vic 361 is a free weekly guide to events and things to do in Victoria, Texas.',
+    body, ld
+  });
+}
+
+// Packages and prices here are the starting offer; change them in one place.
+export const AD_PACKAGES = [
+  {
+    name: 'Weekly sponsor',
+    price: '$300 / week',
+    points: [
+      'Top sponsor block in the Monday newsletter',
+      'Sponsor block on every page of thevic361.com for the week',
+      'Click report at the end of the week'
+    ]
+  },
+  {
+    name: 'Venue partner',
+    price: '$150 / month',
+    points: [
+      'Every event at your venue marked Featured, every week',
+      'Pinned at the top of each day on the site and its event pages',
+      'Monthly click report'
+    ]
+  },
+  {
+    name: 'Featured event',
+    price: '$49 / event',
+    points: [
+      'Pinned at the top of its day on the site',
+      'Called out in the newsletter that week',
+      'Best for concerts, fundraisers, openings, and festivals'
+    ]
+  }
+];
+
+export function renderAdvertisePage({ siteUrl, email }) {
+  const subject = encodeURIComponent('Advertising on The Vic 361');
+  const body = `
+    <h1 class="page-title">Advertise on The Vic 361</h1>
+    <p class="page-lead">Reach people in Victoria, TX who are actively looking for something to do this week. Sponsor the newsletter, partner as a venue, or feature a single event.</p>
+    <div class="ad-packages">
+      ${AD_PACKAGES.map(p => `
+      <section class="ad-package">
+        <h2>${escHtml(p.name)}</h2>
+        <p class="ad-price">${escHtml(p.price)}</p>
+        <ul>${p.points.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul>
+      </section>`).join('')}
+    </div>
+    <h2 class="section-heading">Get started</h2>
+    <p>Email <a href="mailto:${escHtml(email)}?subject=${subject}">${escHtml(email)}</a> with your business name and what you'd like to promote. We'll reply with open dates and our latest audience numbers.</p>
+    <p>Listing a community event is always free: <a href="/submit">submit it here</a>.</p>`;
+  return layout({
+    siteUrl, path: '/advertise',
+    title: `Advertise | ${SITE_NAME}`,
+    description: 'Sponsor The Vic 361 newsletter, become a venue partner, or feature your event to reach people looking for things to do in Victoria, TX.',
+    body
+  });
+}
+
+export function renderNotFoundPage({ siteUrl }) {
+  const body = `
+    <h1 class="page-title">That event isn't listed anymore</h1>
+    <p class="page-lead">It may have already happened. Here's what's on now:</p>
+    <p><a class="btn btn--primary" href="/">See this week's events</a></p>`;
+  return layout({ siteUrl, path: '/404', nav: null, noindex: true, title: `Not found | ${SITE_NAME}`, description: 'Page not found.', body });
+}
+
+// Homepage: inject this week's events + JSON-LD into docs/index.html so
+// the first byte already has the content. docs/app.js re-renders the same
+// list on load (and still powers the admin preview), so nothing changes
+// for visitors with JS.
+export function renderHome(template, events, { siteUrl, now }) {
+  const today = localDateStr(now);
+  const week = currentWeek(today);
+  const weekEvents = events.filter(ev => ev.date >= week[0] && ev.date <= week[6]);
+  const ld = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: SITE_NAME,
+      url: siteUrl + '/',
+      description: 'Events and things to do in Victoria, TX, updated every week.'
+    },
+    ...sortEvents(weekEvents).map(ev => eventJsonLd(ev, siteUrl))
+  ];
+  return template
+    .replace('<p class="loading-message">Loading events...</p>', renderDays(week, events, today))
+    .replace('<!--NAV-->', navHtml('/'))
+    .replace('</head>', ld.map(jsonLd).join('\n') + '\n</head>');
+}
+
+export function renderSitemap(events, { siteUrl, now, lastmod }) {
+  const today = localDateStr(now);
+  const mod = (lastmod || '').slice(0, 10) || today;
+  const urls = [
+    { loc: '/', freq: 'daily', pri: '1.0', mod },
+    ...HUB_PAGES.map(p => ({ loc: p.path, freq: 'daily', pri: '0.8', mod })),
+    { loc: '/about', freq: 'monthly', pri: '0.4' },
+    { loc: '/advertise', freq: 'monthly', pri: '0.3' },
+    { loc: '/submit', freq: 'monthly', pri: '0.4' },
+    ...events.filter(ev => ev.date >= today).map(ev => ({ loc: ev.page, freq: 'weekly', pri: '0.6', mod }))
+  ];
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    urls.map(u => `  <url><loc>${escHtml(siteUrl + u.loc)}</loc>` +
+      (u.mod ? `<lastmod>${u.mod}</lastmod>` : '') +
+      `<changefreq>${u.freq}</changefreq><priority>${u.pri}</priority></url>`).join('\n') +
+    '\n</urlset>\n';
+}
+
+// llms.txt (llmstxt.org): a plain-text map of the site for AI assistants,
+// plus this week's events inline so an answer engine can cite them
+// without crawling every page.
+export function renderLlmsTxt(events, { siteUrl, now }) {
+  const today = localDateStr(now);
+  const upcoming = eventsBetween(events, today, addDays(today, UPCOMING_DAYS));
+  const lines = [
+    '# The Vic 361',
+    '',
+    '> Free weekly guide to events and things to do in Victoria, Texas (the 361 area code). Concerts, festivals, family activities, farmers markets, art shows, and community events, reviewed by a local editor and updated every week.',
+    '',
+    '## Pages',
+    '',
+    `- [This week in Victoria, TX](${siteUrl}/): every event Monday through Sunday`,
+    ...HUB_PAGES.map(p => `- [${p.title}](${siteUrl}${p.path}): ${p.description}`),
+    `- [About](${siteUrl}/about): who runs The Vic 361 and how events are chosen`,
+    `- [Submit an event](${siteUrl}/submit)`,
+    `- [Advertise](${siteUrl}/advertise): sponsorships and featured listings for local businesses`,
+    '',
+    `## Upcoming events (as of ${formatDay(today, { month: 'long', day: 'numeric', year: 'numeric' })})`,
+    ''
+  ];
+  if (!upcoming.length) lines.push('- No events listed yet this week.');
+  for (const ev of upcoming) {
+    const when = formatDay(ev.date, { weekday: 'short', month: 'short', day: 'numeric' }) + (ev.time ? `, ${ev.time}` : '');
+    const where = ev.venue ? ` at ${ev.venue}` : '';
+    const free = ev.free === true ? ' (free)' : '';
+    lines.push(`- ${when}: [${ev.name}](${siteUrl}${ev.page})${where}${free}${ev.description ? ` - ${ev.description}` : ''}`);
+  }
+  return lines.join('\n') + '\n';
+}

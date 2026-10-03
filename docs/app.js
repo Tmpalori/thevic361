@@ -81,17 +81,32 @@
       .join(' ');
   }
 
+  // Event and sponsor URLs come from scrapers and public submissions. Only
+  // http(s) is ever rendered, and the value is escaped so a quote in the
+  // URL can't break out of the href attribute and inject markup.
+  function safeHref(url) {
+    if (typeof url !== 'string') return '';
+    var u = url.trim();
+    return /^https?:\/\//i.test(u) ? escHtml(u) : '';
+  }
+
   // ─── RENDER SINGLE EVENT ───
   function renderEvent(ev) {
     var iconHtml = renderIcons(ev.icons);
-    var nameHtml = ev.url
-      ? '<a href="' + ev.url + '" target="_blank" rel="noopener noreferrer">' + escHtml(ev.name) + '</a>'
-      : escHtml(ev.name);
+    var href = safeHref(ev.url);
+    // ev.page is the server-rendered event page (/events/<slug>), added by
+    // /events.json. Admin preview data doesn't carry it, so fall back to the
+    // external source link there.
+    var nameHtml = ev.page
+      ? '<a href="' + escHtml(ev.page) + '">' + escHtml(ev.name) + '</a>'
+      : href
+        ? '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + escHtml(ev.name) + '</a>'
+        : escHtml(ev.name);
 
     var venuePart = '';
     if (ev.venue) {
-      venuePart = ev.url
-        ? '<a href="' + ev.url + '" target="_blank" rel="noopener noreferrer">' + escHtml(ev.venue) + '</a>'
+      venuePart = href
+        ? '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + escHtml(ev.venue) + '</a>'
         : escHtml(ev.venue);
       if (ev.address) {
         venuePart += ', ' + escHtml(ev.address);
@@ -104,9 +119,10 @@
       ? '<div class="event-desc">' + escHtml(ev.description) + '</div>'
       : '';
 
-    return '<li class="event-entry">' +
+    return '<li class="event-entry' + (ev.featured ? ' event-entry--featured' : '') + '">' +
       '<span class="event-icons" aria-hidden="true">' + iconHtml + '</span>' +
       '<div class="event-details">' +
+        (ev.featured ? '<span class="badge badge--featured">Featured</span> ' : '') +
         '<span class="event-time">' + escHtml(ev.time) + '</span> ' +
         '<span class="event-name">' + nameHtml + '</span>' +
         (venuePart ? ' — <span class="event-venue">' + venuePart + '</span>' : '') +
@@ -138,6 +154,8 @@
         if (ampm === 'AM' && h === 12) h = 0;
         return h * 60 + min;
       }
+      // Featured (paid) events pin to the top of their day.
+      if (Boolean(a.featured) !== Boolean(b.featured)) return a.featured ? -1 : 1;
       return toMins(ta) - toMins(tb);
     });
 
@@ -182,8 +200,9 @@
     if (!sponsor) return '';
     var ctaHtml = '';
     if (sponsor.cta) {
-      if (sponsor.url) {
-        ctaHtml = '<a href="' + sponsor.url + '" class="btn btn--outline" target="_blank" rel="noopener noreferrer">' + escHtml(sponsor.cta) + '</a>';
+      var sponsorHref = safeHref(sponsor.url);
+      if (sponsorHref) {
+        ctaHtml = '<a href="' + sponsorHref + '" class="btn btn--outline sponsor-cta" target="_blank" rel="noopener noreferrer">' + escHtml(sponsor.cta) + '</a>';
       } else {
         ctaHtml = '<span class="btn btn--outline" style="cursor:default; opacity:0.6">' + escHtml(sponsor.cta) + '</span>';
       }
@@ -206,13 +225,10 @@
   }
 
   // ─── PREVIEW MODE ───
-  // Admin's Preview tab loads this page in an iframe. Two preview transports
-  // are supported:
-  //   1. ?previewKey=<key>  — events stored in sessionStorage under
-  //      'vic361_preview_<key>'. Preferred: keeps the URL short even with
-  //      many picks.
-  //   2. ?preview=<json>     — legacy inline JSON blob. Kept for backwards
-  //      compatibility, but admin no longer generates these URLs.
+  // Admin's Preview tab loads this page in an iframe with ?previewKey=<key>;
+  // the events live in sessionStorage under 'vic361_preview_<key>'. The old
+  // ?preview=<json> form was removed: it let anyone craft a link that put
+  // arbitrary markup on thevic361.com, and admin stopped generating it.
   var PREVIEW_STORAGE_PREFIX = 'vic361_preview_';
 
   function readPreviewData() {
@@ -228,8 +244,6 @@
         }
         if (raw) return JSON.parse(raw);
       }
-      var inline = params.get('preview');
-      if (inline) return JSON.parse(decodeURIComponent(inline));
     } catch (err) {
       console.error('Failed to read preview data:', err);
     }

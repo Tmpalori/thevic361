@@ -57,8 +57,8 @@ python collect_events.py --output ./docs/events.json --local-dir . --skip-web
 ## Venue Discovery
 
 Venue curation is **manual**. `venues.json` is edited by hand (or via the
-admin tooling) and is the primary source for the Sonar prompts and venue-
-grounded scrapers. `facebook_venues.json` is kept as a one-cycle legacy
+admin tooling) and is the primary source for the venue-grounded
+scrapers and social post pipelines. `facebook_venues.json` is kept as a one-cycle legacy
 fallback. `rejected_venues.json` blocks names we've explicitly decided
 against.
 
@@ -73,35 +73,23 @@ locally with `APIFY_TOKEN=… python discover_venues.py` if you want to
 seed `pending_venues.json` for manual review — but it does not run
 automatically anywhere.
 
-## Sonar Event Discovery (Venue-Grounded Prompts)
+## AI (OpenAI)
 
-`fetch_perplexity_events` runs **8 venue-grounded query buckets** against
-Perplexity Sonar each Sunday. Buckets are seeded from the current
-`venues.json`, so each prompt names the actual HIGH-tier venues we care
-about instead of asking generically about Victoria, TX:
+The collector makes two kinds of OpenAI calls through one helper
+(`_openai_chat` in `collect_events.py`), both keyed off `OPENAI_API_KEY`:
 
-| # | Bucket | Seeded from |
-|---|---|---|
-| q1 | Live music this week | HIGH music venues (Bar / Live Music, Theatre, etc.) |
-| q2 | Trivia / karaoke / open mic | HIGH bars |
-| q3 | Family events | HIGH family venues (museum, theatre, arcade, zoo, attraction) |
-| q4 | Restaurant specials, pop-ups, food trucks | HIGH/MEDIUM restaurants |
-| q5 | Cultural events | HIGH cultural venues (Arts, Museum, Theatre) |
-| q6 | Community / civic | Churches, civic clubs, library (no venue list) |
-| q7 | Markets / fairs / festivals | Farmers Market + city-wide |
-| q8 | Eventbrite / AllEvents.in catch-all | n/a |
+- **Social post extraction:** reads FB/IG posts (see below) and pulls out dated events.
+- **AI review:** rewrites each candidate's description, picks icons, and sets the `free` flag.
 
-Each bucket caps named venues at 6 (HIGH first) so prompts stay concise. If
-`venues.json` is missing or has no HIGH match for a category, the bucket
-falls back to category-only phrasing — the collector keeps running.
+The default model is `gpt-5-mini`. Set the `OPENAI_MODEL` repo variable to
+try another one without a code change. Without a key, both steps skip and
+the collector still runs.
 
-This replaces the old 10-query generic set; four of those queries
-(`q1 aero`, `q6 trivia`, `q7 music`, `q10 food`) had been silently returning
-zero events for weeks because Sonar had nothing concrete to ground on.
+Perplexity Sonar web-search discovery was removed in Oct 2026.
 
 ## Social Posts → Events (Optional)
 
-Two opt-in pipelines pull recent social posts and ask Perplexity Sonar to
+Two opt-in pipelines pull recent social posts and ask OpenAI to
 extract any specific-dated events from them. They catch events announced
 as posts ("live music tonight 8pm") that never become formal Event pages.
 

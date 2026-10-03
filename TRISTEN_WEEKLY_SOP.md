@@ -145,7 +145,7 @@ gh workflow run "Weekly Collect"
 ## Venue Discovery (Manual)
 
 Venue curation is now **manual**. Edit `venues.json` directly (HIGH-tier
-list used by Sonar prompts and venue-grounded scrapers) and
+list used by the venue-grounded scrapers and social post pipelines) and
 `facebook_venues.json` for the legacy fallback. `rejected_venues.json`
 blocks names you've explicitly decided against.
 
@@ -169,36 +169,19 @@ you to review and commit by hand. It does not run on any schedule.
 
 ---
 
-## Sonar Event Discovery (Venue-Grounded)
+## AI Steps (OpenAI)
 
-The collector now runs **8 venue-grounded Sonar queries** instead of the
-old 10 generic ones. Each bucket pulls real HIGH-tier venue names from
-`venues.json` so Sonar searches by actual venue, not by city:
-
-1. **Live music this week** at HIGH music venues (Aero Crafters, Moonshine,
-   The Hideaway, Theatre Victoria, etc.)
-2. **Trivia / karaoke / open mic** at HIGH bars
-3. **Family events** at HIGH family venues (The Playback, Theatre Victoria,
-   The Nave Museum, etc.)
-4. **Restaurant specials / pop-ups / food trucks** at HIGH restaurants
-5. **Cultural events** at HIGH cultural venues
-6. **Community / civic** (churches, civic clubs, library) — no venue list
-7. **Markets / fairs / festivals** — no venue list
-8. **Eventbrite / AllEvents.in catch-all** for Victoria, TX (77901)
-
-Each bucket caps named venues at 6 (HIGH first) so prompts stay short. If
-`venues.json` lacks HIGH venues for a category, that bucket falls back to
-category-only phrasing — the collector still runs. Anything you want named
-in these prompts should land in `venues.json` as a HIGH-confidence venue
-(via a manual seed entry, or by running `discover_venues.py` locally and
-committing the result by hand).
+OpenAI does two jobs each Sunday: it pulls dated events out of FB/IG posts
+(below), and it rewrites each candidate's description and icons before
+you see them in the admin. Both need the `OPENAI_API_KEY` repo secret.
+Perplexity web search was removed in Oct 2026.
 
 ---
 
 ## Social Posts → Events (Opt-in)
 
 Two optional pipelines pull recent posts from venue social pages and use
-Perplexity Sonar to extract dated events from the post text. Both are
+OpenAI to extract dated events from the post text. Both are
 **off by default** and toggled by repo variables (Settings → Variables →
 Actions):
 
@@ -211,6 +194,6 @@ Actions):
 
 Both share the same Apify monthly-cap tombstone — if one trips the hard
 limit, the rest of that run skips remaining Apify calls. Costs: ≤ $0.50/run
-(FB), ≤ $0.85/run (IG) at current tier sizes. The Sonar extraction prompt
+(FB), ≤ $0.85/run (IG) at current tier sizes. The OpenAI extraction prompt
 is shared between the two; IG captions and FB post text are similar enough
 that one prompt covers both without redesign.

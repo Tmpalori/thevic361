@@ -30,7 +30,7 @@
 # that this PR supersedes.
 #
 # Timeout budget (job-level 30 min, with per-step caps):
-#   - Apify and Perplexity each use a 240s per-call timeout, and the
+#   - Apify uses a 240s per-call timeout (OpenAI calls cap at 60s), and the
 #     collector chains several of them; 30 minutes gives room for a couple
 #     of those to time out without killing the whole run.
 #   - Per-step timeouts cap each phase so a single hung dependency can't
@@ -88,7 +88,7 @@ jobs:
       - name: Run event collector
         # Step-level timeout: collector chains several scrapers (city
         # calendar, library, theatre victoria, allevents, Apify FB events,
-        # optionally FB/IG posts, Perplexity sonar discovery, AI review).
+        # optionally FB/IG posts → OpenAI extraction, OpenAI AI review).
         # Each remote call has its own 240s ceiling. 25 min lets FB Posts +
         # IG Posts + AI Review of ~100 events all complete in a real run
         # while still capping a stuck step so the workflow fails loudly
@@ -99,16 +99,18 @@ jobs:
         timeout-minutes: 25
         env:
           OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
-          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          # Optional repo variable to swap the OpenAI model without a code
+          # change (collector default: gpt-5-mini).
+          OPENAI_MODEL:       ${{ vars.OPENAI_MODEL }}
           APIFY_TOKEN:        ${{ secrets.APIFY_TOKEN }}
           SENTRY_DSN:         ${{ secrets.SENTRY_DSN }}
           SENTRY_ENVIRONMENT: production
-          # Toggle the FB-posts → sonar pipeline. Off until the Apify monthly
+          # Toggle the FB-posts → OpenAI pipeline. Off until the Apify monthly
           # cap resets and we've verified post-volume cost. Set repository
           # variable FB_POSTS_ENABLED=1 (Settings → Variables → Actions) to
           # turn on without editing this file.
           FB_POSTS_ENABLED:   ${{ vars.FB_POSTS_ENABLED }}
-          # Toggle the IG-posts → sonar pipeline (mirrors FB_POSTS_ENABLED).
+          # Toggle the IG-posts → OpenAI pipeline (mirrors FB_POSTS_ENABLED).
           # Off until production-validated. Set repository variable
           # IG_POSTS_ENABLED=1 (Settings → Variables → Actions) to enable.
           IG_POSTS_ENABLED:   ${{ vars.IG_POSTS_ENABLED }}

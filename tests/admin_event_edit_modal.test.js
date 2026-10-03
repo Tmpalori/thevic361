@@ -46,6 +46,15 @@ function bootDom({ session = 'test-session' } = {}) {
   return window.__vic361Admin;
 }
 
+
+// A date a few days ahead of the real clock. The picker's "upcoming"
+// filter drops past dates, so a hard-coded date breaks once it passes.
+function soonDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 3);
+  return d.toISOString().slice(0, 10);
+}
+
 describe('admin event edit modal — static structure', () => {
   beforeEach(() => bootDom());
   afterEach(() => { delete window.__vic361Admin; });
@@ -247,11 +256,11 @@ describe('admin source URL — clickable + selectable', () => {
     // Seed candidates and call the picker render through the public path:
     // we set state.candidates and then read the DOM admin.js produces.
     api._state.candidates = [{
-      date: '2026-04-27', name: 'JP Night', venue: 'Barn',
+      date: soonDate(), name: 'JP Night', venue: 'Barn',
       url: 'https://facebook.com/jp/events/123'
     }];
     // Bypass week filter — the "this week" filter would hide our test row
-    // since 2026-04-27 may not match the live clock.
+    // if its date isn't in the live clock's week.
     api._state.filters.week = 'upcoming';
     // Re-run the picker via a manual dispatch: admin.js wires renderPicker
     // internally on filter changes, so trigger one.
@@ -272,7 +281,7 @@ describe('admin source URL — clickable + selectable', () => {
 
   it('clicking the picker source link does not toggle the row checkbox', () => {
     api._state.candidates = [{
-      date: '2026-04-27', name: 'JP Night', venue: 'Barn',
+      date: soonDate(), name: 'JP Night', venue: 'Barn',
       url: 'https://facebook.com/jp/events/123'
     }];
     api._state.filters.week = 'upcoming';

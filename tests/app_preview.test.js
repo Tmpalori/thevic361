@@ -1,7 +1,7 @@
 // Smoke test for the public site preview-mode reader (docs/app.js).
 //
 // Verifies that ?previewKey=<key> loads payload from sessionStorage and that
-// the legacy ?preview=<json> form still works. We don't boot the full
+// the removed legacy ?preview=<json> form is ignored. We don't boot the full
 // loadAndRender pipeline (it depends on the full index.html DOM and
 // document.fetch); instead we evaluate app.js, which exposes a small
 // __vic361App surface for tests.
@@ -72,12 +72,12 @@ describe('public site preview mode (PR #20)', () => {
     expect(data && data.events[0].name).toBe('Y');
   });
 
-  it('readPreviewData still understands legacy inline ?preview=<json>', () => {
+  it('readPreviewData ignores the removed inline ?preview=<json> form', () => {
+    // A crafted ?preview= link could inject markup on the public site.
     const payload = { last_updated: 'x', events: [{ name: 'Z' }] };
     const blob = encodeURIComponent(JSON.stringify(payload));
     const app = bootApp('?preview=' + blob);
-    const data = app.readPreviewData();
-    expect(data && data.events[0].name).toBe('Z');
+    expect(app.readPreviewData()).toBeNull();
   });
 
   it('showPreviewIndicator renders a single fixed banner', () => {

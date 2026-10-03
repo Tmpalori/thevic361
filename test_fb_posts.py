@@ -32,7 +32,7 @@ def reset_state(monkeypatch, tmp_path):
     ce._WINDOW_END = date.today() + timedelta(days=14)
 
     # Clean env between tests
-    for k in ("APIFY_TOKEN", "PERPLEXITY_API_KEY", "FB_POSTS_ENABLED"):
+    for k in ("APIFY_TOKEN", "OPENAI_API_KEY", "FB_POSTS_ENABLED"):
         monkeypatch.delenv(k, raising=False)
 
     # Drop a venues file next to collect_events.py
@@ -119,7 +119,7 @@ def test_posts_scraper_no_apify_token(monkeypatch):
     assert out == []
 
 
-def test_posts_scraper_no_perplexity_key(monkeypatch):
+def test_posts_scraper_no_openai_key(monkeypatch):
     monkeypatch.setenv("FB_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
     out = ce.fetch_apify_facebook_posts(14)
@@ -129,7 +129,7 @@ def test_posts_scraper_no_perplexity_key(monkeypatch):
 def test_posts_scraper_tombstone_short_circuits(monkeypatch):
     monkeypatch.setenv("FB_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
     ce._APIFY_LIMIT_TRIPPED = True
 
     with patch("collect_events.requests.post") as mock_post:
@@ -141,7 +141,7 @@ def test_posts_scraper_tombstone_short_circuits(monkeypatch):
 def test_posts_scraper_403_hard_limit_trips_tombstone(monkeypatch):
     monkeypatch.setenv("FB_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     fake_resp = MagicMock()
     fake_resp.status_code = 403
@@ -155,21 +155,21 @@ def test_posts_scraper_403_hard_limit_trips_tombstone(monkeypatch):
 
 
 def test_posts_scraper_happy_path(monkeypatch):
-    """Stub Apify + sonar — verify event normalization end-to-end."""
+    """Stub Apify + OpenAI — verify event normalization end-to-end."""
     monkeypatch.setenv("FB_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     target_date = (date.today() + timedelta(days=3)).strftime("%Y-%m-%d")
 
-    # Two responses needed per venue: posts response, then sonar response.
+    # Two responses needed per venue: posts response, then OpenAI response.
     # We only have 3 high-conf venues here (Aero, Moonshine, "No URL Venue").
     # No URL Venue is skipped before any HTTP call.
     posts_payload = [
         {"text": "Live music tonight 8pm with The Rangers", "url": "https://fb.com/post/1", "time": "2026-04-25T15:00:00"},
         {"text": "Photo dump from last weekend", "url": "https://fb.com/post/2", "time": "2026-04-24T15:00:00"},
     ]
-    sonar_payload = {
+    ai_payload = {
         "choices": [{
             "message": {
                 "content": json.dumps([
@@ -195,8 +195,8 @@ def test_posts_scraper_happy_path(monkeypatch):
         resp.raise_for_status = MagicMock()
         if "facebook-posts-scraper" in url:
             resp.json.return_value = posts_payload
-        elif "perplexity.ai" in url:
-            resp.json.return_value = sonar_payload
+        elif "api.openai.com" in url:
+            resp.json.return_value = ai_payload
         else:
             resp.status_code = 500
         return resp
@@ -204,9 +204,9 @@ def test_posts_scraper_happy_path(monkeypatch):
     with patch("collect_events.requests.post", side_effect=fake_post):
         out = ce.fetch_apify_facebook_posts(14)
 
-    # 2 high-confidence venues with URLs (Aero, Moonshine) → 2 Apify + 2 sonar = 4 calls
+    # 2 high-confidence venues with URLs (Aero, Moonshine) → 2 Apify + 2 OpenAI = 4 calls
     assert len([u for u in call_log if "facebook-posts" in u]) == 2
-    assert len([u for u in call_log if "perplexity" in u]) == 2
+    assert len([u for u in call_log if "api.openai.com" in u]) == 2
 
     # Each venue produced one event from the stub
     assert len(out) == 2
@@ -220,13 +220,13 @@ def test_posts_scraper_happy_path(monkeypatch):
 
 
 def test_posts_scraper_filters_out_of_window_events(monkeypatch):
-    """Sonar may return dates outside the collection window — drop them."""
+    """The model may return dates outside the collection window — drop them."""
     monkeypatch.setenv("FB_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     far_future = (date.today() + timedelta(days=400)).strftime("%Y-%m-%d")
-    sonar_payload = {
+    ai_payload = {
         "choices": [{
             "message": {
                 "content": json.dumps([
@@ -245,7 +245,7 @@ def test_posts_scraper_filters_out_of_window_events(monkeypatch):
         if "facebook-posts-scraper" in url:
             resp.json.return_value = [{"text": "post", "time": "2026-04-25T00:00:00"}]
         else:
-            resp.json.return_value = sonar_payload
+            resp.json.return_value = ai_payload
         return resp
 
     with patch("collect_events.requests.post", side_effect=fake_post):
@@ -256,7 +256,7 @@ def test_posts_scraper_filters_out_of_window_events(monkeypatch):
 def test_posts_scraper_handles_actor_500(monkeypatch):
     monkeypatch.setenv("FB_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     fake_resp = MagicMock()
     fake_resp.status_code = 500
@@ -273,7 +273,7 @@ def test_fb_posts_env_cap_limits_venues(monkeypatch):
     high-confidence venues (venues.json order)."""
     monkeypatch.setenv("FB_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
     monkeypatch.setenv("FB_POSTS_MAX_VENUES", "1")
 
     captured_urls = []
@@ -285,7 +285,7 @@ def test_fb_posts_env_cap_limits_venues(monkeypatch):
         if "facebook-posts-scraper" in url:
             captured_urls.append(kwargs.get("json", {}).get("startUrls", [{}])[0].get("url"))
             resp.json.return_value = []
-        elif "perplexity.ai" in url:
+        elif "api.openai.com" in url:
             resp.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
         return resp
 
@@ -303,7 +303,7 @@ def test_fb_posts_no_env_means_no_cap(monkeypatch):
     matching shipped behavior before the IG cost-cap addition."""
     monkeypatch.setenv("FB_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
     monkeypatch.delenv("FB_POSTS_MAX_VENUES", raising=False)
 
     assert ce._FB_POSTS_MAX_VENUES is None
@@ -317,7 +317,7 @@ def test_fb_posts_no_env_means_no_cap(monkeypatch):
         if "facebook-posts-scraper" in url:
             captured_urls.append(kwargs.get("json", {}).get("startUrls", [{}])[0].get("url"))
             resp.json.return_value = []
-        elif "perplexity.ai" in url:
+        elif "api.openai.com" in url:
             resp.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
         return resp
 
@@ -334,7 +334,7 @@ def test_fb_posts_invalid_env_disables_cap(monkeypatch):
     silently zero out the FB scrape."""
     monkeypatch.setenv("FB_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     for bad in ("not-a-number", "", "0", "-2"):
         captured_urls = []
@@ -347,7 +347,7 @@ def test_fb_posts_invalid_env_disables_cap(monkeypatch):
             if "facebook-posts-scraper" in url:
                 captured_urls.append(kwargs.get("json", {}).get("startUrls", [{}])[0].get("url"))
                 resp.json.return_value = []
-            elif "perplexity.ai" in url:
+            elif "api.openai.com" in url:
                 resp.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
             return resp
 

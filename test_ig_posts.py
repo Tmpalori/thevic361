@@ -2,14 +2,14 @@
 
 Mirrors test_fb_posts.py. Covers:
   - IG_POSTS_ENABLED feature flag
-  - APIFY_TOKEN / PERPLEXITY_API_KEY guards
+  - APIFY_TOKEN / OPENAI_API_KEY guards
   - _APIFY_LIMIT_TRIPPED tombstone gating + propagation on 403 hard-limit
   - _normalize_ig_username (URLs, @handles, junk)
   - _venue_instagram_username extraction (instagrams[], instagram, missing)
   - _venue_tier (HIGH/MEDIUM/LOW from tier OR confidence)
   - tier-aware resultsLimit (HIGH=25, MEDIUM=15)
   - actor input shape (username array, resultsLimit, onlyPostsNewerThan)
-  - Sonar handoff via _extract_events_from_posts_via_sonar
+  - OpenAI handoff via _extract_events_from_posts_via_ai
   - empty/no-IG venue behavior
   - error handling (HTTP 500, request exception, bad JSON)
 
@@ -37,7 +37,7 @@ def reset_state(monkeypatch, tmp_path):
     ce._WINDOW_START = date.today()
     ce._WINDOW_END = date.today() + timedelta(days=14)
 
-    for k in ("APIFY_TOKEN", "PERPLEXITY_API_KEY", "IG_POSTS_ENABLED"):
+    for k in ("APIFY_TOKEN", "OPENAI_API_KEY", "IG_POSTS_ENABLED"):
         monkeypatch.delenv(k, raising=False)
 
     venues = [
@@ -146,7 +146,7 @@ def test_ig_posts_no_apify_token(monkeypatch):
     assert ce.fetch_apify_instagram_posts(14) == []
 
 
-def test_ig_posts_no_perplexity_key(monkeypatch):
+def test_ig_posts_no_openai_key(monkeypatch):
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
     assert ce.fetch_apify_instagram_posts(14) == []
@@ -155,7 +155,7 @@ def test_ig_posts_no_perplexity_key(monkeypatch):
 def test_ig_posts_tombstone_short_circuits(monkeypatch):
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
     ce._APIFY_LIMIT_TRIPPED = True
 
     with patch("collect_events.requests.post") as mock_post:
@@ -167,7 +167,7 @@ def test_ig_posts_tombstone_short_circuits(monkeypatch):
 def test_ig_posts_403_hard_limit_trips_tombstone(monkeypatch):
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     fake_resp = MagicMock()
     fake_resp.status_code = 403
@@ -180,7 +180,7 @@ def test_ig_posts_403_hard_limit_trips_tombstone(monkeypatch):
     assert ce._APIFY_LIMIT_TRIPPED is True
 
 
-# ─── Tier-aware actor input + Sonar handoff ─────────────────────────────────
+# ─── Tier-aware actor input + OpenAI handoff ─────────────────────────────────
 
 
 def test_ig_posts_tier_aware_limits_and_payload_shape(monkeypatch):
@@ -188,7 +188,7 @@ def test_ig_posts_tier_aware_limits_and_payload_shape(monkeypatch):
     carry username (array), resultsLimit, onlyPostsNewerThan."""
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     captured_payloads = []
 
@@ -198,8 +198,8 @@ def test_ig_posts_tier_aware_limits_and_payload_shape(monkeypatch):
         resp.raise_for_status = MagicMock()
         if "instagram-post-scraper" in url:
             captured_payloads.append(kwargs.get("json"))
-            resp.json.return_value = []  # no posts → no Sonar call
-        elif "perplexity.ai" in url:
+            resp.json.return_value = []  # no posts → no OpenAI call
+        elif "api.openai.com" in url:
             resp.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
         return resp
 
@@ -221,11 +221,11 @@ def test_ig_posts_tier_aware_limits_and_payload_shape(monkeypatch):
         assert len(p["onlyPostsNewerThan"]) == 10 and p["onlyPostsNewerThan"][4] == "-"
 
 
-def test_ig_posts_happy_path_sonar_handoff(monkeypatch):
-    """Stub Apify + Sonar — verify caption→sonar handoff and event normalization."""
+def test_ig_posts_happy_path_ai_handoff(monkeypatch):
+    """Stub Apify + OpenAI — verify caption→OpenAI handoff and event normalization."""
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     target_date = (date.today() + timedelta(days=3)).strftime("%Y-%m-%d")
 
@@ -241,7 +241,7 @@ def test_ig_posts_happy_path_sonar_handoff(monkeypatch):
             "timestamp": "2026-04-24T15:00:00",
         },
     ]
-    sonar_payload = {
+    ai_payload = {
         "choices": [{
             "message": {
                 "content": json.dumps([
@@ -258,7 +258,7 @@ def test_ig_posts_happy_path_sonar_handoff(monkeypatch):
         }]
     }
 
-    sonar_prompts = []
+    ai_prompts = []
 
     def fake_post(url, **kwargs):
         resp = MagicMock()
@@ -266,19 +266,19 @@ def test_ig_posts_happy_path_sonar_handoff(monkeypatch):
         resp.raise_for_status = MagicMock()
         if "instagram-post-scraper" in url:
             resp.json.return_value = posts_payload
-        elif "perplexity.ai" in url:
-            sonar_prompts.append(kwargs.get("json", {}).get("messages", [{}])[0].get("content", ""))
-            resp.json.return_value = sonar_payload
+        elif "api.openai.com" in url:
+            ai_prompts.append(kwargs.get("json", {}).get("messages", [{}])[0].get("content", ""))
+            resp.json.return_value = ai_payload
         return resp
 
     with patch("collect_events.requests.post", side_effect=fake_post):
         out = ce.fetch_apify_instagram_posts(14)
 
-    # 3 tiered venues with IG handles → 3 actor calls + 3 sonar calls
-    assert len(sonar_prompts) == 3
+    # 3 tiered venues with IG handles → 3 actor calls + 3 OpenAI calls
+    assert len(ai_prompts) == 3
     # The shared FB-posts prompt is being reused — its tell is the
     # "Facebook posts" phrase. We do not redesign the prompt for IG.
-    assert all("Facebook posts" in p for p in sonar_prompts)
+    assert all("Facebook posts" in p for p in ai_prompts)
 
     # Each venue produced one event from the stub
     assert len(out) == 3
@@ -291,13 +291,13 @@ def test_ig_posts_happy_path_sonar_handoff(monkeypatch):
 
 
 def test_ig_posts_filters_out_of_window_events(monkeypatch):
-    """Sonar may return dates outside the collection window — drop them."""
+    """The model may return dates outside the collection window — drop them."""
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     far_future = (date.today() + timedelta(days=400)).strftime("%Y-%m-%d")
-    sonar_payload = {
+    ai_payload = {
         "choices": [{
             "message": {
                 "content": json.dumps([
@@ -316,7 +316,7 @@ def test_ig_posts_filters_out_of_window_events(monkeypatch):
         if "instagram-post-scraper" in url:
             resp.json.return_value = [{"caption": "post", "timestamp": "2026-04-25T00:00:00"}]
         else:
-            resp.json.return_value = sonar_payload
+            resp.json.return_value = ai_payload
         return resp
 
     with patch("collect_events.requests.post", side_effect=fake_post):
@@ -327,7 +327,7 @@ def test_ig_posts_filters_out_of_window_events(monkeypatch):
 def test_ig_posts_handles_actor_500_no_tombstone(monkeypatch):
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     fake_resp = MagicMock()
     fake_resp.status_code = 500
@@ -342,7 +342,7 @@ def test_ig_posts_handles_actor_500_no_tombstone(monkeypatch):
 def test_ig_posts_handles_request_exception(monkeypatch):
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     def boom(*a, **k):
         raise ConnectionError("network down")
@@ -360,7 +360,7 @@ def test_ig_posts_caps_total_venues_per_run(monkeypatch):
     venue list grows. HIGH tier is preserved before MEDIUM."""
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     # Shrink the cap so the test stays readable.
     monkeypatch.setattr(ce, "_IG_POSTS_MAX_VENUES", 3)
@@ -405,7 +405,7 @@ def test_ig_posts_env_var_overrides_default_cap(monkeypatch):
     Actions Variables without a code change."""
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
     # Module default is 20 — env override must win.
     monkeypatch.setenv("IG_POSTS_MAX_VENUES", "2")
 
@@ -441,7 +441,7 @@ def test_ig_posts_invalid_env_falls_back_to_default(monkeypatch):
     code default — a misconfigured workflow var must never widen the cap."""
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
     monkeypatch.setattr(ce, "_IG_POSTS_MAX_VENUES", 3)
 
     venues = [
@@ -480,11 +480,11 @@ def test_ig_posts_default_cap_is_20(monkeypatch):
 
 
 def test_ig_posts_zero_events_with_posts_fires_sentry(monkeypatch):
-    """If Apify returns posts but Sonar extracts zero events for ALL venues,
+    """If Apify returns posts but OpenAI extracts zero events for ALL venues,
     that's a silent regression — fire a Sentry warning so it's visible."""
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     warns = []
     monkeypatch.setattr(ce, "_sentry_warn",
@@ -514,7 +514,7 @@ def test_ig_posts_no_tiered_ig_venues_short_circuits(monkeypatch, tmp_path):
     return [] without making any HTTP calls."""
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     repo_dir = os.path.dirname(ce.__file__)
     primary = os.path.join(repo_dir, "venues.json")

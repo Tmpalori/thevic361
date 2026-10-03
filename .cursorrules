@@ -36,7 +36,7 @@ There is no PR-gating CI for the test suites. Run them locally before pushing.
 
 ## Environment variables — quick map
 DATABASE_URL, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_SESSION_SECRET (required for prod server)
-OPENAI_API_KEY, PERPLEXITY_API_KEY, APIFY_TOKEN, SENTRY_DSN (collector)
+OPENAI_API_KEY, APIFY_TOKEN, SENTRY_DSN (collector)
 GITHUB_TOKEN (optional — enables docs/events.json commits + workflow_dispatch from admin)
 TURNSTILE_SECRET_KEY, TURNSTILE_SITE_KEY (optional — when set, submissions require a token)
 FB_POSTS_ENABLED, IG_POSTS_ENABLED (repo variables, =1 to enable in CI)
