@@ -95,21 +95,12 @@ The weekly digest workflow uses these to email you the candidates each Sunday.
 
 ---
 
-## 7. Set Up Beehiiv (Email Collection)
+## 7. Newsletter (Resend)
 
-1. Sign up at [beehiiv.com](https://www.beehiiv.com) (free tier: 2,500 subscribers)
-2. Create a publication named "The Vic 361"
-3. Set up your custom domain (`newsletter.thevic361.com` or similar)
-4. Get your Beehiiv embed code or subscribe URL
-5. Update the subscribe link in `docs/index.html` (search for `#subscribe`)
-
-Beehiiv free tier includes:
-- Up to 2,500 subscribers
-- Unlimited sends
-- Custom domain support
-- Basic analytics
-
----
+The newsletter runs on Resend (`server/newsletter.js`); Beehiiv is no longer used. Signups on the homepage are saved to the site's own list. To send:
+1. Verify thevic361.com in Resend and create an API key
+2. In Railway set `RESEND_API_KEY` and `NEWSLETTER_ADDRESS` (mailing address shown in every email)
+3. Optional: `NEWSLETTER_CRON_SECRET` (Railway + GitHub secret) and the `NEWSLETTER_AUTOSEND=1` repo variable for the Monday auto-send
 
 ## Monthly Costs
 
@@ -119,7 +110,7 @@ Beehiiv free tier includes:
 | GitHub Actions (2,000 min/month) | Free |
 | Domain (thevic361.com) | ~$1/month ($12/year) |
 | OpenAI API (optional) | ~$1-2/month |
-| Beehiiv free tier | Free |
+| Resend (up to 3,000 emails/mo) | Free |
 | **Total** | **~$2-3/month** |
 
 ---

@@ -298,7 +298,7 @@ class FileStore {
     return c;
   }
 
-  // Imported addresses already opted in elsewhere (Beehiiv), so they start
+  // Imported addresses already opted in elsewhere (an old list), so they start
   // active. People who unsubscribed here are never re-added.
   async importSubscribers(emails, source) {
     return this._withWrite(async () => {

@@ -9,7 +9,7 @@ A community events board that automatically collects and displays things to do i
 1. **`collect_events.py`** gathers events from public Victoria calendars + your curated YAML file into `candidates.json`
 2. **GitHub Actions** runs the collector every Sunday evening (`weekly-collect.yml`) in **candidates-only** mode — it writes `candidates.json` but does NOT overwrite the curated fallback at `docs/events.json`
 3. At 9 PM Central Sunday, an informational digest email summarizes what was collected
-4. Tristen reviews and picks events at `/admin.html` around 10 PM Sunday, then manually sends the Beehiiv newsletter Monday morning. **Save & Publish** writes the curated payload to Railway Postgres (the live source of truth) and, when `GITHUB_TOKEN` is configured, also commits `docs/events.json` as a fallback.
+4. Tristen reviews and picks events at `/admin.html` around 10 PM Sunday, and the Resend newsletter goes out Monday morning. **Save & Publish** writes the curated payload to Railway Postgres (the live source of truth) and, when `GITHUB_TOKEN` is configured, also commits `docs/events.json` as a fallback.
 5. **Railway** serves the live site; `events.json` is read from Postgres first, falling back to the bundled `docs/events.json` snapshot
 6. The website reads `events.json` and auto-displays the next 7 days
 

@@ -878,7 +878,7 @@
       item('Auto-send Mondays', d.autosend ? 'On' : 'Off');
     const warn = document.getElementById('email-nl-warning');
     const issues = [];
-    if (!d.configured) issues.push('Add RESEND_API_KEY in Railway to turn on sending and signups (the site keeps the Beehiiv form until then).');
+    if (!d.configured) issues.push('Add RESEND_API_KEY in Railway to turn on sending. Signups are being saved in the meantime.');
     if (!d.address_set) issues.push('Set NEWSLETTER_ADDRESS (a mailing address) in Railway; US law requires one in every newsletter.');
     if (warn) { warn.hidden = !issues.length; warn.textContent = issues.join(' '); }
     const send = document.getElementById('email-nl-send');

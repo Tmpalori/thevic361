@@ -667,12 +667,6 @@
   overflow-x: hidden;
 }
 
-.beehiiv-embed {
-  width: 100% !important;
-  max-width: 100% !important;
-  min-width: 0 !important;
-}
-
 .footer-grid {
   display: grid;
   grid-template-columns: 1fr;

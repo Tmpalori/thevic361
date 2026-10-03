@@ -1,7 +1,8 @@
 /* server/newsletter.js — Own email newsletter, sent through Resend.
  *
- * Replaces the Beehiiv embed once RESEND_API_KEY is set (until then the
- * homepage keeps the Beehiiv form, so nothing breaks mid-switch).
+ * The homepage signup form always shows. Until RESEND_API_KEY is set,
+ * signups are saved straight to the list (nothing can be emailed yet, so
+ * there's no confirmation step); once it's set, signups are double opt-in.
  *
  *   - Signup: POST /api/subscribe → pending subscriber + confirmation email
  *     (double opt-in, so nobody can sign up someone else).
@@ -196,7 +197,7 @@ export function renderConfirmEmail({ siteUrl, confirmUrl, address }) {
   };
 }
 
-// Signup form that replaces the Beehiiv iframe on the homepage.
+// Newsletter signup form in the homepage footer.
 export function signupFormHtml() {
   return `<form class="signup-form" id="signup-form" action="/api/subscribe" method="post" novalidate>
   <label for="signup-email" class="visually-hidden">Email address</label>
@@ -210,7 +211,7 @@ export function signupFormHtml() {
 f.addEventListener('submit',function(e){e.preventDefault();var b=f.querySelector('button');b.disabled=true;m.textContent='';
 fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value})})
 .then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});})
-.then(function(x){m.textContent=x.ok?'Check your inbox to confirm.':(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';if(window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
+.then(function(x){m.textContent=x.ok?(x.j.message||'Check your inbox to confirm.'):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';if(window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
 .catch(function(){m.textContent='Something went wrong. Try again.';}).then(function(){b.disabled=false;});});})();
 </script>`;
 }
@@ -273,7 +274,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   }
 
   app.post('/api/subscribe', async (req, res) => {
-    if (!supported || !config.enabled) return res.status(503).json({ ok: false, message: 'Signups are paused. Try again soon.' });
+    if (!supported) return res.status(503).json({ ok: false, message: 'Signups are paused. Try again soon.' });
     const ip = req.ip || req.socket.remoteAddress || '';
     if (!subscribeLimiter.check(ip).ok) return res.status(429).json({ ok: false, message: 'Too many tries. Try again later.' });
     const body = req.body || {};
@@ -283,7 +284,14 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     if (!email) return res.status(400).json({ ok: false, message: 'Enter a valid email address.' });
     try {
       const sub = await store.addSubscriber({ email, source: 'site' });
-      if (sub.status === 'active') return res.json({ ok: true, already: true });
+      if (sub.status === 'active') return res.json({ ok: true, already: true, message: "You're already on the list!" });
+      // No email service yet: keep the signup (they asked for it on our own
+      // form) and skip the confirmation email we can't send.
+      if (!config.enabled) {
+        await store.confirmSubscriber(sub.token);
+        if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', email]] });
+        return res.json({ ok: true, message: "You're on the list! See you Monday." });
+      }
       const confirmUrl = `${siteUrl}/subscribe/confirm?token=${encodeURIComponent(sub.token)}`;
       const mail = renderConfirmEmail({ siteUrl, confirmUrl, address: config.address });
       await resend.send({ from: config.from, to: [email], subject: mail.subject, html: mail.html, text: mail.text });
