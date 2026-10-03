@@ -1538,3 +1538,28 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
   .hero-title { font-size: 1.75rem; margin-bottom: 0; }
   .header-actions .btn { padding: 0.35em 0.9em; }
 }
+
+/* ─── Growth bits: list newsletter card, share buttons, venue embed ─── */
+.nl-card {
+  background: var(--lilac-light);
+  border: 3px dashed var(--ink);
+  border-radius: 20px;
+  padding: var(--space-5);
+  margin-bottom: var(--space-8);
+  transform: rotate(-0.4deg);
+}
+.nl-card__title { font-family: var(--font-display); font-weight: 700; font-size: var(--text-lg); }
+.nl-card__text { margin: var(--space-1) 0 var(--space-3); color: var(--color-text-muted); font-weight: 600; }
+.nl-card .signup-form input[type="email"] { background: var(--card); }
+.share-btn--list { background: var(--sun); color: var(--ink); }
+.hero-share { margin: var(--space-3) 0 0; }
+.embed-code {
+  width: 100%;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: var(--text-sm);
+  padding: var(--space-3);
+  border: 2.5px solid var(--ink);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--color-text);
+}

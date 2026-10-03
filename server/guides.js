@@ -117,7 +117,7 @@ export function renderVenuePage(venue, live, archived, { siteUrl, now, sponsor, 
     ${past.length ? `<h2 class="section-heading">Recent events</h2>
     <ul class="event-list" role="list">${past.map(renderEventItem).join('')}</ul>` : ''}
     ${sponsorHtml(sponsor)}
-    <p class="page-cta">Own or manage ${escHtml(venue.name)}? <a href="/advertise">Feature your events every week</a>.</p>`;
+    <p class="page-cta">Own or manage ${escHtml(venue.name)}? <a href="/for-venues?venue=${escHtml(venue.slug)}">Show these events on your website for free</a>, or <a href="/advertise">feature them every week</a>.</p>`;
   const place = {
     '@context': 'https://schema.org',
     '@type': 'Place',

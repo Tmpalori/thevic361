@@ -172,6 +172,56 @@
     '</section>';
   }
 
+  // ─── NEWSLETTER CARD ───
+  // A "get this every Monday" card two days into the list, where people
+  // already finding the list useful are reading, instead of only in the
+  // footer. Hidden after someone subscribes on this device.
+  var SUB_KEY = 'vic361-subscribed';
+  function alreadySubscribed() {
+    try { return localStorage.getItem(SUB_KEY) === '1'; } catch (e) { return false; }
+  }
+  function insertNewsletterCard(container, fromIdx) {
+    if (alreadySubscribed() || /[?&]preview/.test(location.search)) return;
+    var sections = container.querySelectorAll('.day-section');
+    var after = sections[Math.min(fromIdx + 1, sections.length - 1)];
+    if (!after) return;
+    var card = document.createElement('section');
+    card.className = 'nl-card';
+    card.innerHTML =
+      '<div class="nl-card__title">Get this list every Monday</div>' +
+      '<p class="nl-card__text">The week\'s best events in Victoria, in your inbox. Free, no spam.</p>' +
+      '<form class="signup-form js-subscribe" novalidate>' +
+        '<label class="visually-hidden" for="nl-card-email">Email address</label>' +
+        '<input id="nl-card-email" name="email" type="email" required autocomplete="email" placeholder="you@example.com">' +
+        '<input type="text" name="company" tabindex="-1" autocomplete="off" class="hp-field" aria-hidden="true">' +
+        '<button type="submit" class="btn btn--primary">Subscribe</button>' +
+        '<p class="signup-msg" role="status" aria-live="polite"></p>' +
+      '</form>';
+    after.parentNode.insertBefore(card, after.nextSibling);
+    var form = card.querySelector('form');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var msg = form.querySelector('.signup-msg');
+      var btn = form.querySelector('button');
+      btn.disabled = true;
+      fetch('/api/subscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email.value, company: form.company.value })
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+      }).then(function (x) {
+        msg.textContent = x.ok ? (x.j.message || 'Check your inbox to confirm.') : (x.j.message || 'Something went wrong. Try again.');
+        if (x.ok) {
+          form.email.value = '';
+          try { localStorage.setItem(SUB_KEY, '1'); } catch (e2) { /* private mode */ }
+          if (window.vic361Track) window.vic361Track('subscribe_click', { link_url: 'list-card' });
+        }
+      }).catch(function () {
+        msg.textContent = 'Something went wrong. Try again.';
+      }).then(function () { btn.disabled = false; });
+    });
+  }
+
   // ─── RENDER NEW & NOTABLE ───
   function renderNotable(items) {
     if (!items || !items.length) return '';
@@ -316,6 +366,7 @@
         days.forEach(function (d, i) {
           if (toLocalDateStr(d) === todayStr) todayIdx = i;
         });
+        insertNewsletterCard(container, Math.max(todayIdx, 0));
         // Show button whenever today isn't Monday (idx 0)
         if (todayIdx > 0) {
           var skipBar = document.getElementById('skip-today-bar');
