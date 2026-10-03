@@ -185,6 +185,10 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 
 `server/analytics.js` powers the admin **Traffic** tab. People are counted from a `docs/track.js` beacon (`POST /api/track`: page views and sponsor/event/subscribe clicks; skipped in a browser signed into the admin); search and AI crawlers are counted server-side by user agent. Rows go to the `traffic` table (Postgres, ~400 days kept) with a daily salted visitor hash and no IPs or cookies. `GET /api/admin/traffic?days=N` returns the summary.
 
+## Newsletter
+
+`server/newsletter.js`: double opt-in signup (`POST /api/subscribe` → confirmation email → `/subscribe/confirm`), unsubscribe (`GET` shows a button, `POST /unsubscribe` also serves RFC 8058 one-click), the weekly issue rendered from the published events, and Resend batch sends with one send per week (`newsletter_sends`). Admin Newsletter tab: status, preview, test send, send, import (Beehiiv export). Subscribers live in the `subscribers` table.
+
 ## Conventions
 
 - **Python:** stdlib + `requests` + `beautifulsoup4` + `pyyaml` + `sentry-sdk`. No Django, no FastAPI, no async — keep `collect_events.py` blocking and simple.
@@ -247,6 +251,11 @@ Full reference is in [`RAILWAY.md`](./RAILWAY.md). Quick list:
 | `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` | — | When set, `/api/submissions` requires a Turnstile token |
 | `FB_POSTS_ENABLED`, `IG_POSTS_ENABLED` | — | Repo Variables (not secrets); `=1` to enable post-scrape pipelines in CI |
 | `FB_POSTS_MAX_VENUES`, `IG_POSTS_MAX_VENUES` | (collector defaults) | Caps to keep Apify costs bounded |
+| `RESEND_API_KEY` | — | Turns on the email newsletter (server/newsletter.js); until set, the homepage keeps the Beehiiv form |
+| `NEWSLETTER_FROM` | `The Vic 361 <news@thevic361.com>` | Sender; the domain must be verified in Resend |
+| `NEWSLETTER_ADDRESS` | — | Mailing address shown in every email (CAN-SPAM) |
+| `NEWSLETTER_REPLY_TO`, `NEWSLETTER_TEST_TO` | — | Reply-to address; default test recipient |
+| `NEWSLETTER_CRON_SECRET` | — | Shared secret for `POST /api/newsletter/cron` (Monday auto-send via `newsletter.yml`, gated by the `NEWSLETTER_AUTOSEND` repo variable) |
 | `OPENAI_MODEL` | `gpt-5-mini` | Repo Variable; overrides the collector's OpenAI model |
 | `SITE_URL` | `https://www.thevic361.com` | Canonical origin. Requests to the bare domain 301 here |
 | `ADVERTISE_EMAIL` | `tristen.m.palori@gmail.com` | Contact address on `/advertise` |

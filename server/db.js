@@ -112,6 +112,10 @@ export function applyEventEdits(events, edits) {
 
 // ─── JSON FILE BACKEND ───
 const FILE_TRAFFIC_CAP = 50000;
+
+function newToken() {
+  return crypto.randomBytes(24).toString('base64url');
+}
 // Postgres keeps a bit over a year of traffic; older rows are pruned.
 const TRAFFIC_RETENTION_DAYS = 400;
 
@@ -126,16 +130,18 @@ class FileStore {
       const raw = await fs.readFile(this.file, 'utf8');
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') {
-        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [] };
+        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [] };
       }
       if (!Array.isArray(parsed.submissions)) parsed.submissions = [];
       if (!parsed.event_archive || typeof parsed.event_archive !== 'object') parsed.event_archive = {};
       if (!Array.isArray(parsed.traffic)) parsed.traffic = [];
+      if (!Array.isArray(parsed.subscribers)) parsed.subscribers = [];
+      if (!Array.isArray(parsed.newsletter_sends)) parsed.newsletter_sends = [];
       if (!Array.isArray(parsed.event_edits)) parsed.event_edits = [];
       return parsed;
     } catch (err) {
       if (err.code === 'ENOENT') {
-        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [] };
+        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [] };
       }
       throw err;
     }
@@ -235,6 +241,98 @@ class FileStore {
   async listTraffic(sinceDay) {
     const data = await this._read();
     return data.traffic.filter(r => r.day >= sinceDay);
+  }
+
+  // ─── Newsletter (server/newsletter.js) ───
+  async addSubscriber({ email, source }) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      let sub = data.subscribers.find(x => x.email === email);
+      const now = nowIso();
+      if (sub && sub.status === 'active') return sub;
+      if (!sub) {
+        sub = { id: newId(), email, status: 'pending', token: newToken(), source, created_at: now };
+        data.subscribers.push(sub);
+      } else if (sub.status === 'unsubscribed') {
+        Object.assign(sub, { status: 'pending', token: newToken(), unsubscribed_at: null });
+      }
+      await this._write(data);
+      return sub;
+    });
+  }
+
+  async confirmSubscriber(token) {
+    if (!token) return null;
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const sub = data.subscribers.find(x => x.token === token && x.status !== 'unsubscribed');
+      if (!sub) return null;
+      if (sub.status !== 'active') Object.assign(sub, { status: 'active', confirmed_at: nowIso() });
+      await this._write(data);
+      return sub;
+    });
+  }
+
+  async unsubscribe(token) {
+    if (!token) return false;
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const sub = data.subscribers.find(x => x.token === token);
+      if (!sub) return false;
+      Object.assign(sub, { status: 'unsubscribed', unsubscribed_at: nowIso() });
+      await this._write(data);
+      return true;
+    });
+  }
+
+  async listSubscribers({ status } = {}) {
+    const data = await this._read();
+    return data.subscribers.filter(x => !status || x.status === status);
+  }
+
+  async countSubscribers() {
+    const data = await this._read();
+    const c = { active: 0, pending: 0, unsubscribed: 0 };
+    for (const x of data.subscribers) c[x.status] = (c[x.status] || 0) + 1;
+    return c;
+  }
+
+  // Imported addresses already opted in elsewhere (Beehiiv), so they start
+  // active. People who unsubscribed here are never re-added.
+  async importSubscribers(emails, source) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const out = { added: 0, already: 0, skipped_unsubscribed: 0 };
+      for (const email of emails) {
+        const sub = data.subscribers.find(x => x.email === email);
+        if (!sub) {
+          data.subscribers.push({ id: newId(), email, status: 'active', token: newToken(), source, created_at: nowIso(), confirmed_at: nowIso() });
+          out.added++;
+        } else if (sub.status === 'unsubscribed') out.skipped_unsubscribed++;
+        else { if (sub.status !== 'active') Object.assign(sub, { status: 'active', confirmed_at: nowIso() }); out.already++; }
+      }
+      await this._write(data);
+      return out;
+    });
+  }
+
+  async recordNewsletterSend(rec) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      data.newsletter_sends = data.newsletter_sends.filter(x => x.week_key !== rec.week_key);
+      data.newsletter_sends.push({ ...rec, sent_at: nowIso() });
+      await this._write(data);
+    });
+  }
+
+  async getNewsletterSend(weekKey) {
+    const data = await this._read();
+    return data.newsletter_sends.find(x => x.week_key === weekKey) || null;
+  }
+
+  async listNewsletterSends(limit = 10) {
+    const data = await this._read();
+    return data.newsletter_sends.slice().sort((a, b) => (a.sent_at < b.sent_at ? 1 : -1)).slice(0, limit);
   }
 
   async getArchivedEvent(page) {
@@ -368,6 +466,29 @@ class PgStore {
           );
         `);
         await this.pool.query('CREATE INDEX IF NOT EXISTS traffic_day_idx ON traffic(day);');
+        // Newsletter subscribers (server/newsletter.js). token is the secret
+        // in confirm/unsubscribe links.
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS subscribers (
+            id TEXT PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'pending',
+            token TEXT NOT NULL UNIQUE,
+            source TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            confirmed_at TIMESTAMPTZ,
+            unsubscribed_at TIMESTAMPTZ
+          );
+        `);
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS newsletter_sends (
+            week_key TEXT PRIMARY KEY,
+            subject TEXT,
+            recipients INT NOT NULL DEFAULT 0,
+            failed INT NOT NULL DEFAULT 0,
+            sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `);
         await this.pool.query(`
           CREATE TABLE IF NOT EXISTS event_archive (
             page TEXT PRIMARY KEY,
@@ -509,6 +630,98 @@ class PgStore {
              click_type, click_url, bot
       FROM traffic WHERE day >= $1::date
     `, [sinceDay]);
+    return r.rows;
+  }
+
+  // ─── Newsletter ───
+  async addSubscriber({ email, source }) {
+    await this.ready();
+    const existing = (await this.pool.query('SELECT * FROM subscribers WHERE email = $1', [email])).rows[0];
+    if (existing && existing.status === 'active') return existing;
+    if (existing && existing.status === 'pending') return existing;
+    if (existing) {
+      return (await this.pool.query(
+        `UPDATE subscribers SET status = 'pending', token = $2, unsubscribed_at = NULL WHERE email = $1 RETURNING *`,
+        [email, newToken()])).rows[0];
+    }
+    return (await this.pool.query(
+      `INSERT INTO subscribers (id, email, status, token, source) VALUES ($1, $2, 'pending', $3, $4)
+       ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING *`,
+      [newId(), email, newToken(), source])).rows[0];
+  }
+
+  async confirmSubscriber(token) {
+    if (!token) return null;
+    await this.ready();
+    const r = await this.pool.query(
+      `UPDATE subscribers SET status = 'active', confirmed_at = COALESCE(confirmed_at, NOW())
+       WHERE token = $1 AND status <> 'unsubscribed' RETURNING *`, [token]);
+    return r.rows[0] || null;
+  }
+
+  async unsubscribe(token) {
+    if (!token) return false;
+    await this.ready();
+    const r = await this.pool.query(
+      `UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = NOW() WHERE token = $1`, [token]);
+    return r.rowCount > 0;
+  }
+
+  async listSubscribers({ status } = {}) {
+    await this.ready();
+    const r = status
+      ? await this.pool.query('SELECT email, status, token FROM subscribers WHERE status = $1 ORDER BY created_at', [status])
+      : await this.pool.query('SELECT email, status, token FROM subscribers ORDER BY created_at');
+    return r.rows;
+  }
+
+  async countSubscribers() {
+    await this.ready();
+    const r = await this.pool.query('SELECT status, COUNT(*)::int AS n FROM subscribers GROUP BY status');
+    const c = { active: 0, pending: 0, unsubscribed: 0 };
+    for (const row of r.rows) c[row.status] = row.n;
+    return c;
+  }
+
+  async importSubscribers(emails, source) {
+    await this.ready();
+    const out = { added: 0, already: 0, skipped_unsubscribed: 0 };
+    for (const email of emails) {
+      const existing = (await this.pool.query('SELECT status FROM subscribers WHERE email = $1', [email])).rows[0];
+      if (!existing) {
+        await this.pool.query(
+          `INSERT INTO subscribers (id, email, status, token, source, confirmed_at) VALUES ($1, $2, 'active', $3, $4, NOW())
+           ON CONFLICT (email) DO NOTHING`, [newId(), email, newToken(), source]);
+        out.added++;
+      } else if (existing.status === 'unsubscribed') {
+        out.skipped_unsubscribed++;
+      } else {
+        await this.pool.query(
+          `UPDATE subscribers SET status = 'active', confirmed_at = COALESCE(confirmed_at, NOW()) WHERE email = $1`, [email]);
+        out.already++;
+      }
+    }
+    return out;
+  }
+
+  async recordNewsletterSend(rec) {
+    await this.ready();
+    await this.pool.query(`
+      INSERT INTO newsletter_sends (week_key, subject, recipients, failed, sent_at) VALUES ($1, $2, $3, $4, NOW())
+      ON CONFLICT (week_key) DO UPDATE SET subject = EXCLUDED.subject, recipients = EXCLUDED.recipients,
+        failed = EXCLUDED.failed, sent_at = NOW()
+    `, [rec.week_key, rec.subject, rec.recipients, rec.failed]);
+  }
+
+  async getNewsletterSend(weekKey) {
+    await this.ready();
+    const r = await this.pool.query('SELECT * FROM newsletter_sends WHERE week_key = $1', [weekKey]);
+    return r.rows[0] || null;
+  }
+
+  async listNewsletterSends(limit = 10) {
+    await this.ready();
+    const r = await this.pool.query('SELECT * FROM newsletter_sends ORDER BY sent_at DESC LIMIT $1', [limit]);
     return r.rows;
   }
 

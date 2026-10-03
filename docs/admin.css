@@ -1206,3 +1206,11 @@ code {
 .traffic-num { width: 15%; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 .traffic-empty { color: var(--admin-muted); font-style: italic; }
 .traffic-note { margin-top: 1rem; font-size: 0.8rem; color: var(--admin-muted); }
+
+/* ─── Email newsletter (Newsletter tab) ─── */
+.email-nl { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--admin-border); }
+.email-nl input[type="email"], .email-nl textarea { font: inherit; padding: 0.35rem 0.5rem; border: 1px solid var(--admin-border); border-radius: var(--radius); background: var(--admin-input-bg); color: var(--admin-text); }
+.email-nl textarea { width: 100%; box-sizing: border-box; margin: 0.5rem 0; }
+.email-nl-warning { color: var(--admin-warn); font-size: 0.85rem; }
+.email-nl-frame { width: 100%; height: 640px; border: 1px solid var(--admin-border); border-radius: var(--radius); background: #fff; margin-top: 0.75rem; }
+.email-nl-import { margin-top: 1rem; }

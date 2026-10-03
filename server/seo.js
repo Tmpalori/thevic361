@@ -670,7 +670,7 @@ export function renderNotFoundPage({ siteUrl }) {
 // the first byte already has the content. docs/app.js re-renders the same
 // list on load (and still powers the admin preview), so nothing changes
 // for visitors with JS.
-export function renderHome(template, events, { siteUrl, now }) {
+export function renderHome(template, events, { siteUrl, now, signupHtml = null }) {
   const today = localDateStr(now);
   const week = currentWeek(today);
   const weekEvents = events.filter(ev => ev.date >= week[0] && ev.date <= week[6]);
@@ -684,7 +684,14 @@ export function renderHome(template, events, { siteUrl, now }) {
     },
     ...sortEvents(weekEvents).map(ev => eventJsonLd(ev, siteUrl))
   ];
-  return template
+  let page = template;
+  // When the Resend newsletter is on, our own form replaces the Beehiiv embed.
+  if (signupHtml) {
+    page = page
+      .replace(/<!--SIGNUP_START-->[\s\S]*?<!--SIGNUP_END-->/, signupHtml)
+      .replace(/<!--BEEHIIV_SCRIPTS_START-->[\s\S]*?<!--BEEHIIV_SCRIPTS_END-->/, '');
+  }
+  return page
     .replace('<p class="loading-message">Loading events...</p>', renderDays(week, events, today))
     .replace('<!--NAV-->', navHtml('/'))
     .replace('</head>', ld.map(jsonLd).join('\n') + '\n</head>');

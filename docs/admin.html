@@ -237,6 +237,27 @@
       </div>
       <textarea id="newsletter-html" class="newsletter-textarea"
                 spellcheck="false" readonly></textarea>
+
+      <div class="email-nl" id="email-nl">
+        <h3 class="traffic-h">Email newsletter (Resend)</h3>
+        <div id="email-nl-status" class="sources-summary"></div>
+        <p id="email-nl-warning" class="email-nl-warning" hidden></p>
+        <div class="newsletter-actions">
+          <button id="email-nl-preview" type="button" class="btn btn--outline">Preview this week's email</button>
+          <input id="email-nl-test-to" type="email" placeholder="Test address" aria-label="Test address">
+          <button id="email-nl-test" type="button" class="btn btn--outline">Send test</button>
+          <button id="email-nl-send" type="button" class="btn btn--primary">Send to subscribers</button>
+        </div>
+        <p id="email-nl-msg" class="sources-message" role="status" aria-live="polite"></p>
+        <iframe id="email-nl-frame" class="email-nl-frame" title="Newsletter preview" hidden></iframe>
+        <details class="email-nl-import">
+          <summary>Import subscribers (e.g. your Beehiiv export)</summary>
+          <textarea id="email-nl-import-text" rows="5" placeholder="Paste email addresses, one per line or comma-separated"></textarea>
+          <button id="email-nl-import" type="button" class="btn btn--outline">Import</button>
+        </details>
+        <h3 class="traffic-h">Recent sends</h3>
+        <table class="traffic-table" id="email-nl-sends"></table>
+      </div>
     </section>
 
     <!-- ─── SOURCES TAB ─── -->

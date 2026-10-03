@@ -48,13 +48,17 @@
     "event_potential": "Daily specials, live events, Froggy Feast annual event",
     "confidence": "medium",
     "notes": "Has website froggysgrub.com — FB page handle not confirmed directly",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "froggysgrubandpub"
+    ],
+    "instagram_url": "https://www.instagram.com/froggysgrubandpub/"
   },
   {
     "name": "Greek's 205 Bar",
     "category": "Bar / Live Music",
-    "facebook_page": "https://www.facebook.com/greekbros",
-    "facebook_events": "https://www.facebook.com/greekbros/events",
+    "facebook_page": "https://www.facebook.com/Greeks205/",
+    "facebook_events": "https://www.facebook.com/Greeks205/events",
     "event_potential": "Live music, grilled steak, back patio events",
     "confidence": "high",
     "notes": "Also known as Greek Bros. Oyster Bar & Grill — website greekbros.com",
@@ -81,8 +85,8 @@
   {
     "name": "Brown Bag Saloon",
     "category": "Bar",
-    "facebook_page": "https://www.facebook.com/BrownBagSaloon",
-    "facebook_events": "https://www.facebook.com/BrownBagSaloon/events",
+    "facebook_page": "https://www.facebook.com/596688820359365",
+    "facebook_events": "https://www.facebook.com/596688820359365/events",
     "event_potential": "Local bar, occasional events",
     "confidence": "medium",
     "notes": "8609 N. Navarro St — confirmed Facebook exists, handle not confirmed",
@@ -91,8 +95,8 @@
   {
     "name": "Cowgirls Dance Hall",
     "category": "Bar / Music",
-    "facebook_page": "https://www.facebook.com/CowgirlsDanceHall",
-    "facebook_events": "https://www.facebook.com/CowgirlsDanceHall/events",
+    "facebook_page": "https://www.facebook.com/p/Cowgirls-Dance-Hall-61565686846148/",
+    "facebook_events": "https://www.facebook.com/p/Cowgirls-Dance-Hall-61565686846148/events",
     "event_potential": "Country dance hall, live music, DJ nights",
     "confidence": "low",
     "notes": "Could not confirm FB handle",
@@ -101,18 +105,22 @@
   {
     "name": "Dodge City Saloon",
     "category": "Bar",
-    "facebook_page": "https://www.facebook.com/DodgeCitySaloon",
-    "facebook_events": "https://www.facebook.com/DodgeCitySaloon/events",
+    "facebook_page": "https://www.facebook.com/DCSaloon/",
+    "facebook_events": "https://www.facebook.com/DCSaloon/events",
     "event_potential": "Live music, karaoke, dance floor",
     "confidence": "medium",
     "notes": "Has website dcsaloon.com with event schedule — also worth scraping directly",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "dodgecityvictoriatx"
+    ],
+    "instagram_url": "https://www.instagram.com/dodgecityvictoriatx/"
   },
   {
     "name": "Lone Star Tavern",
     "category": "Bar",
-    "facebook_page": "https://www.facebook.com/lonestartavern",
-    "facebook_events": "https://www.facebook.com/lonestartavern/events",
+    "facebook_page": "https://www.facebook.com/lonestartavernvictoria",
+    "facebook_events": "https://www.facebook.com/lonestartavernvictoria/events",
     "event_potential": "Local bar events",
     "confidence": "high",
     "notes": "URL confirmed in search",
@@ -121,8 +129,8 @@
   {
     "name": "The Wellhead Tavern",
     "category": "Bar",
-    "facebook_page": "https://www.facebook.com/WellheadTavern",
-    "facebook_events": "https://www.facebook.com/WellheadTavern/events",
+    "facebook_page": "https://www.facebook.com/thewellheadtavern/",
+    "facebook_events": "https://www.facebook.com/thewellheadtavern/events",
     "event_potential": "Bike shows, seasonal events",
     "confidence": "medium",
     "notes": "Confirmed FB presence, handle not directly confirmed",
@@ -131,8 +139,8 @@
   {
     "name": "Shooters Bar",
     "category": "Bar",
-    "facebook_page": "https://www.facebook.com/ShootersBarVictoriaTX",
-    "facebook_events": "https://www.facebook.com/ShootersBarVictoriaTX/events",
+    "facebook_page": "https://www.facebook.com/shooters.bar.92",
+    "facebook_events": "https://www.facebook.com/shooters.bar.92/events",
     "event_potential": "Bar events",
     "confidence": "high",
     "notes": "Handle confirmed in search",
@@ -146,8 +154,8 @@
   {
     "name": "Another Pour Decision Bar & Grill",
     "category": "Restaurant / Bar",
-    "facebook_page": "https://www.facebook.com/AnotherPourDecision",
-    "facebook_events": "https://www.facebook.com/AnotherPourDecision/events",
+    "facebook_page": "https://www.facebook.com/p/Another-Pour-Decision-100085258271146/",
+    "facebook_events": "https://www.facebook.com/p/Another-Pour-Decision-100085258271146/events",
     "event_potential": "Live music during lunch, local events",
     "confidence": "medium",
     "notes": "221 S Main St — confirmed FB presence, handle inferred",
@@ -156,8 +164,8 @@
   {
     "name": "Mi Casita Bar & Grill",
     "category": "Restaurant / Bar",
-    "facebook_page": "https://www.facebook.com/MiCasitaBarAndGrill",
-    "facebook_events": "https://www.facebook.com/MiCasitaBarAndGrill/events",
+    "facebook_page": "https://www.facebook.com/p/Mi-Casita-Bar-Grill-61566003251709/",
+    "facebook_events": "https://www.facebook.com/p/Mi-Casita-Bar-Grill-61566003251709/events",
     "event_potential": "Tex-Mex, events",
     "confidence": "medium",
     "notes": "Website micasitabarandgrill.com links to FB",
@@ -166,8 +174,8 @@
   {
     "name": "Mi Tequila Mexican Bar & Grill",
     "category": "Restaurant / Bar",
-    "facebook_page": "https://www.facebook.com/MiTequilaVictoriaTX",
-    "facebook_events": "https://www.facebook.com/MiTequilaVictoriaTX/events",
+    "facebook_page": "https://www.facebook.com/p/Mi-Tierra-Bar-Grill-Victoria-100095209997569/",
+    "facebook_events": "https://www.facebook.com/p/Mi-Tierra-Bar-Grill-Victoria-100095209997569/events",
     "event_potential": "Bar events, live music",
     "confidence": "low",
     "notes": "Handle not confirmed",
@@ -176,8 +184,8 @@
   {
     "name": "Las Palmas Mexican Bar and Grill",
     "category": "Restaurant / Bar",
-    "facebook_page": "https://www.facebook.com/LasPalmasVictoriaTX",
-    "facebook_events": "https://www.facebook.com/LasPalmasVictoriaTX/events",
+    "facebook_page": "https://www.facebook.com/p/Las-Palmas-Bar-and-Grill-100063943904668/",
+    "facebook_events": "https://www.facebook.com/p/Las-Palmas-Bar-and-Grill-100063943904668/events",
     "event_potential": "Mexican restaurant events",
     "confidence": "medium",
     "notes": "Handle not confirmed",
@@ -199,8 +207,11 @@
     "notes": "Handle not confirmed",
     "source": "seed",
     "tier": "HIGH",
-    "instagram_url": "https://www.instagram.com/p/DAmq1L3trk4/",
-    "website": "https://lacantina-victoria.com"
+    "instagram_url": "https://www.instagram.com/lacantinavictoria/",
+    "website": "https://lacantina-victoria.com",
+    "instagrams": [
+      "lacantinavictoria"
+    ]
   },
   {
     "name": "Franklin's Backyard Bayou Bar & Grill",
@@ -225,28 +236,28 @@
   {
     "name": "Goat Night Club",
     "category": "Nightclub",
-    "facebook_page": "",
-    "facebook_events": "",
     "event_potential": "Nightclub",
     "confidence": "low",
-    "notes": "Could not find — may be closed or name is different locally",
-    "source": "seed"
+    "notes": "Permanently closed (Apple Maps; last events 2023). Could not find — may be closed or name is different locally",
+    "source": "seed",
+    "instagrams": [],
+    "tier": "LOW"
   },
   {
     "name": "Limelight Club",
     "category": "Nightclub",
-    "facebook_page": "",
-    "facebook_events": "",
     "event_potential": "Nightclub",
     "confidence": "low",
-    "notes": "Could not find — may be closed or name differs",
-    "source": "seed"
+    "notes": "No Victoria presence found (2026-10 check); only a Baytown club. Could not find — may be closed or name differs",
+    "source": "seed",
+    "instagrams": [],
+    "tier": "LOW"
   },
   {
     "name": "Gulf Breeze Winery",
     "category": "Winery",
-    "facebook_page": "https://www.facebook.com/GulfBreezeWinery",
-    "facebook_events": "https://www.facebook.com/GulfBreezeWinery/events",
+    "facebook_page": "https://www.facebook.com/GBWinery/",
+    "facebook_events": "https://www.facebook.com/GBWinery/events",
     "event_potential": "Wine tastings, winery events",
     "confidence": "medium",
     "notes": "Website gulfbreezewinery.com links to FB",
@@ -271,8 +282,8 @@
   {
     "name": "Weber Brewing",
     "category": "Brewery",
-    "facebook_page": "https://www.facebook.com/WeberBrewing",
-    "facebook_events": "https://www.facebook.com/WeberBrewing/events",
+    "facebook_page": "https://www.facebook.com/p/Weber-Brewing-61555658972596/",
+    "facebook_events": "https://www.facebook.com/p/Weber-Brewing-61555658972596/events",
     "event_potential": "Biergarten events, live music",
     "confidence": "high",
     "notes": "Re-opened downtown Victoria fall 2025 — linked from TX Craft Brewers Guild",
@@ -307,13 +318,17 @@
     "event_potential": "Historic deli, occasional events",
     "confidence": "low",
     "notes": "Handle not confirmed",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "fossatisdelicatessen"
+    ],
+    "instagram_url": "https://www.instagram.com/fossatisdelicatessen/"
   },
   {
     "name": "Raven's at the Woodlawn",
     "category": "Restaurant / Bar",
-    "facebook_page": "https://www.facebook.com/RavensAtTheWoodlawn",
-    "facebook_events": "https://www.facebook.com/RavensAtTheWoodlawn/events",
+    "facebook_page": "https://www.facebook.com/p/Ravens-at-the-Woodlawn-100054214073015/",
+    "facebook_events": "https://www.facebook.com/p/Ravens-at-the-Woodlawn-100054214073015/events",
     "event_potential": "Bar events",
     "confidence": "low",
     "notes": "Handle not confirmed",
@@ -322,38 +337,46 @@
   {
     "name": "El Paso Tacos & Tequila",
     "category": "Restaurant / Bar",
-    "facebook_page": "https://www.facebook.com/ElPasoTacosVictoriaTX",
-    "facebook_events": "https://www.facebook.com/ElPasoTacosVictoriaTX/events",
     "event_potential": "Restaurant/bar events",
     "confidence": "low",
-    "notes": "Handle not confirmed",
-    "source": "seed"
+    "notes": "Closed (Yelp). 212 S Main is now La Cantina Tacos & Tequila. Handle not confirmed",
+    "source": "seed",
+    "instagrams": [],
+    "tier": "LOW"
   },
   {
     "name": "Grapevine Cafe & Catering",
     "category": "Restaurant",
-    "facebook_page": "https://www.facebook.com/GrapevineVictoriaTX",
-    "facebook_events": "https://www.facebook.com/GrapevineVictoriaTX/events",
+    "facebook_page": "https://www.facebook.com/p/Grapevine-Cafe-and-Catering-100030635546887/",
+    "facebook_events": "https://www.facebook.com/p/Grapevine-Cafe-and-Catering-100030635546887/events",
     "event_potential": "Catering events, community gatherings",
     "confidence": "low",
     "notes": "Handle not confirmed",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "thegrapevinecafe"
+    ],
+    "instagram_url": "https://www.instagram.com/thegrapevinecafe/"
   },
   {
     "name": "Gardenhouse Coffee & Espresso Bar",
     "category": "Coffee Shop",
-    "facebook_page": "https://www.facebook.com/GardenhouseCoffee",
-    "facebook_events": "https://www.facebook.com/GardenhouseCoffee/events",
+    "facebook_page": "https://www.facebook.com/p/Gardenhouse-Coffee-Espresso-Bar-100091360621814/",
+    "facebook_events": "https://www.facebook.com/p/Gardenhouse-Coffee-Espresso-Bar-100091360621814/events",
     "event_potential": "Coffee shop events, community gatherings",
     "confidence": "low",
     "notes": "Handle not confirmed",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "gardenhousecoffee"
+    ],
+    "instagram_url": "https://www.instagram.com/gardenhousecoffee/"
   },
   {
     "name": "The Box Coffee Bar",
     "category": "Coffee Shop",
-    "facebook_page": "https://www.facebook.com/TheBoxCoffeeBar",
-    "facebook_events": "https://www.facebook.com/TheBoxCoffeeBar/events",
+    "facebook_page": "https://www.facebook.com/theboxcoffee/",
+    "facebook_events": "https://www.facebook.com/theboxcoffee/events",
     "event_potential": "Coffee shop events",
     "confidence": "medium",
     "notes": "Handle not confirmed",
@@ -368,12 +391,16 @@
   {
     "name": "Stir Soda Shoppe",
     "category": "Soda Shop",
-    "facebook_page": "https://www.facebook.com/StirSodaShoppe",
-    "facebook_events": "https://www.facebook.com/StirSodaShoppe/events",
+    "facebook_page": "https://www.facebook.com/stirsoda/",
+    "facebook_events": "https://www.facebook.com/stirsoda/events",
     "event_potential": "Community events, pop-ups",
     "confidence": "low",
     "notes": "Handle not confirmed",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "stirsoda"
+    ],
+    "instagram_url": "https://www.instagram.com/stirsoda/"
   },
   {
     "name": "Theatre Victoria",
@@ -409,8 +436,8 @@
   {
     "name": "The Playback Venue & Arcade",
     "category": "Entertainment",
-    "facebook_page": "https://www.facebook.com/ThePlaybackVictoriaTX",
-    "facebook_events": "https://www.facebook.com/ThePlaybackVictoriaTX/events",
+    "facebook_page": "https://www.facebook.com/p/The-Playback-Venue-Arcade-61571005753166/",
+    "facebook_events": "https://www.facebook.com/p/The-Playback-Venue-Arcade-61571005753166/events",
     "event_potential": "Arcade events, gaming nights, birthday parties",
     "confidence": "high",
     "notes": "Handle confirmed in search",
@@ -439,7 +466,11 @@
     "event_potential": "Art shows, workshops, monthly meetings",
     "confidence": "medium",
     "notes": "Website victoriaartleague.org links to FB",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "victoriaartleague"
+    ],
+    "instagram_url": "https://www.instagram.com/victoriaartleague/"
   },
   {
     "name": "Crossroads Art House",
@@ -449,17 +480,25 @@
     "event_potential": "Art events, community gatherings",
     "confidence": "medium",
     "notes": "Owners confirmed FB is primary channel",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "crossroadsart"
+    ],
+    "instagram_url": "https://www.instagram.com/crossroadsart/"
   },
   {
     "name": "The Colorful Canvas",
     "category": "Arts",
-    "facebook_page": "https://www.facebook.com/TheColorfulCanvas",
-    "facebook_events": "https://www.facebook.com/TheColorfulCanvas/events",
+    "facebook_page": "https://www.facebook.com/Colorfulcanvas313rio/",
+    "facebook_events": "https://www.facebook.com/Colorfulcanvas313rio/events",
     "event_potential": "Paint nights, art classes",
     "confidence": "low",
     "notes": "Handle not confirmed",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "colorfulcanvas"
+    ],
+    "instagram_url": "https://www.instagram.com/colorfulcanvas/"
   },
   {
     "name": "Century Lanes Bowling",
@@ -474,12 +513,16 @@
   {
     "name": "The Axe Society",
     "category": "Entertainment",
-    "facebook_page": "https://www.facebook.com/TheAxeSocietyVictoriaTX",
-    "facebook_events": "https://www.facebook.com/TheAxeSocietyVictoriaTX/events",
+    "facebook_page": "https://www.facebook.com/theaxesociety/",
+    "facebook_events": "https://www.facebook.com/theaxesociety/events",
     "event_potential": "Axe throwing, team events",
     "confidence": "medium",
     "notes": "FB presence confirmed in YouTube/search",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "theaxesociety"
+    ],
+    "instagram_url": "https://www.instagram.com/theaxesociety/"
   },
   {
     "name": "Victoria Farmers Market",
@@ -491,17 +534,24 @@
     "notes": "Run by Food Bank of the Golden Crescent — posts to FB/IG regularly",
     "source": "seed",
     "tier": "HIGH",
-    "instagram_url": "https://www.instagram.com/p/DW_nOEyDUFt/"
+    "instagram_url": "https://www.instagram.com/victoriafarmersmarket/",
+    "instagrams": [
+      "victoriafarmersmarket"
+    ]
   },
   {
     "name": "Victoria Generals Baseball",
     "category": "Sports",
-    "facebook_page": "https://www.facebook.com/VictoriaGenerals",
-    "facebook_events": "https://www.facebook.com/VictoriaGenerals/events",
+    "facebook_page": "https://www.facebook.com/victoria.generals/",
+    "facebook_events": "https://www.facebook.com/victoria.generals/events",
     "event_potential": "Home games, theme nights, family events — summer season",
     "confidence": "medium",
     "notes": "Website victoriagenerals.com — game schedule scrapable directly",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "vgenerals"
+    ],
+    "instagram_url": "https://www.instagram.com/vgenerals/"
   },
   {
     "name": "The Texas Zoo",
@@ -527,27 +577,39 @@
     "event_potential": "Craft markets, vendor pop-ups",
     "confidence": "medium",
     "notes": "Woman/Latina-owned — FB is primary channel",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "southerncraftgrove"
+    ],
+    "instagram_url": "https://www.instagram.com/southerncraftgrove/"
   },
   {
     "name": "The Market of Victoria",
     "category": "Market",
-    "facebook_page": "https://www.facebook.com/TheMarketOfVictoria",
-    "facebook_events": "https://www.facebook.com/TheMarketOfVictoria/events",
+    "facebook_page": "https://www.facebook.com/ShopTheMarketofVictoria/",
+    "facebook_events": "https://www.facebook.com/ShopTheMarketofVictoria/events",
     "event_potential": "Market events",
     "confidence": "low",
     "notes": "Handle not confirmed",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "themarketofvictoriatx"
+    ],
+    "instagram_url": "https://www.instagram.com/themarketofvictoriatx/"
   },
   {
     "name": "Huvar's Artisan Market",
     "category": "Market",
-    "facebook_page": "https://www.facebook.com/HuvarsArtisanMarket",
-    "facebook_events": "https://www.facebook.com/HuvarsArtisanMarket/events",
+    "facebook_page": "https://www.facebook.com/huvars/",
+    "facebook_events": "https://www.facebook.com/huvars/events",
     "event_potential": "Artisan market events",
     "confidence": "low",
     "notes": "Handle not confirmed",
-    "source": "seed"
+    "source": "seed",
+    "instagrams": [
+      "huvars.artisan.market"
+    ],
+    "instagram_url": "https://www.instagram.com/huvars.artisan.market/"
   },
   {
     "name": "Victoria Main Street Program",
@@ -560,7 +622,9 @@
       "victoriamainstreet"
     ],
     "instagram_url": "https://www.instagram.com/victoriamainstreet/",
-    "website": "https://victoriamainstreet.org"
+    "website": "https://victoriamainstreet.org",
+    "facebook_page": "https://www.facebook.com/victoriamainstreet/",
+    "facebook_events": "https://www.facebook.com/victoriamainstreet/events"
   },
   {
     "name": "Discover Victoria Texas",
@@ -573,7 +637,9 @@
       "discovervictoriatexas"
     ],
     "instagram_url": "https://www.instagram.com/discovervictoriatexas/",
-    "website": "https://www.discovervictoriatexas.com"
+    "website": "https://www.discovervictoriatexas.com",
+    "facebook_page": "https://www.facebook.com/discovervictoriatexas/",
+    "facebook_events": "https://www.facebook.com/discovervictoriatexas/events"
   },
   {
     "name": "Victoria Fine Arts Association",
@@ -596,7 +662,9 @@
     "event_potential": "Primary performing arts venue for VTX; hosts Theatre Victoria, ballet, concerts, festivals",
     "source": "seed-csv-2026-04",
     "instagram_url": "https://www.instagram.com/explore/locations/1421941/",
-    "website": "https://www.weldercenter.org"
+    "website": "https://www.weldercenter.org",
+    "facebook_page": "https://www.facebook.com/LeoJWelderCenterForThePerformingArts/",
+    "facebook_events": "https://www.facebook.com/LeoJWelderCenterForThePerformingArts/events"
   },
   {
     "name": "Victoria Bach Festival",
@@ -608,7 +676,9 @@
     "instagrams": [
       "victoriabachfestival"
     ],
-    "instagram_url": "https://www.instagram.com/victoriabachfestival/"
+    "instagram_url": "https://www.instagram.com/victoriabachfestival/",
+    "facebook_page": "https://www.facebook.com/VictoriaBachFestival/",
+    "facebook_events": "https://www.facebook.com/VictoriaBachFestival/events"
   },
   {
     "name": "Tejas Fest",
@@ -620,7 +690,9 @@
     "instagrams": [
       "tejasfest"
     ],
-    "instagram_url": "https://www.instagram.com/tejasfest/"
+    "instagram_url": "https://www.instagram.com/tejasfest/",
+    "facebook_page": "https://www.facebook.com/tejasfestvtx/",
+    "facebook_events": "https://www.facebook.com/tejasfestvtx/events"
   },
   {
     "name": "Shadow's Bar",
@@ -644,7 +716,9 @@
       "starlightdancevictoria"
     ],
     "instagram_url": "https://www.instagram.com/starlightdancevictoria/",
-    "website": "https://www.starlightvictoria.com"
+    "website": "https://www.starlightvictoria.com",
+    "facebook_page": "https://www.facebook.com/starlightvictoria/",
+    "facebook_events": "https://www.facebook.com/starlightvictoria/events"
   },
   {
     "name": "Victoria All Star Dance Academy",
@@ -652,7 +726,9 @@
     "tier": "MEDIUM",
     "confidence": "medium",
     "event_potential": "5400 sq ft studio + 300-person event space; competitions and workshops",
-    "source": "seed-csv-2026-04"
+    "source": "seed-csv-2026-04",
+    "facebook_page": "https://www.facebook.com/VictoriaAllstarDanceAcademy1/",
+    "facebook_events": "https://www.facebook.com/VictoriaAllstarDanceAcademy1/events"
   },
   {
     "name": "Victoria Community Center",
@@ -668,7 +744,9 @@
     "tier": "MEDIUM",
     "confidence": "medium",
     "event_potential": "Countryside 500-cap charming outdoor setting near Victoria",
-    "source": "seed-csv-2026-04"
+    "source": "seed-csv-2026-04",
+    "facebook_page": "https://www.facebook.com/p/Spring-Creek-Place-Event-Center-100063924074635/",
+    "facebook_events": "https://www.facebook.com/p/Spring-Creek-Place-Event-Center-100063924074635/events"
   },
   {
     "name": "361 Pop-Up Shops & Events Venue LLC",
@@ -690,7 +768,9 @@
     "instagrams": [
       "iconicvtx"
     ],
-    "instagram_url": "https://www.instagram.com/iconicvtx/"
+    "instagram_url": "https://www.instagram.com/iconicvtx/",
+    "facebook_page": "https://www.facebook.com/iconicconsignment/",
+    "facebook_events": "https://www.facebook.com/iconicconsignment/events"
   },
   {
     "name": "Here's the Scoop VTX",
@@ -710,7 +790,9 @@
     "tier": "MEDIUM",
     "confidence": "medium",
     "event_potential": "Go-karts + adventure golf + arcade + seasonal events; 78 Tate Rd Victoria TX",
-    "source": "seed-csv-2026-04"
+    "source": "seed-csv-2026-04",
+    "facebook_page": "https://www.facebook.com/OutlawPassFunCenter/",
+    "facebook_events": "https://www.facebook.com/OutlawPassFunCenter/events"
   },
   {
     "name": "Spirit Inn of Mission Valley",
@@ -719,7 +801,9 @@
     "confidence": "medium",
     "event_potential": "Near Victoria, overlooking Guadalupe, customizable packages, entertainment available",
     "source": "seed-csv-2026-04",
-    "website": "https://spiritinnmv.com"
+    "website": "https://spiritinnmv.com",
+    "facebook_page": "https://www.facebook.com/spiritinnmv/",
+    "facebook_events": "https://www.facebook.com/spiritinnmv/events"
   },
   {
     "name": "Victoria Public Library",
@@ -728,7 +812,9 @@
     "confidence": "medium",
     "event_potential": "Regular public workshops, Fun Fridays, author events, Baddie Basics series",
     "source": "seed-csv-2026-04",
-    "website": "https://www.victoriapubliclibrary.org"
+    "website": "https://www.victoriapubliclibrary.org",
+    "facebook_page": "https://www.facebook.com/VictoriaPublicLibrary/",
+    "facebook_events": "https://www.facebook.com/VictoriaPublicLibrary/events"
   },
   {
     "name": "Victoria College (VC)",
@@ -737,7 +823,13 @@
     "confidence": "medium",
     "event_potential": "Public-facing events, College Fair, Student Government events",
     "source": "seed-csv-2026-04",
-    "website": "https://victoriacollege.edu"
+    "website": "https://victoriacollege.edu",
+    "instagrams": [
+      "viccollege"
+    ],
+    "instagram_url": "https://www.instagram.com/viccollege/",
+    "facebook_page": "https://www.facebook.com/VictoriaCollege/",
+    "facebook_events": "https://www.facebook.com/VictoriaCollege/events"
   },
   {
     "name": "University of Houston Victoria (UHV)",
@@ -746,7 +838,14 @@
     "confidence": "medium",
     "event_potential": "UHV Discovers speaker series, public events, free and open to community",
     "source": "seed-csv-2026-04",
-    "website": "https://www.uhv.edu"
+    "website": "https://www.uhv.edu",
+    "instagrams": [
+      "tamu_victoria"
+    ],
+    "instagram_url": "https://www.instagram.com/tamu_victoria/",
+    "facebook_page": "https://www.facebook.com/tamuvictoria/",
+    "facebook_events": "https://www.facebook.com/tamuvictoria/events",
+    "notes": "Now Texas A&M University-Victoria."
   },
   {
     "name": "De Leon Plaza",
@@ -762,15 +861,19 @@
     "tier": "HIGH",
     "confidence": "high",
     "event_potential": "Memorial Weekend Bash + Pacifico events + large outdoor concerts; 407 Memorial Dr",
-    "source": "seed-csv-2026-04"
+    "source": "seed-csv-2026-04",
+    "facebook_page": "https://www.facebook.com/VictoriaParksandRecreation/",
+    "facebook_events": "https://www.facebook.com/VictoriaParksandRecreation/events"
   },
   {
     "name": "Tierra Mexican Grill Cantina Bar",
     "category": "Mexican Restaurant / Live Music",
-    "tier": "HIGH",
-    "confidence": "high",
+    "tier": "LOW",
+    "confidence": "low",
     "event_potential": "Saturday night live music performers; event hosting; downtown VTX",
-    "source": "seed-csv-2026-04"
+    "source": "seed-csv-2026-04",
+    "notes": "No Victoria presence found (2026-10 check); may be closed.",
+    "instagrams": []
   },
   {
     "name": "The Water Well Cafe 361",
@@ -782,7 +885,9 @@
     "instagrams": [
       "thewaterwellcafe"
     ],
-    "instagram_url": "https://www.instagram.com/thewaterwellcafe/"
+    "instagram_url": "https://www.instagram.com/thewaterwellcafe/",
+    "facebook_page": "https://www.facebook.com/thewaterwellcafe/",
+    "facebook_events": "https://www.facebook.com/thewaterwellcafe/events"
   },
   {
     "name": "Forum Club",
@@ -822,7 +927,9 @@
     "tier": "MEDIUM",
     "confidence": "medium",
     "event_potential": "4.9/5 TripAdvisor; concerts + lectures + drama + art shows open to public",
-    "source": "seed-csv-2026-04"
+    "source": "seed-csv-2026-04",
+    "facebook_page": "https://www.facebook.com/VictoriaISDFineArts/",
+    "facebook_events": "https://www.facebook.com/VictoriaISDFineArts/events"
   },
   {
     "name": "Coleto Creek Park & Reservoir",
@@ -859,7 +966,9 @@
     "tier": "MEDIUM",
     "confidence": "medium",
     "event_potential": "Hosts competitive events (Battle for the Monument 2024); Victoria TX location",
-    "source": "seed-csv-2026-04"
+    "source": "seed-csv-2026-04",
+    "facebook_page": "https://www.facebook.com/fitstrongunitedcrossfit/",
+    "facebook_events": "https://www.facebook.com/fitstrongunitedcrossfit/events"
   },
   {
     "name": "Mister Boleton",
@@ -879,7 +988,9 @@
     "instagrams": [
       "meet.victoria"
     ],
-    "instagram_url": "https://www.instagram.com/meet.victoria/"
+    "instagram_url": "https://www.instagram.com/meet.victoria/",
+    "facebook_page": "https://www.facebook.com/downtownvtx/",
+    "facebook_events": "https://www.facebook.com/downtownvtx/events"
   },
   {
     "name": "Victoria Main Street Market Days",
@@ -887,7 +998,13 @@
     "tier": "MEDIUM",
     "confidence": "medium",
     "event_potential": "https://victoriamainstreet.org",
-    "source": "seed-csv-2026-04"
+    "source": "seed-csv-2026-04",
+    "instagrams": [
+      "victoriamainstreet"
+    ],
+    "instagram_url": "https://www.instagram.com/victoriamainstreet/",
+    "facebook_page": "https://www.facebook.com/victoriamainstreet/",
+    "facebook_events": "https://www.facebook.com/victoriamainstreet/events"
   },
   {
     "name": "Community Transformation Church",
@@ -895,7 +1012,9 @@
     "tier": "LOW",
     "confidence": "low",
     "event_potential": "Public worship nights on Eventbrite; Victoria TX community events",
-    "source": "seed-csv-2026-04"
+    "source": "seed-csv-2026-04",
+    "facebook_page": "https://www.facebook.com/people/Community-Transformation-Church-Victoria/100095031101655/",
+    "facebook_events": "https://www.facebook.com/people/Community-Transformation-Church-Victoria/100095031101655/events"
   },
   {
     "name": "First English Evangelical Lutheran Church",
@@ -914,7 +1033,13 @@
     "confidence": "low",
     "event_potential": "Public events calendar, women's brunch, VBS, community programming",
     "source": "seed-csv-2026-04",
-    "website": "https://trinityvictoria.org"
+    "website": "https://trinityvictoria.org",
+    "instagrams": [
+      "trinityesvictoria"
+    ],
+    "instagram_url": "https://www.instagram.com/trinityesvictoria/",
+    "facebook_page": "https://www.facebook.com/TrinityEpiscopalVictoriaTx/",
+    "facebook_events": "https://www.facebook.com/TrinityEpiscopalVictoriaTx/events"
   },
   {
     "name": "Hilton Garden Inn Victoria",

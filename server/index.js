@@ -26,6 +26,7 @@ import { createAuth } from './auth.js';
 import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
+import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import crypto from 'node:crypto';
 import {
   HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
@@ -947,6 +948,14 @@ export async function createApp(opts = {}) {
   app.get('/events.json', serveEventsJson);
   app.get('/docs/events.json', serveEventsJson);
 
+  // ─── Newsletter (Resend; see server/newsletter.js) ───
+  const newsletter = newsletterConfig(process.env, opts);
+  registerNewsletter(app, {
+    store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
+    getPublicPayload, createRateLimiter, config: newsletter,
+    resend: opts.resend || createResend(newsletter.apiKey)
+  });
+
   // ─── Server-rendered pages (SEO + AI crawlers) ───
   // See server/seo.js for why. Registered before express.static so "/"
   // gets the rendered homepage instead of the raw docs/index.html.
@@ -1006,7 +1015,9 @@ export async function createApp(opts = {}) {
     if (!indexTemplate || opts.reloadTemplates) {
       indexTemplate = await fsp.readFile(path.join(DOCS_DIR, 'index.html'), 'utf8');
     }
-    sendHtml(res, renderHome(indexTemplate, payload.events, ctx));
+    sendHtml(res, renderHome(indexTemplate, payload.events, {
+      ...ctx, signupHtml: newsletter.enabled ? signupFormHtml() : null
+    }));
   }));
 
   for (const page of HUB_PAGES) {
