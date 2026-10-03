@@ -28,6 +28,7 @@ import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { stripeConfig, createStripe, createSponsors } from './sponsors.js';
+import { slackConfig, createSlack } from './slack.js';
 import crypto from 'node:crypto';
 import {
   HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
@@ -66,6 +67,8 @@ export async function createApp(opts = {}) {
   // site and where all real traffic lands; the bare domain 301s to it so
   // search engines see one site instead of two copies.
   const siteUrl = (opts.siteUrl ?? process.env.SITE_URL ?? 'https://www.thevic361.com').replace(/\/+$/, '');
+  // Owner pings in Slack (server/slack.js); a no-op until SLACK_WEBHOOK_URL is set.
+  const slack = opts.slack || createSlack(slackConfig(process.env, opts));
   const canonicalHost = new URL(siteUrl).host;
   const apexHost = canonicalHost.replace(/^www\./, '');
   app.use((req, res, next) => {
@@ -143,7 +146,7 @@ export async function createApp(opts = {}) {
   // be registered before the JSON parser below. Its page routes come later.
   const stripeCfg = stripeConfig(process.env, opts);
   const sponsors = createSponsors({
-    store, siteUrl, config: stripeCfg,
+    store, siteUrl, config: stripeCfg, slack,
     nowFn: () => (opts.now || (() => new Date()))(),
     stripe: opts.stripe || createStripe(stripeCfg.secretKey),
     getVenues: () => venues,
@@ -301,6 +304,14 @@ export async function createApp(opts = {}) {
       review_history: [{ at: now, action: 'submitted', note: 'Public submission' }]
     };
     await store.insert(row);
+    const ev = row.payload;
+    slack.notify({
+      title: '📝 New event submitted',
+      fields: [['Event', ev.name], ['When', [ev.date, ev.time].filter(Boolean).join(' ')], ['Venue', ev.venue],
+        ['From', [row.submitter_name, row.submitter_email].filter(Boolean).join(' · ')]],
+      text: ev.description ? ev.description.slice(0, 300) : '',
+      link: `${siteUrl}/admin.html`, footer: 'Review it in the Submissions tab'
+    });
     return res.status(201).json({ ok: true, queued: true, id: row.id });
   });
 
@@ -977,7 +988,7 @@ export async function createApp(opts = {}) {
   const nlResend = opts.resend || createResend(newsletter.apiKey);
   registerNewsletter(app, {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
-    getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend
+    getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend, slack
   });
 
   // ─── Server-rendered pages (SEO + AI crawlers) ───
@@ -1143,6 +1154,8 @@ export async function createApp(opts = {}) {
     // isn't worth a 500 or an error log line.
     if (req.path === '/api/track') return res.status(204).end();
     console.error('[server] error:', err);
+    slack.alert(`500:${req.path}:${err && err.message}`, 'Site error (500)',
+      `${req.method} ${req.path}\n${(err && err.message) || err}`);
     if (req.path.startsWith('/api/')) {
       return res.status(500).json({ ok: false, error: 'server-error' });
     }
@@ -1150,7 +1163,7 @@ export async function createApp(opts = {}) {
   });
 
   await archiveReady;
-  return { app, store, storeBundle };
+  return { app, store, storeBundle, slack };
 }
 
 // Start the server when invoked directly. Importing this module (e.g. from
@@ -1163,12 +1176,29 @@ const isMain = (() => {
 
 if (isMain) {
   const port = Number(process.env.PORT) || 3000;
+  const cfg = slackConfig();
+  const bootSlack = createSlack(cfg);
+  // A crash takes the site down until Railway restarts it; say so first.
+  process.on('uncaughtException', err => {
+    console.error('[thevic361] uncaught:', err);
+    bootSlack.alert('crash', 'Server crashed and is restarting', err && err.stack ? err.stack.slice(0, 1500) : String(err))
+      .finally(() => process.exit(1));
+  });
+  process.on('unhandledRejection', err => {
+    console.error('[thevic361] unhandled rejection:', err);
+    bootSlack.alert(`rejection:${err && err.message}`, 'Unhandled error in the server', (err && err.message) || String(err));
+  });
   createApp().then(({ app, storeBundle }) => {
     app.listen(port, () => {
       console.log(`[thevic361] listening on :${port} (storage=${storeBundle.kind})`);
+      if (cfg.environment === 'production') {
+        bootSlack.notify({ title: '✅ The Vic 361 deployed', text: `Live on ${storeBundle.kind} storage.`,
+          footer: cfg.commit ? `deploy ${cfg.commit}` : '' });
+      }
     });
   }).catch(err => {
     console.error('[thevic361] failed to start:', err);
-    process.exit(1);
+    bootSlack.alert('boot', 'Server failed to start', (err && err.message) || String(err))
+      .finally(() => process.exit(1));
   });
 }

@@ -193,6 +193,10 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 
 `server/sponsors.js`: `/advertise` → `/advertise/checkout?package=weekly|partner|featured` (one form) → Stripe Checkout → `POST /api/stripe/webhook` (signature-verified over the raw body, so it's registered before `express.json`). Weekly sponsor books one Mon–Sun week (held 35 min while someone pays) and replaces the sponsor slot; venue partner is a monthly subscription that marks every event at that venue Featured until it's cancelled in Stripe; featured event adds a `paid-feature` submission to the review queue and features the matching live event. Placements are applied in `getPublicPayload` at read time, never written into the published payload. Orders live in `sponsor_orders`; prices in `AD_PACKAGES` (`server/seo.js`). Admin Sponsors tab: orders, week calendar, hide/restore. Off until both Stripe vars are set.
 
+## Slack notifications
+
+`server/slack.js` posts to a Slack incoming webhook (`SLACK_WEBHOOK_URL`, same setup as austincommercialsites.com). No-op when unset. Server pings: new event submission, sponsor paid, venue partner cancelled or payment failing, newsletter sent (or partly failed / skipped because nothing was published), deploy finished (production only), and alerts for 500s, Stripe checkout or webhook failures, crashes and boot failures. Alerts are de-duplicated per key for 15 minutes. GitHub Actions use `scripts/slack_notify.py` with the `SLACK_WEBHOOK_URL` repo secret: weekly collect done (candidate count) or failed, social kit / newsletter / digest failures, tests failing on main, and `uptime.yml` (hourly site check, daily stale-feed check).
+
 ## Conventions
 
 - **Python:** stdlib + `requests` + `beautifulsoup4` + `pyyaml` + `sentry-sdk`. No Django, no FastAPI, no async — keep `collect_events.py` blocking and simple.
@@ -263,6 +267,7 @@ Full reference is in [`RAILWAY.md`](./RAILWAY.md). Quick list:
 | `OPENAI_MODEL` | `gpt-5-mini` | Repo Variable; overrides the collector's OpenAI model |
 | `SITE_URL` | `https://www.thevic361.com` | Canonical origin. Requests to the bare domain 301 here |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | — | Turn on self-serve sponsor checkout (server/sponsors.js). Webhook endpoint: `https://www.thevic361.com/api/stripe/webhook` with events `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired`, `customer.subscription.updated`, `customer.subscription.deleted` |
+| `SLACK_WEBHOOK_URL` | — | Slack incoming webhook for owner pings (server/slack.js). Set it in Railway (production) and as a GitHub Actions secret for workflow alerts |
 | `ADVERTISE_EMAIL` | `tristen.m.palori@gmail.com` | Contact address on `/advertise`; also gets a paid-order email (when Resend is on) |
 | `PORT` | `3000` | Express listen port |
 

@@ -307,7 +307,7 @@ export function renderThanksPage(order, { siteUrl }) {
 
 // ─── Wiring ──────────────────────────────────────────────────────────────
 
-export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenues, notify }) {
+export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenues, notify, slack = null }) {
   const supported = typeof store.listSponsorOrders === 'function';
   let cache = null;
 
@@ -351,6 +351,17 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       await store.insert(row);
       order.submission_id = row.id;
       await save(order);
+    }
+    if (slack) {
+      const pkg = packageFor(order.kind);
+      slack.notify({
+        title: `💰 New sponsor: ${order.business}`,
+        fields: [['Package', pkg ? pkg.name : order.kind], ['Paid', `$${Math.round((order.amount || 0) / 100)}${order.kind === 'partner' ? '/mo' : ''}`],
+          ['Contact', order.email],
+          ['Details', order.kind === 'weekly' ? `Week of ${order.week_start}` : order.kind === 'partner' ? order.venue_name : `${order.event.name} (${order.event.date})`]],
+        text: order.kind === 'featured' ? 'Approve the event in the Submissions tab to put it live.' : 'Live automatically.',
+        link: `${siteUrl}/admin.html`
+      });
     }
     if (notify) {
       const pkg = packageFor(order.kind);
@@ -401,7 +412,16 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         if (!order || order.status === 'hidden') return;
         const s = event.type === 'customer.subscription.deleted' ? 'canceled' : obj.status;
         const status = (s === 'active' || s === 'trialing') ? 'active' : s === 'canceled' ? 'cancelled' : 'paused';
-        if (status !== order.status) await save({ ...order, status });
+        if (status !== order.status) {
+          await save({ ...order, status });
+          if (slack && status !== 'active') {
+            slack.notify({
+              title: status === 'cancelled' ? `👋 Venue partner cancelled: ${order.business}` : `⚠️ Venue partner payment issue: ${order.business}`,
+              fields: [['Venue', order.venue_name], ['Contact', order.email]],
+              text: status === 'cancelled' ? 'Their events are no longer marked Vic’s Pick.' : 'Stripe couldn’t charge them, so their Vic’s Pick badges are paused until it does.'
+            });
+          }
+        }
         return;
       }
       default:
@@ -423,6 +443,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       } catch (err) {
         // A 500 makes Stripe retry with backoff, which is what we want.
         console.error('[sponsors] webhook failed:', event.type, err.message);
+        if (slack) slack.alert(`stripe-webhook:${event.type}`, 'Stripe webhook failed (Stripe will retry)', `${event.type}: ${err.message}`);
         return res.status(500).json({ ok: false, error: 'webhook-failed' });
       }
       res.json({ received: true });
@@ -483,6 +504,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           }, `vic361-order-${order.id}`);
         } catch (err) {
           console.error('[sponsors] checkout session failed:', err.message);
+          if (slack) slack.alert('stripe-checkout', 'Sponsor checkout is failing', `Stripe: ${err.message}`);
           return fail({ _form: 'The payment page is unavailable right now. Please try again in a few minutes.' }, 502);
         }
         await save({ ...order, session_id: session.id });

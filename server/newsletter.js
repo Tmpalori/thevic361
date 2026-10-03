@@ -217,7 +217,7 @@ fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'
 
 // ─── Routes ──────────────────────────────────────────────────────────────
 
-export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, createRateLimiter, config, resend }) {
+export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, createRateLimiter, config, resend, slack = null }) {
   const subscribeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10 });
   const supported = typeof store.addSubscriber === 'function';
 
@@ -265,6 +265,10 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     }
     const record = { week_key: key, subject: probe.subject, recipients: sent, failed: subs.length - sent };
     await store.recordNewsletterSend(record);
+    if (slack) {
+      if (failures.length) slack.alert(`newsletter-failed-${key}`, 'Newsletter send partly failed', `${sent} sent, ${record.failed} failed.\n${failures[0]}`, `${siteUrl}/admin.html`);
+      else slack.notify({ title: '📧 Newsletter sent', fields: [['Recipients', sent], ['Subject', probe.subject], ['Events', probe.total]] });
+    }
     return { ok: failures.length === 0, ...record, errors: failures.slice(0, 3) };
   }
 
@@ -374,9 +378,15 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     if (!ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
     try {
       const out = await sendWeekly();
+      // Monday's automatic send found nothing published for this week.
+      if (slack && out.error === 'no-events') {
+        slack.alert('newsletter-no-events', 'Newsletter skipped: nothing published for this week',
+          'Publish this week\'s picks in admin, then send it from the Newsletter tab.', `${siteUrl}/admin.html`);
+      }
       // already-sent / no-events are normal outcomes for a cron, not failures.
       res.status(out.ok || ['already-sent', 'no-events', 'no-subscribers'].includes(out.error) ? 200 : 500).json(out);
     } catch (err) {
+      if (slack) slack.alert('newsletter-cron', 'Newsletter send crashed', err.message);
       res.status(500).json({ ok: false, error: 'send-failed', message: err.message });
     }
   });

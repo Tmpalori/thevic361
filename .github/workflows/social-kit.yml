@@ -83,3 +83,9 @@ jobs:
           elif [ "$(date -u +%u)" = "1" ]; then KIND=week
           else KIND=weekend; fi
           python scripts/social_post.py --kind "$KIND"
+
+      - name: Tell Slack it failed
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python3 scripts/slack_notify.py "🚨 Social kit (build or Facebook/Instagram post) failed" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

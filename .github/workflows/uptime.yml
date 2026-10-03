@@ -1,0 +1,49 @@
+# ─── Uptime check ───────────────────────────────────────────────────────────
+# Hourly: the homepage and /events.json must answer, and the events feed must
+# have events. Pings Slack (SLACK_WEBHOOK_URL secret) when they don't, so a
+# dead site doesn't go unnoticed until someone texts about it. Once a day it
+# also flags a stale feed: nothing published for 8+ days.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Uptime
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check the live site
+        env:
+          SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          fail() { echo "::error::$1"; python3 scripts/slack_notify.py "🚨 thevic361.com: $1" --link "$SITE"; exit 1; }
+          # Two tries a minute apart, so one slow deploy restart isn't an alert.
+          for i in 1 2; do
+            home=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/" || echo 000)
+            [ "$home" = "200" ] && break; sleep 60
+          done
+          [ "$home" = "200" ] || fail "homepage returned HTTP $home"
+          code=$(curl -sS -o events.json -w '%{http_code}' --max-time 20 "$SITE/events.json" || echo 000)
+          [ "$code" = "200" ] || fail "/events.json returned HTTP $code"
+          python3 - <<'PY' || fail "events feed is empty or unreadable"
+          import json, sys
+          d = json.load(open("events.json"))
+          sys.exit(0 if d.get("events") else 1)
+          PY
+          # Once a day (15:17 UTC, ~10 AM Central): is the feed going stale?
+          if [ "$(date -u +%H)" = "15" ]; then
+            age=$(python3 -c "import json,datetime as d;u=json.load(open('events.json')).get('last_updated','');print((d.datetime.now(d.timezone.utc)-d.datetime.fromisoformat(u.replace('Z','+00:00'))).days if u else 99)")
+            if [ "$age" -ge 8 ]; then
+              python3 scripts/slack_notify.py "⏰ No events published in $age days. Pick this week's events in admin." --link "$SITE/admin.html"
+            fi
+          fi
+          echo "OK"
