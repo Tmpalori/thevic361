@@ -4,14 +4,35 @@
 #
 # Monday morning covers the week (after Sunday-night Save & Publish);
 # Thursday morning refreshes it for the weekend posts. 13:47 UTC is
-# 8:47 AM CDT / 7:47 AM CST.
+# 8:47 AM CDT / 7:47 AM CST. It also rebuilds when the generator changes.
+#
+# Auto-posting to Facebook + Instagram (scripts/social_post.py) runs on the
+# schedule only when the SOCIAL_AUTOPOST repo variable is 1 and the
+# META_PAGE_ID / META_PAGE_TOKEN (+ optional IG_USER_ID) secrets are set.
+# Monday posts "this week", Thursday posts "this weekend".
 
 name: Social Kit
 
 on:
   schedule:
     - cron: '47 13 * * 1,4'
+  push:
+    branches: [main]
+    paths:
+      - scripts/social_kit.py
+      - scripts/social_post.py
+      - .github/workflows/social-kit.yml
   workflow_dispatch:
+    inputs:
+      post:
+        description: 'Also post to Facebook/Instagram'
+        type: boolean
+        default: false
+      kind:
+        description: 'Which kit to post'
+        type: choice
+        options: [weekend, week]
+        default: weekend
 
 permissions:
   contents: write
@@ -23,13 +44,13 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      - run: pip install pillow
+      - run: pip install pillow requests
       - name: Build kit
         env:
           PYTHONUNBUFFERED: 1
@@ -47,3 +68,18 @@ jobs:
           # main may have moved while the kit built (weekly collect, a merge).
           git pull --rebase origin main
           git push
+      - name: Post to Facebook + Instagram
+        if: >-
+          (github.event_name == 'schedule' && vars.SOCIAL_AUTOPOST == '1') ||
+          (github.event_name == 'workflow_dispatch' && inputs.post)
+        env:
+          PYTHONUNBUFFERED: 1
+          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+          META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          DISPATCH_KIND: ${{ inputs.kind }}
+        run: |
+          if [ -n "$DISPATCH_KIND" ]; then KIND="$DISPATCH_KIND"
+          elif [ "$(date -u +%u)" = "1" ]; then KIND=week
+          else KIND=weekend; fi
+          python scripts/social_post.py --kind "$KIND"

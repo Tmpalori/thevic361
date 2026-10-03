@@ -179,7 +179,7 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 
 ## Venues, guides, social kit
 
-`server/guides.js` generates `/venues` + `/venues/<slug>` from `venues.json` (organizer accounts skipped) and the live + archived events, seasonal guides (`SEASONS`: Tejas Fest, Halloween, Thanksgiving, Christmas, New Year's Eve, July 4th, Bach Festival) that appear in the nav only while in season or when they have upcoming events, and `/events/<slug>.ics`. Event pages carry calendar and share buttons; the homepage has client-side filter chips (`docs/app.js`). `scripts/social_kit.py` runs Monday and Thursday (`social-kit.yml`) and commits slides + captions to `docs/social/latest/` (open `/social/latest/index.html`).
+`server/guides.js` generates `/venues` + `/venues/<slug>` from `venues.json` (organizer accounts skipped) and the live + archived events, seasonal guides (`SEASONS`: Tejas Fest, Halloween, Thanksgiving, Christmas, New Year's Eve, July 4th, Bach Festival) that appear in the nav only while in season or when they have upcoming events, and `/events/<slug>.ics`. Event pages carry calendar and share buttons; the homepage has client-side filter chips (`docs/app.js`). `scripts/social_kit.py` runs Monday and Thursday (`social-kit.yml`, also on changes to the generator) and commits slides, captions and `kit.json` to `docs/social/latest/` (open `/social/latest/`, linked from the admin header). `scripts/social_post.py` then posts the kit to the Facebook Page and Instagram when the `SOCIAL_AUTOPOST` repo variable is `1` and the `META_PAGE_ID` / `META_PAGE_TOKEN` (+ `IG_USER_ID`) secrets are set: Monday posts the week, Thursday the weekend.
 
 ## Traffic stats
 

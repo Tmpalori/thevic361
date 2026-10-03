@@ -1084,6 +1084,12 @@ export async function createApp(opts = {}) {
     res.type('text/plain; charset=utf-8').send(renderLlmsTxt(payload.events, { ...ctx, extraLinks }));
   }));
 
+  // The social kit lives at docs/social/latest/index.html; static serving
+  // has directory indexes off, so send the bare folder there.
+  app.get(['/social', '/social/', '/social/latest', '/social/latest/'], (req, res) => {
+    res.redirect(302, '/social/latest/index.html');
+  });
+
   // ─── Static site ───
   app.use(express.static(DOCS_DIR, { extensions: ['html'], index: false }));
 

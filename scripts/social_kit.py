@@ -309,8 +309,16 @@ def main(argv=None):
         groups = select_events(events, start, end)
         caps = captions(groups, start, end, kind)
         slides = render_slides(groups, start, end, kind, args.out)
-        kits[kind] = {"captions": caps, "slides": slides}
+        kits[kind] = {"captions": caps, "slides": slides, "count": sum(len(v) for v in groups.values())}
         print(f"{kind}: {sum(len(v) for v in groups.values())} events, {len(slides)} slides")
+
+    # Manifest for scripts/social_post.py (auto-posting).
+    with open(os.path.join(args.out, "kit.json"), "w") as f:
+        json.dump({
+            "generated_for": today.isoformat(),
+            "kits": {k: {"slides": v["slides"], "captions": v["captions"],
+                         "events": v["count"]} for k, v in kits.items()},
+        }, f, indent=2, ensure_ascii=False)
 
     with open(os.path.join(args.out, "captions.txt"), "w") as f:
         for kind, kit in kits.items():

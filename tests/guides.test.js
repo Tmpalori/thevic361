@@ -225,3 +225,12 @@ describe('calendar files', () => {
     expect(u.searchParams.get('ctz')).toBe('America/Chicago');
   });
 });
+
+describe('social kit link', () => {
+  it('sends the bare folder to the kit page', async () => {
+    await startApp();
+    const r = await fetch(baseUrl + '/social/latest/', { redirect: 'manual' });
+    expect(r.status).toBe(302);
+    expect(r.headers.get('location')).toBe('/social/latest/index.html');
+  });
+});
