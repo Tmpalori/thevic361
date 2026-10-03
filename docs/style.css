@@ -1052,11 +1052,8 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 .site-header.scrolled { box-shadow: 0 3px 0 var(--ink); }
 
 .logo-group .site-logo {
-  width: 52px;
-  height: 52px;
-  padding: 4px;
-  background: #fff;
-  border: 3px solid var(--ink);
+  width: 54px;
+  height: 54px;
   border-radius: 50%;
   box-shadow: var(--shadow-sm);
   transform: rotate(-6deg);

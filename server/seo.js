@@ -590,7 +590,7 @@ export function renderAboutPage({ siteUrl }) {
     '@type': 'Organization',
     name: SITE_NAME,
     url: siteUrl + '/',
-    logo: siteUrl + '/logo.png',
+    logo: siteUrl + '/logo-512.png',
     description: 'Weekly guide to events and things to do in Victoria, Texas.',
     areaServed: { '@type': 'City', name: 'Victoria, Texas' }
   }];
