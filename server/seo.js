@@ -474,7 +474,6 @@ function footerHtml() {
             <li><a href="/submit">Submit an event</a></li>
             <li><a href="/venues">Venues</a></li>
             <li><a href="/advertise">Advertise</a></li>
-            <li><a href="/for-venues">For venues</a></li>
             <li><a href="/contact">Contact</a></li>
           </ul>
         </div>
@@ -770,7 +769,6 @@ export function renderSitemap(events, { siteUrl, now, lastmod, extraPaths = [] }
     { loc: '/about', freq: 'monthly', pri: '0.4' },
     { loc: '/advertise', freq: 'monthly', pri: '0.3' },
     { loc: '/contact', freq: 'yearly', pri: '0.2' },
-    { loc: '/for-venues', freq: 'monthly', pri: '0.3' },
     { loc: '/submit', freq: 'monthly', pri: '0.4' },
     ...extraPaths.map(loc => ({ loc, freq: 'weekly', pri: '0.5', mod })),
     ...events.filter(ev => ev.date >= today).map(ev => ({ loc: ev.page, freq: 'weekly', pri: '0.6', mod }))

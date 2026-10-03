@@ -1539,7 +1539,7 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
   .header-actions .btn { padding: 0.35em 0.9em; }
 }
 
-/* ─── Growth bits: list newsletter card, share buttons, venue embed ─── */
+/* ─── Growth bits: list newsletter card, share buttons ─── */
 .nl-card {
   background: var(--lilac-light);
   border: 3px dashed var(--ink);
@@ -1553,13 +1553,3 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 .nl-card .signup-form input[type="email"] { background: var(--card); }
 .share-btn--list { background: var(--sun); color: var(--ink); }
 .hero-share { margin: var(--space-3) 0 0; }
-.embed-code {
-  width: 100%;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: var(--text-sm);
-  padding: var(--space-3);
-  border: 2.5px solid var(--ink);
-  border-radius: 12px;
-  background: var(--card);
-  color: var(--color-text);
-}

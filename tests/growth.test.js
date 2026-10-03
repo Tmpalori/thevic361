@@ -1,6 +1,6 @@
 // @vitest-environment node
 //
-// Traffic features: search landing pages, list share images, venue widget.
+// Traffic features: search landing pages and list share images.
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { createApp } from '../server/index.js';
@@ -78,30 +78,5 @@ describe('search landing pages', () => {
     const home = (await get('/')).html;
     expect(home).toContain('property="og:image" content="https://www.thevic361.com/social/latest/week-1.png"');
     expect(home).not.toContain('og:image:width');
-  });
-});
-
-describe('venue widget', () => {
-  it('lists the venue\'s upcoming events and can be framed anywhere', async () => {
-    await start();
-    const { r, html } = await get('/widget/aero-crafters');
-    expect(r.status).toBe(200);
-    expect(r.headers.get('x-frame-options')).toBeNull();
-    expect(r.headers.get('content-security-policy')).toContain('frame-ancestors *');
-    expect(html).toContain('Friday Live Music');
-    expect(html).toContain('Aero Open Mic');
-    expect(html).not.toContain('Art After Dark');
-    expect(html).toContain('utm_source=widget&amp;utm_medium=aero-crafters');
-    expect((await get('/widget/nope')).r.status).toBe(404);
-    // Normal pages still refuse framing.
-    expect((await get('/')).r.headers.get('x-frame-options')).toBe('SAMEORIGIN');
-  });
-
-  it('/for-venues gives copyable code with a real backlink', async () => {
-    await start();
-    const page = (await get('/for-venues?venue=aero-crafters')).html;
-    expect(page).toContain('&lt;iframe src=&quot;https://www.thevic361.com/widget/aero-crafters&quot;');
-    expect(page).toContain('href=&quot;https://www.thevic361.com/venues/aero-crafters&quot;');
-    expect((await get('/venues/aero-crafters')).html).toContain('/for-venues?venue=aero-crafters');
   });
 });
