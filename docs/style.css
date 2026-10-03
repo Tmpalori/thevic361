@@ -1584,3 +1584,24 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
   0%, 70% { background-position: 200% 0; }
   100% { background-position: -50% 0; }
 }
+
+/* ─── Event rows: the name leads, the place is a quiet second line ─── */
+.event-details .event-name {
+  display: block;
+  margin-top: 0.15em;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  line-height: 1.2;
+}
+.event-details .event-venue {
+  display: block;
+  margin-top: 0.1em;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.event-details .event-desc { margin-top: 0.3em; }
+@media (max-width: 639px) {
+  .event-details .event-name { font-size: 1.1rem; }
+}

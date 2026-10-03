@@ -293,15 +293,46 @@ export function slugify(str) {
 
 // Attach a stable `page` path to each event: /events/<date>-<name-slug>.
 // Same date + name twice gets -2, -3 in payload order so links stay unique.
+// Some sources hand us text that's already HTML-encoded ("Texas A&amp;M");
+// decode it once so escaping on render doesn't show "&amp;" on the page.
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+export function decodeEntities(str) {
+  if (typeof str !== 'string' || !str.includes('&')) return str;
+  return str.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, code) => {
+    if (code[0] === '#') {
+      const n = code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+      return Number.isFinite(n) && n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
+    }
+    return ENTITIES[code.toLowerCase()] ?? m;
+  });
+}
+
+// Venue line under an event name: "Venue · street address", without
+// repeating the address when the venue field already is one.
+export function placeText(ev) {
+  let venue = (ev.venue || '').trim();
+  const addr = (ev.address || '').trim();
+  if (/^\d/.test(venue)) venue = venue.split(',')[0].trim();
+  if (!venue) return addr;
+  const v = venue.toLowerCase(), a = addr.toLowerCase();
+  if (!addr || v.includes(a) || a.includes(v)) return venue;
+  return `${venue} · ${addr}`;
+}
+
 export function withPages(events) {
   const seen = new Map();
   return (Array.isArray(events) ? events : [])
     .filter(ev => ev && ev.date && ev.name)
     .map(ev => {
+      // Slug from the stored name so existing event URLs don't move.
       const base = `${ev.date}-${slugify(ev.name) || 'event'}`;
       const n = (seen.get(base) || 0) + 1;
       seen.set(base, n);
-      return Object.assign({}, ev, { page: `/events/${n === 1 ? base : `${base}-${n}`}` });
+      const clean = {};
+      for (const k of ['name', 'venue', 'address', 'description', 'time']) {
+        if (typeof ev[k] === 'string') clean[k] = decodeEntities(ev[k]);
+      }
+      return Object.assign({}, ev, clean, { page: `/events/${n === 1 ? base : `${base}-${n}`}` });
     });
 }
 
@@ -367,21 +398,14 @@ function icons(ev) {
 // client re-render look identical. The name links to our event page (the
 // crawlable, internal link); the venue keeps the external source link.
 export function renderEventItem(ev) {
-  const src = safeUrl(ev.url);
-  let venue = '';
-  if (ev.venue) {
-    venue = src
-      ? `<a href="${escHtml(src)}" target="_blank" rel="noopener noreferrer">${escHtml(ev.venue)}</a>`
-      : escHtml(ev.venue);
-    if (ev.address) venue += ', ' + escHtml(ev.address);
-  }
+  const place = placeText(ev);
   return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}" data-icons="${escHtml((ev.icons || []).join(' ') + (ev.free === true ? ' free' : ''))}">` +
     `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
     '<div class="event-details">' +
       (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
-      `<span class="event-time">${escHtml(ev.time)}</span> ` +
+      (ev.time ? `<span class="event-time">${escHtml(ev.time)}</span> ` : '') +
       `<span class="event-name"><a href="${escHtml(ev.page)}">${escHtml(ev.name)}</a></span>` +
-      (venue ? ` — <span class="event-venue">${venue}</span>` : '') +
+      (place ? `<span class="event-venue">${escHtml(place)}</span>` : '') +
       (ev.description ? `<div class="event-desc">${escHtml(ev.description)}</div>` : '') +
     '</div>' +
   '</li>';

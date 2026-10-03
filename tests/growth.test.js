@@ -17,7 +17,8 @@ const EVENTS = [
   { date: '2026-10-09', name: 'Morning Story Time', time: '10:00 AM', venue: 'Victoria Public Library', icons: ['family'] },
   { date: '2026-10-10', name: 'Zoo Boo', time: '1:00 PM', venue: 'The Texas Zoo', icons: ['family', 'outdoors'] },
   { date: '2026-10-10', name: 'Art After Dark', time: '7:00 PM', venue: 'The Nave Museum', icons: ['arts'] },
-  { date: '2026-10-12', name: 'Aero Open Mic', time: '7:00 PM', venue: 'Aero Crafters', icons: ['music'] }
+  { date: '2026-10-12', name: 'Aero Open Mic', time: '7:00 PM', venue: 'Aero Crafters', icons: ['music'] },
+  { date: '2026-10-10', name: 'Texas A&amp;M Night', time: '6:00 PM', venue: '1907 N Ben Jordan St, Victoria, TX', address: '1907 N Ben Jordan St, Victoria, TX', icons: ['family'] }
 ];
 const VENUES = [
   { name: 'Aero Crafters', category: 'Bar / Live Music' },
@@ -78,5 +79,18 @@ describe('search landing pages', () => {
     const home = (await get('/')).html;
     expect(home).toContain('property="og:image" content="https://www.thevic361.com/social/latest/week-1.png"');
     expect(home).not.toContain('og:image:width');
+  });
+});
+
+describe('event text', () => {
+  it('decodes stored HTML entities and does not repeat the address', async () => {
+    await start();
+    const d = await (await fetch(baseUrl + '/events.json')).json();
+    expect(d.events.find(e => e.date === '2026-10-10' && e.name.startsWith('Texas')).name).toBe('Texas A&M Night');
+    const html = (await get('/')).html;
+    expect(html).not.toContain('&amp;amp;');
+    expect(html).toContain('Texas A&amp;M Night');
+    const row = html.match(/<span class="event-venue">([^<]*)<\/span>/g).find(s => s.includes('Ben Jordan'));
+    expect(row).toBe('<span class="event-venue">1907 N Ben Jordan St</span>');
   });
 });

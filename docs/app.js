@@ -97,15 +97,16 @@
         ? '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + escHtml(ev.name) + '</a>'
         : escHtml(ev.name);
 
+    // Venue line: "Venue · street address", without repeating the address
+    // when the venue field already is one (mirrors placeText in seo.js).
     var venuePart = '';
-    if (ev.venue) {
-      venuePart = href
-        ? '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + escHtml(ev.venue) + '</a>'
-        : escHtml(ev.venue);
-      if (ev.address) {
-        venuePart += ', ' + escHtml(ev.address);
-      }
-    }
+    var venue = (ev.venue || '').trim();
+    var addr = (ev.address || '').trim();
+    if (/^\d/.test(venue)) venue = venue.split(',')[0].trim();
+    if (!venue) venuePart = addr;
+    else if (!addr || venue.toLowerCase().indexOf(addr.toLowerCase()) !== -1 ||
+             addr.toLowerCase().indexOf(venue.toLowerCase()) !== -1) venuePart = venue;
+    else venuePart = venue + ' · ' + addr;
 
     var freeBadge = '';
 
@@ -118,9 +119,9 @@
       '<span class="event-icons" aria-hidden="true">' + iconHtml + '</span>' +
       '<div class="event-details">' +
         (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
-        '<span class="event-time">' + escHtml(ev.time) + '</span> ' +
+        (ev.time ? '<span class="event-time">' + escHtml(ev.time) + '</span> ' : '') +
         '<span class="event-name">' + nameHtml + '</span>' +
-        (venuePart ? ' — <span class="event-venue">' + venuePart + '</span>' : '') +
+        (venuePart ? '<span class="event-venue">' + escHtml(venuePart) + '</span>' : '') +
         freeBadge +
         descHtml +
       '</div>' +
