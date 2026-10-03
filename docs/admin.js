@@ -42,7 +42,7 @@
     sonar: 'Sonar',
     facebook: 'Facebook',
     instagram: 'Instagram',
-    candidate: 'Candidate',
+    candidate: 'Website',
     unknown: 'Unknown',
     // Collector scraper ids (collect_events.py tags each candidate).
     local_events: 'Local YAML',
@@ -443,7 +443,7 @@
       pruneStalePastSelections();
       populateFilters();
       renderPicker();
-      setStatus('Loaded ' + events.length + ' candidate event(s).', 'success');
+      setStatus('Loaded ' + state.candidates.length + ' event(s).', 'success');
       // Note: the server may report `source=local-file` and a `warning` field
       // when the optional GITHUB_TOKEN isn't configured. That's the intended
       // operating mode now — candidates are served from the bundled file on
@@ -530,11 +530,9 @@
     listEl.innerHTML = groups.map(([date, evs]) => {
       const heading = date === '(undated)' ? 'Undated' : formatDateHeading(date);
       const weekend = isWeekend(date);
-      const targetMin = weekend ? WEEKEND_TARGET_MIN : WEEKDAY_TARGET_MIN;
-      const targetMax = weekend ? WEEKEND_TARGET_MAX : WEEKDAY_TARGET_MAX;
+      void weekend;
       const selectedInGroup = evs.filter(ev => state.selected.has(eventKey(ev))).length;
-      const inRange = selectedInGroup >= targetMin && selectedInGroup <= targetMax;
-      const countCls = inRange ? 'is-ok' : 'is-warn';
+      const countCls = selectedInGroup ? 'is-ok' : 'is-warn';
 
       const rows = evs.map(ev => {
         const k = eventKey(ev);
@@ -545,7 +543,7 @@
           '" title="Source: ' + escapeHtml(sourceLabel(src)) + '">' +
           escapeHtml(sourceLabel(src)) + '</span>';
         const publishedPill = state.publishedKeys.has(k)
-          ? '<span class="src-pill src-pill--published" title="Currently live on thevic361.com">Published</span>'
+          ? '<span class="src-pill src-pill--published" title="Currently live on thevic361.com">On site</span>'
           : '';
         const submitterMeta = ev._submitter_kind
           ? '<span class="src-meta">' + escapeHtml(ev._submitter_kind === 'organizer'
@@ -602,8 +600,7 @@
         '<section class="day-group" data-date="' + escapeHtml(date) + '">' +
           '<h2>' + escapeHtml(heading) +
             ' <span class="day-group__count ' + countCls + '">' +
-              selectedInGroup + ' selected · target ' + targetMin + '–' + targetMax +
-              (weekend ? ' (weekend)' : ' (weekday)') +
+              selectedInGroup + ' of ' + evs.length + ' on the site' +
             '</span>' +
           '</h2>' +
           rows +
@@ -657,12 +654,15 @@
     }
     const sum = document.getElementById('count-summary');
     if (sum) {
-      sum.textContent = total + ' selected · ' + weekday + ' weekday / ' + weekend + ' weekend';
-      const okWeekday = weekday >= WEEKDAY_TARGET_MIN && weekday <= WEEKDAY_TARGET_MAX;
-      const okWeekend = weekend >= WEEKEND_TARGET_MIN && weekend <= WEEKEND_TARGET_MAX;
+      const added = Array.from(state.selected).filter(k => !state.publishedKeys.has(k)).length;
+      const thisMonday = toLocalDateStr(getMondayOfWeek());
+      const removed = Array.from(state.publishedKeys).filter(k => !state.selected.has(k) &&
+        state.candidates.some(ev => eventKey(ev) === k && (ev.date || '') >= thisMonday)).length;
+      void weekday; void weekend;
+      sum.textContent = total + ' event' + (total === 1 ? '' : 's') + ' checked' +
+        (added || removed ? ' · unsaved: ' + (added ? '+' + added + ' ' : '') + (removed ? '−' + removed : '') : ' · matches the live site');
       sum.classList.remove('is-ok', 'is-warn');
-      if (okWeekday && okWeekend) sum.classList.add('is-ok');
-      else sum.classList.add('is-warn');
+      sum.classList.add(added || removed ? 'is-warn' : 'is-ok');
     }
   }
 
@@ -694,18 +694,20 @@
       const events = Array.isArray(json.events) ? json.events : [];
       const keys = new Set(events.map(eventKey));
       state.publishedKeys = keys;
-      // Pre-check anything that's published AND still in the candidate list.
-      // We don't add keys that aren't in candidates — they'd be invisible
-      // (no checkbox renders) and would inflate the count without recourse.
+      // The live site is the starting point: everything on it starts checked.
+      // Live events that aren't in this week's candidates (kept from an
+      // earlier collect, approved submissions, hand-added) are added to the
+      // list too. Otherwise they'd be invisible here and Save & Publish
+      // would silently take them off the site.
       const candidateKeys = new Set(state.candidates.map(eventKey));
-      let added = 0;
-      for (const k of keys) {
-        if (candidateKeys.has(k) && !state.selected.has(k)) {
-          state.selected.add(k);
-          added += 1;
-        }
+      const thisMonday = toLocalDateStr(getMondayOfWeek());
+      const liveOnly = events.filter(ev => !candidateKeys.has(eventKey(ev)) && (ev.date || '') >= thisMonday);
+      if (liveOnly.length) {
+        state.candidates = state.candidates.concat(liveOnly).sort((a, b) =>
+          ((a.date || '') + ' ' + (a.time || '')).localeCompare((b.date || '') + ' ' + (b.time || '')));
       }
-      if (added > 0) persistSelections();
+      state.selected = new Set(keys);
+      persistSelections();
     } catch (err) {
       console.warn('[admin] published-events fetch failed:', err.message);
     }
@@ -1270,7 +1272,7 @@
       setStatus('Cannot publish — please sign in first.', 'error');
       return;
     }
-    if (!confirm('Publish ' + picks.length + ' event(s) to docs/events.json on main?')) {
+    if (!confirm('Update the live site to these ' + picks.length + ' checked event(s)? Unchecked events come off the site.')) {
       return;
     }
     if (btn) btn.disabled = true;
@@ -1324,11 +1326,66 @@
     }
   }
 
+  // ─── HOME TAB ───
+  // Setup checklist and at-a-glance numbers from /api/admin/setup.
+  function ago(iso) {
+    if (!iso) return 'never';
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return String(iso);
+    const mins = Math.round((Date.now() - t) / 60000);
+    if (mins < 60) return mins + ' min ago';
+    const hrs = Math.round(mins / 60);
+    if (hrs < 48) return hrs + ' hr ago';
+    return Math.round(hrs / 24) + ' days ago';
+  }
+  async function loadHome() {
+    const el = document.getElementById('home-body');
+    const err = document.getElementById('home-error');
+    if (!el || publishMode() !== 'server') return;
+    try {
+      const { res, json } = await adminFetch('/api/admin/setup');
+      if (!res.ok || !json || !json.ok) throw new Error((json && json.message) || 'Could not load status.');
+      err.hidden = true;
+      const st = json.status || {};
+      const tiles = [
+        ['Upcoming events on the site', st.upcoming_events ?? '—', 'picker'],
+        ['Submissions waiting', st.pending_submissions ?? '—', 'submissions'],
+        ['Newsletter subscribers', st.subscribers ?? '—', 'newsletter'],
+        ['Events last collected', ago(st.collected_at), 'sources']
+      ];
+      document.getElementById('home-tiles').innerHTML = tiles.map(([label, val, tab]) =>
+        '<button type="button" class="home-tile" data-goto="' + tab + '"><span class="home-tile__val">' +
+        escapeHtml(String(val)) + '</span><span class="home-tile__label">' + escapeHtml(label) + '</span></button>').join('');
+      const order = { required: 0, recommended: 1, optional: 2 };
+      const checks = (json.checks || []).slice().sort((a, b) =>
+        (a.ok === true) - (b.ok === true) || order[a.level] - order[b.level]);
+      const done = checks.filter(c => c.ok === true).length;
+      document.getElementById('home-setup-count').textContent = done + ' of ' + checks.length + ' set up';
+      document.getElementById('home-checks').innerHTML = checks.map(c => {
+        const mark = c.ok === true ? '✅' : c.ok === false ? (c.level === 'optional' ? '⚪' : '⚠️') : '🔎';
+        const state = c.ok === true ? 'Set up' : c.ok === false ? 'Not set up' : 'Check in GitHub';
+        return '<li class="home-check home-check--' + (c.ok === true ? 'ok' : c.ok === false ? 'no' : 'unknown') + '">' +
+          '<span class="home-check__mark" aria-hidden="true">' + mark + '</span>' +
+          '<div><strong>' + escapeHtml(c.label) + '</strong> <span class="home-check__state">' + state +
+          (c.ok === true ? '' : ' · ' + escapeHtml(c.level)) + '</span>' +
+          (c.ok === true ? '' : '<p class="home-check__fix">' + escapeHtml(c.fix) +
+            (c.link ? ' <a href="' + escapeHtml(c.link) + '" target="_blank" rel="noopener">Open GitHub settings</a>' : '') + '</p>') +
+          '</div></li>';
+      }).join('');
+      el.hidden = false;
+      el.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => activateTab(b.dataset.goto)));
+    } catch (e) {
+      err.hidden = false;
+      err.textContent = e.message || String(e);
+    }
+  }
+
   // ─── TABS ───
   function activateTab(name) {
     const tabs = document.querySelectorAll('.tab-btn');
     tabs.forEach(t => t.classList.toggle('is-active', t.dataset.tab === name));
     const panels = {
+      home: document.getElementById('tab-home'),
       picker: document.getElementById('tab-picker'),
       submissions: document.getElementById('tab-submissions'),
       preview: document.getElementById('tab-preview'),
@@ -1342,6 +1399,9 @@
       el.hidden = (k !== name);
       el.classList.toggle('is-active', k === name);
     });
+    const counts = document.getElementById('count-summary');
+    if (counts) counts.hidden = name !== 'picker' && name !== 'preview';
+    if (name === 'home') loadHome();
     if (name === 'preview') refreshPreview();
     if (name === 'newsletter') { refreshNewsletter(); loadEmailNewsletter(); }
     if (name === 'sources') loadSources();
@@ -1855,6 +1915,7 @@
           setSession(tok);
           state.session = tok;
           showApp();
+          loadHome();
           loadCandidates();
         } catch (err) {
           showAuthGate(err.message || 'Sign-in failed.');
@@ -1876,6 +1937,7 @@
           setPat(pat);
           state.pat = pat;
           showApp();
+          loadHome();
           loadCandidates();
         } catch (err) {
           showAuthGate(err.message || 'Authentication failed.');
@@ -1989,6 +2051,7 @@
       const ok = await authedSession();
       if (ok) {
         showApp();
+        loadHome();
         loadCandidates();
         return;
       }
@@ -1998,6 +2061,7 @@
     }
     if (state.pat) {
       showApp();
+      loadHome();
       loadCandidates();
       return;
     }
@@ -2040,7 +2104,7 @@
     utf8ToBase64,
     buildEventsPayload, buildPreviewSrc, writePreviewToStorage,
     getMondayOfWeek, getWeekRange, inWeekBucket, toLocalDateStr,
-    pruneStalePastSelections,
+    pruneStalePastSelections, loadCandidates, loadHome,
     inferSource, sourceLabel, mergeCandidateEvents, stripPrivateFields,
     publishMode,
     getStoredTheme, setStoredTheme, effectiveTheme, applyTheme, toggleTheme,

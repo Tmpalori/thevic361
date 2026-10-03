@@ -179,7 +179,7 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 
 ## Venues, guides, social kit
 
-`server/guides.js` generates `/venues` + `/venues/<slug>` from `venues.json` (organizer accounts skipped) and the live + archived events, seasonal guides (`SEASONS`: Tejas Fest, Halloween, Thanksgiving, Christmas, New Year's Eve, July 4th, Bach Festival) that appear in the nav only while in season or when they have upcoming events, and `/events/<slug>.ics`. Event pages carry calendar and share buttons; the homepage has client-side filter chips (`docs/app.js`). `scripts/social_kit.py` runs Monday and Thursday (`social-kit.yml`, also on changes to the generator) and commits slides, captions and `kit.json` to `docs/social/latest/` (open `/social/latest/`, linked from the admin header). `scripts/social_post.py` then posts the kit to the Facebook Page and Instagram when the `SOCIAL_AUTOPOST` repo variable is `1` and the `META_PAGE_ID` / `META_PAGE_TOKEN` (+ `IG_USER_ID`) secrets are set: Monday posts the week, Thursday the weekend.
+`server/guides.js` generates `/venues` + `/venues/<slug>` from `venues.json` (organizer accounts skipped) and the live + archived events, seasonal guides (`SEASONS`: Tejas Fest, Halloween, Thanksgiving, Christmas, New Year's Eve, July 4th, Bach Festival) that appear in the nav only while in season or when they have upcoming events, and `/events/<slug>.ics`. Event pages carry calendar and share buttons; the homepage has client-side filter chips (`docs/app.js`). `scripts/social_kit.py` runs every morning (`social-kit.yml`, also on changes to the generator) and commits slides, captions and `kit.json` to `docs/social/latest/`: Monday rebuilds the week, weekend and today kits, Thursday the weekend (plus `weekend.mp4`, a vertical Reel made with ffmpeg) and today, other days only today. Instagram captions @mention venues that have a handle in `venues.json`, and Monday's run sends Slack `outreach.txt` (this week's venues with their event links, to send them for a reshare) (open `/social/latest/`, linked from the admin header). `scripts/social_post.py` then posts the kit to the Facebook Page and Instagram when the `SOCIAL_AUTOPOST` repo variable is `1` and the `META_PAGE_ID` / `META_PAGE_TOKEN` (+ `IG_USER_ID`) secrets are set: Monday posts the week, Thursday the weekend (as a Reel on Instagram when `weekend.mp4` exists), other days today.
 
 ## Traffic stats
 
@@ -196,6 +196,7 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 ## Traffic features
 
 - Search landing pages in `HUB_PAGES` with `hidden: true` (`/tonight`, `/date-night`, `/this-weekend-with-kids`) stay out of the top nav but are in the footer and sitemap.
+- Hidden landing pages for specific searches: `/tonight`, `/date-night`, `/this-weekend-with-kids`, `/free-this-weekend`, `/nightlife`, `/arts-and-culture`, `/outdoor-events` (footer and sitemap, not the top nav).
 - Hub pages and the homepage hero have a "Share this list" button (handled by `docs/track.js`); `/this-weekend` and the homepage use the social-kit cover slides as link-preview images.
 - `docs/app.js` inserts a "Get this list every Monday" signup card after the day following today (hidden once subscribed on that device, via localStorage).
 

@@ -33,7 +33,7 @@ import { registerContact } from './contact.js';
 import { createAutoPublish } from './autopublish.js';
 import crypto from 'node:crypto';
 import {
-  HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
+  HUB_PAGES, localDateStr, withPages, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
   , fillSeasonalNav
 } from './seo.js';
@@ -1160,6 +1160,56 @@ export async function createApp(opts = {}) {
     }, opts.autoPublishDelayMs ?? 3000);
     if (t.unref) t.unref();
   }
+
+  // ─── Admin home: setup checklist + at-a-glance numbers ───
+  // Presence checks only; no secret value ever leaves the server. Things the
+  // server can't see (GitHub Actions secrets) are listed as "check in GitHub".
+  app.get('/api/admin/setup', requireAdmin, async (req, res) => {
+    const env = process.env;
+    const ghSecrets = `https://github.com/${github.owner}/${github.repo}/settings/secrets/actions`;
+    const checks = [
+      { key: 'database', label: 'Database', ok: storeBundle.kind === 'pg', level: 'required',
+        fix: 'Add a Postgres database in Railway so events and subscribers survive deploys.' },
+      { key: 'login', label: 'Admin login', ok: auth.configured, level: 'required',
+        fix: 'Set ADMIN_USERNAME, ADMIN_PASSWORD and ADMIN_SESSION_SECRET in Railway.' },
+      { key: 'auto_publish', label: 'Auto-publish events', ok: env.AUTO_PUBLISH !== '0', level: 'required',
+        fix: 'Remove AUTO_PUBLISH=0 from Railway.' },
+      { key: 'slack', label: 'Slack alerts', ok: slack.enabled, level: 'recommended',
+        fix: 'Set SLACK_WEBHOOK_URL in Railway (and as a GitHub secret) to get pings for breakage, sponsors and submissions.' },
+      { key: 'newsletter', label: 'Email newsletter (Resend)', ok: newsletter.enabled && Boolean(newsletter.address), level: 'recommended',
+        fix: newsletter.enabled ? 'Set NEWSLETTER_ADDRESS (a mailing address is required by law in every email).' : 'Set RESEND_API_KEY and NEWSLETTER_ADDRESS in Railway.' },
+      { key: 'newsletter_auto', label: 'Newsletter sends itself Mondays', ok: Boolean(newsletter.cronSecret), level: 'recommended',
+        fix: 'Set NEWSLETTER_CRON_SECRET in Railway and GitHub, and the NEWSLETTER_AUTOSEND repo variable to 1.' },
+      { key: 'stripe', label: 'Sponsor payments (Stripe)', ok: stripeCfg.enabled, level: 'recommended',
+        fix: 'Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET in Railway; webhook URL: ' + siteUrl + '/api/stripe/webhook' },
+      { key: 'pull_now', label: '"Pull now" button (GitHub token)', ok: github.isConfigured(), level: 'optional',
+        fix: 'Set GITHUB_TOKEN in Railway (fine-grained, Actions: write on this repo).' },
+      { key: 'spam', label: 'Spam protection on forms (Turnstile)', ok: Boolean(turnstileSecret && turnstileSiteKey), level: 'optional',
+        fix: 'Set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY from Cloudflare Turnstile.' },
+      { key: 'social', label: 'Auto-post to Facebook + Instagram', ok: null, level: 'recommended', link: ghSecrets,
+        fix: 'In GitHub: secrets META_PAGE_ID, META_PAGE_TOKEN, IG_USER_ID and the repo variable SOCIAL_AUTOPOST = 1.' },
+      { key: 'collector_keys', label: 'Event collector keys (OpenAI, Apify)', ok: null, level: 'recommended', link: ghSecrets,
+        fix: 'In GitHub secrets: OPENAI_API_KEY (cleanup + junk filter) and APIFY_TOKEN (Facebook, Instagram, Eventbrite).' }
+    ];
+
+    const status = {};
+    try {
+      const pub = (await store.getPublished()) || {};
+      const today = localDateStr(nowFn());
+      const events = Array.isArray(pub.events) ? pub.events : [];
+      status.live_events = events.length;
+      status.upcoming_events = events.filter(e => e && e.date >= today).length;
+      status.auto_published_at = (pub.auto_publish && pub.auto_publish.at) || null;
+      status.published_at = pub.last_updated || null;
+    } catch { /* leave blank */ }
+    try { status.collected_at = (await readJsonFile(candidatesFile)).last_updated || null; } catch { /* none */ }
+    try { status.pending_submissions = (await store.list({ status: 'pending' })).length; } catch { /* none */ }
+    try {
+      if (typeof store.countSubscribers === 'function') status.subscribers = (await store.countSubscribers()).active || 0;
+    } catch { /* none */ }
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, checks, status, site_url: siteUrl });
+  });
 
   // ─── Static site ───
   app.use(express.static(DOCS_DIR, { extensions: ['html'], index: false }));

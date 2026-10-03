@@ -2,20 +2,23 @@
 # the live published events and commits them to docs/social/latest/, which
 # is served at https://www.thevic361.com/social/latest/ (noindex).
 #
-# Monday morning covers the week (after Sunday-night Save & Publish);
-# Thursday morning refreshes it for the weekend posts. 13:47 UTC is
-# 8:47 AM CDT / 7:47 AM CST. It also rebuilds when the generator changes.
+# Runs every morning at 13:47 UTC (8:47 AM CDT / 7:47 AM CST). Monday
+# rebuilds the week, weekend and today kits; Thursday the weekend (plus its
+# Reel) and today; other days only today, so the repo isn't rewriting the
+# week's slides daily. It also rebuilds everything when the generator changes.
 #
 # Auto-posting to Facebook + Instagram (scripts/social_post.py) runs on the
 # schedule only when the SOCIAL_AUTOPOST repo variable is 1 and the
 # META_PAGE_ID / META_PAGE_TOKEN (+ optional IG_USER_ID) secrets are set.
-# Monday posts "this week", Thursday posts "this weekend".
+# Monday posts "this week", Thursday "this weekend", other days "today".
+# Monday also sends Slack the venues on this week's list (outreach.txt) so
+# they can be sent their link to reshare.
 
 name: Social Kit
 
 on:
   schedule:
-    - cron: '47 13 * * 1,4'
+    - cron: '47 13 * * *'
   push:
     branches: [main]
     paths:
@@ -31,7 +34,7 @@ on:
       kind:
         description: 'Which kit to post'
         type: choice
-        options: [weekend, week]
+        options: [weekend, week, today]
         default: weekend
 
 permissions:
@@ -54,7 +57,13 @@ jobs:
       - name: Build kit
         env:
           PYTHONUNBUFFERED: 1
-        run: python scripts/social_kit.py
+          EVENT: ${{ github.event_name }}
+        run: |
+          DOW="$(TZ=America/Chicago date +%u)"
+          if [ "$EVENT" != "schedule" ] || [ "$DOW" = "1" ]; then KINDS=week,weekend,today
+          elif [ "$DOW" = "4" ]; then KINDS=weekend,today
+          else KINDS=today; fi
+          python scripts/social_kit.py --kinds "$KINDS"
       - name: Commit
         run: |
           git config user.name "The Vic 361 Bot"
@@ -79,10 +88,22 @@ jobs:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           DISPATCH_KIND: ${{ inputs.kind }}
         run: |
+          DOW="$(TZ=America/Chicago date +%u)"
           if [ -n "$DISPATCH_KIND" ]; then KIND="$DISPATCH_KIND"
-          elif [ "$(date -u +%u)" = "1" ]; then KIND=week
-          else KIND=weekend; fi
+          elif [ "$DOW" = "1" ]; then KIND=week
+          elif [ "$DOW" = "4" ]; then KIND=weekend
+          else KIND=today; fi
           python scripts/social_post.py --kind "$KIND"
+
+      - name: Send Slack this week's venues to tag
+        if: github.event_name == 'schedule' && hashFiles('docs/social/latest/outreach.txt') != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          [ "$(TZ=America/Chicago date +%u)" = "1" ] || exit 0
+          [ -s docs/social/latest/outreach.txt ] || exit 0
+          python3 scripts/slack_notify.py "📣 Venues on this week's list. Send each one its link; they usually reshare:
+          $(head -25 docs/social/latest/outreach.txt)"
 
       - name: Tell Slack it failed
         if: failure()
