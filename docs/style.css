@@ -1553,3 +1553,34 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 .nl-card .signup-form input[type="email"] { background: var(--card); }
 .share-btn--list { background: var(--sun); color: var(--ink); }
 .hero-share { margin: var(--space-3) 0 0; }
+
+/* ─── Vic's Pick: a bigger sticker that sits on the row's top edge ───
+   Slightly crooked, with a gentle wobble and a soft shine every few
+   seconds (base.css turns motion off for prefers-reduced-motion). */
+.event-entry--featured {
+  position: relative;
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+}
+.event-entry--featured .badge--featured {
+  position: absolute;
+  top: 0;
+  left: var(--space-4);
+  transform: translateY(-55%) rotate(-5deg);
+  font-size: var(--text-sm);
+  padding: 0.15em 0.9em;
+  border-width: 2.5px;
+  box-shadow: 2px 2px 0 var(--ink);
+  background: linear-gradient(110deg, var(--sunset) 40%, #FFB27F 50%, var(--sunset) 60%) 200% 0 / 250% 100%;
+  animation: pick-wobble 4s ease-in-out infinite, pick-shine 5s ease-in-out infinite;
+  z-index: 1;
+  white-space: nowrap;
+}
+@keyframes pick-wobble {
+  0%, 100% { transform: translateY(-55%) rotate(-5deg); }
+  50% { transform: translateY(-60%) rotate(-2deg) scale(1.04); }
+}
+@keyframes pick-shine {
+  0%, 70% { background-position: 200% 0; }
+  100% { background-position: -50% 0; }
+}
