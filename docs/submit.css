@@ -1,13 +1,15 @@
 /* submit.css — Mobile-first public submit-an-event form. */
 
 :root {
-  --submit-bg: #f7f5f0;
+  /* Same cartoon identity as style.css: ink outlines, sticker colors. */
+  --submit-bg: #FFF4D6;
   --submit-surface: #ffffff;
-  --submit-border: #e4e1d9;
-  --submit-text: #1f2933;
-  --submit-muted: #5a6573;
-  --submit-primary: #2d5b8a;
-  --submit-primary-hover: #244c75;
+  --submit-border: #1F1A3D;
+  --submit-text: #1F1A3D;
+  --submit-muted: #554E7A;
+  --submit-primary: #4B3FD1;
+  --submit-primary-hover: #3A2FB8;
+  --ink: #1F1A3D;
   --submit-danger: #b03a2e;
   --submit-success: #1e7a44;
   --radius: 0.55rem;
@@ -18,7 +20,7 @@
 html, body {
   margin: 0;
   padding: 0;
-  font-family: 'DM Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+  font-family: 'Nunito', system-ui, -apple-system, Segoe UI, sans-serif;
   color: var(--submit-text);
   background: var(--submit-bg);
 }
@@ -201,3 +203,46 @@ html, body {
 }
 
 .turnstile-mount { margin: 0.5rem 0; min-height: 1px; }
+
+/* ─── Cartoon identity (matches docs/style.css) ─── */
+body {
+  background-image: radial-gradient(rgba(31, 26, 61, 0.09) 1.3px, transparent 1.4px);
+  background-size: 22px 22px;
+}
+.submit-header { border-bottom: 3px solid var(--ink); background: #FFC93C; }
+.submit-back { font-family: 'Fredoka', sans-serif; font-size: 1.1rem; }
+.submit-card {
+  border: 3px solid var(--ink);
+  border-radius: 20px;
+  box-shadow: 6px 6px 0 var(--ink);
+}
+.submit-card h1 { font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 1.9rem; }
+.submit-form label, .submit-form legend { font-family: 'Fredoka', sans-serif; font-weight: 600; }
+.submit-form input[type="text"], .submit-form input[type="email"], .submit-form input[type="url"],
+.submit-form input[type="date"], .submit-form textarea, .submit-form .field-fieldset {
+  border: 2.5px solid var(--ink);
+  border-radius: 12px;
+}
+.submit-form select {
+  width: 100%;
+  font: inherit;
+  padding: 0.65rem 0.75rem;
+  border: 2.5px solid var(--ink);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--submit-text);
+}
+.submit-form input:focus, .submit-form textarea:focus { outline: 3px solid #FFC93C; border-color: var(--ink); }
+.chip { border: 2.5px solid var(--ink); font-weight: 700; box-shadow: 2px 2px 0 var(--ink); }
+.chip:has(input:checked) { border-color: var(--ink); }
+.btn {
+  font-family: 'Fredoka', sans-serif;
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 3px 3px 0 var(--ink);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+.btn--outline { background: #fff; border-color: var(--ink); }
+.btn--outline:hover { background: #FFC93C; border-color: var(--ink); }
+.submit-error { border: 2.5px solid var(--submit-danger); border-radius: 12px; }
