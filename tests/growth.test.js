@@ -20,6 +20,7 @@ const EVENTS = [
   { date: '2026-10-12', name: 'Aero Open Mic', time: '7:00 PM', venue: 'Aero Crafters', icons: ['music'] },
   { date: '2026-10-10', name: 'Texas A&amp;M Night', time: '6:00 PM', venue: '1907 N Ben Jordan St, Victoria, TX', address: '1907 N Ben Jordan St, Victoria, TX', icons: ['family'] },
   { date: '2026-10-10', name: 'Josh Abbott Acoustic', time: '8:00 PM', venue: 'Aero Crafters', url: 'https://www.eventbrite.com/b/tx--victoria/music/', icons: ['music'] },
+  { date: '2026-10-10', name: 'Story Strolls', time: '5:30 PM', venue: 'Riverside Park', url: 'https://www.victoriatx.gov/government/departments/parks-recreation', icons: ['outdoors'] },
   { date: '2026-10-10', name: 'Real Ticket Show', time: '9:00 PM', venue: 'Aero Crafters', url: 'https://www.eventbrite.com/e/real-ticket-show-tickets-123', icons: ['music'] }
 ];
 const VENUES = [
@@ -104,6 +105,7 @@ describe('event links', () => {
     expect(d.events.find(e => e.name === 'Josh Abbott Acoustic').url).toBe('');
     expect(d.events.find(e => e.name === 'Real Ticket Show').url).toContain('/e/real-ticket-show');
     expect((await get('/')).html).not.toContain('eventbrite.com/b/');
+    expect(d.events.find(e => e.name === 'Story Strolls').url).toBe('https://www.victoriatx.gov/1330/Parks-Recreation');
   });
 });
 

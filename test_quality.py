@@ -319,3 +319,26 @@ def test_listing_urls_are_not_event_links():
               "https://allevents.in/victoria/tejas-fest-2026/200030008232138",
               "https://www.facebook.com/events/1234567890/", ""):
         assert not is_listing_url(u), u
+
+
+def test_drop_dead_links_only_removes_not_found():
+    from collect_events import drop_dead_links
+
+    class R:
+        def __init__(self, c): self.status_code = c
+
+    codes = {"https://a.com/gone": 404, "https://b.com/ok": 200, "https://c.com/bot": 403}
+    calls = []
+
+    def get(u):
+        calls.append(u)
+        if u == "https://d.com/down":
+            raise ConnectionError("down")
+        return R(codes[u])
+
+    evs = [{"url": u} for u in ["https://a.com/gone", "https://a.com/gone", "https://b.com/ok",
+                                "https://c.com/bot", "https://d.com/down", "https://www.facebook.com/x", ""]]
+    out = drop_dead_links(evs, get=get)
+    assert [e["url"] for e in out] == ["", "", "https://b.com/ok", "https://c.com/bot",
+                                       "https://d.com/down", "https://www.facebook.com/x", ""]
+    assert calls.count("https://a.com/gone") == 1 and "https://www.facebook.com/x" not in calls

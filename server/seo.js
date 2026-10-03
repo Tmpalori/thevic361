@@ -371,6 +371,15 @@ export function linkLabel(url) {
   return 'Event details';
 }
 
+// Links found dead or wrong in the Oct 2026 audit, fixed on events that are
+// already published. The collector's venue table carries the same fixes.
+const FIXED_URLS = {
+  'https://www.victoriatx.gov/government/departments/parks-recreation': 'https://www.victoriatx.gov/1330/Parks-Recreation',
+  'https://www.navemuseum.com': 'https://navemuseum.org',
+  'https://www.victoriafineartscentre.org': 'https://victoriafinearts.org',
+  'https://www.weaverhouseconcerts.com': ''
+};
+
 export function withPages(events) {
   const seen = new Map();
   return (Array.isArray(events) ? events : [])
@@ -384,6 +393,8 @@ export function withPages(events) {
       for (const k of ['name', 'venue', 'address', 'description', 'time']) {
         if (typeof ev[k] === 'string') clean[k] = decodeEntities(ev[k]);
       }
+      const fixed = typeof ev.url === 'string' ? FIXED_URLS[ev.url.trim().replace(/\/$/, '')] : undefined;
+      if (fixed !== undefined) clean.url = fixed;
       if (isListingUrl(ev.url) || isMismatchedUrl(ev.url, ev.name)) clean.url = '';
       return Object.assign({}, ev, clean, { page: `/events/${n === 1 ? base : `${base}-${n}`}` });
     });

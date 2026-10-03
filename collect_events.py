@@ -242,18 +242,17 @@ VENUE_URLS = {
     "moonshine drinkery": "https://www.moonshinedrinkery.com",
     "victoria public library": "https://www.victoriapubliclibrary.org",
     "victoria farmers market": "https://www.facebook.com/VictoriaFarmersMarket",
-    "riverside park": "https://www.victoriatx.gov/government/departments/parks-recreation",
+    "riverside park": "https://www.victoriatx.gov/1330/Parks-Recreation",
     "deleon plaza": "https://www.victoriatx.gov",
-    "victoria fine arts center": "https://www.victoriafineartscentre.org",
+    "victoria fine arts center": "https://victoriafinearts.org",
     "museum of the coastal bend": "https://museumofthecoastalbend.org",
-    "nave museum": "https://www.navemuseum.com",
-    "leo j. welder center": "https://www.victoriapubliclibrary.org",
+    "nave museum": "https://navemuseum.org",
+    "leo j. welder center": "https://www.weldercenter.org",
     "the hideaway": "https://www.facebook.com/TheHideawayVictoriaTX",
     "j welch farms": "https://jwelchfarms.com/events/",
     "theatre victoria": "https://theatrevictoria.org",
     "riverside stadium": "https://victoriagenerals.com",
     "froggy's grub & pub": "https://froggysgrubandpub.com",
-    "weaver house concert": "https://www.weaverhouseconcerts.com",
     "detar hospital": "https://www.detar.com",
     "victoria country club": "https://victoriacc.com",
 }
@@ -1296,6 +1295,41 @@ _LISTING_URL_RES = [
 def is_listing_url(url):
     """True for search/category pages that don't point at one event."""
     return bool(url) and any(r.search(url.strip()) for r in _LISTING_URL_RES)
+
+
+_LINK_CHECK_SKIP = re.compile(r"(facebook|instagram|fb)\.com", re.I)
+
+
+def drop_dead_links(events, get=None, timeout=10):
+    """Blank links that answer 404/410 so nobody lands on a dead page.
+
+    Each unique URL is checked once. Network errors and bot blocks (403,
+    429...) keep the link; only a definite "not found" removes it. Facebook
+    and Instagram are skipped since they answer every bot with a login page.
+    """
+    get = get or (lambda u: requests.get(u, headers=HEADERS, timeout=timeout, allow_redirects=True, stream=True))
+    status = {}
+    dead = 0
+    for ev in events:
+        url = (ev.get("url") or "").strip()
+        if not url or _LINK_CHECK_SKIP.search(url):
+            continue
+        if url not in status:
+            try:
+                resp = get(url)
+                status[url] = resp.status_code
+                close = getattr(resp, "close", None)
+                if close:
+                    close()
+            except Exception:
+                status[url] = None
+        if status[url] in (404, 410):
+            ev["url"] = ""
+            dead += 1
+    if dead:
+        print(f"  [Links] Removed {dead} dead link(s): "
+              + ", ".join(u for u, c in status.items() if c in (404, 410)))
+    return events
 
 
 # ─── FILL GAPS (description + url) ──────────────────────────────────────────
@@ -3434,6 +3468,7 @@ def main():
     merged = cap_library_events(merged)
 
     # 6. Fill missing descriptions + URLs
+    merged = drop_dead_links(merged)
     merged = fill_gaps(merged)
 
     # 7. AI review — polish descriptions + assign icons via OpenAI
