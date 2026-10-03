@@ -179,7 +179,7 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 
 ## Venues, guides, social kit
 
-`server/guides.js` generates `/venues` + `/venues/<slug>` from `venues.json` (organizer accounts skipped) and the live + archived events, seasonal guides (`SEASONS`: Tejas Fest, Halloween, Thanksgiving, Christmas, New Year's Eve, July 4th, Bach Festival) that appear in the nav only while in season or when they have upcoming events, and `/events/<slug>.ics`. Event pages carry calendar and share buttons; the homepage has client-side filter chips (`docs/app.js`). `scripts/social_kit.py` runs every morning (`social-kit.yml`, also on changes to the generator) and commits slides, captions and `kit.json` to `docs/social/latest/`: Monday rebuilds the week, weekend and today kits, Thursday the weekend (plus `weekend.mp4`, a vertical Reel made with ffmpeg) and today, other days only today. Instagram captions @mention venues that have a handle in `venues.json`, and Monday's run sends Slack `outreach.txt` (this week's venues with their event links, to send them for a reshare) (open `/social/latest/`, linked from the admin header). `scripts/social_post.py` then posts the kit to the Facebook Page and Instagram when the `SOCIAL_AUTOPOST` repo variable is `1` and the `META_PAGE_ID` / `META_PAGE_TOKEN` (+ `IG_USER_ID`) secrets are set: Monday posts the week, Thursday the weekend (as a Reel on Instagram when `weekend.mp4` exists), other days today.
+`server/guides.js` generates `/venues` + `/venues/<slug>` from `venues.json` (organizer accounts skipped) and the live + archived events, seasonal guides (`SEASONS`: Tejas Fest, Halloween, Thanksgiving, Christmas, New Year's Eve, July 4th, Bach Festival) that appear in the nav only while in season or when they have upcoming events, and `/events/<slug>.ics`. Event pages carry calendar and share buttons; the homepage has client-side filter chips (`docs/app.js`). `scripts/social_kit.py` runs every morning (`social-kit.yml`, also on changes to the generator) and commits slides, captions and `kit.json` to `docs/social/latest/`: Monday rebuilds the week, weekend and today kits, Thursday the weekend (plus `weekend.mp4`, a vertical Reel made with ffmpeg) and today, other days only today. Instagram captions @mention venues that have a handle in `venues.json`, and Monday's run sends Slack `outreach.txt` (this week's venues with their event links, to send them for a reshare) (open `/social/latest/`, linked from the admin header). `scripts/social_post.py` then posts the kit to the Facebook Page and Instagram when the `SOCIAL_AUTOPOST` repo variable is `1` and the `META_PAGE_ID` / `META_PAGE_TOKEN` (+ `IG_USER_ID`) secrets are set: Monday posts the week, Thursday the weekend (as a Reel on Instagram when `weekend.mp4` exists), other days today. `kit.json` carries a per-run `build` id the poster waits for (so it never posts an earlier same-day kit), and `posted.json` records what went out per day and kind so re-running a half-failed job skips the platform that already posted.
 
 ## Traffic stats
 
@@ -258,6 +258,7 @@ Full reference is in [`RAILWAY.md`](./RAILWAY.md). Quick list:
 |---|---|
 | `OPENAI_API_KEY` | `collect_events.py` AI review + FB/IG post extraction |
 | `APIFY_TOKEN` | `collect_events.py` Facebook events + posts, Instagram posts |
+| `GEMINI_API_KEY` | `collect_events.py` Gemini + Google Search event discovery (`fetch_gemini_events`; optional `GEMINI_MODEL`, `GEMINI_ENABLED=0` to turn off). Events are kept only with their own link on a site Gemini cited, inside the window. |
 | `SENTRY_DSN`, `SENTRY_ENVIRONMENT` | Both collector and server |
 
 ### Optional
@@ -334,3 +335,11 @@ curl -s https://thevic361.com/events.json | jq '.events | length'
 # Tail the latest weekly-collect log:
 gh run view --log $(gh run list --workflow=weekly-collect.yml --limit 1 --json databaseId -q '.[0].databaseId')
 ```
+
+## Security notes
+
+- `trust proxy` is `1` (Railway's edge is the single hop). Don't set it to `true`: Express would then take the client-supplied left-most X-Forwarded-For entry as `req.ip`, and every per-IP rate limit could be bypassed.
+- Anything rendered into HTML attributes must escape quotes (`escHtml` in both `server/seo.js` and `docs/app.js` does). `safeUrl` / `safeHref` reject URLs containing whitespace, quotes or angle brackets.
+- Use function replacements (`.replace(x, () => html)`) when inserting rendered content: event text can contain `$'` / `$&`.
+- Weekly sponsor holds are saved before the Stripe call, under an in-process lock; a payment for an already-sold week is marked `conflict` and flagged in Slack for a refund.
+

@@ -306,7 +306,8 @@ export function renderSeasonPage(season, live, archived, { siteUrl, now, sponsor
 // ─── Calendar + sharing ──────────────────────────────────────────────────
 
 function icsEscape(s) {
-  return String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
+  // \r too: a bare CR is a line break to lenient calendar apps.
+  return String(s || '').replace(/\\/g, '\\\\').replace(/\r\n?|\n/g, '\\n').replace(/([,;])/g, '\\$1');
 }
 
 // RFC 5545 lines must be ≤75 octets; continuation lines start with a space.

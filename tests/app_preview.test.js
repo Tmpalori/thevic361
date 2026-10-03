@@ -89,3 +89,19 @@ describe('public site preview mode (PR #20)', () => {
     expect(banners[0].textContent.toLowerCase()).toContain('preview');
   });
 });
+
+describe('escaping on the public homepage', () => {
+  it('escapes quotes so a URL or name cannot break out of an attribute', () => {
+    bootApp('');
+    const app = window.__vic361App;
+    expect(app.escHtml('a"b\'c<d>&')).toBe('a&quot;b&#39;c&lt;d&gt;&amp;');
+    expect(app.safeHref('https://a.com/"onmouseover="alert(1)')).toBe('');
+    expect(app.safeHref('javascript:alert(1)')).toBe('');
+    expect(app.safeHref('https://a.com/x?y=1&z=2')).toBe('https://a.com/x?y=1&amp;z=2');
+    const html = app.renderEvent({ date: '2099-01-01', name: 'Ladies" onclick="x', url: 'https://a.com/"x', icons: ['music'] });
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    expect(div.querySelector('[onclick]')).toBeNull();
+    expect(div.querySelector('[onmouseover]')).toBeNull();
+  });
+});

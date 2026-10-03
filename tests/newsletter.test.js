@@ -190,3 +190,46 @@ describe('sending', () => {
     expect((await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': '' })).status).toBe(401);
   });
 });
+
+describe('send failures', () => {
+  it('a failed batch is retried by the next cron, only for the people who missed it', async () => {
+    let fail = true;
+    const calls = [];
+    const resend = {
+      send: async () => ({ id: 'x' }),
+      batch: async (msgs, key) => {
+        calls.push({ to: msgs.map(m => m.to[0]), key });
+        if (fail && msgs.some(m => m.to[0] === 'b@example.com')) throw new Error('Resend down');
+        return { data: msgs.map((_, i) => ({ id: `b${i}` })) };
+      }
+    };
+    await startApp({ resend });
+    await store.importSubscribers(['a@example.com', 'b@example.com'], 'import');
+    const first = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
+    expect(first.ok).toBe(false);
+    expect(first.failed).toBe(2); // one batch holds both
+
+    fail = false;
+    const retry = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
+    expect(retry.ok).toBe(true);
+    expect(calls[calls.length - 1].to.sort()).toEqual(['a@example.com', 'b@example.com']);
+    expect(calls[calls.length - 1].key).not.toBe(calls[0].key);
+
+    const again = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
+    expect(again.error).toBe('already-sent');
+  });
+
+  it('refuses to send without a mailing address', async () => {
+    await startApp({ newsletterAddress: '' });
+    await store.importSubscribers(['a@example.com'], 'import');
+    const r = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
+    expect(r.error).toBe('no-address');
+    expect(sent.batches).toHaveLength(0);
+  });
+
+  it('a non-ASCII cron header is rejected, not a crash', async () => {
+    await startApp();
+    const r = await fetch(baseUrl + '/api/newsletter/cron', { method: 'POST', headers: { 'X-Cron-Secret': Buffer.from('crön-secret1', 'latin1').toString('latin1') } });
+    expect(r.status).toBe(401);
+  });
+});

@@ -84,9 +84,11 @@ def select_events(events, start, end):
     """Events between start and end (dates), grouped by date, featured first."""
     out = {}
     for ev in events or []:
+        if not isinstance(ev, dict):
+            continue
         try:
-            d = date.fromisoformat(ev.get("date", ""))
-        except ValueError:
+            d = date.fromisoformat(str(ev.get("date") or "")[:10])
+        except (TypeError, ValueError):
             continue
         if start <= d <= end and ev.get("name"):
             out.setdefault(d, []).append(ev)
@@ -391,7 +393,8 @@ var t=document.getElementById(b.getAttribute('data-copy'));t.select();
 def fetch_events(url):
     req = urllib.request.Request(url, headers={"User-Agent": "TheVic361-SocialKit/1.0"})
     with urllib.request.urlopen(req, timeout=30) as r:
-        events = json.loads(r.read().decode("utf-8")).get("events", [])
+        data = json.loads(r.read().decode("utf-8"))
+        events = data.get("events", []) if isinstance(data, dict) else []
     for ev in events:  # older data can carry "&amp;"
         for k in ("name", "venue"):
             if isinstance(ev.get(k), str):
@@ -444,12 +447,18 @@ def main(argv=None):
             reel = make_reel(args.out, slides)
             if reel:
                 kit["reel"] = reel
+            elif slides:
+                print("::warning::Weekend Reel skipped (ffmpeg missing or failed); Instagram will get the carousel.")
         kits[kind] = kit
         print(f"{kind}: {kit['events']} events, {len(slides)} slides" + (", reel" if kit.get("reel") else ""))
 
     # Manifest for scripts/social_post.py (auto-posting).
     with open(manifest_path, "w") as f:
-        json.dump({"generated_for": today.isoformat(), "kits": kits}, f, indent=2, ensure_ascii=False)
+        # `build` changes every run, so the poster can tell this deploy from an
+        # earlier one the same day before it posts (see wait_for_deploy).
+        build = os.environ.get("GITHUB_RUN_ID") and f"{os.environ['GITHUB_RUN_ID']}-{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}"
+        json.dump({"generated_for": today.isoformat(), "build": build or datetime.now().isoformat(timespec="seconds"),
+                   "kits": kits}, f, indent=2, ensure_ascii=False)
 
     if week_groups is not None:
         with open(os.path.join(args.out, "outreach.txt"), "w") as f:

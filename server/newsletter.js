@@ -233,18 +233,36 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
 
   async function sendWeekly({ force = false } = {}) {
     if (!config.enabled) return { ok: false, error: 'not-configured' };
+    // CAN-SPAM: every marketing email needs a physical postal address.
+    if (!config.address) return { ok: false, error: 'no-address', message: 'Set NEWSLETTER_ADDRESS (a mailing address) before sending.' };
     const now = nowFn();
     const key = weekKey(now);
     const prior = await store.getNewsletterSend(key);
-    if (prior && !force) return { ok: false, error: 'already-sent', sent: prior };
+    const priorFailed = prior && Array.isArray(prior.failed_emails) ? prior.failed_emails : [];
+    // Fully sent: done. Partly sent: a retry (cron or admin) only goes to
+    // the people who didn't get it. Force resends to everyone.
+    if (prior && !force && !priorFailed.length) return { ok: false, error: 'already-sent', sent: prior };
+    const resume = Boolean(prior && !force && priorFailed.length);
     const payload = await getPublicPayload();
-    const subs = await store.listSubscribers({ status: 'active' });
-    if (!subs.length) return { ok: false, error: 'no-subscribers' };
+    let subs = await store.listSubscribers({ status: 'active' });
+    if (resume) {
+      const retry = new Set(priorFailed);
+      subs = subs.filter(s => retry.has(s.email));
+    }
+    if (!subs.length) {
+      if (resume) {
+        await store.recordNewsletterSend({ ...prior, failed: 0, failed_emails: [] });
+        return { ok: false, error: 'already-sent', sent: prior };
+      }
+      return { ok: false, error: 'no-subscribers' };
+    }
     const probe = renderWeekly(payload.events, { siteUrl, now, sponsor: payload.sponsor, unsubscribeUrl: '', address: config.address });
     if (!probe.total) return { ok: false, error: 'no-events' };
 
     let sent = 0;
     const failures = [];
+    const failedEmails = [];
+    const attempt = resume ? `-r${Date.now()}` : force ? `-f${Date.now()}` : '';
     for (let i = 0; i < subs.length; i += BATCH_SIZE) {
       const chunk = subs.slice(i, i + BATCH_SIZE);
       const msgs = chunk.map(s => {
@@ -258,13 +276,18 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       });
       try {
         // Idempotency key per week + chunk: a retried request can't double-send.
-        await resend.batch(msgs, `vic361-${key}-${i / BATCH_SIZE}${force ? `-f${Date.now()}` : ''}`);
+        await resend.batch(msgs, `vic361-${key}-${i / BATCH_SIZE}${attempt}`);
         sent += chunk.length;
       } catch (err) {
         failures.push(err.message);
+        failedEmails.push(...chunk.map(s => s.email));
       }
     }
-    const record = { week_key: key, subject: probe.subject, recipients: sent, failed: subs.length - sent };
+    const record = {
+      week_key: key, subject: probe.subject,
+      recipients: sent + (resume ? (prior.recipients || 0) : 0),
+      failed: failedEmails.length, failed_emails: failedEmails
+    };
     await store.recordNewsletterSend(record);
     if (slack) {
       if (failures.length) slack.alert(`newsletter-failed-${key}`, 'Newsletter send partly failed', `${sent} sent, ${record.failed} failed.\n${failures[0]}`, `${siteUrl}/admin.html`);
@@ -380,9 +403,11 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   // Scheduled send (GitHub Actions). Needs the shared secret; refuses when
   // no secret is configured so the endpoint can't be triggered by anyone.
   app.post('/api/newsletter/cron', async (req, res) => {
-    const given = String(req.get('x-cron-secret') || '');
-    const ok = config.cronSecret && given.length === config.cronSecret.length &&
-      crypto.timingSafeEqual(Buffer.from(given), Buffer.from(config.cronSecret));
+    const given = Buffer.from(String(req.get('x-cron-secret') || ''));
+    const want = Buffer.from(config.cronSecret || '');
+    // Compare byte lengths: timingSafeEqual throws on a length mismatch,
+    // and a non-ASCII header has more bytes than characters.
+    const ok = want.length > 0 && given.length === want.length && crypto.timingSafeEqual(given, want);
     if (!ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
     try {
       const out = await sendWeekly();

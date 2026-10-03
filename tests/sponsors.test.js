@@ -262,3 +262,58 @@ describe('admin', () => {
     expect((await fetch(baseUrl + '/api/admin/sponsors')).status).toBe(401);
   });
 });
+
+describe('booking safety', () => {
+  const weekly = (who) => ({ package: 'weekly', week: '2026-10-19', business: who, text: 'x', url: `${who}.example`, email: `${who}@x.example` });
+
+  it('two buyers hitting the same week at once: only one gets a checkout', async () => {
+    await startApp();
+    const [a, b] = await Promise.all([form(weekly('alpha')), form(weekly('beta'))]);
+    expect([a.status, b.status].sort()).toEqual([303, 400]);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].params.payment_method_types).toEqual(['card']);
+  });
+
+  it('a second payment for a sold week is flagged for refund, not put live', async () => {
+    await startApp();
+    await form(weekly('alpha'));
+    const first = sessions[0];
+    await completed(first);
+    // Second buyer's order sneaks in (e.g. an old hold) and pays too.
+    const id = 'late-order';
+    await store.saveSponsorOrder({ id, kind: 'weekly', week_start: '2026-10-19', business: 'Late', email: 'l@x.example', status: 'pending', created_at: NOW.toISOString(), amount: 30000 });
+    expect((await completed({ id: 'cs_late', params: { client_reference_id: id, line_items: [{ price_data: { unit_amount: 30000 } }] } })).status).toBe(200);
+    const late = (await store.listSponsorOrders()).find(o => o.id === id);
+    expect(late.status).toBe('conflict');
+  });
+
+  it('a refund takes the placement down', async () => {
+    await startApp();
+    await form(weekly('alpha'));
+    await completed(sessions[0], { payment_intent: 'pi_123' });
+    await webhook({ type: 'charge.refunded', data: { object: { payment_intent: 'pi_123', refunded: true } } });
+    const [order] = await store.listSponsorOrders();
+    expect(order.status).toBe('refunded');
+  });
+
+  it('a Stripe failure releases the hold', async () => {
+    await startApp({ stripe: { createCheckoutSession: async () => { throw new Error('down'); } } });
+    expect((await form(weekly('alpha'))).status).toBe(502);
+    const [order] = await store.listSponsorOrders();
+    expect(order.status).toBe('failed');
+    const page = await (await fetch(baseUrl + '/advertise/checkout?package=weekly')).text();
+    expect(page).toContain('value="2026-10-19"');
+    expect(page).not.toMatch(/value="2026-10-19"[^>]*disabled/);
+  });
+});
+
+describe('same event matching', () => {
+  it('same name at two different venues is two events', () => {
+    expect(sameEvent({ date: '2026-10-10', name: 'Live Music', venue: 'Moonshine Drinkery' },
+      { date: '2026-10-10', name: 'Live Music', venue: 'Aero Crafters' })).toBe(false);
+    expect(sameEvent({ date: '2026-10-10', name: 'Live Music', venue: 'Moonshine Drinkery' },
+      { date: '2026-10-10', name: 'Live Music', venue: 'Moonshine Drinkery Victoria' })).toBe(true);
+    expect(sameEvent({ date: '2026-10-10', name: 'Live Music', venue: '' },
+      { date: '2026-10-10', name: 'Live Music', venue: 'Aero Crafters' })).toBe(true);
+  });
+});

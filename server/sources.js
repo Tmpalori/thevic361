@@ -38,6 +38,7 @@ const KNOWN_SOURCES = [
   { name: 'apify_eventbrite',      label: 'Apify · Eventbrite',   category: 'apify' },
   { name: 'apify_facebook_posts',  label: 'Apify · Facebook posts → OpenAI', category: 'apify' },
   { name: 'apify_instagram_posts', label: 'Apify · Instagram posts → OpenAI', category: 'apify' },
+  { name: 'gemini_search', label: 'Gemini · Google Search', category: 'ai' },
 ];
 
 const KNOWN_BY_NAME = new Map(KNOWN_SOURCES.map(s => [s.name, s]));

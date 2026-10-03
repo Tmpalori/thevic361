@@ -11,8 +11,19 @@ export function createRateLimiter({ windowMs, max } = {}) {
   const m = max ?? 5;
   const buckets = new Map();
 
+  let lastSweep = 0;
+  // Drop idle keys now and then so the map can't grow without bound.
+  function sweep(now) {
+    if (now - lastSweep < w) return;
+    lastSweep = now;
+    for (const [k, arr] of buckets) {
+      if (!arr.length || arr[arr.length - 1] <= now - w) buckets.delete(k);
+    }
+  }
+
   function check(key) {
     const now = Date.now();
+    sweep(now);
     const cutoff = now - w;
     const arr = (buckets.get(key) || []).filter(t => t > cutoff);
     if (arr.length >= m) {
