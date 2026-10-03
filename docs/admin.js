@@ -859,6 +859,79 @@
     }
   }
 
+  // ─── EMAIL NEWSLETTER (Resend) ───
+  function emailNlMsg(text, kind) {
+    const el = document.getElementById('email-nl-msg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('is-error', kind === 'error');
+    el.classList.toggle('is-success', kind === 'success');
+  }
+
+  function renderEmailNewsletter(d) {
+    const st = document.getElementById('email-nl-status');
+    const item = (label, value) => '<div class="sources-summary__item"><span class="sources-summary__label">' +
+      escapeHtml(label) + '</span><span class="sources-summary__value">' + escapeHtml(String(value)) + '</span></div>';
+    if (st) st.innerHTML = item('Subscribers', d.counts.active) + item('Awaiting confirmation', d.counts.pending) +
+      item('Unsubscribed', d.counts.unsubscribed) +
+      item('This week', d.this_week_sent ? 'Sent' : (d.next.events + ' events ready')) +
+      item('Auto-send Mondays', d.autosend ? 'On' : 'Off');
+    const warn = document.getElementById('email-nl-warning');
+    const issues = [];
+    if (!d.configured) issues.push('Add RESEND_API_KEY in Railway to turn on sending and signups (the site keeps the Beehiiv form until then).');
+    if (!d.address_set) issues.push('Set NEWSLETTER_ADDRESS (a mailing address) in Railway; US law requires one in every newsletter.');
+    if (warn) { warn.hidden = !issues.length; warn.textContent = issues.join(' '); }
+    const send = document.getElementById('email-nl-send');
+    if (send) {
+      send.disabled = !d.configured || !d.counts.active;
+      send.textContent = d.this_week_sent ? 'Already sent this week' : ('Send to ' + d.counts.active + ' subscribers');
+      if (d.this_week_sent) send.disabled = true;
+    }
+    const sends = document.getElementById('email-nl-sends');
+    if (sends) {
+      sends.innerHTML = (d.sends || []).length
+        ? d.sends.map(s => '<tr><td class="traffic-label">' + escapeHtml(s.subject || s.week_key) + '</td><td class="traffic-num">' +
+          s.recipients + (s.failed ? ' (' + s.failed + ' failed)' : '') + '</td></tr>').join('')
+        : '<tr><td class="traffic-empty">No newsletters sent yet.</td></tr>';
+    }
+  }
+
+  async function loadEmailNewsletter() {
+    if (publishMode() !== 'server') return;
+    try {
+      const { res, json } = await adminFetch('/api/admin/newsletter');
+      if (!res.ok || !json || !json.ok) throw new Error((json && json.message) || ('HTTP ' + res.status));
+      state.emailNewsletter = json;
+      renderEmailNewsletter(json);
+    } catch (err) {
+      emailNlMsg('Could not load newsletter status: ' + (err.message || err), 'error');
+    }
+  }
+
+  async function previewEmailNewsletter() {
+    const frame = document.getElementById('email-nl-frame');
+    try {
+      const res = await fetch(apiBaseUrl() + '/api/admin/newsletter/preview',
+        { headers: state.session ? { Authorization: 'Bearer ' + state.session } : {} });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      frame.srcdoc = await res.text();
+      frame.hidden = false;
+    } catch (err) {
+      emailNlMsg('Preview failed: ' + (err.message || err), 'error');
+    }
+  }
+
+  async function emailNlPost(path, body, okText) {
+    try {
+      const { res, json } = await adminFetch(path, { method: 'POST', body: JSON.stringify(body || {}), headers: { 'Content-Type': 'application/json' } });
+      if (!res.ok || !json || !json.ok) throw new Error((json && (json.message || json.error)) || ('HTTP ' + res.status));
+      emailNlMsg(okText(json), 'success');
+      loadEmailNewsletter();
+    } catch (err) {
+      emailNlMsg(err.message || String(err), 'error');
+    }
+  }
+
   // ─── EVENT EDIT MODAL (PR #22) ───
   // The admin Edit button on a picker row opens this modal so an operator can
   // correct details an AI scraper got wrong (typos, missing times, wrong
@@ -1269,7 +1342,7 @@
       el.classList.toggle('is-active', k === name);
     });
     if (name === 'preview') refreshPreview();
-    if (name === 'newsletter') refreshNewsletter();
+    if (name === 'newsletter') { refreshNewsletter(); loadEmailNewsletter(); }
     if (name === 'sources') loadSources();
     if (name === 'traffic') loadTraffic();
   }
@@ -1748,6 +1821,23 @@
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => activateTab(btn.dataset.tab));
     });
+
+    const nlPreview = document.getElementById('email-nl-preview');
+    const nlTest = document.getElementById('email-nl-test');
+    const nlSend = document.getElementById('email-nl-send');
+    const nlImport = document.getElementById('email-nl-import');
+    if (nlPreview) nlPreview.addEventListener('click', previewEmailNewsletter);
+    if (nlTest) nlTest.addEventListener('click', () => emailNlPost('/api/admin/newsletter/test',
+      { email: (document.getElementById('email-nl-test-to') || {}).value }, j => 'Test sent to ' + j.to + '.'));
+    if (nlSend) nlSend.addEventListener('click', () => {
+      const n = state.emailNewsletter ? state.emailNewsletter.counts.active : 0;
+      if (!window.confirm('Send this week\'s newsletter to ' + n + ' subscribers?')) return;
+      emailNlPost('/api/admin/newsletter/send', {}, j => 'Sent to ' + j.recipients + ' subscribers.');
+    });
+    if (nlImport) nlImport.addEventListener('click', () => emailNlPost('/api/admin/newsletter/import',
+      { emails: (document.getElementById('email-nl-import-text') || {}).value },
+      j => 'Imported ' + j.added + ' new, ' + j.already + ' already subscribed' +
+        (j.skipped_unsubscribed ? ', ' + j.skipped_unsubscribed + ' skipped (unsubscribed)' : '') + '.'));
 
     const trafficDays = document.getElementById('traffic-days');
     const trafficRefresh = document.getElementById('traffic-refresh');

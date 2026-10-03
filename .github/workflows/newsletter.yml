@@ -1,0 +1,33 @@
+# Newsletter — sends this week's email to subscribers on Monday morning by
+# calling the site's /api/newsletter/cron endpoint (server/newsletter.js),
+# after Sunday-night Save & Publish. 12:43 UTC is 7:43 AM CDT / 6:43 AM CST.
+#
+# On only when the NEWSLETTER_AUTOSEND repo variable is 1 and the
+# NEWSLETTER_CRON_SECRET secret matches the Railway variable of the same
+# name. A week that was already sent from the admin is skipped.
+
+name: Newsletter
+
+on:
+  schedule:
+    - cron: '43 12 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    if: vars.NEWSLETTER_AUTOSEND == '1' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Send this week's newsletter
+        env:
+          SECRET: ${{ secrets.NEWSLETTER_CRON_SECRET }}
+          SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+        run: |
+          if [ -z "$SECRET" ]; then echo "::error::NEWSLETTER_CRON_SECRET is not set"; exit 1; fi
+          code=$(curl -sS -o out.json -w '%{http_code}' -X POST -H "X-Cron-Secret: $SECRET" "$SITE/api/newsletter/cron")
+          cat out.json; echo
+          [ "$code" = "200" ] || { echo "::error::Newsletter send returned HTTP $code"; exit 1; }
