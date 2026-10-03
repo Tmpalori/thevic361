@@ -198,7 +198,6 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 - Search landing pages in `HUB_PAGES` with `hidden: true` (`/tonight`, `/date-night`, `/this-weekend-with-kids`) stay out of the top nav but are in the footer and sitemap.
 - Hub pages and the homepage hero have a "Share this list" button (handled by `docs/track.js`); `/this-weekend` and the homepage use the social-kit cover slides as link-preview images.
 - `docs/app.js` inserts a "Get this list every Monday" signup card after the day following today (hidden once subscribed on that device, via localStorage).
-- `server/widget.js`: `/widget/:slug` is an iframe-able "Upcoming at <venue>" box (framing allowed only on that route); `/for-venues` gives venues the embed code plus a plain backlink. Venue pages link to it.
 
 ## Auto-publish
 

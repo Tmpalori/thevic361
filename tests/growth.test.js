@@ -1,6 +1,6 @@
 // @vitest-environment node
 //
-// Traffic features: search landing pages, list share images, venue widget.
+// Traffic features: search landing pages and list share images.
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { createApp } from '../server/index.js';
@@ -17,7 +17,11 @@ const EVENTS = [
   { date: '2026-10-09', name: 'Morning Story Time', time: '10:00 AM', venue: 'Victoria Public Library', icons: ['family'] },
   { date: '2026-10-10', name: 'Zoo Boo', time: '1:00 PM', venue: 'The Texas Zoo', icons: ['family', 'outdoors'] },
   { date: '2026-10-10', name: 'Art After Dark', time: '7:00 PM', venue: 'The Nave Museum', icons: ['arts'] },
-  { date: '2026-10-12', name: 'Aero Open Mic', time: '7:00 PM', venue: 'Aero Crafters', icons: ['music'] }
+  { date: '2026-10-12', name: 'Aero Open Mic', time: '7:00 PM', venue: 'Aero Crafters', icons: ['music'] },
+  { date: '2026-10-10', name: 'Texas A&amp;M Night', time: '6:00 PM', venue: '1907 N Ben Jordan St, Victoria, TX', address: '1907 N Ben Jordan St, Victoria, TX', icons: ['family'] },
+  { date: '2026-10-10', name: 'Josh Abbott Acoustic', time: '8:00 PM', venue: 'Aero Crafters', url: 'https://www.eventbrite.com/b/tx--victoria/music/', icons: ['music'] },
+  { date: '2026-10-10', name: 'Story Strolls', time: '5:30 PM', venue: 'Riverside Park', url: 'https://www.victoriatx.gov/government/departments/parks-recreation', icons: ['outdoors'] },
+  { date: '2026-10-10', name: 'Real Ticket Show', time: '9:00 PM', venue: 'Aero Crafters', url: 'https://www.eventbrite.com/e/real-ticket-show-tickets-123', icons: ['music'] }
 ];
 const VENUES = [
   { name: 'Aero Crafters', category: 'Bar / Live Music' },
@@ -81,27 +85,43 @@ describe('search landing pages', () => {
   });
 });
 
-describe('venue widget', () => {
-  it('lists the venue\'s upcoming events and can be framed anywhere', async () => {
+describe('event text', () => {
+  it('decodes stored HTML entities and does not repeat the address', async () => {
     await start();
-    const { r, html } = await get('/widget/aero-crafters');
-    expect(r.status).toBe(200);
-    expect(r.headers.get('x-frame-options')).toBeNull();
-    expect(r.headers.get('content-security-policy')).toContain('frame-ancestors *');
-    expect(html).toContain('Friday Live Music');
-    expect(html).toContain('Aero Open Mic');
-    expect(html).not.toContain('Art After Dark');
-    expect(html).toContain('utm_source=widget&amp;utm_medium=aero-crafters');
-    expect((await get('/widget/nope')).r.status).toBe(404);
-    // Normal pages still refuse framing.
-    expect((await get('/')).r.headers.get('x-frame-options')).toBe('SAMEORIGIN');
+    const d = await (await fetch(baseUrl + '/events.json')).json();
+    expect(d.events.find(e => e.date === '2026-10-10' && e.name.startsWith('Texas')).name).toBe('Texas A&M Night');
+    const html = (await get('/')).html;
+    expect(html).not.toContain('&amp;amp;');
+    expect(html).toContain('Texas A&amp;M Night');
+    const row = html.match(/<span class="event-venue">([^<]*)<\/span>/g).find(s => s.includes('Ben Jordan'));
+    expect(row).toBe('<span class="event-venue">1907 N Ben Jordan St</span>');
   });
+});
 
-  it('/for-venues gives copyable code with a real backlink', async () => {
+describe('event links', () => {
+  it('drops search/category links but keeps real event links', async () => {
     await start();
-    const page = (await get('/for-venues?venue=aero-crafters')).html;
-    expect(page).toContain('&lt;iframe src=&quot;https://www.thevic361.com/widget/aero-crafters&quot;');
-    expect(page).toContain('href=&quot;https://www.thevic361.com/venues/aero-crafters&quot;');
-    expect((await get('/venues/aero-crafters')).html).toContain('/for-venues?venue=aero-crafters');
+    const d = await (await fetch(baseUrl + '/events.json')).json();
+    expect(d.events.find(e => e.name === 'Josh Abbott Acoustic').url).toBe('');
+    expect(d.events.find(e => e.name === 'Real Ticket Show').url).toContain('/e/real-ticket-show');
+    expect((await get('/')).html).not.toContain('eventbrite.com/b/');
+    expect(d.events.find(e => e.name === 'Story Strolls').url).toBe('https://www.victoriatx.gov/1330/Parks-Recreation');
+  });
+});
+
+describe('link audit helpers', async () => {
+  const { isMismatchedUrl, linkLabel } = await import('../server/seo.js');
+  it('flags an event link whose slug names another event', () => {
+    expect(isMismatchedUrl('https://www.facebook.com/events/306-w-commercial-st-victoria-tx/nave-volunteer-information-session/1065577712573226/', 'Live Band Karaoke')).toBe(true);
+    expect(isMismatchedUrl('https://allevents.in/victoria/walk-to-end-alzheimers/200030364373618', "Walk to End Alzheimer's")).toBe(false);
+    expect(isMismatchedUrl('https://www.facebook.com/victoriamainstreet/posts/-music-on-main-street/138', 'Thursday Karaoke')).toBe(false);
+    expect(isMismatchedUrl('https://victoriapl.librarycalendar.com/event/adult-program-9240', 'Sourdough Baking')).toBe(false);
+  });
+  it('labels venue homepages and posts honestly', () => {
+    expect(linkLabel('https://palacebingo.org')).toBe('Venue website');
+    expect(linkLabel('https://www.weldercenter.org/events')).toBe('Venue website');
+    expect(linkLabel('https://www.instagram.com/p/DdtoAzUCJ6L/')).toBe('See the post');
+    expect(linkLabel('https://www.facebook.com/VictoriaFarmersMarket')).toBe('Venue page');
+    expect(linkLabel('https://allevents.in/victoria/tejas-fest-2026/200030008232138')).toBe('Event details');
   });
 });

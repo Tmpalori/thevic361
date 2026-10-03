@@ -293,15 +293,110 @@ export function slugify(str) {
 
 // Attach a stable `page` path to each event: /events/<date>-<name-slug>.
 // Same date + name twice gets -2, -3 in payload order so links stay unique.
+// Some sources hand us text that's already HTML-encoded ("Texas A&amp;M");
+// decode it once so escaping on render doesn't show "&amp;" on the page.
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+export function decodeEntities(str) {
+  if (typeof str !== 'string' || !str.includes('&')) return str;
+  return str.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, code) => {
+    if (code[0] === '#') {
+      const n = code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+      return Number.isFinite(n) && n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
+    }
+    return ENTITIES[code.toLowerCase()] ?? m;
+  });
+}
+
+// Venue line under an event name: "Venue · street address", without
+// repeating the address when the venue field already is one.
+export function placeText(ev) {
+  let venue = (ev.venue || '').trim();
+  const addr = (ev.address || '').trim();
+  if (/^\d/.test(venue)) venue = venue.split(',')[0].trim();
+  if (!venue) return addr;
+  const v = venue.toLowerCase(), a = addr.toLowerCase();
+  if (!addr || v.includes(a) || a.includes(v)) return venue;
+  return `${venue} · ${addr}`;
+}
+
+// Search and category pages ("music in Victoria") aren't a link to the event.
+const LISTING_URL = [
+  /eventbrite\.[a-z.]+\/(b|d)\//i,
+  /allevents\.in\/[^/]+\/?(all|this-weekend|today|tomorrow|[a-z-]+-events)?\/?(\?|#|$)/i,
+  /facebook\.com\/events\/?(explore|search|discover)?\/?(\?|#|$)/i
+];
+export function isListingUrl(url) {
+  return typeof url === 'string' && LISTING_URL.some(re => re.test(url.trim()));
+}
+
+// Event-specific URLs carry the event's name in a slug
+// (facebook.com/events/<slug>/<id>, allevents.in/<city>/<slug>/<id>,
+// eventbrite.com/e/<slug>-tickets-<id>). If that slug shares no word with the
+// event's name, the link belongs to some other event.
+const SLUG_HOSTS = /(^|\.)(facebook\.com|allevents\.in|eventbrite\.[a-z.]+|victoriachamber\.org)$/i;
+const STOP = new Set('the and at in of for with on to tx victoria texas united states event events tickets night live free'.split(' '));
+function words(text) {
+  return new Set(String(text || '').toLowerCase().normalize('NFKD')
+    .replace(/['’.]/g, '').split(/[^a-z0-9]+/)
+    .filter(w => w.length >= 3 && !/^\d+$/.test(w) && !STOP.has(w))
+    .map(w => w.slice(0, 5)));
+}
+export function isMismatchedUrl(url, name) {
+  let u;
+  try { u = new URL(url); } catch { return false; }
+  if (!SLUG_HOSTS.test(u.hostname)) return false;
+  // A Facebook post can be a roundup of several events; only event links count.
+  if (/facebook\.com$/i.test(u.hostname) && !u.pathname.startsWith('/events/')) return false;
+  const slug = u.pathname.split('/').filter(seg => /[a-z]/i.test(seg) && seg.includes('-')).pop();
+  if (!slug) return false;
+  const a = words(slug), b = words(name);
+  if (!a.size || !b.size) return false;
+  for (const w of a) if (b.has(w)) return false;
+  return true;
+}
+
+// What the event page's button should say for a link.
+export function linkLabel(url) {
+  let u;
+  try { u = new URL(url); } catch { return 'Event details'; }
+  const host = u.hostname.replace(/^www\./, '');
+  const segs = u.pathname.split('/').filter(Boolean);
+  if (/instagram\.com$/.test(host)) return segs[0] === 'p' || segs[0] === 'reel' ? 'See the post' : 'Venue page';
+  if (/facebook\.com$/.test(host)) {
+    if (segs[0] === 'events' && segs.length > 1) return 'Event details';
+    return segs.includes('posts') ? 'See the post' : 'Venue page';
+  }
+  const last = (segs[segs.length - 1] || '').toLowerCase();
+  if (!segs.length || (segs.length === 1 && /^(events?|calendar|index\.php)$/.test(last)) || /search/.test(u.search)) return 'Venue website';
+  return 'Event details';
+}
+
+// Links found dead or wrong in the Oct 2026 audit, fixed on events that are
+// already published. The collector's venue table carries the same fixes.
+const FIXED_URLS = {
+  'https://www.victoriatx.gov/government/departments/parks-recreation': 'https://www.victoriatx.gov/1330/Parks-Recreation',
+  'https://www.navemuseum.com': 'https://navemuseum.org',
+  'https://www.victoriafineartscentre.org': 'https://victoriafinearts.org',
+  'https://www.weaverhouseconcerts.com': ''
+};
+
 export function withPages(events) {
   const seen = new Map();
   return (Array.isArray(events) ? events : [])
     .filter(ev => ev && ev.date && ev.name)
     .map(ev => {
+      // Slug from the stored name so existing event URLs don't move.
       const base = `${ev.date}-${slugify(ev.name) || 'event'}`;
       const n = (seen.get(base) || 0) + 1;
       seen.set(base, n);
-      return Object.assign({}, ev, { page: `/events/${n === 1 ? base : `${base}-${n}`}` });
+      const clean = {};
+      for (const k of ['name', 'venue', 'address', 'description', 'time']) {
+        if (typeof ev[k] === 'string') clean[k] = decodeEntities(ev[k]);
+      }
+      const fixed = typeof ev.url === 'string' ? FIXED_URLS[ev.url.trim().replace(/\/$/, '')] : undefined;
+      if (fixed !== undefined) clean.url = fixed;
+      if (isListingUrl(ev.url) || isMismatchedUrl(ev.url, ev.name)) clean.url = '';
+      return Object.assign({}, ev, clean, { page: `/events/${n === 1 ? base : `${base}-${n}`}` });
     });
 }
 
@@ -367,21 +462,14 @@ function icons(ev) {
 // client re-render look identical. The name links to our event page (the
 // crawlable, internal link); the venue keeps the external source link.
 export function renderEventItem(ev) {
-  const src = safeUrl(ev.url);
-  let venue = '';
-  if (ev.venue) {
-    venue = src
-      ? `<a href="${escHtml(src)}" target="_blank" rel="noopener noreferrer">${escHtml(ev.venue)}</a>`
-      : escHtml(ev.venue);
-    if (ev.address) venue += ', ' + escHtml(ev.address);
-  }
+  const place = placeText(ev);
   return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}" data-icons="${escHtml((ev.icons || []).join(' ') + (ev.free === true ? ' free' : ''))}">` +
     `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
     '<div class="event-details">' +
       (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
-      `<span class="event-time">${escHtml(ev.time)}</span> ` +
+      (ev.time ? `<span class="event-time">${escHtml(ev.time)}</span> ` : '') +
       `<span class="event-name"><a href="${escHtml(ev.page)}">${escHtml(ev.name)}</a></span>` +
-      (venue ? ` — <span class="event-venue">${venue}</span>` : '') +
+      (place ? `<span class="event-venue">${escHtml(place)}</span>` : '') +
       (ev.description ? `<div class="event-desc">${escHtml(ev.description)}</div>` : '') +
     '</div>' +
   '</li>';
@@ -474,7 +562,6 @@ function footerHtml() {
             <li><a href="/submit">Submit an event</a></li>
             <li><a href="/venues">Venues</a></li>
             <li><a href="/advertise">Advertise</a></li>
-            <li><a href="/for-venues">For venues</a></li>
             <li><a href="/contact">Contact</a></li>
           </ul>
         </div>
@@ -612,7 +699,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
       <dt>Cost</dt><dd>${ev.free === true ? 'Free' : 'See event details'}</dd>
     </dl>
     ${ev.description ? `<p class="event-about">${escHtml(ev.description)}</p>` : ''}
-    ${src ? `<p class="page-actions"><a class="btn btn--primary" href="${escHtml(src)}" target="_blank" rel="noopener noreferrer">Event details</a></p>` : ''}
+    ${src ? `<p class="page-actions"><a class="btn btn--primary" href="${escHtml(src)}" target="_blank" rel="noopener noreferrer">${linkLabel(src)}</a></p>` : ''}
     ${extras}
     ${venuePath ? `<p class="venue-more"><a href="${escHtml(venuePath)}">More events at ${escHtml(ev.venue)} →</a></p>` : ''}
     ${sameDay.length ? `<h2 class="section-heading">Also on ${escHtml(formatDay(ev.date, { weekday: 'long' }))}</h2>
@@ -770,7 +857,6 @@ export function renderSitemap(events, { siteUrl, now, lastmod, extraPaths = [] }
     { loc: '/about', freq: 'monthly', pri: '0.4' },
     { loc: '/advertise', freq: 'monthly', pri: '0.3' },
     { loc: '/contact', freq: 'yearly', pri: '0.2' },
-    { loc: '/for-venues', freq: 'monthly', pri: '0.3' },
     { loc: '/submit', freq: 'monthly', pri: '0.4' },
     ...extraPaths.map(loc => ({ loc, freq: 'weekly', pri: '0.5', mod })),
     ...events.filter(ev => ev.date >= today).map(ev => ({ loc: ev.page, freq: 'weekly', pri: '0.6', mod }))
