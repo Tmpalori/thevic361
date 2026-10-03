@@ -109,3 +109,46 @@ describe('server wiring', () => {
     expect(paid.fields.find(f => f[0] === 'Paid')[1]).toBe('$300');
   });
 });
+
+describe('contact form', () => {
+  let tmpDir, server, baseUrl, sent;
+  afterEach(async () => {
+    if (server) await new Promise(r => server.close(r));
+    if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+    server = null; tmpDir = null;
+  });
+
+  it('sends messages to Slack and publishes no email address', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-contact-'));
+    const eventsFile = path.join(tmpDir, 'events.json');
+    await fs.writeFile(eventsFile, JSON.stringify({ events: [] }));
+    sent = [];
+    const { app } = await createApp({
+      storeBundle: { kind: 'file', store: new FileStore(path.join(tmpDir, 's.json')) }, eventsFile, trustProxy: false,
+      siteUrl: 'https://www.thevic361.com', slack: { enabled: true, notify: async (m) => { sent.push(m); return true; }, alert: async () => {} }
+    });
+    server = http.createServer(app);
+    await new Promise(r => server.listen(0, r));
+    baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+    const ad = await (await fetch(baseUrl + '/advertise')).text();
+    expect(ad).toContain('/contact?topic=advertising');
+    expect(ad).not.toMatch(/mailto:|@gmail\.com/);
+    expect(await (await fetch(baseUrl + '/contact?topic=advertising')).text()).toContain('value="advertising" selected');
+
+    const post = (f) => fetch(baseUrl + '/contact', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(f).toString() });
+    const bad = await post({ name: 'Ann', email: 'nope', message: 'hello there' });
+    expect(bad.status).toBe(400);
+    expect(sent).toHaveLength(0);
+
+    const ok = await post({ topic: 'advertising', name: 'Ann', email: 'Ann@Shop.example', business: 'Ann’s Shop', message: 'How much is a sponsor week?' });
+    expect(ok.status).toBe(200);
+    expect(await ok.text()).toContain('Message sent');
+    expect(sent).toHaveLength(1);
+    expect(sent[0].title).toBe('✉️ Website message: Advertising or sponsorship');
+    expect(sent[0].fields).toContainEqual(['Email', 'ann@shop.example']);
+
+    await post({ name: 'Bot', email: 'b@b.example', message: 'spam spam', company: 'x' });
+    expect(sent).toHaveLength(1);
+  });
+});

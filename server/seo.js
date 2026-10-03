@@ -422,6 +422,7 @@ function footerHtml() {
             <li><a href="/submit">Submit an event</a></li>
             <li><a href="/venues">Venues</a></li>
             <li><a href="/advertise">Advertise</a></li>
+            <li><a href="/contact">Contact</a></li>
           </ul>
         </div>
       </div>
@@ -644,8 +645,7 @@ export const AD_PACKAGES = [
   }
 ];
 
-export function renderAdvertisePage({ siteUrl, email, checkout = false }) {
-  const subject = encodeURIComponent('Advertising on The Vic 361');
+export function renderAdvertisePage({ siteUrl, checkout = false }) {
   const body = `
     <h1 class="page-title">Advertise on The Vic 361</h1>
     <p class="page-lead">Reach people in Victoria, TX who are actively looking for something to do this week. Sponsor the newsletter, partner as a venue, or feature a single event.</p>
@@ -659,7 +659,7 @@ export function renderAdvertisePage({ siteUrl, email, checkout = false }) {
       </section>`).join('')}
     </div>
     <h2 class="section-heading">${checkout ? 'Questions?' : 'Get started'}</h2>
-    <p>${checkout ? 'Pick a package above to book and pay online in a couple of minutes. Or email' : 'Email'} <a href="mailto:${escHtml(email)}?subject=${subject}">${escHtml(email)}</a>${checkout ? ' with questions or for custom packages.' : ' with your business name and what you\'d like to promote. We\'ll reply with open dates and our latest audience numbers.'}</p>
+    <p>${checkout ? 'Pick a package above to book and pay online in a couple of minutes. Questions or a custom package?' : 'Tell us your business name and what you\'d like to promote, and we\'ll reply with open dates and our latest audience numbers.'} <a href="/contact?topic=advertising">Send us a message</a>.</p>
     <p>Listing a community event is always free: <a href="/submit">submit it here</a>.</p>`;
   return layout({
     siteUrl, path: '/advertise',
@@ -716,6 +716,7 @@ export function renderSitemap(events, { siteUrl, now, lastmod, extraPaths = [] }
     ...HUB_PAGES.map(p => ({ loc: p.path, freq: 'daily', pri: '0.8', mod })),
     { loc: '/about', freq: 'monthly', pri: '0.4' },
     { loc: '/advertise', freq: 'monthly', pri: '0.3' },
+    { loc: '/contact', freq: 'yearly', pri: '0.2' },
     { loc: '/submit', freq: 'monthly', pri: '0.4' },
     ...extraPaths.map(loc => ({ loc, freq: 'weekly', pri: '0.5', mod })),
     ...events.filter(ev => ev.date >= today).map(ev => ({ loc: ev.page, freq: 'weekly', pri: '0.6', mod }))

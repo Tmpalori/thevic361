@@ -307,7 +307,7 @@ export function renderThanksPage(order, { siteUrl }) {
 
 // ─── Wiring ──────────────────────────────────────────────────────────────
 
-export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenues, notify, slack = null }) {
+export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenues, slack = null }) {
   const supported = typeof store.listSponsorOrders === 'function';
   let cache = null;
 
@@ -362,16 +362,6 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         text: order.kind === 'featured' ? 'Approve the event in the Submissions tab to put it live.' : 'Live automatically.',
         link: `${siteUrl}/admin.html`
       });
-    }
-    if (notify) {
-      const pkg = packageFor(order.kind);
-      const detail = order.kind === 'weekly' ? `Week of ${order.week_start}`
-        : order.kind === 'partner' ? `Venue: ${order.venue_name}`
-          : `Event: ${order.event.name} on ${order.event.date} (in the submissions queue)`;
-      notify({
-        subject: `New sponsor: ${pkg ? pkg.name : order.kind}, ${order.business}`,
-        text: `${order.business} <${order.email}> paid for ${pkg ? pkg.name : order.kind}.\n${detail}\n\nAdmin: ${siteUrl}/admin`
-      }).catch(err => console.warn('[sponsors] notify failed:', err.message));
     }
   }
 
