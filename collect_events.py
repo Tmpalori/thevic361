@@ -995,6 +995,176 @@ def fetch_moonshine_events(days_ahead=8):
     return events
 
 
+# ─── GEMINI + GOOGLE SEARCH (discovery) ────────────────────────────────────
+#
+# Google already indexes local event listings (venue sites, Facebook events,
+# ticketing pages, the city and tourism calendars). Gemini's Google Search
+# grounding lets us ask for them directly, which replaces the web-search
+# discovery we lost with Perplexity.
+#
+# AI search can misread dates, so an event is only kept when it has its own
+# http(s) link, the link's site is one Gemini actually cited (grounding
+# metadata), the date is in the window, and the usual merge filters (area,
+# non-event, dead links, duplicates) pass. Off without GEMINI_API_KEY;
+# GEMINI_ENABLED=0 turns it off; GEMINI_MODEL picks the model.
+
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+_GEMINI_DEFAULT_MODEL = "gemini-2.5-flash"
+GEMINI_CATEGORIES = [
+    "concerts, live music, open mics and karaoke",
+    "family and kids events (story times, zoo, museum, school and library programs)",
+    "festivals, markets, fairs and community events",
+    "arts, theatre, museums, galleries and film screenings",
+    "food and drink events, trivia nights, bar and brewery events",
+    "sports, runs, rodeos, outdoor and recreation events",
+    "Texas A&M University-Victoria and Victoria College public events",
+    "church, charity, fundraiser and civic events open to the public",
+]
+
+
+def _gemini_prompt(category, start, end):
+    return (
+        f"Use Google Search to find real, scheduled public events in Victoria, Texas (Victoria County) "
+        f"happening between {start.isoformat()} and {end.isoformat()}. Focus on: {category}.\n\n"
+        "Return ONLY a JSON array, no prose. Each item: "
+        '{"name": str, "date": "YYYY-MM-DD", "time": "7:00 PM" or "", "venue": str, "address": str, '
+        '"description": one factual sentence, "url": the event\'s own page (venue site, ticket page, '
+        'Facebook event, or official calendar entry; never a search or category page), "free": true/false/null}.\n'
+        "Only include an event if a web page you found states that exact date. One item per date for "
+        "repeating events. Exclude business hours, sales, job postings, online-only events and anything "
+        "outside Victoria County. If you find none, return []."
+    )
+
+
+def _gemini_json_array(text):
+    """Pull the first JSON array out of a reply (it may be fenced or wrapped)."""
+    t = (text or "").strip()
+    t = re.sub(r"^```(?:json)?\s*|\s*```$", "", t)
+    start, end = t.find("["), t.rfind("]")
+    if start < 0 or end <= start:
+        return []
+    try:
+        data = json.loads(t[start:end + 1])
+    except ValueError:
+        return []
+    return [x for x in data if isinstance(x, dict)] if isinstance(data, list) else []
+
+
+def _host(url):
+    m = re.match(r"https?://([^/?#]+)", url or "", re.I)
+    h = (m.group(1) if m else "").lower()
+    return h[4:] if h.startswith("www.") else h
+
+
+def _grounded_hosts(candidate):
+    """Sites Gemini cited. Chunk URIs are Google redirect links, but each
+    chunk's title is the source's domain (e.g. "facebook.com")."""
+    hosts = set()
+    meta = (candidate or {}).get("groundingMetadata") or {}
+    for chunk in meta.get("groundingChunks") or []:
+        web = chunk.get("web") or {}
+        for val in (web.get("title"), web.get("domain"), web.get("uri")):
+            h = _host(val) if val and "://" in str(val) else str(val or "").lower().strip()
+            h = h[4:] if h.startswith("www.") else h
+            if h and "." in h and "vertexaisearch" not in h and "google." not in h:
+                hosts.add(h)
+    return hosts
+
+
+def _host_matches(host, grounded):
+    return any(host == g or host.endswith("." + g) or g.endswith("." + host) for g in grounded)
+
+
+def fetch_gemini_events(days_ahead=14, post=None, categories=None):
+    """Events found by Gemini with Google Search grounding."""
+    events = []
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if os.environ.get("GEMINI_ENABLED", "1").strip().lower() in ("0", "false", "no"):
+        print("  [Gemini] Disabled (GEMINI_ENABLED=0)")
+        return events
+    if not key:
+        print("  [Gemini] No GEMINI_API_KEY — skipping")
+        return events
+    post = post or requests.post
+    model = os.environ.get("GEMINI_MODEL", "").strip() or _GEMINI_DEFAULT_MODEL
+    start = max(_WINDOW_START, now_central().date())
+    end = _WINDOW_END
+    if end < start:
+        return events
+
+    seen = set()
+    dropped = Counter()
+    for category in categories or GEMINI_CATEGORIES:
+        body = {
+            "contents": [{"role": "user", "parts": [{"text": _gemini_prompt(category, start, end)}]}],
+            "tools": [{"google_search": {}}],
+            "generationConfig": {"temperature": 0.2},
+        }
+        try:
+            resp = post(GEMINI_URL.format(model=model), json=body, timeout=90,
+                        headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+            if resp.status_code != 200:
+                print(f"  [Gemini] HTTP {resp.status_code} for {category[:30]}: {resp.text[:200]}")
+                dropped["http"] += 1
+                if resp.status_code in (401, 403):
+                    break  # bad key: every call would fail the same way
+                continue
+            data = resp.json()
+        except Exception as e:  # network, timeout, bad JSON
+            print(f"  [Gemini] {category[:30]} failed: {e}")
+            dropped["error"] += 1
+            continue
+
+        cand = (data.get("candidates") or [{}])[0]
+        text = "".join(p.get("text", "") for p in ((cand.get("content") or {}).get("parts") or []))
+        grounded = _grounded_hosts(cand)
+        for item in _gemini_json_array(text):
+            name = _clean_text(item.get("name"))
+            url = str(item.get("url") or "").strip()
+            try:
+                d = datetime.strptime(str(item.get("date") or "")[:10], "%Y-%m-%d").date()
+            except ValueError:
+                dropped["bad date"] += 1
+                continue
+            if not name:
+                continue
+            if not (start <= d <= end):
+                dropped["out of window"] += 1
+                continue
+            if not re.match(r"https?://", url) or is_listing_url(url):
+                dropped["no event link"] += 1
+                continue
+            host = _host(url)
+            if "google." in host or "vertexaisearch" in host:
+                dropped["no event link"] += 1
+                continue
+            if not grounded or not _host_matches(host, grounded):
+                dropped["link not from a cited site"] += 1
+                continue
+            k = (d.isoformat(), name.lower())
+            if k in seen:
+                continue
+            seen.add(k)
+            venue = _clean_text(item.get("venue"))
+            desc = _clean_text(item.get("description"))[:280]
+            free = item.get("free")
+            events.append({
+                "date": d.isoformat(),
+                "name": name,
+                "time": _clean_text(item.get("time")),
+                "venue": venue,
+                "address": _clean_text(item.get("address")),
+                "description": desc,
+                "icons": classify_icons(name, desc, venue),
+                "free": bool(free) if isinstance(free, bool) else guess_free(name, desc, venue),
+                "url": url,
+            })
+
+    print(f"  [Gemini] {len(events)} events"
+          + (" (dropped: " + ", ".join(f"{v} {k}" for k, v in dropped.items()) + ")" if dropped else ""))
+    return events
+
+
 # ─── OPENAI (shared LLM helper) ─────────────────────────────────────────────
 #
 # Every LLM call in the collector (AI review + FB/IG post extraction) goes
@@ -1564,6 +1734,7 @@ SOURCE_RANK = {
     "apify_eventbrite": 5,
     "moonshine": 6, "vtx_artwalk": 6, "allevents": 4, "apify_facebook": 4,
     "apify_facebook_posts": 3, "apify_instagram_posts": 3,
+    "gemini_search": 2,
 }
 
 
@@ -3499,6 +3670,9 @@ def main():
                                      args=(args.days,), expect_events=False))
         all_events.extend(safe_fetch("allevents", fetch_allevents_events,
                                      args=(args.days,)))
+        # Gemini + Google Search — only runs if GEMINI_API_KEY is set
+        all_events.extend(safe_fetch("gemini_search", fetch_gemini_events,
+                                     args=(args.days,), expect_events=False))
 
         # Apify Facebook events — only runs if APIFY_TOKEN is set
         all_events.extend(safe_fetch("apify_facebook", fetch_apify_facebook_events,

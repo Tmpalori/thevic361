@@ -1215,8 +1215,8 @@ export async function createApp(opts = {}) {
         fix: 'Set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY from Cloudflare Turnstile.' },
       { key: 'social', label: 'Auto-post to Facebook + Instagram', ok: null, level: 'recommended', link: ghSecrets,
         fix: 'In GitHub: secrets META_PAGE_ID, META_PAGE_TOKEN, IG_USER_ID and the repo variable SOCIAL_AUTOPOST = 1.' },
-      { key: 'collector_keys', label: 'Event collector keys (OpenAI, Apify)', ok: null, level: 'recommended', link: ghSecrets,
-        fix: 'In GitHub secrets: OPENAI_API_KEY (cleanup + junk filter) and APIFY_TOKEN (Facebook, Instagram, Eventbrite).' }
+      { key: 'collector_keys', label: 'Event collector keys (OpenAI, Apify, Gemini)', ok: null, level: 'recommended', link: ghSecrets,
+        fix: 'In GitHub secrets: OPENAI_API_KEY (cleanup + junk filter), APIFY_TOKEN (Facebook, Instagram, Eventbrite) and GEMINI_API_KEY (Google Search discovery; free key at aistudio.google.com).' }
     ];
 
     const status = {};

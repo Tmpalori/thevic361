@@ -113,6 +113,9 @@ jobs:
           # change (collector default: gpt-5-mini).
           OPENAI_MODEL:       ${{ vars.OPENAI_MODEL }}
           APIFY_TOKEN:        ${{ secrets.APIFY_TOKEN }}
+          # Gemini + Google Search event discovery (optional; off without it).
+          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL:       ${{ vars.GEMINI_MODEL }}
           SENTRY_DSN:         ${{ secrets.SENTRY_DSN }}
           SENTRY_ENVIRONMENT: production
           # Toggle the FB-posts → OpenAI pipeline. Off until the Apify monthly

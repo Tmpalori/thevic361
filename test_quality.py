@@ -366,3 +366,71 @@ def test_unquoted_yaml_values_dont_abort(tmp_path):
     assert out[0]["time"] == "7:00 PM" and out[0]["date"] == d
     merged = ce.merge_events(out, venues=[])
     assert merged and merged[0]["name"] == "1776"
+
+
+# ─── Gemini + Google Search ───────────────────────────────────────────────
+
+def _gemini_reply(items, hosts=("facebook.com", "victoriatx.gov")):
+    import json as _json
+
+    class R:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {"candidates": [{
+                "content": {"parts": [{"text": "```json\n" + _json.dumps(items) + "\n```"}]},
+                "groundingMetadata": {"groundingChunks": [
+                    {"web": {"uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc", "title": h}} for h in hosts]},
+            }]}
+    return R()
+
+
+def test_gemini_keeps_only_grounded_in_window_events(monkeypatch):
+    from datetime import timedelta
+    import collect_events as ce
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    today = ce.now_central().date()
+    monkeypatch.setattr(ce, "_WINDOW_START", today)
+    monkeypatch.setattr(ce, "_WINDOW_END", today + timedelta(days=14))
+    d = (today + timedelta(days=2)).isoformat()
+    items = [
+        {"name": "Fall Fest", "date": d, "time": "6:00 PM", "venue": "DeLeon Plaza",
+         "url": "https://www.victoriatx.gov/Calendar.aspx?EID=1", "free": True},
+        {"name": "Band Night", "date": d, "venue": "Bar", "url": "https://www.facebook.com/events/123/"},
+        {"name": "Made Up Gala", "date": d, "venue": "X", "url": "https://totally-invented.example/gala"},
+        {"name": "Old Thing", "date": "2020-01-01", "venue": "X", "url": "https://www.facebook.com/events/9/"},
+        {"name": "No Link", "date": d, "venue": "X", "url": ""},
+        {"name": "Search Page", "date": d, "venue": "X", "url": "https://www.eventbrite.com/d/tx--victoria/events/"},
+    ]
+    calls = []
+
+    def post(url, json=None, timeout=None, headers=None):
+        calls.append((url, json, headers))
+        return _gemini_reply(items, hosts=("facebook.com", "victoriatx.gov", "eventbrite.com"))
+
+    out = ce.fetch_gemini_events(14, post=post, categories=["music"])
+    assert [e["name"] for e in out] == ["Fall Fest", "Band Night"]
+    assert out[0]["free"] is True and out[0]["time"] == "6:00 PM"
+    assert calls[0][1]["tools"] == [{"google_search": {}}]
+    assert calls[0][2]["x-goog-api-key"] == "k"
+    assert "gemini-2.5-flash" in calls[0][0]
+
+
+def test_gemini_skips_without_key_and_stops_on_bad_key(monkeypatch):
+    import collect_events as ce
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert ce.fetch_gemini_events(14, post=lambda *a, **k: 1 / 0) == []
+
+    monkeypatch.setenv("GEMINI_API_KEY", "bad")
+    n = []
+
+    class R:
+        status_code = 403
+        text = "denied"
+
+    def post(*a, **k):
+        n.append(1)
+        return R()
+    assert ce.fetch_gemini_events(14, post=post) == []
+    assert len(n) == 1

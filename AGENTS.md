@@ -258,6 +258,7 @@ Full reference is in [`RAILWAY.md`](./RAILWAY.md). Quick list:
 |---|---|
 | `OPENAI_API_KEY` | `collect_events.py` AI review + FB/IG post extraction |
 | `APIFY_TOKEN` | `collect_events.py` Facebook events + posts, Instagram posts |
+| `GEMINI_API_KEY` | `collect_events.py` Gemini + Google Search event discovery (`fetch_gemini_events`; optional `GEMINI_MODEL`, `GEMINI_ENABLED=0` to turn off). Events are kept only with their own link on a site Gemini cited, inside the window. |
 | `SENTRY_DSN`, `SENTRY_ENVIRONMENT` | Both collector and server |
 
 ### Optional
