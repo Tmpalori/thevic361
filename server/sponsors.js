@@ -8,9 +8,9 @@
  *     that Monday's newsletter. One sponsor per week; a week someone is
  *     paying for right now is held for the life of the Checkout session.
  *   - Venue partner ($150/month, Stripe subscription): every event at their
- *     venue is marked Featured while the subscription is active. Cancelling
+ *     venue is a Vic’s Pick (featured) while the subscription is active. Cancelling
  *     in Stripe ends it automatically (customer.subscription.* webhooks).
- *   - Featured event ($49, one-time): the event lands in the submissions
+ *   - Vic’s Pick event ($49, one-time): the event lands in the submissions
  *     queue (so a person still checks it before it's listed) and is pinned
  *     as Featured as soon as it, or a matching collector event, is live.
  *
@@ -289,7 +289,7 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
     </form>`;
   return layout({
     siteUrl, path: '/advertise/checkout', nav: '/advertise', noindex: true,
-    title: `${pkg.name} | ${SITE_NAME}`, description: `Buy a ${pkg.name.toLowerCase()} on ${SITE_NAME}.`, body
+    title: `${pkg.name} | ${SITE_NAME}`, description: `Buy ${pkg.name} on ${SITE_NAME}.`, body
   });
 }
 
@@ -297,7 +297,7 @@ export function renderThanksPage(order, { siteUrl }) {
   let msg = 'We\'re confirming your payment. Stripe will email your receipt in a minute or two.';
   if (order && LIVE.has(order.status)) {
     if (order.kind === 'weekly') msg = `You're booked. Your sponsor block goes live the week of ${escHtml(formatDay(order.week_start, { month: 'long', day: 'numeric' }))}, including that Monday's newsletter.`;
-    else if (order.kind === 'partner') msg = `You're a venue partner. Every event at ${escHtml(order.venue_name)} is now marked Featured.`;
+    else if (order.kind === 'partner') msg = `You're a venue partner. Every event at ${escHtml(order.venue_name)} is now a Vic’s Pick.`;
     else msg = 'Thanks! We\'ll review your event shortly. Once it\'s listed, it\'s pinned to the top of its day.';
   }
   const body = `<h1 class="page-title">Thank you</h1><p class="page-lead">${msg}</p>
@@ -345,7 +345,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         id: newId(), created_at: now, updated_at: now, status: 'pending', source: 'paid-feature',
         submitter_kind: 'organizer', submitter_name: order.business, submitter_email: order.email,
         submitter_ip: null, user_agent: '', payload: normalizePayload(order.event),
-        admin_notes: `Paid featured listing (order ${order.id}). Approve and publish it; it's pinned as Featured automatically.`,
+        admin_notes: `Paid featured listing (order ${order.id}). Approve and publish it; it's pinned as a Vic’s Pick automatically.`,
         review_history: [{ at: now, action: 'submitted', note: 'Paid featured listing' }]
       };
       await store.insert(row);

@@ -1351,7 +1351,7 @@
 
   // ─── SPONSORS TAB ────────────────────────────────────────────────────
   // Paid orders from the Stripe checkout (server/sponsors.js).
-  const SPONSOR_KIND = { weekly: 'Weekly sponsor', partner: 'Venue partner', featured: 'Featured event' };
+  const SPONSOR_KIND = { weekly: 'Weekly sponsor', partner: 'Venue partner', featured: 'Vic’s Pick event' };
   const SPONSOR_STATUS = { paid: 'Live', active: 'Live', pending: 'Awaiting payment', hidden: 'Hidden', cancelled: 'Cancelled', paused: 'Payment issue' };
 
   function sponsorDetail(o) {

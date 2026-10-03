@@ -129,7 +129,7 @@ function eventRow(ev, siteUrl) {
     ? `padding:10px 12px;background:${C.sunLight};border:2px solid ${C.ink};border-radius:12px;`
     : `padding:10px 4px;border-bottom:2px dashed ${C.line};`;
   return `<tr><td style="${rowStyle}">
-${ev.featured ? `<span style="display:inline-block;background:${C.sunset};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">★ FEATURED</span>` : ''}
+${ev.featured ? `<span style="display:inline-block;background:${C.sunset};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">★ VIC’S PICK</span>` : ''}
 ${iconImgs(ev, siteUrl)}
 ${ev.time ? `<span style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:12px;padding:0 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">${escHtml(ev.time)}</span>` : ''}
 <a href="${escHtml(link)}" style="color:${C.ink};font-weight:800;text-decoration:none;">${escHtml(ev.name)}</a>${where ? ` <span style="color:${C.muted};">· ${escHtml(where)}</span>` : ''}${ev.free === true && !(ev.icons || []).includes('free') ? ` <span style="color:#2FA876;font-size:13px;font-weight:bold;">· Free</span>` : ''}

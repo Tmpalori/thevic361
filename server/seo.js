@@ -326,7 +326,7 @@ export function renderEventItem(ev) {
   return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}" data-icons="${escHtml((ev.icons || []).join(' ') + (ev.free === true ? ' free' : ''))}">` +
     `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
     '<div class="event-details">' +
-      (ev.featured ? '<span class="badge badge--featured">Featured</span> ' : '') +
+      (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
       `<span class="event-time">${escHtml(ev.time)}</span> ` +
       `<span class="event-name"><a href="${escHtml(ev.page)}">${escHtml(ev.name)}</a></span>` +
       (venue ? ` — <span class="event-venue">${venue}</span>` : '') +
@@ -623,16 +623,16 @@ export const AD_PACKAGES = [
     price: '$150 / month',
     amount: 15000,
     interval: 'month',
-    blurb: 'Every event at your venue is marked Featured for as long as you stay subscribed.',
+    blurb: 'Every event at your venue is a Vic’s Pick for as long as you stay subscribed.',
     points: [
-      'Every event at your venue marked Featured, every week',
+      'Every event at your venue marked as a Vic’s Pick, every week',
       'Pinned at the top of each day on the site and its event pages',
       'Monthly click report'
     ]
   },
   {
     key: 'featured',
-    name: 'Featured event',
+    name: 'Vic’s Pick',
     price: '$49 / event',
     amount: 4900,
     blurb: 'Tell us about your event. Once it\'s listed, it\'s pinned to the top of its day.',

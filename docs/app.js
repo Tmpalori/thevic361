@@ -117,7 +117,7 @@
     return '<li class="event-entry' + (ev.featured ? ' event-entry--featured' : '') + '" data-icons="' + escHtml(iconAttr) + '">' +
       '<span class="event-icons" aria-hidden="true">' + iconHtml + '</span>' +
       '<div class="event-details">' +
-        (ev.featured ? '<span class="badge badge--featured">Featured</span> ' : '') +
+        (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
         '<span class="event-time">' + escHtml(ev.time) + '</span> ' +
         '<span class="event-name">' + nameHtml + '</span>' +
         (venuePart ? ' — <span class="event-venue">' + venuePart + '</span>' : '') +
