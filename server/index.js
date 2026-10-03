@@ -29,11 +29,12 @@ import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { stripeConfig, createStripe, createSponsors } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
+import { registerContact } from './contact.js';
 import crypto from 'node:crypto';
 import {
   HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
-  , fillSeasonalNav, escHtml
+  , fillSeasonalNav
 } from './seo.js';
 import {
   buildVenues, venueFor, renderVenuePage, renderVenueIndex, venuesWithEvents,
@@ -149,12 +150,7 @@ export async function createApp(opts = {}) {
     store, siteUrl, config: stripeCfg, slack,
     nowFn: () => (opts.now || (() => new Date()))(),
     stripe: opts.stripe || createStripe(stripeCfg.secretKey),
-    getVenues: () => venues,
-    // Best-effort heads-up to the owner when an order is paid.
-    notify: async ({ subject, text }) => {
-      if (!newsletter.enabled || !advertiseEmail) return;
-      await nlResend.send({ from: newsletter.from, to: [advertiseEmail], subject, text, html: `<pre>${escHtml(text)}</pre>` });
-    }
+    getVenues: () => venues
   });
   sponsors.registerWebhook(app);
 
@@ -995,7 +991,6 @@ export async function createApp(opts = {}) {
   // See server/seo.js for why. Registered before express.static so "/"
   // gets the rendered homepage instead of the raw docs/index.html.
   const nowFn = opts.now || (() => new Date());
-  const advertiseEmail = opts.advertiseEmail ?? process.env.ADVERTISE_EMAIL ?? 'tristen.m.palori@gmail.com';
   let indexTemplate = null;
 
   function sendHtml(res, html, status = 200, cacheControl = null) {
@@ -1104,8 +1099,11 @@ export async function createApp(opts = {}) {
   }
 
   app.get('/advertise', pageHandler(async (req, res, payload, ctx) => {
-    sendHtml(res, renderAdvertisePage({ ...ctx, email: advertiseEmail, checkout: stripeCfg.enabled }));
+    sendHtml(res, renderAdvertisePage({ ...ctx, checkout: stripeCfg.enabled }));
   }));
+
+  // Contact form → Slack; replaces publishing an email address.
+  registerContact(app, { siteUrl, slack, createRateLimiter, sendHtml });
 
   sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml });
 

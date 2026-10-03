@@ -265,7 +265,8 @@ describe('site hardening', () => {
     expect(r.status).toBe(200);
     expect(r.text).toContain('Weekly sponsor');
     expect(r.text).toContain('Vic’s Pick');
-    expect(r.text).toContain('mailto:');
+    expect(r.text).toContain('/contact?topic=advertising');
+    expect(r.text).not.toContain('mailto:');
     expect((await get('/')).text).toContain('href="/advertise"');
   });
 
