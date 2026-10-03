@@ -27,11 +27,12 @@ import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
+import { stripeConfig, createStripe, createSponsors } from './sponsors.js';
 import crypto from 'node:crypto';
 import {
   HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
-  , fillSeasonalNav
+  , fillSeasonalNav, escHtml
 } from './seo.js';
 import {
   buildVenues, venueFor, renderVenuePage, renderVenueIndex, venuesWithEvents,
@@ -136,6 +137,23 @@ export async function createApp(opts = {}) {
   const submitLimiterDaily = opts.submitLimiterDaily || createRateLimiter({
     windowMs: 24 * 60 * 60 * 1000, max: 30
   });
+
+  // ─── Sponsor checkout (Stripe; see server/sponsors.js) ───
+  // Created here because the Stripe webhook needs the raw body and so must
+  // be registered before the JSON parser below. Its page routes come later.
+  const stripeCfg = stripeConfig(process.env, opts);
+  const sponsors = createSponsors({
+    store, siteUrl, config: stripeCfg,
+    nowFn: () => (opts.now || (() => new Date()))(),
+    stripe: opts.stripe || createStripe(stripeCfg.secretKey),
+    getVenues: () => venues,
+    // Best-effort heads-up to the owner when an order is paid.
+    notify: async ({ subject, text }) => {
+      if (!newsletter.enabled || !advertiseEmail) return;
+      await nlResend.send({ from: newsletter.from, to: [advertiseEmail], subject, text, html: `<pre>${escHtml(text)}</pre>` });
+    }
+  });
+  sponsors.registerWebhook(app);
 
   app.use(express.json({ limit: '64kb' }));
   app.use(express.urlencoded({ extended: false, limit: '64kb' }));
@@ -884,7 +902,13 @@ export async function createApp(opts = {}) {
   // fall back to the bundled docs/events.json from the deploy. Both the
   // JSON feed and the server-rendered pages below read through here so
   // they always agree.
+  // Paid placements (sponsor of the week, featured events, venue partners)
+  // are layered on at read time so every consumer sees the same thing.
   async function getPublicPayload() {
+    return sponsors.apply(await loadPublicPayload());
+  }
+
+  async function loadPublicPayload() {
     try {
       const published = await store.getPublished();
       if (published) {
@@ -950,10 +974,10 @@ export async function createApp(opts = {}) {
 
   // ─── Newsletter (Resend; see server/newsletter.js) ───
   const newsletter = newsletterConfig(process.env, opts);
+  const nlResend = opts.resend || createResend(newsletter.apiKey);
   registerNewsletter(app, {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
-    getPublicPayload, createRateLimiter, config: newsletter,
-    resend: opts.resend || createResend(newsletter.apiKey)
+    getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend
   });
 
   // ─── Server-rendered pages (SEO + AI crawlers) ───
@@ -963,11 +987,11 @@ export async function createApp(opts = {}) {
   const advertiseEmail = opts.advertiseEmail ?? process.env.ADVERTISE_EMAIL ?? 'tristen.m.palori@gmail.com';
   let indexTemplate = null;
 
-  function sendHtml(res, html, status = 200) {
+  function sendHtml(res, html, status = 200, cacheControl = null) {
     html = fillSeasonalNav(html, res.locals.seasons || [], res.req.path);
     // Short public cache: a new publish shows up within minutes, and a
     // burst of crawler traffic doesn't hit Postgres on every request.
-    res.status(status).set('Cache-Control', status === 200 ? 'public, max-age=300' : 'no-store');
+    res.status(status).set('Cache-Control', cacheControl || (status === 200 ? 'public, max-age=300' : 'no-store'));
     res.type('html').send(html);
   }
 
@@ -1069,8 +1093,10 @@ export async function createApp(opts = {}) {
   }
 
   app.get('/advertise', pageHandler(async (req, res, payload, ctx) => {
-    sendHtml(res, renderAdvertisePage({ ...ctx, email: advertiseEmail }));
+    sendHtml(res, renderAdvertisePage({ ...ctx, email: advertiseEmail, checkout: stripeCfg.enabled }));
   }));
+
+  sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml });
 
   app.get('/about', pageHandler(async (req, res, payload, ctx) => {
     sendHtml(res, renderAboutPage(ctx));

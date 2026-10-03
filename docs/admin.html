@@ -89,6 +89,7 @@
         <button class="tab-btn" data-tab="newsletter" role="tab">Newsletter</button>
         <button class="tab-btn" data-tab="sources" role="tab">Sources</button>
         <button class="tab-btn" data-tab="traffic" role="tab">Traffic</button>
+        <button class="tab-btn" data-tab="sponsors" role="tab">Sponsors</button>
       </nav>
       <div class="admin-header__actions">
         <a class="btn btn--outline" href="/social/latest/index.html" target="_blank" rel="noopener">Social kit</a>
@@ -286,6 +287,22 @@
           <div><h3 class="traffic-h">Other referring sites</h3><table class="traffic-table" id="traffic-referrers"></table></div>
         </div>
         <p class="traffic-note">Counted on our own server: no cookies, bots filtered out, and visits from this browser (signed into admin) aren't counted. Multi-day totals add up each day's visitors.</p>
+      </div>
+    </section>
+
+    <section id="tab-sponsors" class="tab-panel" role="tabpanel" hidden>
+      <div class="traffic-head">
+        <button id="sponsors-refresh" type="button" class="btn btn--outline">Refresh</button>
+        <a class="btn btn--outline" href="https://dashboard.stripe.com/payments" target="_blank" rel="noopener">Stripe dashboard</a>
+      </div>
+      <div id="sponsors-error" class="empty-state empty-state--error" hidden></div>
+      <div id="sponsors-body" hidden>
+        <p id="sponsors-status" class="traffic-note"></p>
+        <h3 class="traffic-h">Orders</h3>
+        <table class="traffic-table sponsors-table" id="sponsors-orders"></table>
+        <h3 class="traffic-h">Weekly sponsor calendar</h3>
+        <table class="traffic-table" id="sponsors-weeks"></table>
+        <p class="traffic-note">Paid placements go live on their own. Hide pulls one off the site (for a refund or bad copy; refund it in Stripe). Venue partners end automatically when they cancel in Stripe.</p>
       </div>
     </section>
 

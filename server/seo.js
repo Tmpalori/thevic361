@@ -604,10 +604,14 @@ export function renderAboutPage({ siteUrl }) {
 }
 
 // Packages and prices here are the starting offer; change them in one place.
+// amount is in cents and is what Stripe charges (server/sponsors.js).
 export const AD_PACKAGES = [
   {
+    key: 'weekly',
     name: 'Weekly sponsor',
     price: '$300 / week',
+    amount: 30000,
+    blurb: 'Pick a week and write your message; it goes live on its own that Monday.',
     points: [
       'Top sponsor block in the Monday newsletter',
       'Sponsor block on every page of thevic361.com for the week',
@@ -615,8 +619,12 @@ export const AD_PACKAGES = [
     ]
   },
   {
+    key: 'partner',
     name: 'Venue partner',
     price: '$150 / month',
+    amount: 15000,
+    interval: 'month',
+    blurb: 'Every event at your venue is marked Featured for as long as you stay subscribed.',
     points: [
       'Every event at your venue marked Featured, every week',
       'Pinned at the top of each day on the site and its event pages',
@@ -624,8 +632,11 @@ export const AD_PACKAGES = [
     ]
   },
   {
+    key: 'featured',
     name: 'Featured event',
     price: '$49 / event',
+    amount: 4900,
+    blurb: 'Tell us about your event. Once it\'s listed, it\'s pinned to the top of its day.',
     points: [
       'Pinned at the top of its day on the site',
       'Called out in the newsletter that week',
@@ -634,7 +645,7 @@ export const AD_PACKAGES = [
   }
 ];
 
-export function renderAdvertisePage({ siteUrl, email }) {
+export function renderAdvertisePage({ siteUrl, email, checkout = false }) {
   const subject = encodeURIComponent('Advertising on The Vic 361');
   const body = `
     <h1 class="page-title">Advertise on The Vic 361</h1>
@@ -645,10 +656,11 @@ export function renderAdvertisePage({ siteUrl, email }) {
         <h2>${escHtml(p.name)}</h2>
         <p class="ad-price">${escHtml(p.price)}</p>
         <ul>${p.points.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul>
+        ${checkout ? `<a class="btn btn--primary ad-buy" href="/advertise/checkout?package=${escHtml(p.key)}">Buy now</a>` : ''}
       </section>`).join('')}
     </div>
-    <h2 class="section-heading">Get started</h2>
-    <p>Email <a href="mailto:${escHtml(email)}?subject=${subject}">${escHtml(email)}</a> with your business name and what you'd like to promote. We'll reply with open dates and our latest audience numbers.</p>
+    <h2 class="section-heading">${checkout ? 'Questions?' : 'Get started'}</h2>
+    <p>${checkout ? 'Pick a package above to book and pay online in a couple of minutes. Or email' : 'Email'} <a href="mailto:${escHtml(email)}?subject=${subject}">${escHtml(email)}</a>${checkout ? ' with questions or for custom packages.' : ' with your business name and what you\'d like to promote. We\'ll reply with open dates and our latest audience numbers.'}</p>
     <p>Listing a community event is always free: <a href="/submit">submit it here</a>.</p>`;
   return layout({
     siteUrl, path: '/advertise',

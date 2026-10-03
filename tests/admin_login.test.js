@@ -109,8 +109,10 @@ describe('POST /api/admin/login', () => {
       { username: 'tristen', password: 'correct horse battery staple' });
     const tok = login.json.token;
     const parts = tok.split('.');
-    // Flip the last char of the signature.
-    const tampered = parts[0] + '.' + parts[1].slice(0, -1) + (parts[1].slice(-1) === 'A' ? 'B' : 'A');
+    // Flip the first char of the signature. (Not the last: a 32-byte HMAC's
+    // final base64url char carries padding bits a lenient decoder drops, so
+    // A<->B there sometimes decodes to the same signature.)
+    const tampered = parts[0] + '.' + (parts[1][0] === 'A' ? 'B' : 'A') + parts[1].slice(1);
     const r = await fetchJson('GET', '/api/admin/submissions', undefined, {
       Authorization: 'Bearer ' + tampered
     });
