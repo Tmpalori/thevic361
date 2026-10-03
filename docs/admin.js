@@ -57,6 +57,7 @@
     vtx_artwalk: 'Art Walk',
     allevents: 'AllEvents',
     apify_facebook: 'Facebook events',
+    apify_eventbrite: 'Eventbrite',
     apify_facebook_posts: 'Facebook posts',
     apify_instagram_posts: 'Instagram posts'
   };

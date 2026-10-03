@@ -374,9 +374,11 @@ def test_resolve_int_env_helper(monkeypatch):
         assert ce._resolve_int_env("FOO_CAP", 10) == expected, f"{val!r}"
 
 
-def test_events_scraper_max_events_is_25(monkeypatch):
-    """Regression: we lowered maxEvents from 60 to 25 to save credits."""
+def test_events_scraper_max_events_default_and_override(monkeypatch):
+    """maxEvents defaults to 50 (Oct 2026 probe: 39/40 results were Victoria
+    events, 25 missed most of the window) and FB_EVENTS_MAX overrides it."""
     monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.delenv("FB_EVENTS_MAX", raising=False)
 
     captured = {}
 
@@ -390,7 +392,12 @@ def test_events_scraper_max_events_is_25(monkeypatch):
     with patch("collect_events.requests.post", side_effect=fake_post):
         ce.fetch_apify_facebook_events(14)
 
-    assert captured["json"]["maxEvents"] == 25
+    assert captured["json"]["maxEvents"] == 50
+
+    monkeypatch.setenv("FB_EVENTS_MAX", "30")
+    with patch("collect_events.requests.post", side_effect=fake_post):
+        ce.fetch_apify_facebook_events(14)
+    assert captured["json"]["maxEvents"] == 30
 
 
 def test_events_scraper_tombstone_short_circuits(monkeypatch):

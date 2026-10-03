@@ -201,3 +201,53 @@ def test_fb_posts_ignores_apify_error_placeholders(monkeypatch):
         out = ce.fetch_apify_facebook_posts()
     assert out == []
     assert called == []  # no OpenAI call for a page with zero real posts
+
+
+# ─── Eventbrite + Facebook events ─────────────────────────────────────────
+
+def _apify_resp(items):
+    r = MagicMock(status_code=200)
+    r.json.return_value = items
+    return r
+
+
+def test_eventbrite_maps_fields_and_filters(monkeypatch):
+    monkeypatch.setenv("APIFY_TOKEN", "t")
+    monkeypatch.delenv("EVENTBRITE_ENABLED", raising=False)
+    monkeypatch.setattr(ce, "_APIFY_LIMIT_TRIPPED", False)
+    items = [
+        {"name": "Next Stop Comedy", "startDate": "2026-10-09T21:00", "venueName": "La Cantina",
+         "venueAddressLine1": "123 Main St", "venueCity": "Victoria", "isFree": False,
+         "summary": "Stand-up night.", "url": "https://www.eventbrite.com/e/123?aff=x"},
+        {"name": "Online Webinar", "startDate": "2026-10-09T12:00", "isOnline": True},
+        {"name": "Corpus Show", "startDate": "2026-10-09T19:00", "venueName": "Hall", "venueCity": "Corpus Christi"},
+        {"name": "Far Future", "startDate": "2027-01-01T19:00", "venueCity": "Victoria"},
+    ]
+    with patch.object(ce.requests, "post", return_value=_apify_resp(items)):
+        out = ce.fetch_apify_eventbrite_events()
+    assert len(out) == 1
+    e = out[0]
+    assert (e["date"], e["time"], e["venue"], e["address"]) == ("2026-10-09", "9:00 PM", "La Cantina", "123 Main St")
+    assert e["url"] == "https://www.eventbrite.com/e/123"
+    assert e["free"] is False
+
+
+def test_eventbrite_can_be_disabled(monkeypatch):
+    monkeypatch.setenv("APIFY_TOKEN", "t")
+    monkeypatch.setenv("EVENTBRITE_ENABLED", "0")
+    with patch.object(ce.requests, "post") as post:
+        assert ce.fetch_apify_eventbrite_events() == []
+    post.assert_not_called()
+
+
+def test_facebook_events_use_victoria_time_not_utc(monkeypatch):
+    monkeypatch.setenv("APIFY_TOKEN", "t")
+    monkeypatch.setattr(ce, "_APIFY_LIMIT_TRIPPED", False)
+    monkeypatch.setattr(ce, "_load_venue_list", lambda: ([{"name": "x"}], "venues.json"))
+    # 7 PM CDT on Oct 9 is 00:00Z on Oct 10.
+    items = [{"name": "Late Show", "utcStartDate": "2026-10-10T00:00:00.000Z",
+              "location": {"name": "Aero Crafters", "city": "Victoria, TX"}}]
+    with patch.object(ce.requests, "post", return_value=_apify_resp(items)):
+        out = ce.fetch_apify_facebook_events()
+    assert out[0]["date"] == "2026-10-09"
+    assert out[0]["time"] == "7:00 PM"
