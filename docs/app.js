@@ -84,9 +84,14 @@
   // ─── RENDER SINGLE EVENT ───
   function renderEvent(ev) {
     var iconHtml = renderIcons(ev.icons);
-    var nameHtml = ev.url
-      ? '<a href="' + ev.url + '" target="_blank" rel="noopener noreferrer">' + escHtml(ev.name) + '</a>'
-      : escHtml(ev.name);
+    // ev.page is the server-rendered event page (/events/<slug>), added by
+    // /events.json. Admin preview data doesn't carry it, so fall back to the
+    // external source link there.
+    var nameHtml = ev.page
+      ? '<a href="' + escHtml(ev.page) + '">' + escHtml(ev.name) + '</a>'
+      : ev.url
+        ? '<a href="' + ev.url + '" target="_blank" rel="noopener noreferrer">' + escHtml(ev.name) + '</a>'
+        : escHtml(ev.name);
 
     var venuePart = '';
     if (ev.venue) {

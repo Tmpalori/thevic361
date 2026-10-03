@@ -24,6 +24,10 @@ import { createRateLimiter } from './rateLimit.js';
 import { createAuth } from './auth.js';
 import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
+import {
+  HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
+  renderAboutPage, renderNotFoundPage, renderSitemap, renderLlmsTxt
+} from './seo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -789,21 +793,19 @@ export async function createApp(opts = {}) {
     res.json({ ok: true, events });
   });
 
-  // ─── Public events feed ───────────────────────────────────────────────
-  // The static site at /index.html fetches `./events.json`. When the admin
-  // publishes via /api/admin/publish-events we always save to the local
-  // store (regardless of whether the GitHub commit also succeeded), so this
-  // route serves the freshest copy if one exists. Otherwise we fall through
-  // to the bundled docs/events.json from the deploy.
-  async function serveEventsJson(req, res, next) {
+  // ─── Public events feed ───
+  // The live payload is the published row in the store (with the admin
+  // event-edits overlay applied). When nothing has been published yet we
+  // fall back to the bundled docs/events.json from the deploy. Both the
+  // JSON feed and the server-rendered pages below read through here so
+  // they always agree.
+  async function getPublicPayload() {
     try {
       const published = await store.getPublished();
       if (published) {
-        res.set('Cache-Control', 'no-store');
-        // Apply the admin event-edits overlay so a correction made between
-        // publishes is reflected on the live site without forcing the admin
-        // to hit Save & Publish again. The published payload keeps original
-        // event identities; the overlay maps original_key -> corrected shape.
+        // The published payload keeps original event identities; the
+        // overlay maps original_key -> corrected shape so a correction made
+        // between publishes shows up without another Save & Publish.
         let events = Array.isArray(published.events) ? published.events : [];
         try {
           const edits = await store.listEventEdits();
@@ -811,24 +813,97 @@ export async function createApp(opts = {}) {
         } catch (err) {
           console.warn('[events] overlay skipped:', err.message);
         }
-        return res.json({ ...published, events });
+        return { ...published, events: withPages(events), source: 'store' };
       }
     } catch (err) {
       console.warn('[events] published lookup failed:', err.message);
     }
-    next();
+    try {
+      const bundled = await readJsonFile(eventsFile);
+      return { ...bundled, events: withPages(bundled.events), source: 'bundled' };
+    } catch (err) {
+      console.warn('[events] bundled events.json unreadable:', err.message);
+      return { events: [], source: 'empty' };
+    }
+  }
+
+  async function serveEventsJson(req, res, next) {
+    try {
+      const { source, ...payload } = await getPublicPayload();
+      if (source === 'empty') return next();
+      // Store-backed payloads change on publish; the bundled file only on deploy.
+      if (source === 'store') res.set('Cache-Control', 'no-store');
+      return res.json(payload);
+    } catch (err) {
+      next(err);
+    }
   }
   app.get('/events.json', serveEventsJson);
   app.get('/docs/events.json', serveEventsJson);
 
-  // ─── Static site ───
-  app.use(express.static(DOCS_DIR, { extensions: ['html'] }));
+  // ─── Server-rendered pages (SEO + AI crawlers) ───
+  // See server/seo.js for why. Registered before express.static so "/"
+  // gets the rendered homepage instead of the raw docs/index.html.
+  const siteUrl = (opts.siteUrl ?? process.env.SITE_URL ?? 'https://thevic361.com').replace(/\/+$/, '');
+  const nowFn = opts.now || (() => new Date());
+  let indexTemplate = null;
 
-  app.get('/', (req, res, next) => {
-    res.sendFile(path.join(DOCS_DIR, 'index.html'), err => {
-      if (err) next(err);
-    });
-  });
+  function sendHtml(res, html, status = 200) {
+    // Short public cache: a new publish shows up within minutes, and a
+    // burst of crawler traffic doesn't hit Postgres on every request.
+    res.status(status).set('Cache-Control', status === 200 ? 'public, max-age=300' : 'no-store');
+    res.type('html').send(html);
+  }
+
+  const pageHandler = render => async (req, res, next) => {
+    try {
+      const payload = await getPublicPayload();
+      await render(req, res, payload, { siteUrl, now: nowFn() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  app.get(['/', '/index.html'], pageHandler(async (req, res, payload, ctx) => {
+    // Admin preview loads the homepage with ?preview / ?previewKey and
+    // renders its own unpublished picks client-side; serve it untouched.
+    if (req.query.preview || req.query.previewKey) {
+      return res.sendFile(path.join(DOCS_DIR, 'index.html'));
+    }
+    if (!indexTemplate || opts.reloadTemplates) {
+      indexTemplate = await fsp.readFile(path.join(DOCS_DIR, 'index.html'), 'utf8');
+    }
+    sendHtml(res, renderHome(indexTemplate, payload.events, ctx));
+  }));
+
+  for (const page of HUB_PAGES) {
+    app.get(page.path, pageHandler(async (req, res, payload, ctx) => {
+      sendHtml(res, renderHubPage(page, payload.events, ctx));
+    }));
+  }
+
+  app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
+    const ev = payload.events.find(e => e.page === `/events/${req.params.slug}`);
+    if (!ev) return sendHtml(res, renderNotFoundPage(ctx), 404);
+    sendHtml(res, renderEventPage(ev, payload.events, ctx));
+  }));
+
+  app.get('/about', pageHandler(async (req, res, payload, ctx) => {
+    sendHtml(res, renderAboutPage(ctx));
+  }));
+
+  app.get('/sitemap.xml', pageHandler(async (req, res, payload, ctx) => {
+    res.set('Cache-Control', 'public, max-age=300');
+    res.type('application/xml').send(renderSitemap(payload.events, { ...ctx, lastmod: payload.last_updated }));
+  }));
+
+  app.get('/llms.txt', pageHandler(async (req, res, payload, ctx) => {
+    res.set('Cache-Control', 'public, max-age=300');
+    res.type('text/plain; charset=utf-8').send(renderLlmsTxt(payload.events, ctx));
+  }));
+
+  // ─── Static site ───
+  app.use(express.static(DOCS_DIR, { extensions: ['html'], index: false }));
 
   // ─── 404 + error handlers ───
   app.use((req, res) => {

@@ -87,6 +87,7 @@ thevic361/
 │   ├── db.js                     # FileStore + PgStore + factory; inline schema
 │   ├── github.js                 # GitHub Contents API + workflow_dispatch
 │   ├── rateLimit.js              # in-memory sliding-window limiter
+│   ├── seo.js                    # server-rendered pages: home, intent pages, /events/:slug, /about, sitemap.xml, llms.txt
 │   ├── sources.js                # /api/admin/sources payload builder
 │   ├── turnstile.js              # Cloudflare Turnstile verify
 │   └── validate.js               # submission validation + bot signals
@@ -96,13 +97,13 @@ thevic361/
 │   ├── admin.html, admin.js, admin-submissions.js, admin.css   # admin UI
 │   ├── submit.html, submit.js, submit.css        # public submission form
 │   ├── events.json               # CURATED FALLBACK — see source-of-truth note above
-│   ├── og-image.png, favicon.svg, sitemap.xml, robots.txt
+│   ├── og-image.png, favicon.svg, robots.txt   # sitemap.xml + llms.txt are served by server/seo.js
 │
 ├── tests/                        # vitest (server + admin/submit pages)
 │   ├── admin.test.js, admin_login.test.js, admin_submissions.test.js
 │   ├── app_preview.test.js, candidates_fallback.test.js
 │   ├── publish_preserves_extras.test.js, published_events.test.js
-│   ├── sources.test.js, submissions_api.test.js, submit_form.test.js
+│   ├── seo.test.js, sources.test.js, submissions_api.test.js, submit_form.test.js
 │
 ├── test_*.py                     # pytest, currently AT REPO ROOT (not /tests/python/)
 │   ├── test_ai_review.py
@@ -166,6 +167,10 @@ There is currently **no `tests.yml` workflow**. Run both suites locally before o
 There is no linter configured. Match the existing style (4-space Python, 2-space JS, ES modules in `server/` and `tests/`).
 
 ---
+
+## SEO / AI search
+
+Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` renders events into plain HTML from the same published payload as `/events.json`: the homepage (injected into `docs/index.html`), intent pages (`/today`, `/this-weekend`, `/free-things-to-do`, `/kids-and-family`, `/live-music`, `/food-and-drink`), one page per event at `/events/<date>-<slug>` with schema.org `Event` JSON-LD, `/about`, `/sitemap.xml`, and `/llms.txt`. `docs/app.js` still re-renders the homepage in the browser and powers admin preview. Keep the two event renderers' markup in sync.
 
 ## Conventions
 
