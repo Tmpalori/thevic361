@@ -329,6 +329,48 @@ export function isListingUrl(url) {
   return typeof url === 'string' && LISTING_URL.some(re => re.test(url.trim()));
 }
 
+// Event-specific URLs carry the event's name in a slug
+// (facebook.com/events/<slug>/<id>, allevents.in/<city>/<slug>/<id>,
+// eventbrite.com/e/<slug>-tickets-<id>). If that slug shares no word with the
+// event's name, the link belongs to some other event.
+const SLUG_HOSTS = /(^|\.)(facebook\.com|allevents\.in|eventbrite\.[a-z.]+|victoriachamber\.org)$/i;
+const STOP = new Set('the and at in of for with on to tx victoria texas united states event events tickets night live free'.split(' '));
+function words(text) {
+  return new Set(String(text || '').toLowerCase().normalize('NFKD')
+    .replace(/['’.]/g, '').split(/[^a-z0-9]+/)
+    .filter(w => w.length >= 3 && !/^\d+$/.test(w) && !STOP.has(w))
+    .map(w => w.slice(0, 5)));
+}
+export function isMismatchedUrl(url, name) {
+  let u;
+  try { u = new URL(url); } catch { return false; }
+  if (!SLUG_HOSTS.test(u.hostname)) return false;
+  // A Facebook post can be a roundup of several events; only event links count.
+  if (/facebook\.com$/i.test(u.hostname) && !u.pathname.startsWith('/events/')) return false;
+  const slug = u.pathname.split('/').filter(seg => /[a-z]/i.test(seg) && seg.includes('-')).pop();
+  if (!slug) return false;
+  const a = words(slug), b = words(name);
+  if (!a.size || !b.size) return false;
+  for (const w of a) if (b.has(w)) return false;
+  return true;
+}
+
+// What the event page's button should say for a link.
+export function linkLabel(url) {
+  let u;
+  try { u = new URL(url); } catch { return 'Event details'; }
+  const host = u.hostname.replace(/^www\./, '');
+  const segs = u.pathname.split('/').filter(Boolean);
+  if (/instagram\.com$/.test(host)) return segs[0] === 'p' || segs[0] === 'reel' ? 'See the post' : 'Venue page';
+  if (/facebook\.com$/.test(host)) {
+    if (segs[0] === 'events' && segs.length > 1) return 'Event details';
+    return segs.includes('posts') ? 'See the post' : 'Venue page';
+  }
+  const last = (segs[segs.length - 1] || '').toLowerCase();
+  if (!segs.length || (segs.length === 1 && /^(events?|calendar|index\.php)$/.test(last)) || /search/.test(u.search)) return 'Venue website';
+  return 'Event details';
+}
+
 export function withPages(events) {
   const seen = new Map();
   return (Array.isArray(events) ? events : [])
@@ -342,7 +384,7 @@ export function withPages(events) {
       for (const k of ['name', 'venue', 'address', 'description', 'time']) {
         if (typeof ev[k] === 'string') clean[k] = decodeEntities(ev[k]);
       }
-      if (isListingUrl(ev.url)) clean.url = '';
+      if (isListingUrl(ev.url) || isMismatchedUrl(ev.url, ev.name)) clean.url = '';
       return Object.assign({}, ev, clean, { page: `/events/${n === 1 ? base : `${base}-${n}`}` });
     });
 }
@@ -646,7 +688,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
       <dt>Cost</dt><dd>${ev.free === true ? 'Free' : 'See event details'}</dd>
     </dl>
     ${ev.description ? `<p class="event-about">${escHtml(ev.description)}</p>` : ''}
-    ${src ? `<p class="page-actions"><a class="btn btn--primary" href="${escHtml(src)}" target="_blank" rel="noopener noreferrer">Event details</a></p>` : ''}
+    ${src ? `<p class="page-actions"><a class="btn btn--primary" href="${escHtml(src)}" target="_blank" rel="noopener noreferrer">${linkLabel(src)}</a></p>` : ''}
     ${extras}
     ${venuePath ? `<p class="venue-more"><a href="${escHtml(venuePath)}">More events at ${escHtml(ev.venue)} →</a></p>` : ''}
     ${sameDay.length ? `<h2 class="section-heading">Also on ${escHtml(formatDay(ev.date, { weekday: 'long' }))}</h2>

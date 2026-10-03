@@ -106,3 +106,20 @@ describe('event links', () => {
     expect((await get('/')).html).not.toContain('eventbrite.com/b/');
   });
 });
+
+describe('link audit helpers', async () => {
+  const { isMismatchedUrl, linkLabel } = await import('../server/seo.js');
+  it('flags an event link whose slug names another event', () => {
+    expect(isMismatchedUrl('https://www.facebook.com/events/306-w-commercial-st-victoria-tx/nave-volunteer-information-session/1065577712573226/', 'Live Band Karaoke')).toBe(true);
+    expect(isMismatchedUrl('https://allevents.in/victoria/walk-to-end-alzheimers/200030364373618', "Walk to End Alzheimer's")).toBe(false);
+    expect(isMismatchedUrl('https://www.facebook.com/victoriamainstreet/posts/-music-on-main-street/138', 'Thursday Karaoke')).toBe(false);
+    expect(isMismatchedUrl('https://victoriapl.librarycalendar.com/event/adult-program-9240', 'Sourdough Baking')).toBe(false);
+  });
+  it('labels venue homepages and posts honestly', () => {
+    expect(linkLabel('https://palacebingo.org')).toBe('Venue website');
+    expect(linkLabel('https://www.weldercenter.org/events')).toBe('Venue website');
+    expect(linkLabel('https://www.instagram.com/p/DdtoAzUCJ6L/')).toBe('See the post');
+    expect(linkLabel('https://www.facebook.com/VictoriaFarmersMarket')).toBe('Venue page');
+    expect(linkLabel('https://allevents.in/victoria/tejas-fest-2026/200030008232138')).toBe('Event details');
+  });
+});
