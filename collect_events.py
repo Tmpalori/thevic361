@@ -1017,8 +1017,10 @@ GEMINI_CATEGORIES = [
     "arts, theatre, museums, galleries and film screenings",
     "food and drink events, trivia nights, bar and brewery events",
     "sports, runs, rodeos, outdoor and recreation events",
-    "Texas A&M University-Victoria and Victoria College public events",
-    "church, charity, fundraiser and civic events open to the public",
+    "Texas A&M University-Victoria and Victoria College events open to the general public "
+    "(concerts, plays, lectures, exhibits, games); not student-only, recruiting, orientation or club events",
+    "charity fundraisers, galas, benefit concerts and civic events open to the public "
+    "(not worship services or church meetings)",
 ]
 
 
@@ -1031,8 +1033,8 @@ def _gemini_prompt(category, start, end):
         '"description": one factual sentence, "url": the event\'s own page (venue site, ticket page, '
         'Facebook event, or official calendar entry; never a search or category page), "free": true/false/null}.\n'
         "Only include an event if a web page you found states that exact date. One item per date for "
-        "repeating events. Exclude business hours, sales, job postings, online-only events and anything "
-        "outside Victoria County. If you find none, return []."
+        "repeating events. Exclude business hours, sales, job postings, online-only events, worship services, "
+        "members- or students-only events, and anything outside Victoria County. If you find none, return []."
     )
 
 
@@ -1852,6 +1854,20 @@ _NON_EVENT_RE = re.compile(
     re.IGNORECASE,
 )
 _NATIONAL_DAY_RE = re.compile(r"^\s*national\b.*\bday\b", re.IGNORECASE)
+# Regular worship and church business: real, but not a "thing to do" for the
+# general public. Church festivals, concerts and fish fries still pass.
+_WORSHIP_RE = re.compile(
+    r"\b(mass|misa|masses|confessions?|baptism(?:al)? class|communion(?: service)?|rosary|adoration"
+    r"|worship service|sunday service|bible study|prayer (?:service|meeting|group)|novena|vespers"
+    r"|(?:charities|second) collection|catechism|rcia|ccd)\b", re.IGNORECASE)
+# Worship words inside a public event's name ("Christmas Mass Choir Concert").
+_PUBLIC_EVENT_RE = re.compile(r"\b(concert|choir|festival|fest|fair|fish fry|carnival|bazaar|gala|market|5k|run)\b", re.IGNORECASE)
+# Members/students only: club meetings, orientations, recruiting visits.
+_MEMBERS_ONLY_RE = re.compile(
+    r"\b(board meeting|members? meeting|chapter meeting|(?:monthly|regular|general) meeting|meeting of the"
+    r"|orientation|transfer (?:day|tuesdays?|event)|admissions|registration deadline|advising"
+    r"|meet (?:&|and) sweets|tuesdays? at vc|pinning|white coat|color (?:guard )?ceremony)\b"
+    r"|\bmeeting\s*$", re.IGNORECASE)
 
 
 def non_event_reason(ev):
@@ -1859,6 +1875,10 @@ def non_event_reason(ev):
     name = ev.get("name") or ""
     if _NON_EVENT_RE.search(name):
         return "not an event"
+    if _WORSHIP_RE.search(name) and not _PUBLIC_EVENT_RE.search(name):
+        return "worship service"
+    if _MEMBERS_ONLY_RE.search(name):
+        return "members or students only"
     # "National Drink Beer Day" with no time is a social post, not a party.
     if _NATIONAL_DAY_RE.search(name) and not (ev.get("time") or "").strip():
         return "awareness day"

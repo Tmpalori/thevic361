@@ -48,7 +48,11 @@ def main():
         print(json.dumps(info))
     print(f"\n=== Kept {len(events)} events ===")
     for e in sorted(events, key=lambda x: (x["date"], x["time"])):
-        print(f"{e['date']} {e['time'] or '--':>9}  {e['name'][:60]}  @ {e['venue'][:30]}  {e['url'][:80]}")
+        why = ce.non_event_reason(e) or ce.out_of_area_reason(e)
+        mark = f"  [merge drops: {why}]" if why else ""
+        print(f"{e['date']} {e['time'] or '--':>9}  {e['name'][:60]}  @ {e['venue'][:30]}  {e['url'][:80]}{mark}")
+    kept = [e for e in events if not (ce.non_event_reason(e) or ce.out_of_area_reason(e))]
+    print(f"\n{len(kept)} of {len(events)} survive the merge filters (before duplicate merging).")
     with open("gemini_probe.json", "w") as f:
         json.dump({"categories": seen_replies, "events": events}, f, indent=2)
     return 0
