@@ -24,10 +24,9 @@ const GA_ID = 'G-52YHD3X3C2';
 const TZ = 'America/Chicago';
 const UPCOMING_DAYS = 60;
 
-const ICON_EMOJI = {
-  food: '🍔', music: '🎵', family: '🧑‍🧑‍🧒', drinks: '🍺', arts: '🎨',
-  shopping: '🛍️', outdoors: '🏃', community: '📣', free: '🆓'
-};
+// Cartoon category icons: one <symbol> per key in docs/icons.svg.
+const ICON_KEYS = new Set(['food', 'music', 'family', 'drinks', 'arts', 'shopping', 'outdoors', 'community', 'free']);
+const iconSvg = k => `<svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-${k}"></use></svg>`;
 
 // Intent pages. `filter` picks events from the upcoming window; `range`
 // picks the date window. Order here is the nav order.
@@ -309,7 +308,7 @@ export function eventJsonLd(ev, siteUrl) {
 // ─── HTML pieces ─────────────────────────────────────────────────────────
 
 function icons(ev) {
-  return (ev.icons || []).map(k => ICON_EMOJI[k] || '').filter(Boolean).join(' ');
+  return (ev.icons || []).filter(k => ICON_KEYS.has(k)).map(iconSvg).join('');
 }
 
 // Mirrors renderEvent() in docs/app.js so the server markup and the

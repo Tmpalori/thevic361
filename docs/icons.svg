@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <!-- The Vic 361 category icons: sticker-style, same ink outline and
+       palette as skyline.svg and style.css. Used via
+       <svg class="ico"><use href="icons.svg#i-food"/></svg>. -->
+
+  <!-- Food: burger -->
+  <symbol id="i-food" viewBox="0 0 32 32">
+    <g stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M5 14.5C5 8.5 10 5 16 5s11 3.5 11 9.5z" fill="#FFB547"/>
+      <path d="M4 17.5l3-2 3 2 3-2 3 2 3-2 3 2 3-2 3 2v1.5H4z" fill="#3DBE8B"/>
+      <rect x="5" y="19" width="22" height="4" rx="2" fill="#9B5A3C"/>
+      <path d="M5 23h22v1.5c0 2-1.5 3.5-3.5 3.5h-15C6.5 28 5 26.5 5 24.5z" fill="#FFB547"/>
+    </g>
+    <g fill="#FFF4D6">
+      <ellipse cx="12" cy="9.5" rx="1.1" ry="0.7"/><ellipse cx="17" cy="8" rx="1.1" ry="0.7"/><ellipse cx="21" cy="10.5" rx="1.1" ry="0.7"/>
+    </g>
+  </symbol>
+
+  <!-- Music: beamed notes -->
+  <symbol id="i-music" viewBox="0 0 32 32">
+    <g stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M12 22V8l14-3v14" fill="none"/>
+      <path d="M12 8l14-3v4l-14 3z" fill="#4B3FD1"/>
+      <ellipse cx="8.5" cy="23" rx="4.5" ry="3.6" fill="#4B3FD1"/>
+      <ellipse cx="22.5" cy="20" rx="4.5" ry="3.6" fill="#4B3FD1"/>
+    </g>
+    <path d="M27.5 25.5l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z" fill="#FFC93C"/>
+  </symbol>
+
+  <!-- Family: two smiling faces -->
+  <symbol id="i-family" viewBox="0 0 32 32">
+    <g stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <circle cx="12" cy="14" r="8.5" fill="#FF8FC0"/>
+      <circle cx="23" cy="20" r="6" fill="#FFC93C"/>
+      <path d="M8.8 16.5q3.2 3 6.4 0M20.8 21.6q2.2 2 4.4 0" fill="none" stroke-width="2"/>
+    </g>
+    <g fill="#1F1A3D">
+      <circle cx="9.5" cy="12.5" r="1.2"/><circle cx="14.5" cy="12.5" r="1.2"/>
+      <circle cx="21.3" cy="19" r="1"/><circle cx="24.7" cy="19" r="1"/>
+    </g>
+  </symbol>
+
+  <!-- 21+ / drinks: frothy mug -->
+  <symbol id="i-drinks" viewBox="0 0 32 32">
+    <g stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M22 13h3a3.5 3.5 0 0 1 3.5 3.5v2A3.5 3.5 0 0 1 25 22h-3" fill="none"/>
+      <rect x="6" y="11" width="16" height="17" rx="2.5" fill="#FFC93C"/>
+      <path d="M5.5 11.5a3.5 3.5 0 0 1 3-5.5a4 4 0 0 1 7-1a3.5 3.5 0 0 1 6 2.5a2.8 2.8 0 0 1 .5 5.5c-1 0-1.5-.8-1.5-.8s-1 2-3 2s-2.5-2-2.5-2s-1 2-3.5 2s-3-1.5-3-1.5s-1.5.8-3-1.2z" fill="#fff"/>
+      <path d="M11 17v7M16.5 17v7" fill="none" stroke-width="2"/>
+    </g>
+  </symbol>
+
+  <!-- Arts: paint palette -->
+  <symbol id="i-arts" viewBox="0 0 32 32">
+    <g stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M16 4C8.8 4 3.5 9 3.5 15.5S8.5 28 15 28c2.2 0 2.8-1.6 2.2-3-.8-1.8.2-3.5 2.3-3.5h3.2c3.6 0 5.8-2.6 5.8-6C28.5 8.6 22.8 4 16 4z" fill="#F6E3C3"/>
+      <circle cx="10" cy="12" r="2.3" fill="#FF5C5C"/>
+      <circle cx="16" cy="9" r="2.3" fill="#FFC93C"/>
+      <circle cx="22" cy="11.5" r="2.3" fill="#4B3FD1"/>
+      <circle cx="9.5" cy="19" r="2.3" fill="#3DBE8B"/>
+    </g>
+  </symbol>
+
+  <!-- Shopping: bag with a heart -->
+  <symbol id="i-shopping" viewBox="0 0 32 32">
+    <g stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M11 11V9a5 5 0 0 1 10 0v2" fill="none"/>
+      <path d="M6 11h20l-1.5 16.5a1.5 1.5 0 0 1-1.5 1.5H9a1.5 1.5 0 0 1-1.5-1.5z" fill="#FF8FC0"/>
+    </g>
+    <path d="M16 24.5s-4.5-2.8-4.5-5.6a2.3 2.3 0 0 1 4.5-.8a2.3 2.3 0 0 1 4.5.8c0 2.8-4.5 5.6-4.5 5.6z" fill="#fff" stroke="#1F1A3D" stroke-width="1.8" stroke-linejoin="round"/>
+  </symbol>
+
+  <!-- Outdoors: cactus under the sun -->
+  <symbol id="i-outdoors" viewBox="0 0 32 32">
+    <g stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <circle cx="24" cy="8" r="4.5" fill="#FFC93C"/>
+      <path d="M3 28h26" fill="none"/>
+      <path d="M13 28V9.5a3 3 0 0 1 6 0V28z" fill="#3DBE8B"/>
+      <path d="M13 19H9.5A2.5 2.5 0 0 1 7 16.5V13a1.8 1.8 0 0 1 3.6 0v2.6H13z" fill="#3DBE8B"/>
+      <path d="M19 16.5h2.4V12a1.8 1.8 0 0 1 3.6 0v4a3.5 3.5 0 0 1-3.5 3.5H19z" fill="#3DBE8B"/>
+    </g>
+  </symbol>
+
+  <!-- Community: megaphone -->
+  <symbol id="i-community" viewBox="0 0 32 32">
+    <g stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M9 20.5l2.2 6a1.8 1.8 0 0 0 3.4-1.2l-1.8-4.8" fill="#FF8A80"/>
+      <path d="M4 13.5h5l11-6.5v18L9 18.5H4z" fill="#FF7A3D"/>
+      <path d="M24 12q2.5 3.5 0 7M27 9.5q4.5 6 0 12" fill="none"/>
+    </g>
+  </symbol>
+
+  <!-- Free: scalloped sticker -->
+  <symbol id="i-free" viewBox="0 0 32 32">
+    <path stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" fill="#3DBE8B" d="M16 2.5l2.6 2.2 3.4-.6 1.2 3.2 3.2 1.2-.6 3.4 2.2 2.6-2.2 2.6.6 3.4-3.2 1.2-1.2 3.2-3.4-.6-2.6 2.2-2.6-2.2-3.4.6-1.2-3.2-3.2-1.2.6-3.4L3 14.5l2.2-2.6-.6-3.4 3.2-1.2 1.2-3.2 3.4.6z" transform="translate(0 1.5)"/>
+    <text x="16" y="19.6" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="8.2" fill="#fff" stroke="#1F1A3D" stroke-width="0.6" paint-order="stroke">FREE</text>
+  </symbol>
+
+  <!-- Pin: fallback for New & Notable -->
+  <symbol id="i-pin" viewBox="0 0 32 32">
+    <g stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M16 20v9" fill="none"/>
+      <path d="M11 4h10l-1.5 7 4.5 4v3H8v-3l4.5-4z" fill="#FF5C5C"/>
+    </g>
+  </symbol>
+</svg>

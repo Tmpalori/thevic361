@@ -1490,3 +1490,14 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 .main-content a:not(.btn):not(.share-btn):hover { text-decoration-style: wavy; text-decoration-color: var(--sunset); }
 .event-name a, .event-venue a { font-weight: inherit; }
 .event-name a { color: inherit !important; text-decoration: none; }
+
+/* Cartoon category icons (docs/icons.svg) */
+.ico { display: inline-block; width: 1.5em; height: 1.5em; vertical-align: middle; flex: none; }
+.event-icons { display: flex; flex-wrap: wrap; gap: 3px; width: 3.7rem; }
+.event-icons .ico { width: 27px; height: 27px; }
+.legend-item .ico { width: 22px; height: 22px; }
+.notable-icon .ico { width: 30px; height: 30px; }
+@media (max-width: 639px) {
+  .event-icons { width: 3rem; }
+  .event-icons .ico { width: 22px; height: 22px; }
+}

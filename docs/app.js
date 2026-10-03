@@ -3,18 +3,12 @@
 (function () {
   'use strict';
 
-  // ─── ICON MAP ───
-  const ICON_MAP = {
-    food:      '🍔',
-    music:     '🎵',
-    family:    '🧑‍🧑‍🧒',
-    drinks:    '🍺',
-    arts:      '🎨',
-    shopping:  '🛍️',
-    outdoors:  '🏃',
-    community: '📣',
-    free:      '🆓'
-  };
+  // ─── ICONS ───
+  // Cartoon category icons live in icons.svg (one <symbol> per key).
+  const ICON_KEYS = ['food', 'music', 'family', 'drinks', 'arts', 'shopping', 'outdoors', 'community', 'free'];
+  function iconSvg(key) {
+    return '<svg class="ico" aria-hidden="true" focusable="false"><use href="icons.svg#i-' + key + '"></use></svg>';
+  }
 
   // ─── DARK MODE TOGGLE ───
   const toggle = document.querySelector('[data-theme-toggle]');
@@ -76,9 +70,9 @@
   function renderIcons(icons) {
     if (!icons || !icons.length) return '';
     return icons
-      .map(function (key) { return ICON_MAP[key] || ''; })
-      .filter(Boolean)
-      .join(' ');
+      .filter(function (key) { return ICON_KEYS.indexOf(key) !== -1; })
+      .map(iconSvg)
+      .join('');
   }
 
   // Event and sponsor URLs come from scrapers and public submissions. Only
@@ -182,7 +176,7 @@
   function renderNotable(items) {
     if (!items || !items.length) return '';
     return items.map(function (item) {
-      var icon = ICON_MAP[item.icon] || '📌';
+      var icon = iconSvg(ICON_KEYS.indexOf(item.icon) !== -1 ? item.icon : 'pin');
       var tagClass = item.tag === 'new' ? 'badge--new' : 'badge--coming';
       var tagText = item.tag === 'new' ? 'NEW' : 'COMING';
       return '<li class="notable-entry">' +
