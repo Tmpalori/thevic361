@@ -110,7 +110,7 @@ thevic361/
 │   ├── test_collect_events_safety.py    # ⚠️  PINS the --candidates-only invariant
 │   ├── test_discover_venues.py
 │   ├── test_fb_posts.py, test_ig_posts.py
-│   ├── test_library_cap.py, test_venues_seed.py
+│   ├── test_library_cap.py, test_quality.py, test_venues_seed.py
 │
 ├── .github/workflows/
 │   ├── weekly-collect.yml        # Sun 23:00 UTC — collector → candidates.json
@@ -167,6 +167,10 @@ pytest -q
 There is no linter configured. Match the existing style (4-space Python, 2-space JS, ES modules in `server/` and `tests/`).
 
 ---
+
+## Collector quality
+
+`merge_events` in `collect_events.py` is the single quality gate: it drops scraped events outside Victoria County (`out_of_area_reason`; local YAML is trusted), moves street addresses out of the venue field (`clean_venue`), and fuzzy-dedupes per day (`is_same_event`), keeping the record from the higher-ranked source in `SOURCE_RANK` and filling gaps from the other. `safe_fetch` tags every event with `_source`, which the admin shows as a pill. Tests: `test_quality.py`.
 
 ## SEO / AI search
 

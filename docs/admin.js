@@ -43,7 +43,22 @@
     facebook: 'Facebook',
     instagram: 'Instagram',
     candidate: 'Candidate',
-    unknown: 'Unknown'
+    unknown: 'Unknown',
+    // Collector scraper ids (collect_events.py tags each candidate).
+    local_events: 'Local YAML',
+    google_sheet: 'Google Sheet',
+    city_calendar: 'City calendar',
+    chamber: 'Chamber',
+    library: 'Library',
+    theatre_victoria: 'Theatre Victoria',
+    jwelch: 'J Welch Farms',
+    generals: 'Generals',
+    moonshine: 'Moonshine',
+    vtx_artwalk: 'Art Walk',
+    allevents: 'AllEvents',
+    apify_facebook: 'Facebook events',
+    apify_facebook_posts: 'Facebook posts',
+    apify_instagram_posts: 'Instagram posts'
   };
   function inferSource(ev) {
     if (!ev) return 'unknown';

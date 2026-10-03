@@ -43,6 +43,7 @@ import os
 import re
 import sys
 from collections import Counter
+from difflib import SequenceMatcher
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
@@ -145,6 +146,11 @@ def safe_fetch(name, fn, args=(), expect_events=True):
         result = fn(*args)
         if not isinstance(result, list):
             result = list(result or [])
+        # Tag every event with the scraper it came from, so dedupe can prefer
+        # official sources and the admin can see where a candidate came from.
+        for ev in result:
+            if isinstance(ev, dict):
+                ev.setdefault("_source", name)
         finished = datetime.now().isoformat(timespec="seconds")
         if len(result) == 0:
             if expect_events:
@@ -1293,15 +1299,209 @@ def fill_gaps(events):
     return events
 
 
+# ─── QUALITY: location, venue cleanup, fuzzy dedupe ───────────────────────────
+#
+# Why this exists (from the 2026-09-28 run): the same event arrived from two
+# or three sources under slightly different names ("Tejas Fest" vs "Tejas
+# Fest 2026", "Disney Pixar's Finding Nemo JR." vs "Disney's Finding Nemo
+# JR") and slipped past the exact/prefix dedupe; AllEvents put the full
+# street address in the venue field; and nothing checked that a scraped
+# event was actually in Victoria.
+
+# Victoria County ZIP codes. Victoria proper is 77901/77904/77905; the rest
+# are county towns we're happy to list (Inez, Nursery, Bloomington,
+# Placedo, Telferner, McFaddin).
+VICTORIA_AREA_ZIPS = {"77901", "77902", "77903", "77904", "77905",
+                      "77968", "77976", "77951", "77977", "77988", "77960"}
+
+# Towns near enough to show up in regional feeds but not ours. Street names
+# like "Houston Hwy" or "Port Lavaca Dr" are real Victoria addresses, so a
+# match followed by a street suffix doesn't count.
+_OTHER_TOWNS = [
+    "cuero", "port lavaca", "goliad", "edna", "yoakum", "hallettsville",
+    "shiner", "corpus christi", "houston", "san antonio", "austin",
+    "refugio", "ganado", "seadrift", "el campo", "wharton", "beeville",
+    "kenedy", "yorktown", "point comfort", "palacios", "rockport",
+    "port o'connor", "port oconnor", "gonzales", "bay city",
+]
+_STREET_SUFFIX = r"(?:hwy|highway|st|street|ave|avenue|rd|road|dr|drive|blvd|ln|lane|hwy\.|loop|pkwy)\b"
+_OTHER_TOWN_RE = re.compile(
+    r"\b(" + "|".join(re.escape(t) for t in _OTHER_TOWNS) + r")\b(?!\s+" + _STREET_SUFFIX + r")",
+    re.IGNORECASE,
+)
+
+
+def out_of_area_reason(ev):
+    """Return why an event looks like it's outside Victoria County, or None.
+
+    Only the location fields are checked (venue + address), plus an explicit
+    ", <Town>, TX" in the description, so an event *about* Houston held in
+    Victoria still passes.
+    """
+    loc = " ".join(str(ev.get(k) or "") for k in ("venue", "address"))
+    for z in re.findall(r"\b(7\d{4})\b", loc):
+        if z not in VICTORIA_AREA_ZIPS:
+            return f"zip {z}"
+    m = _OTHER_TOWN_RE.search(loc)
+    if m and not re.search(r"\bvictoria\b", loc, re.IGNORECASE):
+        return f"town {m.group(1).lower()}"
+    m = re.search(r",\s*(" + "|".join(re.escape(t) for t in _OTHER_TOWNS) + r"),?\s*(?:tx|texas)\b",
+                  str(ev.get("description") or ""), re.IGNORECASE)
+    if m:
+        return f"town {m.group(1).lower()}"
+    return None
+
+
+_ADDRESSY = re.compile(r"^\d+\s+\w|,\s*(?:victoria|tx|texas)\b|\b7\d{4}\b", re.IGNORECASE)
+
+
+def clean_venue(ev, venues=None):
+    """Fix venue/address mix-ups in place.
+
+    AllEvents often puts "101 N. Main St, Victoria, TX, United States, Texas
+    77901" in the venue field. Move it to address and, when the street
+    matches a venue in venues.json, use that venue's name.
+    """
+    venue = (ev.get("venue") or "").strip()
+    if not venue or not _ADDRESSY.search(venue):
+        return ev
+    street = venue.split(",")[0].strip()
+    if not (ev.get("address") or "").strip():
+        ev["address"] = street
+    ev["venue"] = street
+    key = _street_key(street)
+    for v in venues or []:
+        if key and _street_key(v.get("address") or "") == key and v.get("name"):
+            ev["venue"] = v["name"]
+            break
+    return ev
+
+
+def _street_key(addr):
+    """'101 N. Main St' and '101 North Main Street' → '101 main'."""
+    a = re.sub(r"[^a-z0-9 ]", " ", (addr or "").lower())
+    words = [w for w in a.split() if w not in {
+        "n", "s", "e", "w", "north", "south", "east", "west",
+        "st", "street", "ave", "avenue", "rd", "road", "dr", "drive", "blvd", "ln", "lane",
+        "suite", "ste", "victoria", "tx", "texas", "united", "states"}]
+    words = [w for w in words if not re.fullmatch(r"7\d{4}", w)]
+    return " ".join(words[:2])
+
+
+_NAME_STOP = {"the", "a", "an", "at", "in", "of", "and", "with", "for", "on", "annual", "presents"}
+_MONTHS = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
+
+
+def _name_tokens(name):
+    n = (name or "").lower().replace("&", " and ")
+    n = re.sub(r"[\u2019']s\b", "", n)                       # "Disney's" → "disney"
+    n = re.sub(r"\b20\d{2}\b", " ", n)                      # years
+    n = re.sub(r"\b" + _MONTHS + r"\s+\d{1,2}(?:st|nd|rd|th)?\b", " ", n)  # "October 10th"
+    n = re.sub(r"\$\d+(?:\.\d+)?", " ", n)                   # prices
+    n = re.sub(r"[^a-z0-9 ]", " ", n)
+    return [w for w in n.split() if w not in _NAME_STOP]
+
+
+def _same_place(a, b):
+    """True when two events share a venue or street address (or one is blank)."""
+    va, vb = (a.get("venue") or "").lower(), (b.get("venue") or "").lower()
+    if not va or not vb:
+        return True
+    if va in vb or vb in va:
+        return True
+    ka, kb = _street_key(a.get("address") or a.get("venue")), _street_key(b.get("address") or b.get("venue"))
+    return bool(ka) and ka == kb
+
+
+def is_same_event(a, b):
+    """Fuzzy match for two events on the same date."""
+    if a.get("date") != b.get("date"):
+        return False
+    ta, tb = _name_tokens(a.get("name")), _name_tokens(b.get("name"))
+    if not ta or not tb:
+        return False
+    sa, sb = " ".join(ta), " ".join(tb)
+    if sa == sb:
+        return True
+    if SequenceMatcher(None, sa, sb).ratio() >= 0.85:
+        return True
+    # One name contains the other ("6th Realm Night Market" vs "6th Realm
+    # Night Market Street spots"): only a match at the same place, so
+    # "Tejas Fest" doesn't swallow "Chihuahua Races at Tejas Fest".
+    small, big = (set(ta), set(tb)) if len(ta) <= len(tb) else (set(tb), set(ta))
+    if len(small) >= 2 and small <= big and _same_place(a, b):
+        return True
+    return False
+
+
+# Higher wins when two sources describe the same event: an official
+# calendar beats an aggregator beats a social post.
+SOURCE_RANK = {
+    "local_events": 10, "google_sheet": 9, "city_calendar": 8, "library": 8,
+    "chamber": 7, "theatre_victoria": 7, "jwelch": 7, "generals": 7,
+    "moonshine": 6, "vtx_artwalk": 6, "allevents": 4, "apify_facebook": 4,
+    "apify_facebook_posts": 3, "apify_instagram_posts": 3,
+}
+
+
+# venues.json entries that are organizers rather than places ("Discover
+# Victoria Texas", promoters, festivals). Their posts name the account, not
+# where the event happens, so a real venue from another source wins.
+_NON_PLACE_CATEGORY = re.compile(r"aggregator|promoter|program|festival|media|hub|online", re.IGNORECASE)
+_NON_PLACE_NAMES = set()
+
+
+def _set_non_place_names(venues):
+    _NON_PLACE_NAMES.clear()
+    for v in venues or []:
+        if v.get("name") and _NON_PLACE_CATEGORY.search(v.get("category") or ""):
+            _NON_PLACE_NAMES.add(v["name"].lower())
+
+
+def _merge_pair(old, new):
+    """Combine two records of the same event into the best single record."""
+    def completeness(e):
+        return sum(1 for k in ("time", "venue", "address", "description", "url") if e.get(k))
+
+    def rank(e):
+        return (SOURCE_RANK.get(e.get("_source"), 0), completeness(e))
+
+    base, other = (new, old) if rank(new) > rank(old) else (old, new)
+    merged = dict(base)
+    for k in ("time", "venue", "address", "description", "url"):
+        if not merged.get(k) and other.get(k):
+            merged[k] = other[k]
+    if (merged.get("venue") or "").lower() in _NON_PLACE_NAMES and other.get("venue") \
+            and other["venue"].lower() not in _NON_PLACE_NAMES:
+        merged["venue"] = other["venue"]
+        merged["address"] = other.get("address") or ""
+    # The shorter name is usually the clean one ("Tejas Fest" over "Tejas
+    # Fest 2026 - Presented by ...").
+    if other.get("name") and len(other["name"]) < len(merged.get("name") or ""):
+        merged["name"] = other["name"]
+    merged["icons"] = list(dict.fromkeys((base.get("icons") or []) + (other.get("icons") or [])))[:4]
+    merged["free"] = bool(base.get("free") or other.get("free"))
+    merged["_sources"] = sorted(set((old.get("_sources") or [old.get("_source")]) +
+                                    (new.get("_sources") or [new.get("_source")])) - {None})
+    return merged
+
+
 # ─── MERGE + DEDUPLICATE ─────────────────────────────────────────────────────
 
-def merge_events(all_events, days_ahead=7):
-    """Merge, deduplicate, auto-tag, sort."""
+def merge_events(all_events, days_ahead=7, venues=None):
+    """Filter to the window and Victoria County, clean venues, dedupe, sort."""
     today = _WINDOW_START
     end_date = _WINDOW_END
+    if venues is None:
+        try:
+            venues, _ = _load_venue_list()
+        except Exception:
+            venues = []
 
-    seen = {}  # key → event (keep the one with more info)
-    prefix_index = {}  # prefix_key → key (so we can find existing entries by prefix)
+    _set_non_place_names(venues)
+    by_date = {}
+    dropped_area = []
+    merged_count = 0
     for ev in all_events:
         date_str = ev.get("date", "")
         if not date_str:
@@ -1313,51 +1513,54 @@ def merge_events(all_events, days_ahead=7):
         except ValueError:
             continue
 
-        # Normalize key — strip punctuation differences for fuzzy dedup
-        name_norm = re.sub(r'[\s\-\u2013\u2014:,]+', ' ', ev.get("name", "").lower()).strip()
-        # Also build a "prefix" key from the first 6 significant words to catch
-        # variants like "Foo with Bar" vs "Foo with Bar, Title" (same event, longer name).
-        words = [w for w in name_norm.split() if len(w) > 1]
-        prefix_norm = " ".join(words[:6])
-        key = (name_norm, date_str)
-        prefix_key = (prefix_norm, date_str)
-
-        # Auto-tag if needed
-        if not ev.get("icons"):
-            ev["icons"] = classify_icons(ev.get("name", ""), ev.get("description", ""), ev.get("venue", ""))
-        if ev.get("free") and "free" not in ev["icons"]:
-            ev["icons"].append("free")
-
-        # Keep the entry with more filled fields
-        def completeness(e):
-            return sum(1 for v in [e.get("time"), e.get("venue"), e.get("address"), e.get("description")] if v)
-
         new_entry = {
             "date": date_str,
-            "name": ev.get("name", "").strip(),
-            "time": ev.get("time", "").strip(),
-            "venue": ev.get("venue", "").strip(),
-            "address": ev.get("address", "").strip(),
-            "description": ev.get("description", "").strip(),
-            "icons": ev.get("icons", []),
+            "name": (ev.get("name") or "").strip(),
+            "time": (ev.get("time") or "").strip(),
+            "venue": (ev.get("venue") or "").strip(),
+            "address": (ev.get("address") or "").strip(),
+            "description": (ev.get("description") or "").strip(),
+            "icons": list(ev.get("icons") or []),
             "free": bool(ev.get("free", False)),
-            "url": ev.get("url", "").strip(),
+            "url": (ev.get("url") or "").strip(),
         }
+        if ev.get("_source"):
+            new_entry["_source"] = ev["_source"]
+        if not new_entry["name"]:
+            continue
+        clean_venue(new_entry, venues)
 
-        # Resolve dupe via exact key OR prefix key (catches "X with Y" vs "X with Y, Z").
-        existing_key = key if key in seen else prefix_index.get(prefix_key)
-        if existing_key is None:
-            seen[key] = new_entry
-            prefix_index[prefix_key] = key
+        # Hand-curated YAML is trusted; everything scraped must be local.
+        if new_entry.get("_source") != "local_events":
+            reason = out_of_area_reason(new_entry)
+            if reason:
+                dropped_area.append(f"{new_entry['name'][:50]} ({reason})")
+                continue
+
+        if not new_entry["icons"]:
+            new_entry["icons"] = classify_icons(new_entry["name"], new_entry["description"], new_entry["venue"])
+        if new_entry["free"] and "free" not in new_entry["icons"]:
+            new_entry["icons"].append("free")
+
+        day = by_date.setdefault(date_str, [])
+        for i, existing in enumerate(day):
+            if is_same_event(existing, new_entry):
+                day[i] = _merge_pair(existing, new_entry)
+                merged_count += 1
+                break
         else:
-            old = seen[existing_key]
-            # Pick the more complete entry, but always keep the shorter, cleaner name
-            # (longer names are usually a source's verbose variant of the same event).
-            chosen = new_entry if completeness(new_entry) > completeness(old) else old
-            chosen["name"] = old["name"] if len(old["name"]) <= len(new_entry["name"]) else new_entry["name"]
-            seen[existing_key] = chosen
+            day.append(new_entry)
 
-    final = sorted(seen.values(), key=lambda e: (e["date"], e.get("time", "ZZ")))
+    final = [e for d in by_date.values() for e in d]
+    for e in final:
+        # Keep a single public-facing source string for the admin pill.
+        srcs = e.pop("_sources", None)
+        if srcs and len(srcs) > 1:
+            e["_also_from"] = [s for s in srcs if s != e.get("_source")]
+    final.sort(key=lambda e: (e["date"], e.get("time") or "ZZ"))
+    print(f"   [Quality] merged {merged_count} duplicates, dropped {len(dropped_area)} outside Victoria County")
+    for d in dropped_area[:15]:
+        print(f"     – {d}")
     return final
 
 
@@ -1825,24 +2028,48 @@ def fetch_generals_events(days_ahead=7):
 
 # ─── SOURCE: ALLEVENTS.IN (Victoria, TX aggregator) ──────────────────────────────
 
-def fetch_allevents_events(days_ahead=14):
-    """Pull events from allevents.in/victoria-tx.
+# The "all" page only lists the first ~20 events. Category pages surface
+# different ones; a page that 404s or changes layout just adds nothing.
+ALLEVENTS_PAGES = [
+    "https://allevents.in/victoria-tx/all",
+    "https://allevents.in/victoria-tx/this-weekend",
+    "https://allevents.in/victoria-tx/music",
+    "https://allevents.in/victoria-tx/festivals",
+    "https://allevents.in/victoria-tx/kids",
+    "https://allevents.in/victoria-tx/food-drinks",
+    "https://allevents.in/victoria-tx/performances",
+    "https://allevents.in/victoria-tx/arts",
+    "https://allevents.in/victoria-tx/sports",
+]
 
-    The page exposes structured Event objects via JSON-LD <script> blocks
+
+def fetch_allevents_events(days_ahead=14):
+    """Pull events from allevents.in for Victoria, TX across several pages.
+
+    Each page exposes structured Event objects via JSON-LD <script> blocks
     (date, name, url, location). Times appear in the HTML cards (`.date`).
-    We index time by event id, then merge into the JSON-LD entries.
+    Events are deduped by URL across pages.
     """
     events = []
-    url = "https://allevents.in/victoria-tx/all"
+    seen_urls = set()
+    per_page = []
+    for url in ALLEVENTS_PAGES:
+        before = len(events)
+        try:
+            resp = http_get(url)
+            resp.raise_for_status()
+        except Exception as e:
+            per_page.append(f"{url.rsplit('/', 1)[-1]}: error {str(e)[:40]}")
+            continue
+        _parse_allevents_page(resp.text, events, seen_urls)
+        per_page.append(f"{url.rsplit('/', 1)[-1]}: +{len(events) - before}")
+    print(f"  [AllEvents] Extracted {len(events)} events ({', '.join(per_page)})")
+    return events
 
-    try:
-        resp = http_get(url)
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"  [AllEvents] Fetch error: {e}")
-        return events
 
-    soup = BeautifulSoup(resp.text, "html.parser")
+def _parse_allevents_page(html_text, events, seen_urls):
+    """Append in-window Victoria events from one AllEvents page."""
+    soup = BeautifulSoup(html_text, "html.parser")
 
     # Build eid → time map from HTML cards
     eid_to_time = {}
@@ -1856,7 +2083,6 @@ def fetch_allevents_events(days_ahead=14):
         if m:
             eid_to_time[eid] = m.group(1).upper()
 
-    seen_urls = set()
     spam_terms = (
         "certification training", "classroom training",
         "agile training", "scrum training",
@@ -1944,8 +2170,8 @@ def fetch_allevents_events(days_ahead=14):
             })
             seen_urls.add(ev_url)
 
-    print(f"  [AllEvents] Extracted {len(events)} events")
-    return events
+
+
 
 
 # ─── SOURCE: APIFY (Facebook events + posts) ────────────────────────────────────────
@@ -2264,7 +2490,7 @@ Posts:
 {posts_blob}
 
 Return ONLY a JSON array of upcoming events mentioned in these posts. Each object:
-{{"date":"YYYY-MM-DD","name":"Event Name","time":"7:00 PM or empty string","description":"One short sentence or empty string","free":true_or_false,"source_post_index":N}}
+{{"date":"YYYY-MM-DD","name":"Event Name","time":"7:00 PM or empty string","venue":"Where it happens if NOT at {venue_name} itself, else empty string","description":"One short sentence or empty string","free":true_or_false,"source_post_index":N}}
 
 Rules:
 - Only emit events whose ACTUAL DATE falls between {today_str} and {end_str}, regardless of when the post was made. A 20-day-old post announcing "Live music every Friday at 8pm" should produce one entry per upcoming Friday in that window.
@@ -2272,6 +2498,7 @@ Rules:
 - Recurring events ("every Wednesday", "Trivia Tuesdays", "weekly karaoke") MUST be expanded into one entry per upcoming occurrence in the window. Do not emit a single placeholder.
 - Skip posts that are pure promo, photo dumps, customer thank-yous, or undated announcements.
 - Skip events that already happened (post-date BEFORE today's date with no recurring signal).
+- Only include events held in Victoria, TX or elsewhere in Victoria County. Skip events in other towns (Cuero, Port Lavaca, Goliad, Edna, Yoakum, Corpus Christi, Houston, etc.).
 - Return [] if no events found. No prose, no markdown fences."""
 
     try:
@@ -2302,6 +2529,18 @@ Rules:
     except Exception as e:
         _sentry_warn("FB posts AI exception", venue=venue_name, error=str(e)[:200])
         return []
+
+
+def _post_event_venue(r, account_name, account_address):
+    """Venue + address for an event extracted from an account's post.
+
+    Uses the venue the model named when the event isn't at the account's own
+    place; otherwise the account itself (with its known address).
+    """
+    named = (r.get("venue") or "").strip() if isinstance(r, dict) else ""
+    if named and named.lower() not in account_name.lower() and account_name.lower() not in named.lower():
+        return named, ""
+    return account_name, account_address
 
 
 def fetch_apify_facebook_posts(days_ahead=14):
@@ -2422,6 +2661,17 @@ def fetch_apify_facebook_posts(days_ahead=14):
             venue_stats.append(f"{venue_name}: unexpected type {type(posts).__name__}")
             continue
 
+        # The actor returns a single {"error": ...} placeholder item when a
+        # page has no reachable posts (renamed page, private, login wall).
+        # Counting that as "1 post" hid ~25 dead page URLs for months.
+        page_errors = [p for p in posts if isinstance(p, dict) and p.get("error")]
+        posts = [p for p in posts if isinstance(p, dict) and not p.get("error")
+                 and (p.get("text") or p.get("caption"))]
+        if not posts:
+            reason = (page_errors[0].get("error") if page_errors else "no posts with text")
+            venue_stats.append(f"{venue_name}: 0 posts ({str(reason)[:60]}) — check facebook_page in venues.json")
+            continue
+
         # Hand the posts to OpenAI for event extraction
         raw = _extract_events_from_posts_via_ai(venue_name, posts)
         kept = 0
@@ -2455,13 +2705,15 @@ def fetch_apify_facebook_posts(days_ahead=14):
 
             description = (r.get("description") or "").strip()[:280]
             time_str = (r.get("time") or "").strip()
-            address = (venue.get("address") or "").strip()
+            # Accounts like "Discover Victoria Texas" post about events held
+            # elsewhere; the model names the real venue when it isn't theirs.
+            ev_venue, address = _post_event_venue(r, venue_name, (venue.get("address") or "").strip())
 
             events.append({
                 "date": d_obj.strftime("%Y-%m-%d"),
                 "name": name,
                 "time": time_str,
-                "venue": venue_name,
+                "venue": ev_venue,
                 "address": address,
                 "description": description,
                 "icons": classify_icons(name, description, venue_name),
@@ -2807,13 +3059,15 @@ def fetch_apify_instagram_posts(days_ahead=14):
 
             description = (r.get("description") or "").strip()[:280]
             time_str = (r.get("time") or "").strip()
-            address = (venue.get("address") or "").strip()
+            # Accounts like "Discover Victoria Texas" post about events held
+            # elsewhere; the model names the real venue when it isn't theirs.
+            ev_venue, address = _post_event_venue(r, venue_name, (venue.get("address") or "").strip())
 
             events.append({
                 "date": d_obj.strftime("%Y-%m-%d"),
                 "name": name,
                 "time": time_str,
-                "venue": venue_name,
+                "venue": ev_venue,
                 "address": address,
                 "description": description,
                 "icons": classify_icons(name, description, venue_name),
@@ -2902,6 +3156,8 @@ def main():
     yaml_path = os.path.join(args.local_dir, "local_events.yaml")
     _local_started = datetime.now().isoformat(timespec="seconds")
     _local = load_local_events(yaml_path, args.days)
+    for _ev in _local:
+        _ev.setdefault("_source", "local_events")
     _local_finished = datetime.now().isoformat(timespec="seconds")
     _record_source_stat(
         "local_events", len(_local),
