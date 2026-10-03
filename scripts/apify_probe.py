@@ -33,10 +33,10 @@ CITY = "Victoria, TX"
 # actor id → extra input overrides (applied after the generic guesses)
 ACTORS = {
     "muhammadafzal/google-events": {"searchQueries": ["events in Victoria TX", "things to do in Victoria Texas"],
-                                    "location": "Victoria, Texas, United States", "dateFilter": "month"},
-    "codingfrontend/google-events-scraper": {"maxRequestRetries": 3, "dateFilter": "month",
+                                    "location": "Victoria, Texas, United States", "dateFilter": "this_month"},
+    "codingfrontend/google-events-scraper": {"maxRequestRetries": 3, "dateFilter": "this_month",
                                              "location": "Victoria, Texas, United States", "gl": "us", "hl": "en"},
-    "alfalfa/facebook-events-scraper": {"searchQueries": ["Victoria, Texas"], "maxConcurrency": 10},
+    # Round 2: alfalfa/facebook-events-scraper 40 items, 31 Victoria, different set from apify's.
 }
 
 VICTORIA_RE = re.compile(r"victoria,?\s*(tx|texas)|\b7790[145]\b", re.I)
