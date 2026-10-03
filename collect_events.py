@@ -2193,6 +2193,7 @@ def _parse_allevents_page(html_text, events, seen_urls):
 
 APIFY_FB_ACTOR = "apify~facebook-events-scraper"
 APIFY_FB_POSTS_ACTOR = "apify~facebook-posts-scraper"
+APIFY_FB_ALT_ACTOR = "alfalfa~facebook-events-scraper"
 APIFY_IG_POSTS_ACTOR = "apify~instagram-post-scraper"
 # Eventbrite by city. Picked from the Oct 2026 Apify probe: 40 items for
 # Victoria with ISO dates, venue address, isFree and descriptions, ~$0.20
@@ -2345,6 +2346,29 @@ def fetch_apify_eventbrite_events(days_ahead=14):
     return events
 
 
+def _run_apify_search(actor, payload, token):
+    """Run an Apify actor synchronously; return its items, or None on failure."""
+    global _APIFY_LIMIT_TRIPPED
+    url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items?token={token}"
+    try:
+        resp = requests.post(url, json=payload, timeout=APIFY_RUN_TIMEOUT,
+                             headers={"Content-Type": "application/json"})
+        if resp.status_code >= 400:
+            print(f"  [Apify FB] {actor} HTTP {resp.status_code}: {resp.text[:300]}")
+            if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
+                _APIFY_LIMIT_TRIPPED = True
+                _sentry_warn("Apify monthly hard limit tripped", actor=actor, status=403)
+            return None
+        items = resp.json()
+    except Exception as e:
+        print(f"  [Apify FB] {actor} run failed: {e}")
+        return None
+    if not isinstance(items, list):
+        print(f"  [Apify FB] {actor} unexpected response type: {type(items).__name__}")
+        return None
+    return items
+
+
 def fetch_apify_facebook_events(days_ahead=14):
     """Run the Apify Facebook Events Scraper actor against our high-value venue
     list (facebook_venues.json) and parse the dataset.
@@ -2376,38 +2400,42 @@ def fetch_apify_facebook_events(days_ahead=14):
     # for Victoria-area events using the address/location text.
     print(f"  [Apify FB] Searching Facebook events for Victoria TX...")
 
-    actor_run_url = f"https://api.apify.com/v2/acts/{APIFY_FB_ACTOR}/run-sync-get-dataset-items?token={token}"
-    payload = {
-        "searchQueries": ["Victoria Texas"],
-        # The Oct 2026 probe got 39 Victoria events out of 40 (~$0.39); the
-        # old cap of 25 left most of the next two weeks on the table because
-        # search results skew toward events months out.
-        "maxEvents": _resolve_int_env("FB_EVENTS_MAX", 50),
-    }
-    try:
-        resp = requests.post(
-            actor_run_url,
-            json=payload,
-            timeout=APIFY_RUN_TIMEOUT,
-            headers={"Content-Type": "application/json"},
-        )
-        if resp.status_code >= 400:
-            print(f"  [Apify FB] HTTP {resp.status_code}: {resp.text[:300]}")
-            if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
-                _APIFY_LIMIT_TRIPPED = True
-                _sentry_warn(
-                    "Apify monthly hard limit tripped",
-                    actor=APIFY_FB_ACTOR,
-                    status=403,
-                )
-            return events
-        items = resp.json()
-    except Exception as e:
-        print(f"  [Apify FB] Run failed: {e}")
-        return events
+    # Two search actors with the same output schema return different
+    # events for the same query (Oct 2026 probe: 39 and 31 Victoria events,
+    # little overlap), so run both and dedupe by event id.
+    searches = [
+        (APIFY_FB_ACTOR, {
+            "searchQueries": ["Victoria Texas"],
+            # The Oct 2026 probe got 39 Victoria events out of 40 (~$0.39); the
+            # old cap of 25 left most of the next two weeks on the table because
+            # search results skew toward events months out.
+            "maxEvents": _resolve_int_env("FB_EVENTS_MAX", 50),
+        }),
+    ]
+    if os.environ.get("FB_EVENTS_ALT_ENABLED", "1").strip() not in ("0", "false", "no"):
+        searches.append((APIFY_FB_ALT_ACTOR, {
+            "searchQueries": ["Victoria, Texas"],
+            "maxEvents": _resolve_int_env("FB_EVENTS_MAX", 50),
+            "scrapeOrganizerContacts": False,
+            "maxConcurrency": 10,
+            "proxyConfiguration": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]},
+        }))
 
-    if not isinstance(items, list):
-        print(f"  [Apify FB] Unexpected response type: {type(items).__name__}")
+    items, seen_ids = [], set()
+    for actor, payload in searches:
+        got = _run_apify_search(actor, payload, token)
+        if got is None:
+            if _APIFY_LIMIT_TRIPPED:
+                break
+            continue
+        for it in got:
+            key = isinstance(it, dict) and (it.get("id") or it.get("url"))
+            if key and key in seen_ids:
+                continue
+            if key:
+                seen_ids.add(key)
+            items.append(it)
+    if not items:
         return events
 
     skipped_off_window = 0

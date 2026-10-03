@@ -251,3 +251,33 @@ def test_facebook_events_use_victoria_time_not_utc(monkeypatch):
         out = ce.fetch_apify_facebook_events()
     assert out[0]["date"] == "2026-10-09"
     assert out[0]["time"] == "7:00 PM"
+
+
+def test_facebook_events_runs_both_searches_and_dedupes(monkeypatch):
+    monkeypatch.setenv("APIFY_TOKEN", "t")
+    monkeypatch.delenv("FB_EVENTS_ALT_ENABLED", raising=False)
+    monkeypatch.setattr(ce, "_APIFY_LIMIT_TRIPPED", False)
+    monkeypatch.setattr(ce, "_load_venue_list", lambda: ([{"name": "x"}], "venues.json"))
+    loc = {"name": "Hall", "city": "Victoria, TX"}
+    by_actor = {
+        ce.APIFY_FB_ACTOR: [{"id": "1", "name": "Shared", "utcStartDate": "2026-10-09T23:00:00Z", "location": loc}],
+        ce.APIFY_FB_ALT_ACTOR: [{"id": "1", "name": "Shared", "utcStartDate": "2026-10-09T23:00:00Z", "location": loc},
+                                {"id": "2", "name": "Only Alt", "utcStartDate": "2026-10-10T23:00:00Z", "location": loc}],
+    }
+    calls = []
+
+    def fake_post(url, **kw):
+        actor = url.split("/acts/")[1].split("/")[0]
+        calls.append(actor)
+        return _apify_resp(by_actor[actor])
+
+    with patch.object(ce.requests, "post", side_effect=fake_post):
+        out = ce.fetch_apify_facebook_events()
+    assert calls == [ce.APIFY_FB_ACTOR, ce.APIFY_FB_ALT_ACTOR]
+    assert sorted(e["name"] for e in out) == ["Only Alt", "Shared"]
+
+    monkeypatch.setenv("FB_EVENTS_ALT_ENABLED", "0")
+    calls.clear()
+    with patch.object(ce.requests, "post", side_effect=fake_post):
+        ce.fetch_apify_facebook_events()
+    assert calls == [ce.APIFY_FB_ACTOR]
