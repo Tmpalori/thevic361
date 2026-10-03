@@ -130,18 +130,19 @@ class FileStore {
       const raw = await fs.readFile(this.file, 'utf8');
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') {
-        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [] };
+        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], sponsor_orders: [] };
       }
       if (!Array.isArray(parsed.submissions)) parsed.submissions = [];
       if (!parsed.event_archive || typeof parsed.event_archive !== 'object') parsed.event_archive = {};
       if (!Array.isArray(parsed.traffic)) parsed.traffic = [];
       if (!Array.isArray(parsed.subscribers)) parsed.subscribers = [];
       if (!Array.isArray(parsed.newsletter_sends)) parsed.newsletter_sends = [];
+      if (!Array.isArray(parsed.sponsor_orders)) parsed.sponsor_orders = [];
       if (!Array.isArray(parsed.event_edits)) parsed.event_edits = [];
       return parsed;
     } catch (err) {
       if (err.code === 'ENOENT') {
-        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [] };
+        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], sponsor_orders: [] };
       }
       throw err;
     }
@@ -335,6 +336,21 @@ class FileStore {
     return data.newsletter_sends.slice().sort((a, b) => (a.sent_at < b.sent_at ? 1 : -1)).slice(0, limit);
   }
 
+  // ─── Sponsor orders (server/sponsors.js) ───
+  async saveSponsorOrder(order) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      data.sponsor_orders = data.sponsor_orders.filter(x => x.id !== order.id);
+      data.sponsor_orders.push(order);
+      await this._write(data);
+    });
+  }
+
+  async listSponsorOrders() {
+    const data = await this._read();
+    return data.sponsor_orders.slice().sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  }
+
   async getArchivedEvent(page) {
     const data = await this._read();
     return data.event_archive[page] || null;
@@ -487,6 +503,16 @@ class PgStore {
             recipients INT NOT NULL DEFAULT 0,
             failed INT NOT NULL DEFAULT 0,
             sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `);
+        // Sponsor orders (server/sponsors.js). Low volume, read whole; the
+        // order itself lives in payload so new fields need no migration.
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS sponsor_orders (
+            id TEXT PRIMARY KEY,
+            payload JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
         `);
         await this.pool.query(`
@@ -711,6 +737,20 @@ class PgStore {
       ON CONFLICT (week_key) DO UPDATE SET subject = EXCLUDED.subject, recipients = EXCLUDED.recipients,
         failed = EXCLUDED.failed, sent_at = NOW()
     `, [rec.week_key, rec.subject, rec.recipients, rec.failed]);
+  }
+
+  async saveSponsorOrder(order) {
+    await this.ready();
+    await this.pool.query(`
+      INSERT INTO sponsor_orders (id, payload, created_at, updated_at) VALUES ($1, $2::jsonb, COALESCE($3::timestamptz, NOW()), NOW())
+      ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()
+    `, [order.id, JSON.stringify(order), order.created_at || null]);
+  }
+
+  async listSponsorOrders() {
+    await this.ready();
+    const r = await this.pool.query('SELECT payload FROM sponsor_orders ORDER BY created_at DESC LIMIT 1000');
+    return r.rows.map(row => row.payload);
   }
 
   async getNewsletterSend(weekKey) {

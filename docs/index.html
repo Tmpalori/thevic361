@@ -41,8 +41,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Fonts load without blocking first paint; text shows in the fallback face until they arrive. -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:opsz,wght@9..144,500..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:opsz,wght@9..144,500..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap"></noscript>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400..700&family=Nunito:ital,wght@0,400..900;1,400..900&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400..700&family=Nunito:ital,wght@0,400..900;1,400..900&display=swap"></noscript>
 
 <!-- Styles -->
 <link rel="stylesheet" href="./base.css">
@@ -77,21 +77,31 @@
   <div class="icon-legend">
     <div class="container">
       <div class="legend-inner">
-        <span class="legend-item"><span class="icon">🍔</span> Food</span>
-        <span class="legend-item"><span class="icon">🎵</span> Music</span>
-        <span class="legend-item"><span class="icon">🧑‍🧑‍🧒</span> Family</span>
-        <span class="legend-item"><span class="icon">🍺</span> 21+</span>
-        <span class="legend-item"><span class="icon">🎨</span> Arts</span>
-        <span class="legend-item"><span class="icon">🛍️</span> Shopping</span>
-        <span class="legend-item"><span class="icon">🏃</span> Outdoors</span>
-        <span class="legend-item"><span class="icon">📣</span> Community</span>
-        <span class="legend-item"><span class="icon">🆓</span> Free</span>
+        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-food"></use></svg> Food</span>
+        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-music"></use></svg> Music</span>
+        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-family"></use></svg> Family</span>
+        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-drinks"></use></svg> 21+</span>
+        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-arts"></use></svg> Arts</span>
+        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-shopping"></use></svg> Shopping</span>
+        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-outdoors"></use></svg> Outdoors</span>
+        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-community"></use></svg> Community</span>
+        <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-free"></use></svg> Free</span>
       </div>
     </div>
   </div>
 
   <!-- ═══ BROWSE NAV ═══ (filled in by the server; see server/seo.js) -->
   <!--NAV-->
+
+  <!-- ═══ HERO ═══ -->
+  <section class="hero">
+    <div class="container hero-inner">
+      <span class="hero-kicker">Fresh picks every week</span>
+      <h1 class="hero-title">Things to do in <mark>Victoria, TX</mark> this week</h1>
+      <p class="hero-sub">Live music, festivals, markets, and family fun, all in one place.</p>
+    </div>
+    <img class="hero-art" src="./skyline.svg" width="2800" height="260" alt="" aria-hidden="true">
+  </section>
 
   <!-- ═══ MAIN ═══ -->
   <main class="main-content">

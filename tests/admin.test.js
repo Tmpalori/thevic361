@@ -89,12 +89,12 @@ describe('admin.html static structure', () => {
     }
   });
 
-  it('exposes the six admin tab buttons', () => {
+  it('exposes the seven admin tab buttons', () => {
     bootDom();
     const tabs = document.querySelectorAll('.tab-btn');
-    expect(tabs.length).toBe(6);
+    expect(tabs.length).toBe(7);
     expect(Array.from(tabs).map(t => t.dataset.tab).sort())
-      .toEqual(['newsletter', 'picker', 'preview', 'sources', 'submissions', 'traffic']);
+      .toEqual(['newsletter', 'picker', 'preview', 'sources', 'sponsors', 'submissions', 'traffic']);
   });
 
   it('exposes the Sources tab structure', () => {

@@ -235,7 +235,7 @@ def render_slides(groups, start, end, kind, out_dir):
     img, d = new()
     _header(d, "Never miss a thing", "Get the full list every week")
     for i, line in enumerate(["Every event, every day, in one place:", "thevic361.com", "",
-                              "Have an event? Submit it free.", "Own a venue? Get featured."]):
+                              "Have an event? Submit it free.", "Own a venue? Become a Vic’s Pick."]):
         d.text((72, 400 + i * 80), line, font=_font(i in (1,), 52 if i == 1 else 44), fill=ACCENT if i == 1 else INK)
     _footer(d)
     files.append(img)

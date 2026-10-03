@@ -24,10 +24,9 @@ const GA_ID = 'G-52YHD3X3C2';
 const TZ = 'America/Chicago';
 const UPCOMING_DAYS = 60;
 
-const ICON_EMOJI = {
-  food: '🍔', music: '🎵', family: '🧑‍🧑‍🧒', drinks: '🍺', arts: '🎨',
-  shopping: '🛍️', outdoors: '🏃', community: '📣', free: '🆓'
-};
+// Cartoon category icons: one <symbol> per key in docs/icons.svg.
+const ICON_KEYS = new Set(['food', 'music', 'family', 'drinks', 'arts', 'shopping', 'outdoors', 'community', 'free']);
+const iconSvg = k => `<svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-${k}"></use></svg>`;
 
 // Intent pages. `filter` picks events from the upcoming window; `range`
 // picks the date window. Order here is the nav order.
@@ -309,7 +308,7 @@ export function eventJsonLd(ev, siteUrl) {
 // ─── HTML pieces ─────────────────────────────────────────────────────────
 
 function icons(ev) {
-  return (ev.icons || []).map(k => ICON_EMOJI[k] || '').filter(Boolean).join(' ');
+  return (ev.icons || []).filter(k => ICON_KEYS.has(k)).map(iconSvg).join('');
 }
 
 // Mirrors renderEvent() in docs/app.js so the server markup and the
@@ -327,7 +326,7 @@ export function renderEventItem(ev) {
   return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}" data-icons="${escHtml((ev.icons || []).join(' ') + (ev.free === true ? ' free' : ''))}">` +
     `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
     '<div class="event-details">' +
-      (ev.featured ? '<span class="badge badge--featured">Featured</span> ' : '') +
+      (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
       `<span class="event-time">${escHtml(ev.time)}</span> ` +
       `<span class="event-name"><a href="${escHtml(ev.page)}">${escHtml(ev.name)}</a></span>` +
       (venue ? ` — <span class="event-venue">${venue}</span>` : '') +
@@ -466,8 +465,8 @@ ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Fonts load without blocking first paint; text shows in the fallback face until they arrive. -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:opsz,wght@9..144,500..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:opsz,wght@9..144,500..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap"></noscript>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400..700&family=Nunito:ital,wght@0,400..900;1,400..900&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400..700&family=Nunito:ital,wght@0,400..900;1,400..900&display=swap"></noscript>
 <link rel="stylesheet" href="/base.css">
 <link rel="stylesheet" href="/style.css">
 ${ld.map(jsonLd).join('\n')}
@@ -591,7 +590,7 @@ export function renderAboutPage({ siteUrl }) {
     '@type': 'Organization',
     name: SITE_NAME,
     url: siteUrl + '/',
-    logo: siteUrl + '/logo.png',
+    logo: siteUrl + '/logo-512.png',
     description: 'Weekly guide to events and things to do in Victoria, Texas.',
     areaServed: { '@type': 'City', name: 'Victoria, Texas' }
   }];
@@ -604,10 +603,14 @@ export function renderAboutPage({ siteUrl }) {
 }
 
 // Packages and prices here are the starting offer; change them in one place.
+// amount is in cents and is what Stripe charges (server/sponsors.js).
 export const AD_PACKAGES = [
   {
+    key: 'weekly',
     name: 'Weekly sponsor',
     price: '$300 / week',
+    amount: 30000,
+    blurb: 'Pick a week and write your message; it goes live on its own that Monday.',
     points: [
       'Top sponsor block in the Monday newsletter',
       'Sponsor block on every page of thevic361.com for the week',
@@ -615,17 +618,24 @@ export const AD_PACKAGES = [
     ]
   },
   {
+    key: 'partner',
     name: 'Venue partner',
     price: '$150 / month',
+    amount: 15000,
+    interval: 'month',
+    blurb: 'Every event at your venue is a Vic’s Pick for as long as you stay subscribed.',
     points: [
-      'Every event at your venue marked Featured, every week',
+      'Every event at your venue marked as a Vic’s Pick, every week',
       'Pinned at the top of each day on the site and its event pages',
       'Monthly click report'
     ]
   },
   {
-    name: 'Featured event',
+    key: 'featured',
+    name: 'Vic’s Pick',
     price: '$49 / event',
+    amount: 4900,
+    blurb: 'Tell us about your event. Once it\'s listed, it\'s pinned to the top of its day.',
     points: [
       'Pinned at the top of its day on the site',
       'Called out in the newsletter that week',
@@ -634,7 +644,7 @@ export const AD_PACKAGES = [
   }
 ];
 
-export function renderAdvertisePage({ siteUrl, email }) {
+export function renderAdvertisePage({ siteUrl, email, checkout = false }) {
   const subject = encodeURIComponent('Advertising on The Vic 361');
   const body = `
     <h1 class="page-title">Advertise on The Vic 361</h1>
@@ -645,10 +655,11 @@ export function renderAdvertisePage({ siteUrl, email }) {
         <h2>${escHtml(p.name)}</h2>
         <p class="ad-price">${escHtml(p.price)}</p>
         <ul>${p.points.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul>
+        ${checkout ? `<a class="btn btn--primary ad-buy" href="/advertise/checkout?package=${escHtml(p.key)}">Buy now</a>` : ''}
       </section>`).join('')}
     </div>
-    <h2 class="section-heading">Get started</h2>
-    <p>Email <a href="mailto:${escHtml(email)}?subject=${subject}">${escHtml(email)}</a> with your business name and what you'd like to promote. We'll reply with open dates and our latest audience numbers.</p>
+    <h2 class="section-heading">${checkout ? 'Questions?' : 'Get started'}</h2>
+    <p>${checkout ? 'Pick a package above to book and pay online in a couple of minutes. Or email' : 'Email'} <a href="mailto:${escHtml(email)}?subject=${subject}">${escHtml(email)}</a>${checkout ? ' with questions or for custom packages.' : ' with your business name and what you\'d like to promote. We\'ll reply with open dates and our latest audience numbers.'}</p>
     <p>Listing a community event is always free: <a href="/submit">submit it here</a>.</p>`;
   return layout({
     siteUrl, path: '/advertise',

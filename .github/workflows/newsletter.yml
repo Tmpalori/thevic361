@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v6   # for scripts/slack_notify.py
       - name: Send this week's newsletter
         env:
           SECRET: ${{ secrets.NEWSLETTER_CRON_SECRET }}
@@ -31,3 +32,9 @@ jobs:
           code=$(curl -sS -o out.json -w '%{http_code}' -X POST -H "X-Cron-Secret: $SECRET" "$SITE/api/newsletter/cron")
           cat out.json; echo
           [ "$code" = "200" ] || { echo "::error::Newsletter send returned HTTP $code"; exit 1; }
+
+      - name: Tell Slack it failed
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python3 scripts/slack_notify.py "🚨 Monday newsletter send failed" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

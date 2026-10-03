@@ -79,37 +79,61 @@ export function createResend(apiKey, fetchImpl = globalThis.fetch) {
 
 // ─── Email content ───────────────────────────────────────────────────────
 
-const C = { bg: '#FAF5E4', card: '#FFFBEC', ink: '#1E1B33', muted: '#5C5878', accent: '#4E47B8', line: '#E0DAC2' };
+// Same cartoon identity as the site (docs/style.css): ink outlines, sticker
+// colors, rounded type. Email clients can't load icons.svg or web fonts
+// reliably, so icons and the skyline are PNGs in docs/email/ and the font
+// stack falls back to rounded system faces.
+const C = {
+  bg: '#FFF4D6', card: '#FFFFFF', ink: '#1F1A3D', muted: '#554E7A', accent: '#4B3FD1',
+  line: '#E8D9AE', sun: '#FFC93C', sunLight: '#FFF0BF', sunset: '#FF7A3D', navy: '#2B2370', sky: '#DDF2FF'
+};
+const DAY_COLORS = ['#FFC93C', '#8FD3FF', '#FF8FC0', '#3DBE8B', '#FF7A3D', '#B9A6FF', '#FF8A80'];
+const ICON_KEYS = new Set(['food', 'music', 'family', 'drinks', 'arts', 'shopping', 'outdoors', 'community', 'free']);
+const DISPLAY = "'Fredoka','Baloo 2','Trebuchet MS',Arial,sans-serif";
+const BODY = "'Nunito','Helvetica Neue',Arial,sans-serif";
+const btn = (href, label) => `<a href="${escHtml(href)}" style="display:inline-block;background:${C.accent};color:#fff;font-family:${DISPLAY};font-weight:bold;font-size:16px;padding:11px 22px;border:3px solid ${C.ink};border-radius:999px;box-shadow:3px 3px 0 ${C.ink};text-decoration:none;">${escHtml(label)}</a>`;
 
-function emailShell({ title, preheader, bodyHtml, footerHtml }) {
+function emailShell({ title, preheader, bodyHtml, footerHtml, siteUrl }) {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escHtml(title)}</title></head>
+<meta name="color-scheme" content="light only"><title>${escHtml(title)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@400;700;800&display=swap" rel="stylesheet"></head>
 <body style="margin:0;padding:0;background:${C.bg};">
 <span style="display:none;max-height:0;overflow:hidden;opacity:0;">${escHtml(preheader || '')}</span>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.bg};"><tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:${C.card};border:1px solid ${C.line};border-radius:10px;">
-<tr><td style="background:${C.accent};padding:20px 24px;border-radius:10px 10px 0 0;font-family:Georgia,serif;color:#FFFBEC;">
-<div style="font-size:13px;letter-spacing:1px;text-transform:uppercase;opacity:.85;font-family:Arial,sans-serif;">The Vic 361</div>
-<div style="font-size:26px;font-weight:bold;line-height:1.2;margin-top:4px;">${escHtml(title)}</div></td></tr>
-<tr><td style="padding:8px 24px 24px;font-family:Arial,Helvetica,sans-serif;color:${C.ink};font-size:15px;line-height:1.5;">${bodyHtml}</td></tr>
-<tr><td style="padding:16px 24px;border-top:1px solid ${C.line};font-family:Arial,sans-serif;color:${C.muted};font-size:12px;line-height:1.5;">${footerHtml}</td></tr>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:${C.card};border:3px solid ${C.ink};border-radius:20px;box-shadow:6px 6px 0 ${C.ink};overflow:hidden;">
+<tr><td align="center" style="background:${C.sky};padding:22px 24px 0;font-family:${DISPLAY};color:${C.ink};">
+<div><span style="font-size:22px;font-weight:bold;">The Vic</span> <span style="display:inline-block;font-size:18px;font-weight:bold;background:${C.sun};border:3px solid ${C.ink};border-radius:8px;padding:0 6px;">361</span></div>
+<div style="font-size:30px;font-weight:bold;line-height:1.15;margin:10px 0 12px;">${escHtml(title)}</div></td></tr>
+<tr><td style="background:${C.sky};padding:0;line-height:0;border-bottom:3px solid ${C.ink};"><img src="${siteUrl}/email/skyline.png" width="600" alt="" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>
+<tr><td style="padding:8px 22px 26px;font-family:${BODY};color:${C.ink};font-size:15px;line-height:1.5;">${bodyHtml}</td></tr>
+<tr><td style="background:${C.navy};padding:18px 24px;border-top:3px solid ${C.ink};font-family:${BODY};color:#D6CFFF;font-size:12px;line-height:1.6;font-weight:bold;">${footerHtml}</td></tr>
 </table></td></tr></table></body></html>`;
 }
 
 function footer({ siteUrl, unsubscribeUrl, address }) {
-  return `You're getting this because you subscribed at <a href="${siteUrl}" style="color:${C.accent};">thevic361.com</a>.<br>
-<a href="${escHtml(unsubscribeUrl)}" style="color:${C.accent};">Unsubscribe</a> · <a href="${siteUrl}/advertise" style="color:${C.accent};">Advertise</a> · <a href="${siteUrl}/submit" style="color:${C.accent};">Submit an event</a><br>
+  const a = 'color:#FFC93C;';
+  return `You're getting this because you subscribed at <a href="${siteUrl}" style="${a}">thevic361.com</a>.<br>
+<a href="${escHtml(unsubscribeUrl)}" style="${a}">Unsubscribe</a> · <a href="${siteUrl}/advertise" style="${a}">Advertise</a> · <a href="${siteUrl}/submit" style="${a}">Submit an event</a><br>
 ${escHtml(SITE_NAME)}${address ? ` · ${escHtml(address)}` : ' · Victoria, TX'}`;
+}
+
+function iconImgs(ev, siteUrl) {
+  return (ev.icons || []).filter(k => ICON_KEYS.has(k)).slice(0, 3)
+    .map(k => `<img src="${siteUrl}/email/${k}.png" width="22" height="22" alt="" style="vertical-align:middle;border:0;margin-right:2px;">`).join('');
 }
 
 function eventRow(ev, siteUrl) {
   const link = ev.page ? `${siteUrl}${ev.page}` : (safeUrl(ev.url) || siteUrl);
   const where = [ev.venue].filter(Boolean).join('');
-  return `<tr><td style="padding:8px 0;border-bottom:1px solid ${C.line};">
-${ev.featured ? `<span style="display:inline-block;background:${C.accent};color:#fff;font-size:11px;font-weight:bold;padding:1px 6px;border-radius:8px;margin-right:4px;">FEATURED</span>` : ''}
-<span style="color:${C.accent};font-weight:bold;">${escHtml(ev.time || '')}</span>
-<a href="${escHtml(link)}" style="color:${C.ink};font-weight:bold;text-decoration:none;">${escHtml(ev.name)}</a>${where ? ` <span style="color:${C.muted};">· ${escHtml(where)}</span>` : ''}${ev.free === true ? ` <span style="color:#3F7D2E;font-size:13px;">· Free</span>` : ''}
-${ev.description ? `<div style="color:${C.muted};font-size:13px;">${escHtml(ev.description)}</div>` : ''}
+  const rowStyle = ev.featured
+    ? `padding:10px 12px;background:${C.sunLight};border:2px solid ${C.ink};border-radius:12px;`
+    : `padding:10px 4px;border-bottom:2px dashed ${C.line};`;
+  return `<tr><td style="${rowStyle}">
+${ev.featured ? `<span style="display:inline-block;background:${C.sunset};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">★ VIC’S PICK</span>` : ''}
+${iconImgs(ev, siteUrl)}
+${ev.time ? `<span style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:12px;padding:0 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">${escHtml(ev.time)}</span>` : ''}
+<a href="${escHtml(link)}" style="color:${C.ink};font-weight:800;text-decoration:none;">${escHtml(ev.name)}</a>${where ? ` <span style="color:${C.muted};">· ${escHtml(where)}</span>` : ''}${ev.free === true && !(ev.icons || []).includes('free') ? ` <span style="color:#2FA876;font-size:13px;font-weight:bold;">· Free</span>` : ''}
+${ev.description ? `<div style="color:${C.muted};font-size:13px;margin-top:2px;">${escHtml(ev.description)}</div>` : ''}
 </td></tr>`;
 }
 
@@ -124,24 +148,31 @@ export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, ad
   const highlights = byDay.flatMap(x => x.list).filter(e => e.featured).concat(byDay.flatMap(x => x.list)).map(e => e.name);
   const preheader = [...new Set(highlights)].slice(0, 3).join(' · ');
 
+  // Day colors follow the weekday (Monday yellow ... Sunday coral), like the site.
   const days = byDay.map(({ d, list }) => `
-<h2 style="font-family:Georgia,serif;font-size:19px;margin:22px 0 4px;color:${C.ink};">${escHtml(formatDay(d, { weekday: 'long' }))} <span style="font-family:Arial,sans-serif;font-size:13px;color:${C.muted};font-weight:normal;">${escHtml(formatDay(d, { month: 'long', day: 'numeric' }))}</span></h2>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${list.slice(0, PER_DAY).map(e => eventRow(e, siteUrl)).join('')}</table>
-${list.length > PER_DAY ? `<p style="margin:6px 0 0;font-size:13px;"><a href="${siteUrl}/" style="color:${C.accent};">+${list.length - PER_DAY} more on ${escHtml(formatDay(d, { weekday: 'long' }))} →</a></p>` : ''}`).join('');
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:22px;border:3px solid ${C.ink};border-radius:16px;overflow:hidden;border-collapse:separate;">
+<tr><td style="background:${DAY_COLORS[(currentWeek(d).indexOf(d) + 7) % 7]};padding:10px 14px;border-bottom:3px solid ${C.ink};font-family:${DISPLAY};color:${C.ink};">
+<span style="font-size:21px;font-weight:bold;">${escHtml(formatDay(d, { weekday: 'long' }))}</span>
+<span style="display:inline-block;margin-left:6px;font-size:13px;font-weight:bold;background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:0 9px;">${escHtml(formatDay(d, { month: 'long', day: 'numeric' }))}</span></td></tr>
+<tr><td style="padding:6px 12px 10px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${list.slice(0, PER_DAY).map(e => eventRow(e, siteUrl)).join('')}</table>
+${list.length > PER_DAY ? `<p style="margin:8px 0 0;font-size:13px;font-weight:bold;"><a href="${siteUrl}/" style="color:${C.accent};">+${list.length - PER_DAY} more on ${escHtml(formatDay(d, { weekday: 'long' }))} →</a></p>` : ''}
+</td></tr></table>`).join('');
 
   const sponsorBlock = sponsor && sponsor.name ? `
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;background:${C.bg};border:1px solid ${C.line};border-radius:8px;"><tr><td style="padding:14px 16px;">
-<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:${C.muted};">This week's sponsor</div>
-<div style="font-family:Georgia,serif;font-size:18px;font-weight:bold;margin:2px 0;">${escHtml(sponsor.name)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;background:${C.sunLight};border:3px dashed ${C.ink};border-radius:16px;"><tr><td style="padding:14px 16px;">
+<span style="display:inline-block;font-family:${DISPLAY};font-size:11px;font-weight:bold;letter-spacing:.5px;background:${C.sunset};color:${C.ink};border:2px solid ${C.ink};border-radius:999px;padding:1px 10px;">THIS WEEK'S SPONSOR</span>
+<div style="font-family:${DISPLAY};font-size:20px;font-weight:bold;margin:6px 0 2px;">${escHtml(sponsor.name)}</div>
 ${sponsor.text ? `<div style="font-size:14px;">${escHtml(sponsor.text)}</div>` : ''}
-${safeUrl(sponsor.url) && sponsor.cta ? `<a href="${escHtml(safeUrl(sponsor.url))}" style="display:inline-block;margin-top:8px;color:${C.accent};font-weight:bold;">${escHtml(sponsor.cta)} →</a>` : ''}
+${safeUrl(sponsor.url) && sponsor.cta ? `<a href="${escHtml(safeUrl(sponsor.url))}" style="display:inline-block;margin-top:10px;background:#fff;color:${C.ink};font-family:${DISPLAY};font-weight:bold;padding:6px 14px;border:2px solid ${C.ink};border-radius:999px;text-decoration:none;">${escHtml(sponsor.cta)} →</a>` : ''}
 </td></tr></table>` : '';
 
+  const pill = (href, label) => `<a href="${siteUrl}${href}" style="display:inline-block;margin:6px 4px 0 0;font-family:${DISPLAY};font-weight:bold;font-size:13px;color:${C.ink};background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:2px 10px;text-decoration:none;">${label}</a>`;
   const bodyHtml = `
-<p style="margin:16px 0 0;">${total ? `Here's what's happening in Victoria, TX this week: <strong>${total} events</strong>.` : 'Nothing is listed yet for the rest of this week.'}
-<a href="${siteUrl}/this-weekend" style="color:${C.accent};">This weekend</a> · <a href="${siteUrl}/free-things-to-do" style="color:${C.accent};">Free</a> · <a href="${siteUrl}/kids-and-family" style="color:${C.accent};">Kids</a> · <a href="${siteUrl}/live-music" style="color:${C.accent};">Live music</a></p>
+<p style="margin:16px 0 4px;font-size:16px;">${total ? `Here's what's happening in Victoria, TX this week: <strong>${total} events</strong>.` : 'Nothing is listed yet for the rest of this week.'}</p>
+<div>${pill('/this-weekend', 'This weekend')}${pill('/free-things-to-do', 'Free')}${pill('/kids-and-family', 'Kids')}${pill('/live-music', 'Live music')}</div>
 ${days}${sponsorBlock}
-<p style="margin:24px 0 0;"><a href="${siteUrl}/" style="display:inline-block;background:${C.accent};color:#fff;font-weight:bold;padding:10px 18px;border-radius:999px;text-decoration:none;">See the full list</a></p>`;
+<p style="margin:28px 0 0;text-align:center;">${btn(`${siteUrl}/`, 'See the full list')}</p>`;
 
   const text = [
     `${subject}`, '',
@@ -150,16 +181,16 @@ ${days}${sponsorBlock}
     `Full list: ${siteUrl}/`, '', `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
   ].join('\n');
 
-  return { subject, html: emailShell({ title: 'This week in Victoria', preheader, bodyHtml, footerHtml: footer({ siteUrl, unsubscribeUrl, address }) }), text, total };
+  return { subject, html: emailShell({ title: 'This week in Victoria', preheader, bodyHtml, siteUrl, footerHtml: footer({ siteUrl, unsubscribeUrl, address }) }), text, total };
 }
 
 export function renderConfirmEmail({ siteUrl, confirmUrl, address }) {
-  const bodyHtml = `<p style="margin:16px 0;">Tap the button to confirm and start getting Victoria's events every week.</p>
-<p><a href="${escHtml(confirmUrl)}" style="display:inline-block;background:${C.accent};color:#fff;font-weight:bold;padding:10px 18px;border-radius:999px;text-decoration:none;">Confirm my subscription</a></p>
+  const bodyHtml = `<p style="margin:18px 0;font-size:16px;">Tap the button to confirm and start getting Victoria's events every week.</p>
+<p style="text-align:center;">${btn(confirmUrl, 'Confirm my subscription')}</p>
 <p style="color:${C.muted};font-size:13px;">Didn't sign up? Ignore this email and you won't hear from us.</p>`;
   return {
     subject: 'Confirm your Vic 361 subscription',
-    html: emailShell({ title: 'One tap to confirm', preheader: 'Confirm to get Victoria events every week', bodyHtml,
+    html: emailShell({ title: 'One tap to confirm', preheader: 'Confirm to get Victoria events every week', bodyHtml, siteUrl,
       footerHtml: `${escHtml(SITE_NAME)} · ${escHtml(address || 'Victoria, TX')}` }),
     text: `Confirm your subscription to The Vic 361: ${confirmUrl}\n\nDidn't sign up? Ignore this email.`
   };
@@ -186,7 +217,7 @@ fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'
 
 // ─── Routes ──────────────────────────────────────────────────────────────
 
-export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, createRateLimiter, config, resend }) {
+export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, createRateLimiter, config, resend, slack = null }) {
   const subscribeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10 });
   const supported = typeof store.addSubscriber === 'function';
 
@@ -234,6 +265,10 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     }
     const record = { week_key: key, subject: probe.subject, recipients: sent, failed: subs.length - sent };
     await store.recordNewsletterSend(record);
+    if (slack) {
+      if (failures.length) slack.alert(`newsletter-failed-${key}`, 'Newsletter send partly failed', `${sent} sent, ${record.failed} failed.\n${failures[0]}`, `${siteUrl}/admin.html`);
+      else slack.notify({ title: '📧 Newsletter sent', fields: [['Recipients', sent], ['Subject', probe.subject], ['Events', probe.total]] });
+    }
     return { ok: failures.length === 0, ...record, errors: failures.slice(0, 3) };
   }
 
@@ -343,9 +378,15 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     if (!ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
     try {
       const out = await sendWeekly();
+      // Monday's automatic send found nothing published for this week.
+      if (slack && out.error === 'no-events') {
+        slack.alert('newsletter-no-events', 'Newsletter skipped: nothing published for this week',
+          'Publish this week\'s picks in admin, then send it from the Newsletter tab.', `${siteUrl}/admin.html`);
+      }
       // already-sent / no-events are normal outcomes for a cron, not failures.
       res.status(out.ok || ['already-sent', 'no-events', 'no-subscribers'].includes(out.error) ? 200 : 500).json(out);
     } catch (err) {
+      if (slack) slack.alert('newsletter-cron', 'Newsletter send crashed', err.message);
       res.status(500).json({ ok: false, error: 'send-failed', message: err.message });
     }
   });

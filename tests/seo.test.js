@@ -264,7 +264,7 @@ describe('site hardening', () => {
     const r = await get('/advertise');
     expect(r.status).toBe(200);
     expect(r.text).toContain('Weekly sponsor');
-    expect(r.text).toContain('Featured event');
+    expect(r.text).toContain('Vic’s Pick');
     expect(r.text).toContain('mailto:');
     expect((await get('/')).text).toContain('href="/advertise"');
   });
@@ -286,7 +286,7 @@ describe('paid placements', () => {
     await startApp(events);
     const r = await get('/this-weekend');
     expect(r.text.indexOf('Paid Late Show')).toBeLessThan(r.text.indexOf('Early Show'));
-    expect(r.text).toContain('<span class="badge badge--featured">Featured</span>');
+    expect(r.text).toContain('<span class="badge badge--featured">Vic’s Pick</span>');
   });
 
   it('sponsor block appears on server-rendered pages', async () => {

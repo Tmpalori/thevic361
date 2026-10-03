@@ -1334,7 +1334,8 @@
       preview: document.getElementById('tab-preview'),
       newsletter: document.getElementById('tab-newsletter'),
       sources: document.getElementById('tab-sources'),
-      traffic: document.getElementById('tab-traffic')
+      traffic: document.getElementById('tab-traffic'),
+      sponsors: document.getElementById('tab-sponsors')
     };
     Object.entries(panels).forEach(([k, el]) => {
       if (!el) return;
@@ -1345,6 +1346,81 @@
     if (name === 'newsletter') { refreshNewsletter(); loadEmailNewsletter(); }
     if (name === 'sources') loadSources();
     if (name === 'traffic') loadTraffic();
+    if (name === 'sponsors') loadSponsors();
+  }
+
+  // ─── SPONSORS TAB ────────────────────────────────────────────────────
+  // Paid orders from the Stripe checkout (server/sponsors.js).
+  const SPONSOR_KIND = { weekly: 'Weekly sponsor', partner: 'Venue partner', featured: 'Vic’s Pick event' };
+  const SPONSOR_STATUS = { paid: 'Live', active: 'Live', pending: 'Awaiting payment', hidden: 'Hidden', cancelled: 'Cancelled', paused: 'Payment issue' };
+
+  function sponsorDetail(o) {
+    if (o.kind === 'weekly') return 'Week of ' + o.week_start + (o.sponsor ? ': ' + o.sponsor.text : '');
+    if (o.kind === 'partner') return o.venue_name || o.venue_slug || '';
+    return o.event ? o.event.name + ' (' + o.event.date + ')' + (o.submission_id ? ' · in Submissions' : '') : '';
+  }
+
+  function renderSponsors(d) {
+    const status = document.getElementById('sponsors-status');
+    if (status) {
+      status.textContent = d.configured
+        ? 'Online checkout is on: /advertise shows Buy now buttons.'
+        : 'Online checkout is off. Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET in Railway to turn on Buy now buttons.';
+    }
+    const table = document.getElementById('sponsors-orders');
+    if (table) {
+      table.innerHTML = d.orders.length
+        ? '<tr><th>Date</th><th>Package</th><th>Business</th><th>Details</th><th>Amount</th><th>Status</th><th></th></tr>' +
+          d.orders.map(o => {
+            const live = o.status === 'paid' || o.status === 'active';
+            const btn = live ? '<button type="button" class="btn btn--ghost" data-sponsor-action="hide" data-id="' + escapeHtml(o.id) + '">Hide</button>'
+              : o.status === 'hidden' ? '<button type="button" class="btn btn--ghost" data-sponsor-action="restore" data-id="' + escapeHtml(o.id) + '">Restore</button>' : '';
+            return '<tr><td>' + escapeHtml((o.paid_at || o.created_at || '').slice(0, 10)) + '</td>' +
+              '<td>' + escapeHtml(SPONSOR_KIND[o.kind] || o.kind) + '</td>' +
+              '<td>' + escapeHtml(o.business || '') + '<br><small>' + escapeHtml(o.email || '') + '</small></td>' +
+              '<td>' + escapeHtml(sponsorDetail(o)) + '</td>' +
+              '<td>$' + escapeHtml(String(Math.round((o.amount || 0) / 100))) + '</td>' +
+              '<td>' + escapeHtml(SPONSOR_STATUS[o.status] || o.status) + '</td><td>' + btn + '</td></tr>';
+          }).join('')
+        : '<tr><td class="traffic-empty">No orders yet.</td></tr>';
+    }
+    const weeks = document.getElementById('sponsors-weeks');
+    if (weeks) {
+      weeks.innerHTML = d.weeks.map(w => '<tr><td>' + escapeHtml(w.label) + '</td><td>' +
+        (w.available ? 'Open' : 'Booked') + '</td></tr>').join('');
+    }
+  }
+
+  async function loadSponsors() {
+    const errEl = document.getElementById('sponsors-error');
+    const body = document.getElementById('sponsors-body');
+    if (publishMode() !== 'server') {
+      if (errEl) { errEl.hidden = false; errEl.textContent = 'Sign in to the server to view sponsors.'; }
+      return;
+    }
+    if (errEl) errEl.hidden = true;
+    try {
+      const { res, json } = await adminFetch('/api/admin/sponsors');
+      if (!res.ok || !json || !json.ok) throw new Error((json && json.message) || ('Failed to load sponsors (HTTP ' + res.status + ').'));
+      renderSponsors(json);
+      if (body) body.hidden = false;
+    } catch (err) {
+      console.error(err);
+      if (errEl) { errEl.hidden = false; errEl.textContent = err.message || String(err); }
+    }
+  }
+
+  async function sponsorAction(id, action) {
+    const errEl = document.getElementById('sponsors-error');
+    try {
+      const { res, json } = await adminFetch('/api/admin/sponsors/' + encodeURIComponent(id), {
+        method: 'POST', body: JSON.stringify({ action }), headers: { 'Content-Type': 'application/json' }
+      });
+      if (!res.ok || !json || !json.ok) throw new Error((json && (json.message || json.error)) || ('HTTP ' + res.status));
+      loadSponsors();
+    } catch (err) {
+      if (errEl) { errEl.hidden = false; errEl.textContent = err.message || String(err); }
+    }
   }
 
   // ─── TRAFFIC TAB ─────────────────────────────────────────────────────
@@ -1843,6 +1919,17 @@
     const trafficRefresh = document.getElementById('traffic-refresh');
     if (trafficDays) trafficDays.addEventListener('change', loadTraffic);
     if (trafficRefresh) trafficRefresh.addEventListener('click', loadTraffic);
+
+    const sponsorsRefresh = document.getElementById('sponsors-refresh');
+    if (sponsorsRefresh) sponsorsRefresh.addEventListener('click', loadSponsors);
+    const sponsorsOrders = document.getElementById('sponsors-orders');
+    if (sponsorsOrders) sponsorsOrders.addEventListener('click', e => {
+      const b = e.target.closest('[data-sponsor-action]');
+      if (!b) return;
+      const action = b.getAttribute('data-sponsor-action');
+      if (action === 'hide' && !confirm('Hide this placement from the site? (Refund it in Stripe separately.)')) return;
+      sponsorAction(b.getAttribute('data-id'), action);
+    });
 
     const search = document.getElementById('filter-search');
     const cat = document.getElementById('filter-category');

@@ -159,3 +159,17 @@ jobs:
           [ -f collection_metadata.json ] && git add collection_metadata.json
           git commit -m "🏙️ Update candidates $(date +'%Y-%m-%d')"
           git push
+
+      - name: Tell Slack the candidates are ready
+        if: success()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          n=$(python3 -c "import json;d=json.load(open('candidates.json'));print(len(d.get('events',d) if isinstance(d,dict) else d))" 2>/dev/null || echo "?")
+          python3 scripts/slack_notify.py "🗓️ Weekly collect done: $n candidate events ready. Pick this week's in admin." --link "${{ vars.SITE_URL || 'https://www.thevic361.com' }}/admin.html"
+
+      - name: Tell Slack it failed
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python3 scripts/slack_notify.py "🚨 Weekly event collect failed" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

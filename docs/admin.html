@@ -89,6 +89,7 @@
         <button class="tab-btn" data-tab="newsletter" role="tab">Newsletter</button>
         <button class="tab-btn" data-tab="sources" role="tab">Sources</button>
         <button class="tab-btn" data-tab="traffic" role="tab">Traffic</button>
+        <button class="tab-btn" data-tab="sponsors" role="tab">Sponsors</button>
       </nav>
       <div class="admin-header__actions">
         <a class="btn btn--outline" href="/social/latest/index.html" target="_blank" rel="noopener">Social kit</a>
@@ -289,6 +290,22 @@
       </div>
     </section>
 
+    <section id="tab-sponsors" class="tab-panel" role="tabpanel" hidden>
+      <div class="traffic-head">
+        <button id="sponsors-refresh" type="button" class="btn btn--outline">Refresh</button>
+        <a class="btn btn--outline" href="https://dashboard.stripe.com/payments" target="_blank" rel="noopener">Stripe dashboard</a>
+      </div>
+      <div id="sponsors-error" class="empty-state empty-state--error" hidden></div>
+      <div id="sponsors-body" hidden>
+        <p id="sponsors-status" class="traffic-note"></p>
+        <h3 class="traffic-h">Orders</h3>
+        <table class="traffic-table sponsors-table" id="sponsors-orders"></table>
+        <h3 class="traffic-h">Weekly sponsor calendar</h3>
+        <table class="traffic-table" id="sponsors-weeks"></table>
+        <p class="traffic-note">Paid placements go live on their own. Hide pulls one off the site (for a refund or bad copy; refund it in Stripe). Venue partners end automatically when they cancel in Stripe.</p>
+      </div>
+    </section>
+
     <section id="tab-sources" class="tab-panel" role="tabpanel" hidden>
       <div class="sources-summary" id="sources-summary">
         <div class="sources-summary__item">
@@ -438,7 +455,7 @@
           <input type="checkbox" name="free"> This event is free
         </label>
         <label class="event-edit-form__check">
-          <input type="checkbox" name="featured"> Featured (paid): pin to the top of its day with a badge
+          <input type="checkbox" name="featured"> Vic’s Pick (paid): pin to the top of its day with a badge
         </label>
         <footer class="event-edit-form__actions">
           <span id="event-edit-status" class="event-edit-form__status"

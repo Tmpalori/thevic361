@@ -1,19 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-label="The Vic 361">
-  <!-- Hexagon badge -->
-  <path d="M32 4 L56 18 L56 46 L32 60 L8 46 L8 18 Z"
-        fill="#FAF5E4" stroke="#4E47B8" stroke-width="4" stroke-linejoin="round"/>
-  <!-- Bluebonnet stalk - simplified petals -->
-  <g fill="#4E47B8">
-    <ellipse cx="32" cy="20" rx="3.5" ry="3"/>
-    <ellipse cx="28" cy="24" rx="3" ry="2.5"/>
-    <ellipse cx="36" cy="24" rx="3" ry="2.5"/>
-    <ellipse cx="29" cy="29" rx="3.5" ry="2.8"/>
-    <ellipse cx="35" cy="29" rx="3.5" ry="2.8"/>
-    <ellipse cx="32" cy="33" rx="4" ry="3"/>
+  <!-- Simplified logo.svg for tab-sized icons: the water tower tank. -->
+  <circle cx="32" cy="32" r="29" fill="#8FD3FF" stroke="#1F1A3D" stroke-width="4"/>
+  <g stroke="#1F1A3D" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M22 46l-3 12M42 46l3 12" fill="none"/>
+    <rect x="7" y="21" width="50" height="27" rx="12" fill="#FFC93C"/>
+    <path d="M10 28Q32 6 54 28" fill="#4B3FD1"/>
   </g>
-  <!-- Stem -->
-  <line x1="32" y1="36" x2="32" y2="48" stroke="#7A9E63" stroke-width="2.5" stroke-linecap="round"/>
-  <!-- Leaves -->
-  <path d="M32 42 Q24 41 22 45" stroke="#7A9E63" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-  <path d="M32 42 Q40 41 42 45" stroke="#7A9E63" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <text x="32" y="44" text-anchor="middle" font-family="Fredoka, 'Arial Black', Arial, sans-serif" font-weight="900" font-size="21" fill="#1F1A3D">Vic</text>
 </svg>

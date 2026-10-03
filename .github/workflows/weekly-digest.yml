@@ -44,3 +44,9 @@ jobs:
             --candidates ./candidates.json \
             --to tristen.m.palori@gmail.com \
             --all-days
+
+      - name: Tell Slack it failed
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python3 scripts/slack_notify.py "🚨 Weekly digest email failed" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
