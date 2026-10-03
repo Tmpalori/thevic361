@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-label="The Vic 361">
-  <!-- Simplified logo.svg for tab-sized icons: the 361 water tower tank. -->
+  <!-- Simplified logo.svg for tab-sized icons: the water tower tank. -->
   <circle cx="32" cy="32" r="29" fill="#8FD3FF" stroke="#1F1A3D" stroke-width="4"/>
   <g stroke="#1F1A3D" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
     <path d="M22 46l-3 12M42 46l3 12" fill="none"/>
     <rect x="7" y="21" width="50" height="27" rx="12" fill="#FFC93C"/>
     <path d="M10 28Q32 6 54 28" fill="#4B3FD1"/>
   </g>
-  <text x="32" y="44" text-anchor="middle" font-family="Fredoka, 'Arial Black', Arial, sans-serif" font-weight="900" font-size="19" fill="#1F1A3D">361</text>
+  <text x="32" y="44" text-anchor="middle" font-family="Fredoka, 'Arial Black', Arial, sans-serif" font-weight="900" font-size="21" fill="#1F1A3D">Vic</text>
 </svg>

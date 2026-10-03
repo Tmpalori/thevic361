@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="The Vic 361">
-  <!-- The 361 water tower from skyline.svg, as a round sticker. -->
+  <!-- The water tower from skyline.svg, labeled Vic, as a round sticker. -->
   <defs><clipPath id="c"><circle cx="64" cy="64" r="57"/></clipPath></defs>
   <circle cx="64" cy="64" r="57" fill="#8FD3FF"/>
   <g clip-path="url(#c)" stroke="#1F1A3D" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
@@ -7,7 +7,7 @@
     <path d="M-4 104Q64 86 132 104V132H-4Z" fill="#3DBE8B"/>
     <rect x="24" y="36" width="80" height="44" rx="20" fill="#FFC93C"/>
     <path d="M28 46Q64 14 100 46" fill="#4B3FD1"/>
-    <text x="64" y="73" text-anchor="middle" font-family="Fredoka, 'Arial Black', Arial, sans-serif" font-weight="700" font-size="30" fill="#1F1A3D" stroke="none">361</text>
+    <text x="64" y="73" text-anchor="middle" font-family="Fredoka, 'Arial Black', Arial, sans-serif" font-weight="700" font-size="34" fill="#1F1A3D" stroke="none">Vic</text>
     <g fill="#4B3FD1" stroke-width="2.5">
       <circle cx="26" cy="100" r="4.5"/><circle cx="26" cy="91" r="4.5"/><circle cx="34" cy="98" r="4"/>
       <circle cx="102" cy="100" r="4.5"/><circle cx="102" cy="91" r="4.5"/><circle cx="94" cy="98" r="4"/>
