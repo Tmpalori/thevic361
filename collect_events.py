@@ -38,6 +38,7 @@ Usage:
 """
 
 import argparse
+import html
 import json
 import os
 import re
@@ -1088,6 +1089,7 @@ For each event you receive, return:
   - description: ≤160 characters, max 2 short sentences. Neutral, friendly local-newsletter tone. NO emojis. Do NOT repeat the event name, venue name, address, date, or time (the site already shows those). If the input description has no useful info beyond what's already in the name/venue, write a brief 1-line description of what attendees can expect based on the event type.
   - icons: 1–3 strings from this exact set: food, music, family, drinks, arts, shopping, outdoors, community, free. Order by relevance (most representative first). Use "free" only when the event is genuinely free to attend.
   - free: boolean, true if the event is free to attend.
+  - keep: boolean. false when this is NOT a real event someone can attend at a set time and place, for example a job or internship posting, "now booking" field trips or parties, a menu or daily special with nothing happening, a "National ___ Day" post, a giveaway, a closure or holiday-hours notice, or registration for something that isn't on this date. When unsure, keep: true.
 
 Icon guidance:
   - food: meals, food trucks, tastings, farmers markets, BBQ, restaurants
@@ -1100,7 +1102,7 @@ Icon guidance:
   - community: meetings, fundraisers, civic, volunteer, library programs
   - free: zero cost to attend (also set free=true)
 
-Return ONLY a JSON array, one object per input event in the same order, each: {"description": "...", "icons": [...], "free": true|false}. No prose, no markdown fences."""
+Return ONLY a JSON array, one object per input event in the same order, each: {"description": "...", "icons": [...], "free": true|false, "keep": true|false}. No prose, no markdown fences."""
 
 
 _EMOJI_RE = re.compile(
@@ -1137,6 +1139,8 @@ def _ai_review_batch(api_key, batch):
     payload = [
         {
             "name": ev.get("name", ""),
+            "date": ev.get("date", ""),
+            "time": ev.get("time", ""),
             "venue": ev.get("venue", ""),
             "raw_description": ev.get("description", "")[:600],
             "current_icons": ev.get("icons", []),
@@ -1261,7 +1265,18 @@ def ai_review(events, batch_size=8):
                 elif not new_free and "free" in ev.get("icons", []):
                     ev["icons"] = [ic for ic in ev["icons"] if ic != "free"]
 
+            # Not a real event (job post, booking ad, menu...): drop it.
+            if ai.get("keep") is False:
+                ev["_ai_drop"] = True
+
             polished += 1
+
+    dropped = [ev for ev in events if ev.pop("_ai_drop", False)]
+    if dropped:
+        events[:] = [ev for ev in events if ev not in dropped]
+        print(f"  [AI Review] Dropped {len(dropped)} non-events:")
+        for ev in dropped[:15]:
+            print(f"     – {ev.get('date')} {ev.get('name', '')[:60]}")
 
     print(f"  [AI Review] Polished {polished}/{len(events)} events "
           f"({failed_batches} batches fell back to originals)")
@@ -1491,6 +1506,35 @@ def _merge_pair(old, new):
 
 # ─── MERGE + DEDUPLICATE ─────────────────────────────────────────────────────
 
+# Posts and listings that aren't events someone can attend. Kept narrow on
+# purpose (the AI review catches subtler cases when OPENAI_API_KEY is set):
+# from the 2026-09-28 run, "Internship Program", "Field Trip Booking" and
+# "National Drink Beer Day" all reached the admin as events.
+_NON_EVENT_RE = re.compile(
+    r"\b(internships?|now hiring|we'?re hiring|hiring now|job opening|apply now|applications? (?:open|due)"
+    r"|field trips? book(?:ing)?|book(?:ing)? (?:now|your|a) (?:field trip|party|event)|now booking"
+    r"|gift cards?|giveaway|closed (?:for|today|on)|holiday hours|new hours|our hours)\b",
+    re.IGNORECASE,
+)
+_NATIONAL_DAY_RE = re.compile(r"^\s*national\b.*\bday\b", re.IGNORECASE)
+
+
+def non_event_reason(ev):
+    """Return why a scraped item isn't an attendable event, or None."""
+    name = ev.get("name") or ""
+    if _NON_EVENT_RE.search(name):
+        return "not an event"
+    # "National Drink Beer Day" with no time is a social post, not a party.
+    if _NATIONAL_DAY_RE.search(name) and not (ev.get("time") or "").strip():
+        return "awareness day"
+    return None
+
+
+def _clean_text(value):
+    """Decode HTML entities ("Texas A&amp;M") and collapse whitespace."""
+    return re.sub(r"\s+", " ", html.unescape(value or "")).strip()
+
+
 def merge_events(all_events, days_ahead=7, venues=None):
     """Filter to the window and Victoria County, clean venues, dedupe, sort."""
     today = _WINDOW_START
@@ -1504,6 +1548,7 @@ def merge_events(all_events, days_ahead=7, venues=None):
     _set_non_place_names(venues)
     by_date = {}
     dropped_area = []
+    dropped_junk = []
     merged_count = 0
     for ev in all_events:
         date_str = ev.get("date", "")
@@ -1518,11 +1563,11 @@ def merge_events(all_events, days_ahead=7, venues=None):
 
         new_entry = {
             "date": date_str,
-            "name": (ev.get("name") or "").strip(),
+            "name": _clean_text(ev.get("name")),
             "time": (ev.get("time") or "").strip(),
-            "venue": (ev.get("venue") or "").strip(),
-            "address": (ev.get("address") or "").strip(),
-            "description": (ev.get("description") or "").strip(),
+            "venue": _clean_text(ev.get("venue")),
+            "address": _clean_text(ev.get("address")),
+            "description": _clean_text(ev.get("description")),
             "icons": list(ev.get("icons") or []),
             "free": bool(ev.get("free", False)),
             "url": (ev.get("url") or "").strip(),
@@ -1533,11 +1578,16 @@ def merge_events(all_events, days_ahead=7, venues=None):
             continue
         clean_venue(new_entry, venues)
 
-        # Hand-curated YAML is trusted; everything scraped must be local.
+        # Hand-curated YAML is trusted; everything scraped must be local
+        # and an actual event.
         if new_entry.get("_source") != "local_events":
             reason = out_of_area_reason(new_entry)
             if reason:
                 dropped_area.append(f"{new_entry['name'][:50]} ({reason})")
+                continue
+            reason = non_event_reason(new_entry)
+            if reason:
+                dropped_junk.append(f"{new_entry['name'][:50]} ({reason})")
                 continue
 
         if not new_entry["icons"]:
@@ -1561,8 +1611,9 @@ def merge_events(all_events, days_ahead=7, venues=None):
         if srcs and len(srcs) > 1:
             e["_also_from"] = [s for s in srcs if s != e.get("_source")]
     final.sort(key=lambda e: (e["date"], e.get("time") or "ZZ"))
-    print(f"   [Quality] merged {merged_count} duplicates, dropped {len(dropped_area)} outside Victoria County")
-    for d in dropped_area[:15]:
+    print(f"   [Quality] merged {merged_count} duplicates, dropped {len(dropped_area)} outside Victoria County, "
+          f"{len(dropped_junk)} non-events")
+    for d in (dropped_area + dropped_junk)[:20]:
         print(f"     – {d}")
     return final
 

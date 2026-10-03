@@ -30,6 +30,7 @@ import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } fr
 import { stripeConfig, createStripe, createSponsors } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
+import { createAutoPublish } from './autopublish.js';
 import crypto from 'node:crypto';
 import {
   HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
@@ -967,7 +968,8 @@ export async function createApp(opts = {}) {
 
   async function serveEventsJson(req, res, next) {
     try {
-      const { source, ...payload } = await getPublicPayload();
+      // auto_publish is bookkeeping for server/autopublish.js, not public.
+      const { source, auto_publish: _auto, ...payload } = await getPublicPayload();
       if (source === 'empty') return next();
       // Store-backed payloads change on publish; the bundled file only on deploy.
       if (source === 'store') res.set('Cache-Control', 'no-store');
@@ -1135,6 +1137,29 @@ export async function createApp(opts = {}) {
   app.get(['/social', '/social/', '/social/latest', '/social/latest/'], (req, res) => {
     res.redirect(302, '/social/latest/index.html');
   });
+
+  // ─── Auto-publish (server/autopublish.js) ───
+  // Each collector run commits candidates.json and redeploys; on boot the
+  // new candidates go live without anyone opening the admin. Production
+  // only, so PR environments and tests never publish on their own.
+  const autoPublish = createAutoPublish({
+    store, candidatesFile, readJsonFile, siteUrl, slack, archiveEvents,
+    nowFn: () => (opts.now || (() => new Date()))()
+  });
+  app.post('/api/admin/auto-publish', requireAdmin, async (req, res, next) => {
+    try { res.json(await autoPublish.run({ force: true })); } catch (err) { next(err); }
+  });
+  const autoOnBoot = opts.autoPublish ??
+    (process.env.AUTO_PUBLISH !== '0' && process.env.RAILWAY_ENVIRONMENT_NAME === 'production');
+  if (autoOnBoot) {
+    const t = setTimeout(() => {
+      autoPublish.run().catch(err => {
+        console.error('[auto-publish] failed:', err.message);
+        slack.alert('auto-publish', 'Auto-publish failed', err.message, `${siteUrl}/admin.html`);
+      });
+    }, opts.autoPublishDelayMs ?? 3000);
+    if (t.unref) t.unref();
+  }
 
   // ─── Static site ───
   app.use(express.static(DOCS_DIR, { extensions: ['html'], index: false }));

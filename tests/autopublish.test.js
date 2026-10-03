@@ -1,0 +1,133 @@
+// @vitest-environment node
+//
+// Auto-publish (server/autopublish.js): collector candidates go live without
+// the admin, but the admin's removals stick.
+
+import { describe, it, expect, afterEach } from 'vitest';
+import { createApp } from '../server/index.js';
+import { FileStore } from '../server/db.js';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import http from 'node:http';
+
+const NOW = new Date('2026-10-05T15:00:00Z'); // Mon Oct 5
+
+let tmpDir, server, baseUrl, store, sent;
+
+async function start({ candidates, published = null, extra = {} } = {}) {
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-auto-'));
+  const candidatesFile = path.join(tmpDir, 'candidates.json');
+  const eventsFile = path.join(tmpDir, 'events.json');
+  await fs.writeFile(candidatesFile, JSON.stringify(candidates));
+  await fs.writeFile(eventsFile, JSON.stringify({ events: [] }));
+  store = new FileStore(path.join(tmpDir, 's.json'));
+  if (published) await store.setPublished(published);
+  sent = [];
+  const { app } = await createApp({
+    storeBundle: { kind: 'file', store }, eventsFile, candidatesFile, trustProxy: false, now: () => NOW,
+    siteUrl: 'https://www.thevic361.com', adminUsername: 'a', adminPassword: 'b', adminSessionSecret: 'c',
+    slack: { enabled: true, notify: async (m) => { sent.push(m); return true; }, alert: async () => {} },
+    ...extra
+  });
+  server = http.createServer(app);
+  await new Promise(r => server.listen(0, r));
+  baseUrl = `http://127.0.0.1:${server.address().port}`;
+}
+
+afterEach(async () => {
+  if (server) await new Promise(r => server.close(r));
+  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+  server = null; tmpDir = null;
+});
+
+async function auth() {
+  const r = await fetch(baseUrl + '/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'a', password: 'b' }) });
+  return { Authorization: `Bearer ${(await r.json()).token}`, 'Content-Type': 'application/json' };
+}
+const runNow = async () => (await fetch(baseUrl + '/api/admin/auto-publish', { method: 'POST', headers: await auth() })).json();
+const live = async () => (await fetch(baseUrl + '/events.json')).json();
+
+const CANDIDATES = {
+  last_updated: '2026-10-04T23:40:00-05:00',
+  events: [
+    { date: '2026-10-01', name: 'Already Happened', time: '7:00 PM', venue: 'X' },
+    { date: '2026-10-09', name: 'Friday Live Music', time: '8:00 PM', venue: 'Aero Crafters', _source: 'apify_facebook' },
+    { date: '2026-10-10', name: 'Farmers Market', time: '8:00 AM', venue: 'Market Square' },
+    { date: '2026-10-10', name: 'Fall Festival 2026', time: '11:00 AM', venue: 'De Leon Plaza' }
+  ]
+};
+
+describe('auto-publish', () => {
+  it('publishes upcoming candidates, keeps prior events and extras, hides bookkeeping', async () => {
+    await start({
+      candidates: CANDIDATES,
+      published: {
+        last_updated: '2026-09-28T00:00:00Z',
+        sponsor: { name: 'Acme' },
+        events: [
+          { date: '2026-10-10', name: 'Fall Festival', time: '11:00 AM', venue: 'De Leon Plaza' }, // hand-picked, same event
+          { date: '2026-09-20', name: 'Old Event', time: '1 PM', venue: 'Y' }
+        ]
+      }
+    });
+    const r = await runNow();
+    expect(r).toMatchObject({ ok: true, published: 3, added: 2, kept: 1 });
+
+    const d = await live();
+    expect(d.events.map(e => e.name)).toEqual(['Friday Live Music', 'Farmers Market', 'Fall Festival']);
+    expect(d.sponsor.name).toBe('Acme');
+    expect(d.auto_publish).toBeUndefined();
+    expect(JSON.stringify(d)).not.toContain('_source');
+    expect(sent[0].title).toBe('🗓️ Published 3 events automatically');
+  });
+
+  it("doesn't re-add an event the admin removed", async () => {
+    await start({ candidates: CANDIDATES });
+    await runNow();
+    const h = await auth();
+    // Admin takes Farmers Market down with Save & Publish.
+    const keep = (await live()).events.filter(e => e.name !== 'Farmers Market');
+    await fetch(baseUrl + '/api/admin/publish-events', { method: 'POST', headers: h, body: JSON.stringify({ events: keep }) });
+
+    const r = await runNow();
+    expect(r.skipped_removed).toBe(1);
+    expect((await live()).events.map(e => e.name)).not.toContain('Farmers Market');
+  });
+
+  it('includes approved submissions', async () => {
+    await start({ candidates: { last_updated: 'x', events: [] } });
+    await store.insert({
+      id: 's1', status: 'approved', source: 'submission', created_at: NOW.toISOString(), updated_at: NOW.toISOString(),
+      payload: { date: '2026-10-08', name: 'Church Fish Fry', time: '5:00 PM', venue: 'St. Mary', description: 'Fish.', icons: ['food'] }
+    });
+    await runNow();
+    expect((await live()).events.map(e => e.name)).toEqual(['Church Fish Fry']);
+  });
+
+  it('runs on boot once per candidates file', async () => {
+    await start({ candidates: CANDIDATES, extra: { autoPublish: true, autoPublishDelayMs: 0 } });
+    await new Promise(r => setTimeout(r, 100));
+    expect((await live()).events).toHaveLength(3);
+    const at = (await store.getPublished()).auto_publish.at;
+
+    // Same candidates on the next boot: nothing changes.
+    await new Promise(r => server.close(r));
+    const { app } = await createApp({
+      storeBundle: { kind: 'file', store }, eventsFile: path.join(tmpDir, 'events.json'),
+      candidatesFile: path.join(tmpDir, 'candidates.json'), trustProxy: false, now: () => NOW,
+      siteUrl: 'https://www.thevic361.com', autoPublish: true, autoPublishDelayMs: 0,
+      slack: { enabled: false, notify: async () => false, alert: async () => false }
+    });
+    server = http.createServer(app);
+    await new Promise(r => server.listen(0, r));
+    await new Promise(r => setTimeout(r, 100));
+    expect((await store.getPublished()).auto_publish.at).toBe(at);
+  });
+
+  it('is off by default outside production', async () => {
+    await start({ candidates: CANDIDATES });
+    await new Promise(r => setTimeout(r, 50));
+    expect(await store.getPublished()).toBeNull();
+  });
+});

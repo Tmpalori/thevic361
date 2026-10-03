@@ -263,3 +263,18 @@ class TestOpenAIChat(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestAiKeep(unittest.TestCase):
+    def test_keep_false_drops_event_and_missing_keep_keeps_it(self):
+        events = [dict(e) for e in SAMPLE_EVENTS]
+
+        def fake_batch(api_key, batch):
+            return [{"keep": True}, {"keep": False}, {}][:len(batch)]
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "x"}):
+            with patch.object(ce, "_ai_review_batch", side_effect=fake_batch):
+                result = ce.ai_review(events, batch_size=8)
+
+        self.assertEqual([e["name"] for e in result], ["Baby Hour: Pages to Play", "Victoria Farmers' Market"])
+        self.assertTrue(all("_ai_drop" not in e for e in result))

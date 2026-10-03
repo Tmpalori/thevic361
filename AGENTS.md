@@ -41,7 +41,7 @@ Production hosting:
 │  Sunday ~22:00 Central — Tristen at thevic361.com/admin.html       │
 │                                                                    │
 │   Login (ADMIN_USERNAME / ADMIN_PASSWORD) → Candidates tab         │
-│   Pick events → Save & Publish                                     │
+│   Auto-publish on deploy, or Pick events → Save & Publish          │
 │                                                                    │
 │   Server writes published_events row in Railway Postgres (live).   │
 │   If GITHUB_TOKEN is set, also commits docs/events.json to repo.   │
@@ -193,6 +193,10 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 
 `server/sponsors.js`: `/advertise` → `/advertise/checkout?package=weekly|partner|featured` (one form) → Stripe Checkout → `POST /api/stripe/webhook` (signature-verified over the raw body, so it's registered before `express.json`). Weekly sponsor books one Mon–Sun week (held 35 min while someone pays) and replaces the sponsor slot; venue partner is a monthly subscription that marks every event at that venue Featured until it's cancelled in Stripe; featured event adds a `paid-feature` submission to the review queue and features the matching live event. Placements are applied in `getPublicPayload` at read time, never written into the published payload. Orders live in `sponsor_orders`; prices in `AD_PACKAGES` (`server/seo.js`). Admin Sponsors tab: orders, week calendar, hide/restore. Paid orders ping Slack. Off until both Stripe vars are set.
 
+## Auto-publish
+
+`server/autopublish.js`: each collector run commits `candidates.json`, which redeploys the site; on boot in production (`RAILWAY_ENVIRONMENT_NAME=production`, unless `AUTO_PUBLISH=0`) the upcoming candidates plus approved submissions are published to the store. Upcoming events already published are kept; events it added that the admin later removed are remembered (`auto_publish` in the published payload, hidden from `/events.json`) and not re-added. `POST /api/admin/auto-publish` forces a run. The collector drops non-events (`non_event_reason`: job/internship posts, booking ads, awareness-day posts) and decodes HTML entities; with `OPENAI_API_KEY`, the AI review also returns `keep: false` for non-events. `weekly-collect.yml` runs Sunday and Wednesday.
+
 ## Slack notifications
 
 The public site publishes no email address: `/contact` (`server/contact.js`) sends messages to Slack, falling back to the server log if Slack is unavailable.
@@ -262,6 +266,7 @@ Full reference is in [`RAILWAY.md`](./RAILWAY.md). Quick list:
 | `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` | — | When set, `/api/submissions` requires a Turnstile token |
 | `FB_POSTS_ENABLED`, `IG_POSTS_ENABLED` | — | Repo Variables (not secrets); `=1` to enable post-scrape pipelines in CI |
 | `FB_POSTS_MAX_VENUES`, `IG_POSTS_MAX_VENUES` | (collector defaults) | Caps to keep Apify costs bounded |
+| `AUTO_PUBLISH` | on in production | `0` turns off publishing collector candidates on boot (server/autopublish.js) |
 | `RESEND_API_KEY` | — | Turns on the email newsletter (server/newsletter.js); until set, signups are saved but nothing is emailed |
 | `NEWSLETTER_FROM` | `The Vic 361 <news@thevic361.com>` | Sender; the domain must be verified in Resend |
 | `NEWSLETTER_ADDRESS` | — | Mailing address shown in every email (CAN-SPAM) |
