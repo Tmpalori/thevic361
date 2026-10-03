@@ -354,12 +354,9 @@
       status.classList.remove('is-error');
       status.classList.add('is-success');
     }
-    // Switch back to the Pick events tab so the editor can include them.
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('is-active', b.dataset.tab === 'picker'));
-    ['picker', 'submissions', 'preview', 'newsletter'].forEach(name => {
-      const el = document.getElementById('tab-' + name);
-      if (el) { el.hidden = name !== 'picker'; el.classList.toggle('is-active', name === 'picker'); }
-    });
+    // Switch to the Events tab so the editor can include them.
+    const admin = window.__vic361Admin;
+    if (admin && typeof admin.activateTab === 'function') admin.activateTab('picker');
   }
 
   function wire() {

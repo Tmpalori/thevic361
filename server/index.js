@@ -32,6 +32,7 @@ import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
 import { createAutoPublish } from './autopublish.js';
 import crypto from 'node:crypto';
+import net from 'node:net';
 import {
   HUB_PAGES, localDateStr, withPages, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
@@ -56,14 +57,33 @@ async function readJsonFile(file) {
   return JSON.parse(raw);
 }
 
+function safeTokenEqual(a, b) {
+  const ah = crypto.createHash('sha256').update(String(a)).digest();
+  const bh = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ah, bh);
+}
+
 export async function createApp(opts = {}) {
   const app = express();
 
   const adminToken = opts.adminToken ?? process.env.ADMIN_TOKEN ?? null;
   const turnstileSecret = opts.turnstileSecret ?? process.env.TURNSTILE_SECRET_KEY ?? null;
   const turnstileSiteKey = opts.turnstileSiteKey ?? process.env.TURNSTILE_SITE_KEY ?? null;
-  const trustProxy = opts.trustProxy ?? true;
-  if (trustProxy) app.set('trust proxy', true);
+  // Railway's edge is the one proxy in front of us. Trusting exactly one hop
+  // makes req.ip the address Railway saw; `true` would trust the left-most
+  // X-Forwarded-For entry, which any client can set to dodge rate limits.
+  const trustProxy = opts.trustProxy ?? 1;
+  if (trustProxy) app.set('trust proxy', trustProxy === true ? 1 : trustProxy);
+  // On Railway the edge sets X-Real-IP to the visitor's address
+  // (docs.railway.com: Public Networking > Specs & Limits); prefer it so the
+  // rate limits key on the real client however many hops sit in between.
+  if (trustProxy && (opts.railway ?? Boolean(process.env.RAILWAY_ENVIRONMENT_NAME))) {
+    app.use((req, res, next) => {
+      const real = String(req.headers['x-real-ip'] || '').trim();
+      if (net.isIP(real)) Object.defineProperty(req, 'ip', { value: real, configurable: true });
+      next();
+    });
+  }
 
   // Canonical host. www.thevic361.com is where Google already indexes the
   // site and where all real traffic lands; the bare domain 301s to it so
@@ -330,7 +350,7 @@ export async function createApp(opts = {}) {
       if (v.ok) return { ok: true, kind: 'session', sub: v.payload.sub };
       // Fall through to legacy token check before giving up.
     }
-    if (adminToken && provided === adminToken) {
+    if (adminToken && provided && safeTokenEqual(provided, adminToken)) {
       return { ok: true, kind: 'legacy-token' };
     }
     return { ok: false, reason: 'unauthorized' };
@@ -537,6 +557,9 @@ export async function createApp(opts = {}) {
         original_key,
         payload: v.data
       });
+      // The edit can rename a live event (new page URL); archive it now so
+      // that URL keeps working after the week rotates out.
+      store.getPublished().then(p => p && archiveEvents(p.events)).catch(() => {});
       res.json({
         ok: true,
         edit: row,
@@ -952,10 +975,14 @@ export async function createApp(opts = {}) {
   // Keep every published event's page alive after its week rotates out
   // (see archiveEvents in db.js). Best-effort: a failure here must never
   // block a publish or a page view.
+  // Archive what the site actually shows: the edits overlay changes names
+  // (and so page slugs), and those are the URLs people share.
   function archiveEvents(events) {
     if (typeof store.archiveEvents !== 'function') return Promise.resolve();
     archiveCache = null;
-    return store.archiveEvents(withPages(events))
+    return Promise.resolve(typeof store.listEventEdits === 'function' ? store.listEventEdits() : [])
+      .catch(() => [])
+      .then(edits => store.archiveEvents(withPages(applyEventEdits(events, edits))))
       .then(() => { archiveCache = null; })
       .catch(err => console.warn('[events] archive skipped:', err.message));
   }
@@ -1071,7 +1098,7 @@ export async function createApp(opts = {}) {
   app.get('/events/:slug.ics', pageHandler(async (req, res, payload, ctx) => {
     const ev = await findEvent(payload, `/events/${req.params.slug}`);
     if (!ev) return res.status(404).type('text/plain').send('Not found');
-    res.set('Content-Disposition', `attachment; filename="${req.params.slug}.ics"`);
+    res.set('Content-Disposition', `attachment; filename="${String(req.params.slug).replace(/[^a-z0-9-]/gi, '') || 'event'}.ics"`);
     res.type('text/calendar; charset=utf-8').send(renderIcs(ev, ctx));
   }));
 

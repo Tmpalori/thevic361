@@ -505,6 +505,8 @@ class PgStore {
             sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
         `);
+        // Who didn't get it, so a retry resends to them only.
+        await this.pool.query(`ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS failed_emails JSONB NOT NULL DEFAULT '[]'::jsonb`);
         // Sponsor orders (server/sponsors.js). Low volume, read whole; the
         // order itself lives in payload so new fields need no migration.
         await this.pool.query(`
@@ -733,10 +735,10 @@ class PgStore {
   async recordNewsletterSend(rec) {
     await this.ready();
     await this.pool.query(`
-      INSERT INTO newsletter_sends (week_key, subject, recipients, failed, sent_at) VALUES ($1, $2, $3, $4, NOW())
+      INSERT INTO newsletter_sends (week_key, subject, recipients, failed, failed_emails, sent_at) VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
       ON CONFLICT (week_key) DO UPDATE SET subject = EXCLUDED.subject, recipients = EXCLUDED.recipients,
-        failed = EXCLUDED.failed, sent_at = NOW()
-    `, [rec.week_key, rec.subject, rec.recipients, rec.failed]);
+        failed = EXCLUDED.failed, failed_emails = EXCLUDED.failed_emails, sent_at = NOW()
+    `, [rec.week_key, rec.subject, rec.recipients, rec.failed, JSON.stringify(rec.failed_emails || [])]);
   }
 
   async saveSponsorOrder(order) {
@@ -749,7 +751,13 @@ class PgStore {
 
   async listSponsorOrders() {
     await this.ready();
-    const r = await this.pool.query('SELECT payload FROM sponsor_orders ORDER BY created_at DESC LIMIT 1000');
+    // Abandoned checkouts pile up; keep every live or recent order and let
+    // old expired/failed ones fall out instead of capping the whole list.
+    const r = await this.pool.query(
+      `SELECT payload FROM sponsor_orders
+        WHERE COALESCE(payload->>'status', '') NOT IN ('expired', 'failed')
+           OR created_at > now() - interval '30 days'
+        ORDER BY created_at DESC`);
     return r.rows.map(row => row.payload);
   }
 

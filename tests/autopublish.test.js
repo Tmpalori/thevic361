@@ -149,3 +149,22 @@ describe('admin setup checklist', () => {
     expect(JSON.stringify(r)).not.toMatch(/"b"|"c"/); // no password/secret values
   });
 });
+
+describe('client IP behind Railway', () => {
+  it('ignores a forged X-Forwarded-For and uses the edge X-Real-IP', async () => {
+    const { createApp: make } = await import('../server/index.js');
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-ip-'));
+    const { app } = await make({ storeBundle: { kind: 'file', store: new FileStore(path.join(dir, 's.json')) },
+      trustProxy: 1, railway: true, adminUsername: 'a', adminPassword: 'b', adminSessionSecret: 'c' });
+    const srv = http.createServer(app);
+    await new Promise(r => srv.listen(0, r));
+    const url = `http://127.0.0.1:${srv.address().port}/api/admin/login`;
+    const tryLogin = (xff) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': xff, 'X-Real-IP': '203.0.113.9' },
+      body: JSON.stringify({ username: 'a', password: 'wrong' }) });
+    const codes = [];
+    for (let i = 0; i < 12; i++) codes.push((await tryLogin(`10.0.0.${i}`)).status);
+    expect(codes).toContain(429);
+    await new Promise(r => srv.close(r));
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+});

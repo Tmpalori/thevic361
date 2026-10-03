@@ -125,10 +125,25 @@ function nameKey(s) {
   return String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-// Same day and a clearly matching name: exact, one containing the other,
-// or most words shared ("Fall Festival" vs "Fall Festival at De Leon Plaza").
+const VENUE_STOP = new Set(['the', 'and', 'victoria', 'texas', 'bar', 'grill', 'pub', 'cafe', 'park',
+  'center', 'centre', 'church', 'hall', 'club', 'house', 'street']);
+function venueWords(v) {
+  return new Set(nameKey(v).split(' ').filter(w => w.length >= 4 && !VENUE_STOP.has(w)));
+}
+// Two named venues that share no distinctive word are different places.
+function differentPlaces(a, b) {
+  const va = nameKey(a.venue), vb = nameKey(b.venue);
+  if (!va || !vb || va.includes(vb) || vb.includes(va)) return false;
+  const wb = venueWords(b.venue);
+  return ![...venueWords(a.venue)].some(w => wb.has(w));
+}
+
+// Same day, same place (when both name one) and a clearly matching name:
+// exact, one containing the other, or most words shared ("Fall Festival" vs
+// "Fall Festival at De Leon Plaza"). "Live Music" at two bars is two events.
 export function sameEvent(a, b) {
   if (!a || !b || a.date !== b.date) return false;
+  if (differentPlaces(a, b)) return false;
   const ka = nameKey(a.name);
   const kb = nameKey(b.name);
   if (!ka || !kb) return false;
@@ -329,6 +344,15 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     cache = null;
   }
 
+  // One booking at a time (single Railway instance), so two buyers can't
+  // both pass the "is this week free?" check before either hold is saved.
+  let bookingChain = Promise.resolve();
+  function withBookingLock(fn) {
+    const run = bookingChain.then(fn, fn);
+    bookingChain = run.catch(() => {});
+    return run;
+  }
+
   async function apply(payload) {
     try {
       return applyPlacements(payload, await orders(), { now: nowFn(), venues: getVenues() });
@@ -376,7 +400,14 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       case 'checkout.session.completed':
       case 'checkout.session.async_payment_succeeded': {
         const order = findBy(list, 'id', obj.client_reference_id) || findBy(list, 'session_id', obj.id);
-        if (!order || order.status !== 'pending' && order.status !== 'expired') return;
+        if (!order) return;
+        // A retry after a failed fulfil (e.g. the submission insert threw):
+        // the order is already paid, so finish the job instead of stopping.
+        if (LIVE.has(order.status)) {
+          if (order.kind === 'featured' && order.event && !order.submission_id) await fulfil(order);
+          return;
+        }
+        if (order.status !== 'pending' && order.status !== 'expired' && order.status !== 'failed') return;
         // Delayed payment methods complete the session before the money
         // arrives; async_payment_succeeded follows when it does.
         if (obj.payment_status !== 'paid' && obj.payment_status !== 'no_payment_required') return;
@@ -385,8 +416,23 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           paid_at: nowIso(),
           amount: Number.isFinite(obj.amount_total) ? obj.amount_total : order.amount,
           subscription_id: typeof obj.subscription === 'string' ? obj.subscription : null,
-          customer_id: typeof obj.customer === 'string' ? obj.customer : null
+          customer_id: typeof obj.customer === 'string' ? obj.customer : null,
+          payment_intent: typeof obj.payment_intent === 'string' ? obj.payment_intent : null
         });
+        // Someone else already paid for this week (e.g. this hold lapsed
+        // first). Keep the money traceable and ask for a refund, but don't
+        // put two sponsors in one slot.
+        if (order.kind === 'weekly' && list.some(o => o.id !== order.id && o.kind === 'weekly' &&
+            o.week_start === order.week_start && LIVE.has(o.status))) {
+          order.status = 'conflict';
+          await save(order);
+          if (slack) {
+            slack.alert(`sponsor-conflict:${order.id}`, `Week of ${order.week_start} was paid for twice`,
+              `${order.business} (${order.email}) paid for a week that's already sold. Refund them in Stripe or move them to another week.`,
+              `${siteUrl}/admin.html`);
+          }
+          return;
+        }
         await save(order);
         await fulfil(order);
         return;
@@ -399,9 +445,15 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
         const order = findBy(list, 'subscription_id', obj.id);
-        if (!order || order.status === 'hidden') return;
+        if (!order) return;
         const s = event.type === 'customer.subscription.deleted' ? 'canceled' : obj.status;
         const status = (s === 'active' || s === 'trialing') ? 'active' : s === 'canceled' ? 'cancelled' : 'paused';
+        // Hidden by the admin: remember what Stripe says so Restore can't
+        // bring back a partner that cancelled in the meantime.
+        if (order.status === 'hidden') {
+          if (order.hidden_from !== status) await save({ ...order, hidden_from: status });
+          return;
+        }
         if (status !== order.status) {
           await save({ ...order, status });
           if (slack && status !== 'active') {
@@ -411,6 +463,22 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
               text: status === 'cancelled' ? 'Their events are no longer marked Vic’s Pick.' : 'Stripe couldn’t charge them, so their Vic’s Pick badges are paused until it does.'
             });
           }
+        }
+        return;
+      }
+      case 'charge.refunded':
+      case 'charge.dispute.created': {
+        const pi = typeof obj.payment_intent === 'string' ? obj.payment_intent : null;
+        const order = findBy(list, 'payment_intent', pi);
+        if (!order || order.status === 'refunded') return;
+        if (event.type === 'charge.refunded' && obj.refunded === false) return; // partial refund: leave it live
+        await save({ ...order, status: 'refunded', hidden_from: null });
+        if (slack) {
+          slack.notify({
+            title: event.type === 'charge.refunded' ? `↩️ Sponsor refunded: ${order.business}` : `⚠️ Sponsor disputed a charge: ${order.business}`,
+            fields: [['Contact', order.email], ['Order', order.id]],
+            text: 'Their placement is off the site.'
+          });
         }
         return;
       }
@@ -463,14 +531,20 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         const ip = req.ip || req.socket.remoteAddress;
         if (!limiter.check(ip).ok) return fail({ _form: 'Too many attempts. Try again in an hour.' }, 429);
 
-        // Re-read so a week booked seconds ago is caught.
-        cache = null;
-        ctx.orders = await orders();
-        const v = validateOrder(pkg.key, body, ctx);
-        if (!v.ok) return fail(v.errors);
-
-        // Same clock as bookableWeeks, so the hold window lines up.
-        const order = { ...v.order, id: newId(), status: 'pending', amount: pkg.amount, created_at: nowFn().toISOString() };
+        // Re-read and save the hold under one lock, so a week booked seconds
+        // ago (or right now, by someone else) is caught.
+        const booked = await withBookingLock(async () => {
+          cache = null;
+          ctx.orders = await orders();
+          const v = validateOrder(pkg.key, body, ctx);
+          if (!v.ok) return { errors: v.errors };
+          // Same clock as bookableWeeks, so the hold window lines up.
+          const o = { ...v.order, id: newId(), status: 'pending', amount: pkg.amount, created_at: nowFn().toISOString() };
+          await save(o);
+          return { order: o };
+        });
+        if (booked.errors) return fail(booked.errors);
+        const order = booked.order;
         const lineItem = {
           quantity: 1,
           price_data: {
@@ -483,6 +557,9 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         try {
           session = await stripe.createCheckoutSession({
             mode: pkg.interval ? 'subscription' : 'payment',
+            // Cards settle at checkout; delayed methods could complete
+            // after the week's hold lapses and double-book it.
+            payment_method_types: ['card'],
             customer_email: order.email,
             client_reference_id: order.id,
             line_items: [lineItem],
@@ -495,6 +572,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         } catch (err) {
           console.error('[sponsors] checkout session failed:', err.message);
           if (slack) slack.alert('stripe-checkout', 'Sponsor checkout is failing', `Stripe: ${err.message}`);
+          await save({ ...order, status: 'failed' }); // release the hold
           return fail({ _form: 'The payment page is unavailable right now. Please try again in a few minutes.' }, 502);
         }
         await save({ ...order, session_id: session.id });
@@ -517,7 +595,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         ok: true,
         configured: config.enabled,
         supported,
-        orders: list.filter(o => o.status !== 'expired' && !(o.status === 'pending' &&
+        orders: list.filter(o => o.status !== 'expired' && o.status !== 'failed' && !(o.status === 'pending' &&
           nowFn().getTime() - Date.parse(o.created_at) > 24 * 3600 * 1000)),
         weeks: bookableWeeks(nowFn(), list)
       });

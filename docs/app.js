@@ -81,7 +81,7 @@
   function safeHref(url) {
     if (typeof url !== 'string') return '';
     var u = url.trim();
-    return /^https?:\/\//i.test(u) ? escHtml(u) : '';
+    return /^https?:\/\/[^\s"'<>`]+$/i.test(u) ? escHtml(u) : '';
   }
 
   // ─── RENDER SINGLE EVENT ───
@@ -263,11 +263,16 @@
   }
 
   // ─── HTML ESCAPE ───
+  // Escapes quotes too: the result goes into attributes (href, data-*), and
+  // a text node's innerHTML leaves " and ' alone.
   function escHtml(str) {
-    if (!str) return '';
-    var div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    if (str === null || str === undefined || str === '') return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   // ─── PREVIEW MODE ───
@@ -322,7 +327,13 @@
       showPreviewIndicator();
       dataPromise = Promise.resolve(previewData);
     } else {
-      dataPromise = fetch('./events.json').then(function (res) { return res.json(); });
+      dataPromise = fetch('./events.json').then(function (res) {
+        if (!res.ok) throw new Error('events.json HTTP ' + res.status);
+        return res.json();
+      }).then(function (data) {
+        if (!data || !Array.isArray(data.events)) throw new Error('events.json has no events list');
+        return data;
+      });
     }
     dataPromise
       .then(function (data) {
@@ -403,8 +414,12 @@
       })
       .catch(function (err) {
         console.error('Failed to load events:', err);
-        document.getElementById('events-container').innerHTML =
-          '<p class="empty-state">Could not load events. Please try again later.</p>';
+        // The server already rendered this week's list into the page; keep
+        // it. Only show an error when there's nothing there to keep.
+        var container = document.getElementById('events-container');
+        if (container && !container.querySelector('.event-entry, .day-section, .day-card')) {
+          container.innerHTML = '<p class="empty-state">Could not load events. Please try again later.</p>';
+        }
       });
   }
 
@@ -487,7 +502,10 @@
       readPreviewData: readPreviewData,
       showPreviewIndicator: showPreviewIndicator,
       PREVIEW_STORAGE_PREFIX: PREVIEW_STORAGE_PREFIX,
-      applyFilter: applyFilter
+      applyFilter: applyFilter,
+      escHtml: escHtml,
+      safeHref: safeHref,
+      renderEvent: renderEvent
     };
   }
 

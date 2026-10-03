@@ -41,7 +41,7 @@ jobs:
           PY
           # Once a day (15:17 UTC, ~10 AM Central): is the feed going stale?
           if [ "$(date -u +%H)" = "15" ]; then
-            age=$(python3 -c "import json,datetime as d;u=json.load(open('events.json')).get('last_updated','');print((d.datetime.now(d.timezone.utc)-d.datetime.fromisoformat(u.replace('Z','+00:00'))).days if u else 99)")
+            age=$(python3 scripts/feed_age.py events.json 2>/dev/null || echo 99)
             if [ "$age" -ge 8 ]; then
               python3 scripts/slack_notify.py "⏰ No events published in $age days. Pick this week's events in admin." --link "$SITE/admin.html"
             fi

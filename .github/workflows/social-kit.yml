@@ -54,6 +54,10 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install pillow requests
+      # The weekend Reel is stitched with ffmpeg, which runner images don't
+      # always include.
+      - name: Install ffmpeg
+        run: command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
       - name: Build kit
         env:
           PYTHONUNBUFFERED: 1
@@ -75,9 +79,13 @@ jobs:
           fi
           git commit -m "📣 Social kit $(date +'%Y-%m-%d')"
           # main may have moved while the kit built (weekly collect, a merge).
-          git pull --rebase origin main
-          git push
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && exit 0
+            sleep $((i * 10))
+          done
+          exit 1
       - name: Post to Facebook + Instagram
+        id: post
         if: >-
           (github.event_name == 'schedule' && vars.SOCIAL_AUTOPOST == '1') ||
           (github.event_name == 'workflow_dispatch' && inputs.post)
@@ -95,8 +103,24 @@ jobs:
           else KIND=today; fi
           python scripts/social_post.py --kind "$KIND"
 
+      # Record what was posted (posted.json) even when one platform failed,
+      # so re-running the job doesn't post to the other one twice.
+      - name: Save posted ids
+        if: always() && steps.post.outcome != 'skipped' && hashFiles('docs/social/latest/posted.json') != ''
+        run: |
+          git config user.name "The Vic 361 Bot"
+          git config user.email "bot@thevic361.com"
+          git add docs/social/latest/posted.json
+          git diff --cached --quiet && exit 0
+          git commit -m "📣 Social posts $(date +'%Y-%m-%d')"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && exit 0
+            sleep $((i * 10))
+          done
+          exit 1
+
       - name: Send Slack this week's venues to tag
-        if: github.event_name == 'schedule' && hashFiles('docs/social/latest/outreach.txt') != ''
+        if: always() && github.event_name == 'schedule' && hashFiles('docs/social/latest/outreach.txt') != ''
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |

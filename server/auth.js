@@ -40,11 +40,12 @@ function b64urlDecode(str) {
   return Buffer.from(std, 'base64');
 }
 
+// Compares fixed-length digests, so neither the contents nor the length of
+// the secret leaks through timing.
 function safeEqualStr(a, b) {
-  const ab = Buffer.from(String(a), 'utf8');
-  const bb = Buffer.from(String(b), 'utf8');
-  if (ab.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ab, bb);
+  const ah = crypto.createHash('sha256').update(String(a), 'utf8').digest();
+  const bh = crypto.createHash('sha256').update(String(b), 'utf8').digest();
+  return crypto.timingSafeEqual(ah, bh) && String(a) === String(b);
 }
 
 function safeEqualBuf(a, b) {

@@ -342,3 +342,27 @@ def test_drop_dead_links_only_removes_not_found():
     assert [e["url"] for e in out] == ["", "", "https://b.com/ok", "https://c.com/bot",
                                        "https://d.com/down", "https://www.facebook.com/x", ""]
     assert calls.count("https://a.com/gone") == 1 and "https://www.facebook.com/x" not in calls
+
+
+def test_same_name_different_venues_stay_separate():
+    from collect_events import is_same_event
+    a = {"date": "2026-10-10", "name": "Live Music", "venue": "Moonshine Drinkery"}
+    b = {"date": "2026-10-10", "name": "Live Music", "venue": "Aero Crafters"}
+    c = {"date": "2026-10-10", "name": "Live Music!", "venue": "Moonshine Drinkery Victoria"}
+    d = {"date": "2026-10-10", "name": "Live Music", "venue": ""}
+    assert not is_same_event(a, b)
+    assert is_same_event(a, c)
+    assert is_same_event(a, d)
+
+
+def test_unquoted_yaml_values_dont_abort(tmp_path):
+    from datetime import date, timedelta
+    import collect_events as ce
+    d = (ce.now_central().date() + timedelta(days=1)).isoformat()
+    p = tmp_path / "local.yaml"
+    p.write_text(f"events:\n  - date: {d}\n    name: 1776\n    time: 19:00\n  - date: not-a-date\n    name: Broken\n")
+    out = ce.load_local_events(str(p), days_ahead=7)
+    assert [e["name"] for e in out] == ["1776"]
+    assert out[0]["time"] == "7:00 PM" and out[0]["date"] == d
+    merged = ce.merge_events(out, venues=[])
+    assert merged and merged[0]["name"] == "1776"

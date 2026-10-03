@@ -691,3 +691,49 @@ describe('Home tab', () => {
     expect(document.getElementById('home-checks').textContent).toContain('Set SLACK_WEBHOOK_URL');
   });
 });
+
+describe('Events tab safety', () => {
+  afterEach(() => { delete window.__vic361Admin; });
+  const live = [{ date: '2099-01-03', name: 'In Both', time: '8 PM', venue: 'B' }];
+  const cands = [
+    { date: '2099-01-03', name: 'In Both', time: '8 PM', venue: 'B' },
+    { date: '2099-01-04', name: 'New This Week', time: '9 PM', venue: 'C' }
+  ];
+  function stub(publishedOk = true) {
+    window.fetch = vi.fn(async (url) => {
+      const u = String(url);
+      if (u.includes('/api/admin/candidates')) return { ok: true, status: 200, json: async () => ({ ok: true, data: { events: cands } }) };
+      if (u.includes('/api/admin/published-events')) {
+        return publishedOk
+          ? { ok: true, status: 200, json: async () => ({ ok: true, events: live }) }
+          : { ok: false, status: 500, json: async () => ({ ok: false }) };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+  }
+
+  it('Reload keeps unsaved checkmarks', async () => {
+    const api = bootDom();
+    stub();
+    api._state.session = 'tok';
+    await api.loadCandidates();
+    api._state.selected.add('2099-01-04|New This Week|C');
+    api._state.selected.delete('2099-01-03|In Both|B');
+    window.localStorage.setItem('vic361_admin_pending', JSON.stringify({ add: ['2099-01-04|New This Week|C'], remove: ['2099-01-03|In Both|B'] }));
+    await api.loadCandidates();
+    expect(api.buildEventsPayload().events.map(e => e.name)).toEqual(['New This Week']);
+  });
+
+  it('turns Save & Publish off when the live list fails to load', async () => {
+    const api = bootDom();
+    stub(false);
+    api._state.session = 'tok';
+    await api.loadCandidates();
+    expect(document.getElementById('publish-btn').disabled).toBe(true);
+    window.confirm = vi.fn(() => true);
+    api._state.session = 'tok'; // boot's async sign-in check clears it in jsdom
+    await api.publish();
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(document.getElementById('status-message').textContent).toMatch(/Reload/);
+  });
+});

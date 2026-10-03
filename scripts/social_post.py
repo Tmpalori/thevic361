@@ -54,13 +54,18 @@ def _graph(method, path, session, **params):
     return body
 
 
-def wait_for_deploy(urls, kit_url, generated_for, session, timeout_s=600, sleep=15):
-    """Wait until the deployed kit.json is this run's kit and the images load."""
+def wait_for_deploy(urls, kit_url, generated_for, session, timeout_s=600, sleep=15, build=None):
+    """Wait until the deployed kit.json is this run's kit and the images load.
+
+    `build` (unique per run) beats the date: an earlier kit from the same day
+    has the same `generated_for` but older slides."""
     deadline = time.time() + timeout_s
     while True:
         try:
             live = session.get(kit_url, timeout=20)
-            if live.ok and live.json().get("generated_for") == generated_for \
+            body = live.json() if live.ok else {}
+            same = body.get("build") == build if build else body.get("generated_for") == generated_for
+            if live.ok and same \
                     and all(session.head(u, timeout=20).ok for u in urls):
                 return True
         except (requests.RequestException, ValueError):
@@ -99,6 +104,8 @@ def post_instagram(ig_user_id, token, image_urls, caption, session, poll_sleep=5
         if status.get("status_code") == "ERROR":
             raise PostError("Instagram could not process the carousel.")
         time.sleep(poll_sleep)
+    else:
+        raise PostError("Instagram was still processing the carousel after 2 minutes.")
     return _graph("POST", f"{ig_user_id}/media_publish", session,
                   creation_id=carousel["id"], access_token=token)["id"]
 
@@ -147,16 +154,46 @@ def main(argv=None, session=None):
     urls = [f"{base}/{name}" for name in pick_slides(kit["slides"])]
     reel_url = f"{base}/{kit['reel']}" if kit.get("reel") else None
     if not args.no_wait:
+        # Cache-bust so Meta can't fetch yesterday's image at the same name.
         wait_for_deploy(urls + ([reel_url] if reel_url else []), f"{base}/kit.json",
-                        manifest["generated_for"], session)
+                        manifest["generated_for"], session, build=manifest.get("build"))
+    if manifest.get("build"):
+        v = f"?v={manifest['build']}"
+        urls = [u + v for u in urls]
+        reel_url = reel_url and reel_url + v
+
+    # Posted ids per day + kind, so re-running a half-failed job doesn't post
+    # the same thing to Facebook twice.
+    posted_path = os.path.join(args.kit_dir, "posted.json")
+    try:
+        with open(posted_path) as f:
+            posted = json.load(f)
+    except (OSError, ValueError):
+        posted = {}
+    slot_key = f"{manifest['generated_for']}:{args.kind}"
+    slot = posted.setdefault(slot_key, {})
+
+    def remember(platform, post_id):
+        slot[platform] = post_id
+        # Keep two weeks of history.
+        for k in sorted(posted)[:-30]:
+            posted.pop(k, None)
+        with open(posted_path, "w") as f:
+            json.dump(posted, f, indent=2)
 
     failures = []
-    try:
-        fb_id = post_facebook(page_id, token, urls, kit["captions"]["facebook"], session)
-        print(f"Facebook: posted {fb_id}")
-    except PostError as e:
-        failures.append(f"Facebook: {e}")
-    if ig_user:
+    if slot.get("facebook"):
+        print(f"Facebook: already posted {slot['facebook']} for {slot_key}; skipping.")
+    else:
+        try:
+            fb_id = post_facebook(page_id, token, urls, kit["captions"]["facebook"], session)
+            remember("facebook", fb_id)
+            print(f"Facebook: posted {fb_id}")
+        except PostError as e:
+            failures.append(f"Facebook: {e}")
+    if ig_user and slot.get("instagram"):
+        print(f"Instagram: already posted {slot['instagram']} for {slot_key}; skipping.")
+    elif ig_user:
         try:
             if reel_url:
                 ig_id = post_instagram_reel(ig_user, token, reel_url, kit["captions"]["instagram"], session)
@@ -164,6 +201,7 @@ def main(argv=None, session=None):
             else:
                 ig_id = post_instagram(ig_user, token, urls, kit["captions"]["instagram"], session)
                 print(f"Instagram: posted {ig_id}")
+            remember("instagram", ig_id)
         except PostError as e:
             failures.append(f"Instagram: {e}")
     else:

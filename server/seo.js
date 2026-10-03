@@ -225,7 +225,9 @@ export function escHtml(str) {
 export function safeUrl(url) {
   if (typeof url !== 'string') return '';
   const u = url.trim();
-  return /^https?:\/\//i.test(u) ? u : '';
+  // No whitespace, quotes or angle brackets: a URL that needs them is
+  // either broken or trying to break out of an attribute.
+  return /^https?:\/\/[^\s"'<>`]+$/i.test(u) ? u : '';
 }
 
 // JSON-LD lives inside a <script> tag, so "</script>" in an event name
@@ -390,6 +392,7 @@ const SLUG_HOSTS = /(^|\.)(facebook\.com|allevents\.in|eventbrite\.[a-z.]+|victo
 const STOP = new Set('the and at in of for with on to tx victoria texas united states event events tickets night live free'.split(' '));
 function words(text) {
   return new Set(String(text || '').toLowerCase().normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '') // "Música" -> "musica", like the slug
     .replace(/['’.]/g, '').split(/[^a-z0-9]+/)
     .filter(w => w.length >= 3 && !/^\d+$/.test(w) && !STOP.has(w))
     .map(w => w.slice(0, 5)));
@@ -891,14 +894,16 @@ export function renderHome(template, events, { siteUrl, now, signupHtml = null }
   ];
   let page = template;
   // The newsletter signup form (server/newsletter.js) fills the footer slot.
-  if (signupHtml) page = page.replace(/<!--SIGNUP_START-->[\s\S]*?<!--SIGNUP_END-->/, signupHtml);
+  if (signupHtml) page = page.replace(/<!--SIGNUP_START-->[\s\S]*?<!--SIGNUP_END-->/, () => signupHtml);
   return page
     // Link previews show this week's list (the social-kit cover slide).
     .replace(/(<meta (?:property="og:image"|name="twitter:image") content=")[^"]*"/g, `$1${siteUrl}/social/latest/week-1.png"`)
     .replace(/<meta property="og:image:(?:width|height)"[^>]*>\n?/g, '')
-    .replace('<p class="loading-message">Loading events...</p>', renderDays(week, events, today))
-    .replace('<!--NAV-->', navHtml('/'))
-    .replace('</head>', ld.map(jsonLd).join('\n') + '\n</head>');
+    // Function replacements: event text can contain "$'" or "$&", which a
+    // string replacement would expand into chunks of the page.
+    .replace('<p class="loading-message">Loading events...</p>', () => renderDays(week, events, today))
+    .replace('<!--NAV-->', () => navHtml('/'))
+    .replace('</head>', () => ld.map(jsonLd).join('\n') + '\n</head>');
 }
 
 export function renderSitemap(events, { siteUrl, now, lastmod, extraPaths = [] }) {

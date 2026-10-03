@@ -64,6 +64,11 @@ on:
 permissions:
   contents: write          # Needed to push updated candidates.json
 
+# A manual run and the schedule must not collect (and push) at once.
+concurrency:
+  group: weekly-collect
+  cancel-in-progress: false
+
 jobs:
   collect:
     runs-on: ubuntu-latest
@@ -163,7 +168,13 @@ jobs:
           # counts + timestamps). Add it only if the collector wrote one.
           [ -f collection_metadata.json ] && git add collection_metadata.json
           git commit -m "🏙️ Update candidates $(date +'%Y-%m-%d')"
-          git push
+          # main can move during the ~25 min collect (a merge, the social
+          # kit's commit). Rebase and retry instead of losing this run.
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && exit 0
+            sleep $((i * 10))
+          done
+          exit 1
 
       - name: Tell Slack the candidates are ready
         if: success()

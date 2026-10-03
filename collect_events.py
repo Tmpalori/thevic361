@@ -173,6 +173,16 @@ def safe_fetch(name, fn, args=(), expect_events=True):
         return []
 
 
+def now_central():
+    """Current time in Victoria, TX. GitHub runners are on UTC, which puts a
+    run after ~7 PM Central on tomorrow's date."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/Chicago"))
+    except Exception:  # pragma: no cover - tzdata missing
+        return datetime.now()
+
+
 # ─── DATE WINDOW HELPERS ─────────────────────────────────────────────────────
 # The site renders Mon–Sun of the current week + lookahead. We must collect
 # events starting from THIS Monday, not just "today", or earlier days of the
@@ -180,7 +190,7 @@ def safe_fetch(name, fn, args=(), expect_events=True):
 
 def week_start_date(today=None):
     """Return the Monday of the current calendar week (in local time)."""
-    today = today or datetime.now().date()
+    today = today or now_central().date()
     return today - timedelta(days=today.weekday())  # weekday(): Mon=0
 
 
@@ -190,7 +200,7 @@ def date_window(days_ahead=14, backfill_to_monday=True):
     If backfill_to_monday is True, start = Monday of this week (so the site's
     Mon–Sun grid never shows empty days). Otherwise start = today.
     """
-    today = datetime.now().date()
+    today = now_central().date()
     start = week_start_date(today) if backfill_to_monday else today
     end = today + timedelta(days=days_ahead)
     return start, end
@@ -315,6 +325,33 @@ def guess_free(name, description="", venue=""):
 
 # ─── SOURCE: LOCAL YAML (backbone) ──────────────────────────────────────────
 
+def _coerce_yaml_events(data):
+    """Hand-typed YAML loads unquoted values as other types: `date: 2026-10-10`
+    is a date, `time: 19:00` is the integer 1140 (YAML 1.1 base-60), and
+    `name: 1776` is an int. Turn them back into the strings the rest of the
+    pipeline expects so one unquoted value can't abort the weekly run."""
+    import datetime as _dt
+
+    def fix(ev):
+        if not isinstance(ev, dict):
+            return ev
+        out = dict(ev)
+        for k, v in ev.items():
+            if isinstance(v, (_dt.date, _dt.datetime)):
+                out[k] = v.isoformat()[:10]
+            elif k == "time" and isinstance(v, int) and not isinstance(v, bool):
+                h, m = divmod(v, 60)
+                out[k] = f"{(h % 12) or 12}:{m:02d} {'PM' if h % 24 >= 12 else 'AM'}" if h < 24 else str(v)
+            elif k in ("name", "venue", "address", "description", "day") and v is not None and not isinstance(v, str):
+                out[k] = str(v)
+        return out
+
+    for key in ("recurring", "events"):
+        if isinstance(data.get(key), list):
+            data[key] = [fix(ev) for ev in data[key]]
+    return data
+
+
 def load_local_events(yaml_path, days_ahead=7):
     """Load recurring + one-time events from the YAML file.
 
@@ -349,6 +386,9 @@ def load_local_events(yaml_path, days_ahead=7):
         print(f"  [Local] Unexpected error reading {yaml_path}: {e}")
         _sentry_exception("local_events")
         return events
+
+    if isinstance(data, dict):
+        data = _coerce_yaml_events(data)
 
     if not isinstance(data, dict):
         # YAML loaded but isn't a mapping (e.g. someone replaced the file
@@ -417,7 +457,7 @@ def load_local_events(yaml_path, days_ahead=7):
                     "free": ev.get("free", False),
                     "url": ev.get("url", ""),
                 })
-        except (ValueError, KeyError):
+        except Exception:  # one bad entry must not stop the run
             continue
 
     print(f"  [Local] {len(events)} events from YAML")
@@ -1476,18 +1516,37 @@ def _same_place(a, b):
     return bool(ka) and ka == kb
 
 
+_VENUE_STOP = {"the", "and", "of", "at", "victoria", "tx", "texas", "bar", "grill", "pub", "cafe",
+               "park", "center", "centre", "church", "hall", "club", "house", "street", "st"}
+
+
+def _near_place(a, b):
+    """_same_place, or the venue names share a distinctive word
+    ("Moonshine Drinkery" vs "Moonshine Drinkery Victoria")."""
+    # An organizer account ("Discover Victoria Texas") says who posted, not
+    # where: treat it like an unknown venue.
+    if (a.get("venue") or "").lower() in _NON_PLACE_NAMES or (b.get("venue") or "").lower() in _NON_PLACE_NAMES:
+        return True
+    if _same_place(a, b):
+        return True
+    wa = {w for w in re.findall(r"[a-z0-9]+", (a.get("venue") or "").lower()) if len(w) >= 4 and w not in _VENUE_STOP}
+    wb = {w for w in re.findall(r"[a-z0-9]+", (b.get("venue") or "").lower()) if len(w) >= 4 and w not in _VENUE_STOP}
+    return bool(wa & wb)
+
+
 def is_same_event(a, b):
-    """Fuzzy match for two events on the same date."""
+    """Fuzzy match for two events on the same date.
+
+    A matching name isn't enough on its own: "Live Music" or "Trivia Night"
+    at two different bars the same night are two events."""
     if a.get("date") != b.get("date"):
         return False
     ta, tb = _name_tokens(a.get("name")), _name_tokens(b.get("name"))
     if not ta or not tb:
         return False
     sa, sb = " ".join(ta), " ".join(tb)
-    if sa == sb:
-        return True
-    if SequenceMatcher(None, sa, sb).ratio() >= 0.85:
-        return True
+    if sa == sb or SequenceMatcher(None, sa, sb).ratio() >= 0.85:
+        return _near_place(a, b)
     # One name contains the other ("6th Realm Night Market" vs "6th Realm
     # Night Market Street spots"): only a match at the same place, so
     # "Tejas Fest" doesn't swallow "Chihuahua Races at Tejas Fest".
@@ -1580,7 +1639,9 @@ def non_event_reason(ev):
 
 def _clean_text(value):
     """Decode HTML entities ("Texas A&amp;M") and collapse whitespace."""
-    return re.sub(r"\s+", " ", html.unescape(value or "")).strip()
+    if value is None:
+        value = ""
+    return re.sub(r"\s+", " ", html.unescape(str(value))).strip()
 
 
 def merge_events(all_events, days_ahead=7, venues=None):
@@ -1599,7 +1660,9 @@ def merge_events(all_events, days_ahead=7, venues=None):
     dropped_junk = []
     merged_count = 0
     for ev in all_events:
-        date_str = ev.get("date", "")
+        if not isinstance(ev, dict):
+            continue
+        date_str = str(ev.get("date") or "")[:10]
         if not date_str:
             continue
         try:
@@ -1612,7 +1675,7 @@ def merge_events(all_events, days_ahead=7, venues=None):
         new_entry = {
             "date": date_str,
             "name": _clean_text(ev.get("name")),
-            "time": (ev.get("time") or "").strip(),
+            "time": str(ev.get("time") or "").strip(),
             "venue": _clean_text(ev.get("venue")),
             "address": _clean_text(ev.get("address")),
             "description": _clean_text(ev.get("description")),
@@ -3481,7 +3544,7 @@ def main():
 
     # 6. Build output
     output = {
-        "last_updated": datetime.now().strftime("%Y-%m-%dT%H:%M:%S-05:00"),
+        "last_updated": now_central().isoformat(timespec="seconds"),
         "events": merged,
         "new_and_notable": extras["new_and_notable"],
         "sponsor": extras["sponsor"],
@@ -3506,7 +3569,7 @@ def main():
     # 8. Write candidates.json (all events for screening)
     candidates_path = os.path.abspath(args.candidates)
     candidates_output = {
-        "last_updated": datetime.now().strftime("%Y-%m-%dT%H:%M:%S-05:00"),
+        "last_updated": now_central().isoformat(timespec="seconds"),
         "events": merged,
     }
     with open(candidates_path, "w") as f:

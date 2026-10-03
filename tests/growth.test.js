@@ -142,3 +142,21 @@ describe('more landing pages', () => {
     for (const p of ['/free-this-weekend', '/nightlife', '/arts-and-culture', '/outdoor-events']) expect(map).toContain(p);
   });
 });
+
+describe('homepage survives odd event names', () => {
+  it("doesn't expand $' or $& from event text into the page", async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-dollar-'));
+    const eventsFile = path.join(tmpDir, 'events.json');
+    await fs.writeFile(eventsFile, JSON.stringify({ events: [{ date: '2026-10-09', name: "Ladies$' Night $& more", time: '8:00 PM', venue: 'Bar' }] }));
+    const { app } = await createApp({
+      storeBundle: { kind: 'file', store: new FileStore(path.join(tmpDir, 's.json')) },
+      eventsFile, trustProxy: false, now: () => NOW, siteUrl: 'https://www.thevic361.com'
+    });
+    server = http.createServer(app);
+    await new Promise(r => server.listen(0, r));
+    baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const html = (await get('/')).html;
+    expect(html.match(/<body/g)).toHaveLength(1);
+    expect(html).toContain('Ladies$&#39; Night $&amp; more');
+  });
+});

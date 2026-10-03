@@ -236,7 +236,12 @@
   function clearAuth() {
     clearSession();
     clearPat();
-    try { localStorage.removeItem(PICKS_KEY); } catch (_) {}
+    try {
+      localStorage.removeItem(PICKS_KEY);
+      localStorage.removeItem(PENDING_KEY);
+      localStorage.removeItem('vic361_submissions_admin_token');
+      localStorage.removeItem('vic361_submissions_api_url');
+    } catch (_) {}
   }
 
   function showAuthGate(errMsg) {
@@ -667,10 +672,27 @@
   }
 
   // ─── SELECTIONS PERSISTENCE ───
+  // Unsaved changes are stored as a diff against the live site, so Reload
+  // or a refresh keeps them without freezing out events that went live
+  // meanwhile (auto-publish).
+  const PENDING_KEY = 'vic361_admin_pending';
   function persistSelections() {
     try {
       localStorage.setItem(PICKS_KEY, JSON.stringify(Array.from(state.selected)));
+      if (state.liveLoaded) {
+        const add = Array.from(state.selected).filter(k => !state.publishedKeys.has(k));
+        const remove = Array.from(state.publishedKeys).filter(k => !state.selected.has(k));
+        if (add.length || remove.length) localStorage.setItem(PENDING_KEY, JSON.stringify({ add, remove }));
+        else localStorage.removeItem(PENDING_KEY);
+      }
     } catch (_) {}
+  }
+  function readPending() {
+    try {
+      const p = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null');
+      if (p && Array.isArray(p.add) && Array.isArray(p.remove)) return p;
+    } catch (_) {}
+    return { add: [], remove: [] };
   }
   function restoreSelectionsFromStorage() {
     try {
@@ -688,9 +710,10 @@
   // there's no Railway-side published store to read, so we skip silently.
   async function loadPublishedAndSeedSelections() {
     if (publishMode() !== 'server') return;
+    state.liveLoaded = false;
     try {
       const { res, json } = await adminFetch('/api/admin/published-events');
-      if (!res.ok || !json || !json.ok) return;
+      if (!res.ok || !json || !json.ok) throw new Error('HTTP ' + res.status);
       const events = Array.isArray(json.events) ? json.events : [];
       const keys = new Set(events.map(eventKey));
       state.publishedKeys = keys;
@@ -707,10 +730,20 @@
           ((a.date || '') + ' ' + (a.time || '')).localeCompare((b.date || '') + ' ' + (b.time || '')));
       }
       state.selected = new Set(keys);
+      const pending = readPending();
+      const known = new Set(state.candidates.map(eventKey));
+      pending.add.forEach(k => { if (known.has(k)) state.selected.add(k); });
+      pending.remove.forEach(k => state.selected.delete(k));
+      state.liveLoaded = true;
       persistSelections();
     } catch (err) {
+      // Without the live list, Save & Publish would quietly drop every live
+      // event that isn't in this week's candidates. Block it instead.
       console.warn('[admin] published-events fetch failed:', err.message);
+      setStatus('Couldn’t load what’s live on the site, so Save & Publish is off. Press Reload to try again.', 'error');
     }
+    const btn = document.getElementById('publish-btn');
+    if (btn) btn.disabled = !state.liveLoaded;
   }
 
   function pruneStalePastSelections() {
@@ -770,6 +803,8 @@
     const key = generatePreviewKey();
     const storageKey = PREVIEW_STORAGE_PREFIX + key;
     try {
+      // One preview at a time; old ones would fill sessionStorage.
+      Object.keys(sessionStorage).forEach(k => { if (k.indexOf(PREVIEW_STORAGE_PREFIX) === 0) sessionStorage.removeItem(k); });
       sessionStorage.setItem(storageKey, JSON.stringify(payload));
     } catch (err) {
       console.error('Failed to write preview to sessionStorage:', err);
@@ -783,8 +818,8 @@
     if (key) {
       return 'index.html?previewKey=' + encodeURIComponent(key);
     }
-    const blob = encodeURIComponent(JSON.stringify(payload));
-    return 'index.html?preview=' + blob;
+    setStatus('Preview couldn’t be prepared (browser storage is full or blocked).', 'error');
+    return 'about:blank';
   }
 
   function refreshPreview() {
@@ -1263,6 +1298,10 @@
   async function publish() {
     const btn = document.getElementById('publish-btn');
     const picks = getPickedEvents();
+    if (publishMode() === 'server' && !state.liveLoaded) {
+      setStatus('Couldn’t load what’s live on the site. Press Reload before publishing.', 'error');
+      return;
+    }
     if (!picks.length) {
       setStatus('Select at least one event before publishing.', 'error');
       return;
@@ -1292,6 +1331,9 @@
         // GITHUB_TOKEN is configured. A failed/skipped GitHub commit must NOT
         // be surfaced as an error — the public site (Railway/Postgres) is
         // already updated, which is what Save & Publish is responsible for.
+        state.publishedKeys = new Set(state.selected);
+        persistSelections();
+        renderPicker();
         const dest = (json && json.destinations) || {};
         const ghOk = dest.github && dest.github.ok;
         const ghAttempted = dest.github && dest.github.error !== 'github-not-configured';
@@ -1412,7 +1454,7 @@
   // ─── SPONSORS TAB ────────────────────────────────────────────────────
   // Paid orders from the Stripe checkout (server/sponsors.js).
   const SPONSOR_KIND = { weekly: 'Weekly sponsor', partner: 'Venue partner', featured: 'Vic’s Pick event' };
-  const SPONSOR_STATUS = { paid: 'Live', active: 'Live', pending: 'Awaiting payment', hidden: 'Hidden', cancelled: 'Cancelled', paused: 'Payment issue' };
+  const SPONSOR_STATUS = { paid: 'Live', active: 'Live', pending: 'Awaiting payment', hidden: 'Hidden', cancelled: 'Cancelled', paused: 'Payment issue', refunded: 'Refunded', conflict: 'Double-booked: refund', failed: 'Checkout failed' };
 
   function sponsorDetail(o) {
     if (o.kind === 'weekly') return 'Week of ' + o.week_start + (o.sponsor ? ': ' + o.sponsor.text : '');
@@ -2104,7 +2146,7 @@
     utf8ToBase64,
     buildEventsPayload, buildPreviewSrc, writePreviewToStorage,
     getMondayOfWeek, getWeekRange, inWeekBucket, toLocalDateStr,
-    pruneStalePastSelections, loadCandidates, loadHome,
+    pruneStalePastSelections, loadCandidates, loadHome, activateTab, publish,
     inferSource, sourceLabel, mergeCandidateEvents, stripPrivateFields,
     publishMode,
     getStoredTheme, setStoredTheme, effectiveTheme, applyTheme, toggleTheme,
