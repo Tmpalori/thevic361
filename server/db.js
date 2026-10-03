@@ -111,6 +111,10 @@ export function applyEventEdits(events, edits) {
 }
 
 // ─── JSON FILE BACKEND ───
+const FILE_TRAFFIC_CAP = 50000;
+// Postgres keeps a bit over a year of traffic; older rows are pruned.
+const TRAFFIC_RETENTION_DAYS = 400;
+
 class FileStore {
   constructor(file) {
     this.file = file || DEFAULT_FILE;
@@ -122,15 +126,16 @@ class FileStore {
       const raw = await fs.readFile(this.file, 'utf8');
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') {
-        return { submissions: [], published: null, event_edits: [], event_archive: {} };
+        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [] };
       }
       if (!Array.isArray(parsed.submissions)) parsed.submissions = [];
       if (!parsed.event_archive || typeof parsed.event_archive !== 'object') parsed.event_archive = {};
+      if (!Array.isArray(parsed.traffic)) parsed.traffic = [];
       if (!Array.isArray(parsed.event_edits)) parsed.event_edits = [];
       return parsed;
     } catch (err) {
       if (err.code === 'ENOENT') {
-        return { submissions: [], published: null, event_edits: [], event_archive: {} };
+        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [] };
       }
       throw err;
     }
@@ -214,6 +219,22 @@ class FileStore {
       }
       await this._write(data);
     });
+  }
+
+  // Visitor stats (server/analytics.js). Capped so the JSON file stays
+  // small; production uses Postgres.
+  async recordTraffic(row) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      data.traffic.push({ ...row, ts: nowIso() });
+      if (data.traffic.length > FILE_TRAFFIC_CAP) data.traffic.splice(0, data.traffic.length - FILE_TRAFFIC_CAP);
+      await this._write(data);
+    });
+  }
+
+  async listTraffic(sinceDay) {
+    const data = await this._read();
+    return data.traffic.filter(r => r.day >= sinceDay);
   }
 
   async getArchivedEvent(page) {
@@ -329,6 +350,24 @@ class PgStore {
         `);
         // Every event ever published, keyed by its public page path, so
         // /events/<slug> keeps working after the week rotates out.
+        // Visitor stats (server/analytics.js): one row per page view, click,
+        // or crawler hit. No IPs or cookies, only a daily visitor hash.
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS traffic (
+            id BIGSERIAL PRIMARY KEY,
+            day DATE NOT NULL,
+            ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            kind TEXT NOT NULL,
+            path TEXT,
+            visitor TEXT,
+            ref_source TEXT,
+            ref_host TEXT,
+            click_type TEXT,
+            click_url TEXT,
+            bot TEXT
+          );
+        `);
+        await this.pool.query('CREATE INDEX IF NOT EXISTS traffic_day_idx ON traffic(day);');
         await this.pool.query(`
           CREATE TABLE IF NOT EXISTS event_archive (
             page TEXT PRIMARY KEY,
@@ -448,6 +487,29 @@ class PgStore {
           SET event_date = EXCLUDED.event_date, payload = EXCLUDED.payload, updated_at = NOW();
       `, [ev.page, /^\d{4}-\d{2}-\d{2}$/.test(ev.date || '') ? ev.date : null, JSON.stringify(ev)]);
     }
+  }
+
+  async recordTraffic(row) {
+    await this.ready();
+    await this.pool.query(`
+      INSERT INTO traffic (day, kind, path, visitor, ref_source, ref_host, click_type, click_url, bot)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+    `, [row.day, row.kind, row.path || null, row.visitor || null, row.ref_source || null,
+        row.ref_host || null, row.click_type || null, row.click_url || null, row.bot || null]);
+    // Prune now and then instead of on a schedule.
+    if (Math.random() < 0.002) {
+      await this.pool.query(`DELETE FROM traffic WHERE day < CURRENT_DATE - $1::int`, [TRAFFIC_RETENTION_DAYS]);
+    }
+  }
+
+  async listTraffic(sinceDay) {
+    await this.ready();
+    const r = await this.pool.query(`
+      SELECT to_char(day, 'YYYY-MM-DD') AS day, kind, path, visitor, ref_source, ref_host,
+             click_type, click_url, bot
+      FROM traffic WHERE day >= $1::date
+    `, [sinceDay]);
+    return r.rows;
   }
 
   async getArchivedEvent(page) {
