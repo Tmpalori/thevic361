@@ -1,0 +1,49 @@
+# Social Kit — builds this week's / this weekend's slides and captions from
+# the live published events and commits them to docs/social/latest/, which
+# is served at https://www.thevic361.com/social/latest/ (noindex).
+#
+# Monday morning covers the week (after Sunday-night Save & Publish);
+# Thursday morning refreshes it for the weekend posts. 13:47 UTC is
+# 8:47 AM CDT / 7:47 AM CST.
+
+name: Social Kit
+
+on:
+  schedule:
+    - cron: '47 13 * * 1,4'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: social-kit
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install pillow
+      - name: Build kit
+        env:
+          PYTHONUNBUFFERED: 1
+        run: python scripts/social_kit.py
+      - name: Commit
+        run: |
+          git config user.name "The Vic 361 Bot"
+          git config user.email "bot@thevic361.com"
+          git add docs/social/latest
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "📣 Social kit $(date +'%Y-%m-%d')"
+          # main may have moved while the kit built (weekly collect, a merge).
+          git pull --rebase origin main
+          git push

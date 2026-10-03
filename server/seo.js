@@ -151,7 +151,7 @@ function ymd(date) {
   return date.toISOString().slice(0, 10);
 }
 
-function addDays(s, n) {
+export function addDays(s, n) {
   const d = parseYmd(s);
   d.setUTCDate(d.getUTCDate() + n);
   return ymd(d);
@@ -161,7 +161,7 @@ function weekday(s) {
   return parseYmd(s).getUTCDay(); // 0 = Sunday
 }
 
-function formatDay(s, opts) {
+export function formatDay(s, opts) {
   return parseYmd(s).toLocaleDateString('en-US', Object.assign({ timeZone: 'UTC' }, opts));
 }
 
@@ -195,7 +195,7 @@ export function dateRange(kind, today) {
 
 // Chicago UTC offset ("-05:00" / "-06:00") for a given date, so JSON-LD
 // startDate carries an explicit offset as Google recommends.
-function chicagoOffset(dateStr) {
+export function chicagoOffset(dateStr) {
   const name = new Intl.DateTimeFormat('en-US', {
     timeZone: TZ, timeZoneName: 'shortOffset'
   }).formatToParts(parseYmd(dateStr)).find(p => p.type === 'timeZoneName');
@@ -255,7 +255,7 @@ export function withPages(events) {
 }
 
 // By date, then featured (paid) events first within a day, then by time.
-function sortEvents(list) {
+export function sortEvents(list) {
   return list.slice().sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;
     if (Boolean(a.featured) !== Boolean(b.featured)) return a.featured ? -1 : 1;
@@ -324,7 +324,7 @@ export function renderEventItem(ev) {
       : escHtml(ev.venue);
     if (ev.address) venue += ', ' + escHtml(ev.address);
   }
-  return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}">` +
+  return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}" data-icons="${escHtml((ev.icons || []).join(' ') + (ev.free === true ? ' free' : ''))}">` +
     `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
     '<div class="event-details">' +
       (ev.featured ? '<span class="badge badge--featured">Featured</span> ' : '') +
@@ -355,15 +355,29 @@ export function renderDays(dates, events, today) {
 }
 
 // Day sections only for dates that have events (intent pages).
-function renderGrouped(list, today) {
+export function renderGrouped(list, today) {
   const dates = [...new Set(list.map(ev => ev.date))];
   return dates.map((d, i) => renderDay(d, list.filter(ev => ev.date === d), i, today)).join('');
+}
+
+// In-season guides are request-specific, so pages carry a placeholder the
+// server fills per response (fillSeasonalNav) instead of sharing state
+// between concurrent requests.
+export const SEASONAL_NAV_SLOT = '<!--SEASONAL_NAV-->';
+
+export function seasonalNavLinks(seasons, current) {
+  return (seasons || []).map(p =>
+    `<a href="${p.path}"${p.path === current ? ' aria-current="page"' : ''}>${escHtml(p.nav)}</a>`).join('');
+}
+
+export function fillSeasonalNav(html, seasons, current) {
+  return html.split(SEASONAL_NAV_SLOT).join(seasonalNavLinks(seasons, current));
 }
 
 export function navHtml(current) {
   const links = HUB_PAGES.map(p =>
     `<a href="${p.path}"${p.path === current ? ' aria-current="page"' : ''}>${escHtml(p.nav)}</a>`);
-  return `<nav class="browse-nav" aria-label="Browse events"><div class="container browse-inner">${links.join('')}</div></nav>`;
+  return `<nav class="browse-nav" aria-label="Browse events"><div class="container browse-inner">${SEASONAL_NAV_SLOT}${links.join('')}</div></nav>`;
 }
 
 function headerHtml() {
@@ -407,6 +421,7 @@ function footerHtml() {
           <ul class="footer-links" role="list">
             <li><a href="/about">About The Vic 361</a></li>
             <li><a href="/submit">Submit an event</a></li>
+            <li><a href="/venues">Venues</a></li>
             <li><a href="/advertise">Advertise</a></li>
           </ul>
         </div>
@@ -416,7 +431,7 @@ function footerHtml() {
   </footer>`;
 }
 
-function breadcrumbLd(siteUrl, trail) {
+export function breadcrumbLd(siteUrl, trail) {
   return {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
@@ -489,7 +504,7 @@ export function sponsorHtml(sponsor) {
     cta + '</div></section>';
 }
 
-function ctaHtml() {
+export function ctaHtml() {
   return `<p class="page-cta">Get the full list every week: <a href="/#subscribe">subscribe to The Vic 361 newsletter</a>. Know something we missed? <a href="/submit">Submit an event</a>.</p>`;
 }
 
@@ -522,7 +537,7 @@ export function renderHubPage(page, events, { siteUrl, now, sponsor }) {
   return layout({ siteUrl, path: page.path, title: `${page.title} | ${SITE_NAME}`, description: page.description, body, ld });
 }
 
-export function renderEventPage(ev, events, { siteUrl, now, sponsor }) {
+export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = '', venuePath = null }) {
   const today = localDateStr(now);
   const src = safeUrl(ev.url);
   const when = formatDay(ev.date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -544,6 +559,8 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor }) {
     </dl>
     ${ev.description ? `<p class="event-about">${escHtml(ev.description)}</p>` : ''}
     ${src ? `<p class="page-actions"><a class="btn btn--primary" href="${escHtml(src)}" target="_blank" rel="noopener noreferrer">Event details</a></p>` : ''}
+    ${extras}
+    ${venuePath ? `<p class="venue-more"><a href="${escHtml(venuePath)}">More events at ${escHtml(ev.venue)} →</a></p>` : ''}
     ${sameDay.length ? `<h2 class="section-heading">Also on ${escHtml(formatDay(ev.date, { weekday: 'long' }))}</h2>
     <ul class="event-list" role="list">${sameDay.map(renderEventItem).join('')}</ul>` : ''}
     ${sponsorHtml(sponsor)}
@@ -673,7 +690,7 @@ export function renderHome(template, events, { siteUrl, now }) {
     .replace('</head>', ld.map(jsonLd).join('\n') + '\n</head>');
 }
 
-export function renderSitemap(events, { siteUrl, now, lastmod }) {
+export function renderSitemap(events, { siteUrl, now, lastmod, extraPaths = [] }) {
   const today = localDateStr(now);
   const mod = (lastmod || '').slice(0, 10) || today;
   const urls = [
@@ -682,6 +699,7 @@ export function renderSitemap(events, { siteUrl, now, lastmod }) {
     { loc: '/about', freq: 'monthly', pri: '0.4' },
     { loc: '/advertise', freq: 'monthly', pri: '0.3' },
     { loc: '/submit', freq: 'monthly', pri: '0.4' },
+    ...extraPaths.map(loc => ({ loc, freq: 'weekly', pri: '0.5', mod })),
     ...events.filter(ev => ev.date >= today).map(ev => ({ loc: ev.page, freq: 'weekly', pri: '0.6', mod }))
   ];
   return '<?xml version="1.0" encoding="UTF-8"?>\n' +
@@ -695,7 +713,7 @@ export function renderSitemap(events, { siteUrl, now, lastmod }) {
 // llms.txt (llmstxt.org): a plain-text map of the site for AI assistants,
 // plus this week's events inline so an answer engine can cite them
 // without crawling every page.
-export function renderLlmsTxt(events, { siteUrl, now }) {
+export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [] }) {
   const today = localDateStr(now);
   const upcoming = eventsBetween(events, today, addDays(today, UPCOMING_DAYS));
   const lines = [
@@ -707,6 +725,7 @@ export function renderLlmsTxt(events, { siteUrl, now }) {
     '',
     `- [This week in Victoria, TX](${siteUrl}/): every event Monday through Sunday`,
     ...HUB_PAGES.map(p => `- [${p.title}](${siteUrl}${p.path}): ${p.description}`),
+    ...extraLinks.map(([title, path, desc]) => `- [${title}](${siteUrl}${path})${desc ? `: ${desc}` : ''}`),
     `- [About](${siteUrl}/about): who runs The Vic 361 and how events are chosen`,
     `- [Submit an event](${siteUrl}/submit)`,
     `- [Advertise](${siteUrl}/advertise): sponsorships and featured listings for local businesses`,

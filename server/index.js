@@ -28,7 +28,12 @@ import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import {
   HUB_PAGES, withPages, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
+  , fillSeasonalNav
 } from './seo.js';
+import {
+  buildVenues, venueFor, renderVenuePage, renderVenueIndex, venuesWithEvents,
+  SEASONS, activeSeasons, renderSeasonPage, renderIcs, eventActionsHtml
+} from './guides.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -36,6 +41,7 @@ const DOCS_DIR = path.join(REPO_ROOT, 'docs');
 const CANDIDATES_FILE = path.join(REPO_ROOT, 'candidates.json');
 const COLLECTION_METADATA_FILE = path.join(REPO_ROOT, 'collection_metadata.json');
 const EVENTS_FILE = path.join(DOCS_DIR, 'events.json');
+const VENUES_FILE = path.join(REPO_ROOT, 'venues.json');
 const WEEKLY_COLLECT_WORKFLOW = 'weekly-collect.yml';
 
 async function readJsonFile(file) {
@@ -859,12 +865,19 @@ export async function createApp(opts = {}) {
     }
   }
 
+  // In-memory copy of the archive (see listArchived). Declared before the
+  // boot backfill below, which clears it.
+  const ARCHIVE_TTL_MS = 5 * 60 * 1000;
+  let archiveCache = null;
+
   // Keep every published event's page alive after its week rotates out
   // (see archiveEvents in db.js). Best-effort: a failure here must never
   // block a publish or a page view.
   function archiveEvents(events) {
     if (typeof store.archiveEvents !== 'function') return Promise.resolve();
+    archiveCache = null;
     return store.archiveEvents(withPages(events))
+      .then(() => { archiveCache = null; })
       .catch(err => console.warn('[events] archive skipped:', err.message));
   }
 
@@ -896,16 +909,43 @@ export async function createApp(opts = {}) {
   let indexTemplate = null;
 
   function sendHtml(res, html, status = 200) {
+    html = fillSeasonalNav(html, res.locals.seasons || [], res.req.path);
     // Short public cache: a new publish shows up within minutes, and a
     // burst of crawler traffic doesn't hit Postgres on every request.
     res.status(status).set('Cache-Control', status === 200 ? 'public, max-age=300' : 'no-store');
     res.type('html').send(html);
   }
 
+  // venues.json ships with the deploy; read once at boot.
+  let venues = [];
+  try {
+    venues = buildVenues(await readJsonFile(opts.venuesFile || VENUES_FILE));
+  } catch (err) {
+    console.warn('[venues] venues.json unreadable:', err.message);
+  }
+
+  // The archive only changes on publish, so keep it in memory for a few
+  // minutes instead of reading every archived event on every page view.
+  async function listArchived() {
+    if (typeof store.listArchivedEvents !== 'function') return [];
+    if (archiveCache && Date.now() - archiveCache.at < ARCHIVE_TTL_MS) return archiveCache.events;
+    try {
+      const events = await store.listArchivedEvents();
+      archiveCache = { at: Date.now(), events };
+      return events;
+    } catch (err) {
+      console.warn('[events] archive list failed:', err.message);
+      return archiveCache ? archiveCache.events : [];
+    }
+  }
+
   const pageHandler = render => async (req, res, next) => {
     try {
       const payload = await getPublicPayload();
-      await render(req, res, payload, { siteUrl, now: nowFn(), sponsor: payload.sponsor || null });
+      const archived = await listArchived();
+      const now = nowFn();
+      res.locals.seasons = activeSeasons(payload.events, archived, now);
+      await render(req, res, payload, { siteUrl, now, sponsor: payload.sponsor || null, archived, venues });
     } catch (err) {
       next(err);
     }
@@ -929,15 +969,47 @@ export async function createApp(opts = {}) {
     }));
   }
 
-  app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
-    const page = `/events/${req.params.slug}`;
+  async function findEvent(payload, page) {
     let ev = payload.events.find(e => e.page === page);
     if (!ev && typeof store.getArchivedEvent === 'function') {
       ev = await store.getArchivedEvent(page);
     }
-    if (!ev) return sendHtml(res, renderNotFoundPage(ctx), 404);
-    sendHtml(res, renderEventPage(ev, payload.events, ctx));
+    return ev || null;
+  }
+
+  // Add-to-calendar file. Registered before /events/:slug, which would
+  // otherwise treat "<slug>.ics" as a slug.
+  app.get('/events/:slug.ics', pageHandler(async (req, res, payload, ctx) => {
+    const ev = await findEvent(payload, `/events/${req.params.slug}`);
+    if (!ev) return res.status(404).type('text/plain').send('Not found');
+    res.set('Content-Disposition', `attachment; filename="${req.params.slug}.ics"`);
+    res.type('text/calendar; charset=utf-8').send(renderIcs(ev, ctx));
   }));
+
+  app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
+    const ev = await findEvent(payload, `/events/${req.params.slug}`);
+    if (!ev) return sendHtml(res, renderNotFoundPage(ctx), 404);
+    const venue = venueFor(ev, venues);
+    sendHtml(res, renderEventPage(ev, payload.events, {
+      ...ctx, extras: eventActionsHtml(ev, siteUrl), venuePath: venue ? venue.path : null
+    }));
+  }));
+
+  app.get('/venues', pageHandler(async (req, res, payload, ctx) => {
+    sendHtml(res, renderVenueIndex(venues, payload.events, ctx.archived, ctx));
+  }));
+
+  app.get('/venues/:slug', pageHandler(async (req, res, payload, ctx) => {
+    const venue = venues.find(v => v.slug === req.params.slug);
+    if (!venue) return sendHtml(res, renderNotFoundPage(ctx), 404);
+    sendHtml(res, renderVenuePage(venue, payload.events, ctx.archived, ctx));
+  }));
+
+  for (const season of SEASONS) {
+    app.get(season.path, pageHandler(async (req, res, payload, ctx) => {
+      sendHtml(res, renderSeasonPage(season, payload.events, ctx.archived, ctx));
+    }));
+  }
 
   app.get('/advertise', pageHandler(async (req, res, payload, ctx) => {
     sendHtml(res, renderAdvertisePage({ ...ctx, email: advertiseEmail }));
@@ -949,12 +1021,21 @@ export async function createApp(opts = {}) {
 
   app.get('/sitemap.xml', pageHandler(async (req, res, payload, ctx) => {
     res.set('Cache-Control', 'public, max-age=300');
-    res.type('application/xml').send(renderSitemap(payload.events, { ...ctx, lastmod: payload.last_updated }));
+    const extraPaths = [
+      '/venues',
+      ...activeSeasons(payload.events, ctx.archived, ctx.now).map(s => s.path),
+      ...venuesWithEvents(venues, payload.events, ctx.archived, ctx.now).map(v => v.path)
+    ];
+    res.type('application/xml').send(renderSitemap(payload.events, { ...ctx, lastmod: payload.last_updated, extraPaths }));
   }));
 
   app.get('/llms.txt', pageHandler(async (req, res, payload, ctx) => {
     res.set('Cache-Control', 'public, max-age=300');
-    res.type('text/plain; charset=utf-8').send(renderLlmsTxt(payload.events, ctx));
+    const extraLinks = [
+      ['Event venues in Victoria, TX', '/venues', 'every venue we track, with its upcoming events'],
+      ...activeSeasons(payload.events, ctx.archived, ctx.now).map(s => [s.title, s.path, s.description])
+    ];
+    res.type('text/plain; charset=utf-8').send(renderLlmsTxt(payload.events, { ...ctx, extraLinks }));
   }));
 
   // ─── Static site ───

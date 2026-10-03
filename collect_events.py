@@ -1439,6 +1439,7 @@ def is_same_event(a, b):
 SOURCE_RANK = {
     "local_events": 10, "google_sheet": 9, "city_calendar": 8, "library": 8,
     "chamber": 7, "theatre_victoria": 7, "jwelch": 7, "generals": 7,
+    "apify_eventbrite": 5,
     "moonshine": 6, "vtx_artwalk": 6, "allevents": 4, "apify_facebook": 4,
     "apify_facebook_posts": 3, "apify_instagram_posts": 3,
 }
@@ -1447,7 +1448,9 @@ SOURCE_RANK = {
 # venues.json entries that are organizers rather than places ("Discover
 # Victoria Texas", promoters, festivals). Their posts name the account, not
 # where the event happens, so a real venue from another source wins.
-_NON_PLACE_CATEGORY = re.compile(r"aggregator|promoter|program|festival|media|hub|online", re.IGNORECASE)
+# Exact organizer words only: "Public Library / Community Programs" is a
+# place, so a bare "program" match is wrong.
+_NON_PLACE_CATEGORY = re.compile(r"aggregator|promoter|\bfestival\b|\bmedia\b|events hub|online", re.IGNORECASE)
 _NON_PLACE_NAMES = set()
 
 
@@ -2192,7 +2195,12 @@ def _parse_allevents_page(html_text, events, seen_urls):
 
 APIFY_FB_ACTOR = "apify~facebook-events-scraper"
 APIFY_FB_POSTS_ACTOR = "apify~facebook-posts-scraper"
+APIFY_FB_ALT_ACTOR = "alfalfa~facebook-events-scraper"
 APIFY_IG_POSTS_ACTOR = "apify~instagram-post-scraper"
+# Eventbrite by city. Picked from the Oct 2026 Apify probe: 40 items for
+# Victoria with ISO dates, venue address, isFree and descriptions, ~$0.20
+# per 40 results. Lighter alternatives only returned title/date text.
+APIFY_EVENTBRITE_ACTOR = "khadinakbar~eventbrite-events-scraper"
 APIFY_RUN_TIMEOUT = 240  # seconds we'll wait for the run to finish
 
 # Process-local tombstone: once we see a 403 hard-limit, all later Apify calls
@@ -2231,6 +2239,138 @@ def _apify_hard_limit_tripped(resp_text):
     t = resp_text.lower()
     return "monthly usage hard limit" in t or "usage hard limit exceeded" in t
 
+def _to_central(dt):
+    """Convert an aware datetime to America/Chicago (naive ones pass through)."""
+    if dt.tzinfo is None:
+        return dt
+    try:
+        from zoneinfo import ZoneInfo
+        return dt.astimezone(ZoneInfo("America/Chicago"))
+    except Exception:
+        return dt
+
+
+def fetch_apify_eventbrite_events(days_ahead=14):
+    """Eventbrite events in Victoria, TX via Apify.
+
+    On by default whenever APIFY_TOKEN is set; EVENTBRITE_ENABLED=0 turns it
+    off. EVENTBRITE_MAX caps results (default 60).
+    """
+    global _APIFY_LIMIT_TRIPPED
+    events = []
+    if os.environ.get("EVENTBRITE_ENABLED", "1").strip() in ("0", "false", "no"):
+        print("  [Eventbrite] Disabled (EVENTBRITE_ENABLED=0)")
+        return events
+    token = os.environ.get("APIFY_TOKEN", "").strip()
+    if not token:
+        print("  [Eventbrite] No APIFY_TOKEN — skipping")
+        return events
+    if _APIFY_LIMIT_TRIPPED:
+        print("  [Eventbrite] Apify monthly limit already tripped this run — skipping")
+        return events
+
+    payload = {
+        "searchQuery": "events in Victoria, TX",
+        "location": "Victoria, TX",
+        "onlineOnly": False,
+        "includeDetails": True,
+        "maxResults": _resolve_int_env("EVENTBRITE_MAX", 60),
+        "proxyConfiguration": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]},
+    }
+    url = f"https://api.apify.com/v2/acts/{APIFY_EVENTBRITE_ACTOR}/run-sync-get-dataset-items?token={token}"
+    try:
+        resp = requests.post(url, json=payload, timeout=APIFY_RUN_TIMEOUT,
+                             headers={"Content-Type": "application/json"})
+        if resp.status_code >= 400:
+            print(f"  [Eventbrite] HTTP {resp.status_code}: {resp.text[:300]}")
+            if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
+                _APIFY_LIMIT_TRIPPED = True
+                _sentry_warn("Apify monthly hard limit tripped", actor=APIFY_EVENTBRITE_ACTOR, status=403)
+            return events
+        items = resp.json()
+    except Exception as e:
+        print(f"  [Eventbrite] Run failed: {e}")
+        return events
+    if not isinstance(items, list):
+        print(f"  [Eventbrite] Unexpected response type: {type(items).__name__}")
+        return events
+
+    skipped = {"window": 0, "online_or_cancelled": 0, "not_victoria": 0, "no_data": 0}
+    for item in items:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+        if item.get("isOnline") or item.get("isCancelled"):
+            skipped["online_or_cancelled"] += 1
+            continue
+        name = (item.get("name") or "").strip()
+        start = str(item.get("startDate") or "")
+        try:
+            # startDate is local time ("2026-10-03T10:00") with a separate
+            # timezone field; take it as-is.
+            dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            if dt.tzinfo is not None:
+                dt = _to_central(dt)
+        except ValueError:
+            dt = None
+        if not name or dt is None:
+            skipped["no_data"] += 1
+            continue
+        if not in_window(dt.date()):
+            skipped["window"] += 1
+            continue
+
+        venue = (item.get("venueName") or "").strip()
+        address = (item.get("venueAddressLine1") or "").strip()
+        city = (item.get("venueCity") or "").strip()
+        region = (item.get("venueRegion") or item.get("venueState") or "").strip()
+        loc_text = " ".join([venue, address, city, region, str(item.get("venueAddress") or "")]).lower()
+        if "victoria" not in loc_text:
+            skipped["not_victoria"] += 1
+            continue
+
+        description = (item.get("summary") or item.get("description") or "").strip()[:280]
+        time_str = dt.strftime("%-I:%M %p") if (dt.hour or dt.minute) else ""
+        free = item.get("isFree")
+        events.append({
+            "date": dt.strftime("%Y-%m-%d"),
+            "name": name,
+            "time": time_str,
+            "venue": venue,
+            "address": address,
+            "description": description,
+            "icons": classify_icons(name, description, venue),
+            "free": bool(free) if free is not None else guess_free(name, description, venue),
+            "url": (item.get("url") or "").split("?")[0],
+        })
+
+    print(f"  [Eventbrite] Extracted {len(events)} Victoria events ({len(items)} raw, "
+          + ", ".join(f"{v} {k}" for k, v in skipped.items()) + ")")
+    return events
+
+
+def _run_apify_search(actor, payload, token):
+    """Run an Apify actor synchronously; return its items, or None on failure."""
+    global _APIFY_LIMIT_TRIPPED
+    url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items?token={token}"
+    try:
+        resp = requests.post(url, json=payload, timeout=APIFY_RUN_TIMEOUT,
+                             headers={"Content-Type": "application/json"})
+        if resp.status_code >= 400:
+            print(f"  [Apify FB] {actor} HTTP {resp.status_code}: {resp.text[:300]}")
+            if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
+                _APIFY_LIMIT_TRIPPED = True
+                _sentry_warn("Apify monthly hard limit tripped", actor=actor, status=403)
+            return None
+        items = resp.json()
+    except Exception as e:
+        print(f"  [Apify FB] {actor} run failed: {e}")
+        return None
+    if not isinstance(items, list):
+        print(f"  [Apify FB] {actor} unexpected response type: {type(items).__name__}")
+        return None
+    return items
+
+
 def fetch_apify_facebook_events(days_ahead=14):
     """Run the Apify Facebook Events Scraper actor against our high-value venue
     list (facebook_venues.json) and parse the dataset.
@@ -2262,37 +2402,42 @@ def fetch_apify_facebook_events(days_ahead=14):
     # for Victoria-area events using the address/location text.
     print(f"  [Apify FB] Searching Facebook events for Victoria TX...")
 
-    actor_run_url = f"https://api.apify.com/v2/acts/{APIFY_FB_ACTOR}/run-sync-get-dataset-items?token={token}"
-    payload = {
-        "searchQueries": ["Victoria Texas"],
-        # 25 is plenty after the Victoria locality post-filter; 60 was burning
-        # ~2x credits for the same final event count.
-        "maxEvents": 25,
-    }
-    try:
-        resp = requests.post(
-            actor_run_url,
-            json=payload,
-            timeout=APIFY_RUN_TIMEOUT,
-            headers={"Content-Type": "application/json"},
-        )
-        if resp.status_code >= 400:
-            print(f"  [Apify FB] HTTP {resp.status_code}: {resp.text[:300]}")
-            if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
-                _APIFY_LIMIT_TRIPPED = True
-                _sentry_warn(
-                    "Apify monthly hard limit tripped",
-                    actor=APIFY_FB_ACTOR,
-                    status=403,
-                )
-            return events
-        items = resp.json()
-    except Exception as e:
-        print(f"  [Apify FB] Run failed: {e}")
-        return events
+    # Two search actors with the same output schema return different
+    # events for the same query (Oct 2026 probe: 39 and 31 Victoria events,
+    # little overlap), so run both and dedupe by event id.
+    searches = [
+        (APIFY_FB_ACTOR, {
+            "searchQueries": ["Victoria Texas"],
+            # The Oct 2026 probe got 39 Victoria events out of 40 (~$0.39); the
+            # old cap of 25 left most of the next two weeks on the table because
+            # search results skew toward events months out.
+            "maxEvents": _resolve_int_env("FB_EVENTS_MAX", 50),
+        }),
+    ]
+    if os.environ.get("FB_EVENTS_ALT_ENABLED", "1").strip() not in ("0", "false", "no"):
+        searches.append((APIFY_FB_ALT_ACTOR, {
+            "searchQueries": ["Victoria, Texas"],
+            "maxEvents": _resolve_int_env("FB_EVENTS_MAX", 50),
+            "scrapeOrganizerContacts": False,
+            "maxConcurrency": 10,
+            "proxyConfiguration": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]},
+        }))
 
-    if not isinstance(items, list):
-        print(f"  [Apify FB] Unexpected response type: {type(items).__name__}")
+    items, seen_ids = [], set()
+    for actor, payload in searches:
+        got = _run_apify_search(actor, payload, token)
+        if got is None:
+            if _APIFY_LIMIT_TRIPPED:
+                break
+            continue
+        for it in got:
+            key = isinstance(it, dict) and (it.get("id") or it.get("url"))
+            if key and key in seen_ids:
+                continue
+            if key:
+                seen_ids.add(key)
+            items.append(it)
+    if not items:
         return events
 
     skipped_off_window = 0
@@ -2318,9 +2463,11 @@ def fetch_apify_facebook_events(days_ahead=14):
             skipped_no_data += 1
             continue
 
-        # Parse start date
+        # Parse start date. utcStartDate is UTC: a 7 PM CDT event is 00:00Z
+        # the next day, so convert to Victoria time before taking the date.
         try:
             dt = datetime.fromisoformat(str(start_iso).replace("Z", "+00:00"))
+            dt = _to_central(dt)
             d_obj = dt.date()
         except Exception:
             try:
@@ -3193,6 +3340,10 @@ def main():
 
         # Apify Facebook events — only runs if APIFY_TOKEN is set
         all_events.extend(safe_fetch("apify_facebook", fetch_apify_facebook_events,
+                                     args=(args.days,), expect_events=False))
+
+        # Eventbrite (Apify) — on whenever APIFY_TOKEN is set.
+        all_events.extend(safe_fetch("apify_eventbrite", fetch_apify_eventbrite_events,
                                      args=(args.days,), expect_events=False))
 
         # Apify Facebook *posts* → OpenAI event extraction. Off by default;

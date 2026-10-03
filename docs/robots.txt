@@ -5,6 +5,7 @@ Allow: /
 Disallow: /admin
 Disallow: /admin.html
 Disallow: /api/
+Disallow: /social/
 
 User-agent: GPTBot
 User-agent: OAI-SearchBot
@@ -22,5 +23,6 @@ Allow: /
 Disallow: /admin
 Disallow: /admin.html
 Disallow: /api/
+Disallow: /social/
 
 Sitemap: https://www.thevic361.com/sitemap.xml

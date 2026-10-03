@@ -1,0 +1,49 @@
+# Apify Probe — manual, or on a push to a claude/* branch that edits the probe. Tries candidate Apify actors against Victoria,
+# TX and reports item counts, Victoria matches, fields and cost in the log
+# plus a JSON artifact. Commits nothing and touches no site data.
+
+name: Apify Probe
+
+on:
+  push:
+    branches: ['claude/**']
+    paths:
+      - scripts/apify_probe.py
+      - .github/workflows/apify-probe.yml
+  workflow_dispatch:
+    inputs:
+      actors:
+        description: 'Comma-separated actor ids to run (blank = all in scripts/apify_probe.py)'
+        required: false
+        default: ''
+      max_items:
+        description: 'Item cap per actor'
+        required: false
+        default: '40'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - name: Run probe
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          PROBE_ACTORS: ${{ inputs.actors }}
+          PROBE_MAX_ITEMS: ${{ inputs.max_items }}
+          PYTHONUNBUFFERED: 1
+        run: python scripts/apify_probe.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apify-probe-report
+          path: apify_probe_report.json
+          if-no-files-found: ignore

@@ -35,6 +35,7 @@ const KNOWN_SOURCES = [
   { name: 'generals',              label: 'Victoria Generals',    category: 'web' },
   { name: 'allevents',             label: 'AllEvents.in',         category: 'web' },
   { name: 'apify_facebook',        label: 'Apify · Facebook events', category: 'apify' },
+  { name: 'apify_eventbrite',      label: 'Apify · Eventbrite',   category: 'apify' },
   { name: 'apify_facebook_posts',  label: 'Apify · Facebook posts → OpenAI', category: 'apify' },
   { name: 'apify_instagram_posts', label: 'Apify · Instagram posts → OpenAI', category: 'apify' },
 ];

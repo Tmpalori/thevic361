@@ -120,7 +120,8 @@ describe('server-rendered pages', () => {
     expect(r.text).toContain('Trivia Night');
     expect(r.text).toContain('href="/events/2026-10-07-trivia-night"');
     expect(r.text).toContain('Monday Market'); // Mon of the same week
-    expect(r.text).not.toContain('Tejas Fest'); // later week
+    expect(r.text).not.toContain('/events/2026-10-24-tejas-fest'); // later week
+    expect(r.text).toContain('href="/tejas-fest"'); // in-season guide in the nav
     expect(r.text).toContain('href="/this-weekend"');
     const types = ldBlocks(r.text).map(b => b['@type']);
     expect(types).toContain('WebSite');
