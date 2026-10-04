@@ -15,7 +15,7 @@ const NOW = new Date('2026-10-05T15:00:00Z'); // Mon Oct 5
 
 let tmpDir, server, baseUrl, store, sent;
 
-async function start({ candidates, published = null, extra = {} } = {}) {
+async function start({ candidates, published = null, extra = {}, storeKind = 'file' } = {}) {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-auto-'));
   const candidatesFile = path.join(tmpDir, 'candidates.json');
   const eventsFile = path.join(tmpDir, 'events.json');
@@ -25,7 +25,7 @@ async function start({ candidates, published = null, extra = {} } = {}) {
   if (published) await store.setPublished(published);
   sent = [];
   const { app } = await createApp({
-    storeBundle: { kind: 'file', store }, eventsFile, candidatesFile, trustProxy: false, now: () => NOW,
+    storeBundle: { kind: storeKind, store }, eventsFile, candidatesFile, trustProxy: false, now: () => NOW,
     siteUrl: 'https://www.thevic361.com', adminUsername: 'a', adminPassword: 'b', adminSessionSecret: 'c',
     slack: { enabled: true, notify: async (m) => { sent.push(m); return true; }, alert: async () => {} },
     ...extra
@@ -147,6 +147,13 @@ describe('admin setup checklist', () => {
     expect(r.status.upcoming_events).toBe(3);
     expect(r.status.collected_at).toBe(CANDIDATES.last_updated);
     expect(JSON.stringify(r)).not.toMatch(/"b"|"c"/); // no password/secret values
+  });
+
+  it('counts the Postgres store as set up', async () => {
+    // server/db.js names it 'postgres'; the check once looked for 'pg' and always warned.
+    await start({ candidates: CANDIDATES, storeKind: 'postgres' });
+    const r = await (await fetch(baseUrl + '/api/admin/setup', { headers: await auth() })).json();
+    expect(r.checks.find(c => c.key === 'database').ok).toBe(true);
   });
 });
 
