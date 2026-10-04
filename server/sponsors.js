@@ -77,25 +77,64 @@ export function formEncode(obj, prefix = '', out = new URLSearchParams()) {
   return out;
 }
 
+// Pinned so request and response shapes don't change under us when Stripe
+// ships a new version. Set the webhook endpoint to the same version in the
+// Dashboard so events match.
+export const STRIPE_API_VERSION = '2026-09-30.endive';
+// Tags our Checkout Sessions in the Dashboard (Stripe asks for an 8-letter suffix).
+export const INTEGRATION_ID = 'vic361_sponsor_checkout_qvbkmxtr';
+
 export function createStripe(secretKey, fetchImpl = globalThis.fetch) {
+  async function call(method, path, params, idempotencyKey) {
+    const qs = method === 'GET' && params ? `?${formEncode(params)}` : '';
+    const res = await fetchImpl(`${STRIPE_API}${path}${qs}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        'Stripe-Version': STRIPE_API_VERSION,
+        ...(method === 'GET' ? {} : { 'Content-Type': 'application/x-www-form-urlencoded' }),
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {})
+      },
+      body: method === 'GET' ? undefined : formEncode(params || {}).toString()
+    });
+    let body = null;
+    try { body = await res.json(); } catch (_) { body = null; }
+    if (!res.ok || !body) {
+      const err = new Error((body && body.error && body.error.message) || `Stripe HTTP ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    return body;
+  }
+
+  // One Product + Price per package, found by lookup_key and created the
+  // first time it's needed, so the Dashboard catalog and reports show
+  // "Weekly sponsor" etc. instead of a throwaway product per checkout.
+  const priceCache = new Map();
+  async function ensurePrice(pkg) {
+    const lookupKey = `vic361_${pkg.key}_${pkg.amount}${pkg.interval ? `_${pkg.interval}` : ''}`;
+    if (priceCache.has(lookupKey)) return priceCache.get(lookupKey);
+    const found = await call('GET', '/prices', { 'lookup_keys[]': lookupKey, active: 'true', limit: 1 });
+    let id = found && Array.isArray(found.data) && found.data[0] && found.data[0].id;
+    if (!id) {
+      const product = await call('POST', '/products', {
+        name: `${SITE_NAME}: ${pkg.name}`, metadata: { vic361_package: pkg.key }
+      }, `vic361-product-${pkg.key}`);
+      const price = await call('POST', '/prices', {
+        product: product.id, currency: 'usd', unit_amount: pkg.amount, lookup_key: lookupKey,
+        recurring: pkg.interval ? { interval: pkg.interval } : undefined
+      }, `vic361-price-${lookupKey}`);
+      id = price.id;
+    }
+    priceCache.set(lookupKey, id);
+    return id;
+  }
+
   return {
+    ensurePrice,
     async createCheckoutSession(params, idempotencyKey) {
-      const res = await fetchImpl(`${STRIPE_API}/checkout/sessions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${secretKey}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-          ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {})
-        },
-        body: formEncode(params).toString()
-      });
-      let body = null;
-      try { body = await res.json(); } catch (_) { body = null; }
-      if (!res.ok || !body || typeof body.url !== 'string' || typeof body.id !== 'string') {
-        const err = new Error((body && body.error && body.error.message) || `Stripe HTTP ${res.status}`);
-        err.status = res.status;
-        throw err;
-      }
+      const body = await call('POST', '/checkout/sessions', params, idempotencyKey);
+      if (typeof body.url !== 'string' || typeof body.id !== 'string') throw new Error('Stripe returned no checkout URL');
       return { id: body.id, url: body.url };
     }
   };
@@ -178,7 +217,7 @@ export function bookableWeeks(now, orders) {
   const monday = currentWeek(localDateStr(now))[0];
   const nowMs = now.getTime();
   const taken = new Set((orders || [])
-    .filter(o => o.kind === 'weekly' && (o.status === 'paid' ||
+    .filter(o => o.kind === 'weekly' && (o.status === 'paid' || o.status === 'processing' ||
       (o.status === 'pending' && nowMs - Date.parse(o.created_at) < HOLD_MS)))
     .map(o => o.week_start));
   const short = { month: 'short', day: 'numeric' };
@@ -294,7 +333,7 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
     <h1 class="page-title">${escHtml(pkg.name)}</h1>
     <p class="page-lead">${escHtml(pkg.price)}. ${escHtml(pkg.blurb)}</p>
     ${e._form ? `<p class="co-error co-error--form">${escHtml(e._form)}</p>` : ''}
-    <form class="co-form" method="post" action="/advertise/checkout">
+    <form class="co-form" method="post" action="/advertise/checkout" data-turnstile>
       <input type="hidden" name="package" value="${escHtml(pkg.key)}">
       <div class="hp-field" aria-hidden="true"><label>Company <input name="company" tabindex="-1" autocomplete="off"></label></div>
       ${fields}
@@ -407,10 +446,16 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           if (order.kind === 'featured' && order.event && !order.submission_id) await fulfil(order);
           return;
         }
-        if (order.status !== 'pending' && order.status !== 'expired' && order.status !== 'failed') return;
+        if (!['pending', 'expired', 'failed', 'processing'].includes(order.status)) return;
         // Delayed payment methods complete the session before the money
-        // arrives; async_payment_succeeded follows when it does.
-        if (obj.payment_status !== 'paid' && obj.payment_status !== 'no_payment_required') return;
+        // arrives; async_payment_succeeded (or _failed) follows. Hold the
+        // week meanwhile so nobody else can buy it.
+        if (obj.payment_status !== 'paid' && obj.payment_status !== 'no_payment_required') {
+          if (event.type === 'checkout.session.completed' && order.status !== 'processing') {
+            await save({ ...order, status: 'processing', session_id: order.session_id || obj.id });
+          }
+          return;
+        }
         Object.assign(order, {
           status: order.kind === 'partner' ? 'active' : 'paid',
           paid_at: nowIso(),
@@ -435,6 +480,44 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         }
         await save(order);
         await fulfil(order);
+        return;
+      }
+      case 'checkout.session.async_payment_failed': {
+        const order = findBy(list, 'id', obj.client_reference_id) || findBy(list, 'session_id', obj.id);
+        if (!order || !['processing', 'pending'].includes(order.status)) return;
+        await save({ ...order, status: 'failed' });
+        if (slack) {
+          slack.notify({
+            title: `⚠️ Sponsor payment didn't go through: ${order.business}`,
+            fields: [['Package', order.kind], ['Contact', order.email]],
+            text: order.kind === 'weekly' ? `Week of ${order.week_start} is open again.` : 'Nothing went live.'
+          });
+        }
+        return;
+      }
+      case 'invoice.payment_failed': {
+        // Older API versions put the subscription on the invoice; newer ones
+        // under parent.subscription_details.
+        const subId = (typeof obj.subscription === 'string' && obj.subscription) ||
+          (obj.parent && obj.parent.subscription_details && obj.parent.subscription_details.subscription) || null;
+        const order = findBy(list, 'subscription_id', subId);
+        if (order && slack) {
+          slack.notify({
+            title: `⚠️ Venue partner card declined: ${order.business}`,
+            fields: [['Venue', order.venue_name], ['Contact', order.email]],
+            text: 'Stripe will retry automatically. Their badges pause if the subscription goes past due.'
+          });
+        }
+        return;
+      }
+      case 'radar.early_fraud_warning.created': {
+        const pi = typeof obj.payment_intent === 'string' ? obj.payment_intent : null;
+        const order = findBy(list, 'payment_intent', pi);
+        if (slack) {
+          slack.alert(`fraud-warning:${obj.id || pi}`, 'Stripe early fraud warning on a sponsor payment',
+            `${order ? `${order.business} (${order.email}), ${order.kind}` : `Payment ${pi || 'unknown'}`}. Review it in Stripe and refund if it looks fraudulent.`,
+            'https://dashboard.stripe.com/radar/early-fraud-warnings');
+        }
         return;
       }
       case 'checkout.session.expired': {
@@ -508,7 +591,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     });
   }
 
-  function registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml }) {
+  function registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman = async () => true }) {
     const limiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20 });
 
     app.get('/advertise/checkout', async (req, res, next) => {
@@ -530,6 +613,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         if (typeof body.company === 'string' && body.company.trim()) return res.redirect(303, '/advertise');
         const ip = req.ip || req.socket.remoteAddress;
         if (!limiter.check(ip).ok) return fail({ _form: 'Too many attempts. Try again in an hour.' }, 429);
+        if (!(await verifyHuman(req))) return fail({ _form: "We couldn't confirm you're not a bot. Please try again." });
 
         // Re-read and save the hold under one lock, so a week booked seconds
         // ago (or right now, by someone else) is caught.
@@ -545,7 +629,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         });
         if (booked.errors) return fail(booked.errors);
         const order = booked.order;
-        const lineItem = {
+        let lineItem = {
           quantity: 1,
           price_data: {
             currency: 'usd', unit_amount: pkg.amount,
@@ -553,13 +637,23 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
             recurring: pkg.interval ? { interval: pkg.interval } : undefined
           }
         };
+        // Catalog price when we can get one; inline price_data otherwise, so
+        // a catalog hiccup never blocks a sale.
+        if (typeof stripe.ensurePrice === 'function') {
+          try {
+            lineItem = { quantity: 1, price: await stripe.ensurePrice(pkg) };
+          } catch (err) {
+            console.warn('[sponsors] catalog price unavailable, using inline price:', err.message);
+          }
+        }
         let session;
         try {
           session = await stripe.createCheckoutSession({
             mode: pkg.interval ? 'subscription' : 'payment',
-            // Cards settle at checkout; delayed methods could complete
-            // after the week's hold lapses and double-book it.
-            payment_method_types: ['card'],
+            // No payment_method_types: Stripe shows the methods enabled in
+            // the Dashboard. Slower methods (bank debits) keep the week held
+            // as "processing" until they settle; see the webhook.
+            integration_identifier: INTEGRATION_ID,
             customer_email: order.email,
             client_reference_id: order.id,
             line_items: [lineItem],

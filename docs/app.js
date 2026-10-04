@@ -191,7 +191,7 @@
     card.innerHTML =
       '<div class="nl-card__title">Get this list every Monday</div>' +
       '<p class="nl-card__text">The week\'s best events in Victoria, in your inbox. Free, no spam.</p>' +
-      '<form class="signup-form js-subscribe" novalidate>' +
+      '<form class="signup-form js-subscribe" novalidate data-turnstile="fetch">' +
         '<label class="visually-hidden" for="nl-card-email">Email address</label>' +
         '<input id="nl-card-email" name="email" type="email" required autocomplete="email" placeholder="you@example.com">' +
         '<input type="text" name="company" tabindex="-1" autocomplete="off" class="hp-field" aria-hidden="true">' +
@@ -205,9 +205,12 @@
       var msg = form.querySelector('.signup-msg');
       var btn = form.querySelector('button');
       btn.disabled = true;
-      fetch('/api/subscribe', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: form.email.value, company: form.company.value })
+      var tokenP = window.vicTurnstile ? window.vicTurnstile.token(form) : Promise.resolve('');
+      tokenP.then(function (t) {
+        return fetch('/api/subscribe', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: form.email.value, company: form.company.value, turnstile_token: t })
+        });
       }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
       }).then(function (x) {
@@ -219,7 +222,10 @@
         }
       }).catch(function () {
         msg.textContent = 'Something went wrong. Try again.';
-      }).then(function () { btn.disabled = false; });
+      }).then(function () {
+        btn.disabled = false;
+        if (window.vicTurnstile) window.vicTurnstile.reset(form);
+      });
     });
   }
 

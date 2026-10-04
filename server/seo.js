@@ -678,6 +678,7 @@ ${body}
 </main>
 ${footerHtml()}
 <script src="/track.js" defer></script>
+<script src="/turnstile.js" defer></script>
 </body>
 </html>`;
 }

@@ -1008,12 +1008,23 @@ export async function createApp(opts = {}) {
   app.get('/events.json', serveEventsJson);
   app.get('/docs/events.json', serveEventsJson);
 
+  // Turnstile for the other public forms (contact, newsletter signup, sponsor
+  // checkout). Off until TURNSTILE_SECRET_KEY is set, like /api/submissions.
+  async function verifyHuman(req) {
+    const b = req.body || {};
+    const token = b['cf-turnstile-response'] || b.turnstile_token;
+    const r = await verifyTurnstile(typeof token === 'string' ? token : '', {
+      secret: turnstileSecret, remoteip: req.ip, fetch: opts.fetch
+    });
+    return r.ok;
+  }
+
   // ─── Newsletter (Resend; see server/newsletter.js) ───
   const newsletter = newsletterConfig(process.env, opts);
   const nlResend = opts.resend || createResend(newsletter.apiKey);
   registerNewsletter(app, {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
-    getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend, slack
+    getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman
   });
 
   // ─── Server-rendered pages (SEO + AI crawlers) ───
@@ -1132,9 +1143,9 @@ export async function createApp(opts = {}) {
   }));
 
   // Contact form → Slack; replaces publishing an email address.
-  registerContact(app, { siteUrl, slack, createRateLimiter, sendHtml });
+  registerContact(app, { siteUrl, slack, createRateLimiter, sendHtml, verifyHuman });
 
-  sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml });
+  sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman });
 
   app.get('/about', pageHandler(async (req, res, payload, ctx) => {
     sendHtml(res, renderAboutPage(ctx));
@@ -1208,11 +1219,12 @@ export async function createApp(opts = {}) {
       { key: 'newsletter_auto', label: 'Newsletter sends itself Mondays', ok: Boolean(newsletter.cronSecret), level: 'recommended',
         fix: 'Set NEWSLETTER_CRON_SECRET in Railway and GitHub, and the NEWSLETTER_AUTOSEND repo variable to 1.' },
       { key: 'stripe', label: 'Sponsor payments (Stripe)', ok: stripeCfg.enabled, level: 'recommended',
-        fix: 'Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET in Railway; webhook URL: ' + siteUrl + '/api/stripe/webhook' },
+        fix: 'In Stripe: create a restricted key (Checkout Sessions, Products and Prices: write) and a webhook to ' + siteUrl +
+          '/api/stripe/webhook on API version 2026-09-30.endive. Put them in Railway as STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.' },
       { key: 'pull_now', label: '"Pull now" button (GitHub token)', ok: github.isConfigured(), level: 'optional',
         fix: 'Set GITHUB_TOKEN in Railway (fine-grained, Actions: write on this repo).' },
       { key: 'spam', label: 'Spam protection on forms (Turnstile)', ok: Boolean(turnstileSecret && turnstileSiteKey), level: 'optional',
-        fix: 'Set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY from Cloudflare Turnstile.' },
+        fix: 'In Cloudflare Turnstile, add a widget (or add www.thevic361.com to an existing one) in Managed mode, then set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY in Railway. Protects Submit, Contact, newsletter signup and sponsor checkout.' },
       { key: 'social', label: 'Auto-post to Facebook + Instagram', ok: null, level: 'recommended', link: ghSecrets,
         fix: 'In GitHub: secrets META_PAGE_ID, META_PAGE_TOKEN, IG_USER_ID and the repo variable SOCIAL_AUTOPOST = 1.' },
       { key: 'collector_keys', label: 'Event collector keys (OpenAI, Apify, Gemini)', ok: null, level: 'recommended', link: ghSecrets,

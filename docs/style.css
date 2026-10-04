@@ -1605,3 +1605,7 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 @media (max-width: 639px) {
   .event-details .event-name { font-size: 1.1rem; }
 }
+
+/* Turnstile spam check (docs/turnstile.js): invisible unless Cloudflare needs a click. */
+.ts-mount { margin: 0.5rem 0; }
+.ts-mount:empty { display: none; }

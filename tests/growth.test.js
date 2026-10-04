@@ -160,3 +160,52 @@ describe('homepage survives odd event names', () => {
     expect(html).toContain('Ladies$&#39; Night $&amp; more');
   });
 });
+
+describe('spam check (Turnstile) on public forms', () => {
+  const siteverify = async (url, init) => ({
+    json: async () => ({ success: String(init.body).includes('response=good-token') })
+  });
+  async function boot() {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-ts-'));
+    const eventsFile = path.join(tmpDir, 'events.json');
+    await fs.writeFile(eventsFile, JSON.stringify({ events: EVENTS }));
+    const store = new FileStore(path.join(tmpDir, 's.json'));
+    const { app } = await createApp({
+      storeBundle: { kind: 'file', store }, eventsFile, trustProxy: false, now: () => NOW,
+      siteUrl: 'https://www.thevic361.com', turnstileSecret: 'ts-secret', turnstileSiteKey: 'ts-site',
+      fetch: siteverify, slack: { enabled: false, notify: async () => false, alert: async () => false },
+      stripeSecretKey: 'sk_test', stripeWebhookSecret: 'whsec', resendApiKey: '',
+      stripe: { createCheckoutSession: async () => ({ id: 'cs_1', url: 'https://checkout.stripe.com/x' }) }
+    });
+    server = http.createServer(app);
+    await new Promise(r => server.listen(0, r));
+    baseUrl = `http://127.0.0.1:${server.address().port}`;
+    return store;
+  }
+  const postForm = (p, fields) => fetch(baseUrl + p, { method: 'POST', redirect: 'manual',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(fields).toString() });
+
+  it('contact, newsletter and checkout reject a missing or bad token and accept a good one', async () => {
+    const store = await boot();
+    const contact = { topic: 'other', name: 'Ann', email: 'ann@example.com', message: 'Hi there' };
+    expect((await postForm('/contact', contact)).status).toBe(400);
+    expect(await (await postForm('/contact', { ...contact, 'cf-turnstile-response': 'good-token' })).text()).toContain('Message sent');
+
+    const sub = (t) => fetch(baseUrl + '/api/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'b@example.com', turnstile_token: t }) });
+    expect((await sub('bad')).status).toBe(400);
+    expect((await sub('good-token')).status).toBe(200);
+    expect((await store.countSubscribers()).active).toBe(1);
+
+    const order = { package: 'weekly', week: '2026-10-19', business: 'Acme', text: 'x', url: 'acme.example', email: 'a@acme.example' };
+    expect((await postForm('/advertise/checkout', order)).status).toBe(400);
+    expect((await postForm('/advertise/checkout', { ...order, 'cf-turnstile-response': 'good-token' })).status).toBe(303);
+  });
+
+  it('pages load the spam-check script and mark the forms', async () => {
+    await boot();
+    const html = (await get('/contact')).html;
+    expect(html).toContain('<script src="/turnstile.js" defer></script>');
+    expect(html).toContain('action="/contact" data-turnstile');
+  });
+});
