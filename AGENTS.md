@@ -342,4 +342,4 @@ gh run view --log $(gh run list --workflow=weekly-collect.yml --limit 1 --json d
 - Anything rendered into HTML attributes must escape quotes (`escHtml` in both `server/seo.js` and `docs/app.js` does). `safeUrl` / `safeHref` reject URLs containing whitespace, quotes or angle brackets.
 - Use function replacements (`.replace(x, () => html)`) when inserting rendered content: event text can contain `$'` / `$&`.
 - Weekly sponsor holds are saved before the Stripe call, under an in-process lock; a payment for an already-sold week is marked `conflict` and flagged in Slack for a refund.
-
+- Cloudflare Turnstile (`TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`) protects `/api/submissions`, `/contact`, `/api/subscribe` and `/advertise/checkout`. `docs/turnstile.js` mounts an interaction-only widget on forms marked `data-turnstile` (loaded on first focus; `data-turnstile="fetch"` forms call `vicTurnstile.token(form)`); the server checks `cf-turnstile-response` or `turnstile_token` via `verifyHuman` in `server/index.js`. Both off until the keys are set.

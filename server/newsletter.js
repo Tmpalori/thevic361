@@ -199,7 +199,7 @@ export function renderConfirmEmail({ siteUrl, confirmUrl, address }) {
 
 // Newsletter signup form in the homepage footer.
 export function signupFormHtml() {
-  return `<form class="signup-form" id="signup-form" action="/api/subscribe" method="post" novalidate>
+  return `<form class="signup-form" id="signup-form" action="/api/subscribe" method="post" novalidate data-turnstile="fetch">
   <label for="signup-email" class="visually-hidden">Email address</label>
   <input id="signup-email" name="email" type="email" required autocomplete="email" placeholder="you@example.com">
   <input type="text" name="company" tabindex="-1" autocomplete="off" class="hp-field" aria-hidden="true">
@@ -209,16 +209,16 @@ export function signupFormHtml() {
 <script>
 (function(){var f=document.getElementById('signup-form');if(!f)return;var m=document.getElementById('signup-msg');
 f.addEventListener('submit',function(e){e.preventDefault();var b=f.querySelector('button');b.disabled=true;m.textContent='';
-fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value})})
+(window.vicTurnstile?window.vicTurnstile.token(f):Promise.resolve('')).then(function(t){return fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value,turnstile_token:t})});})
 .then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});})
 .then(function(x){m.textContent=x.ok?(x.j.message||'Check your inbox to confirm.'):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';try{localStorage.setItem('vic361-subscribed','1')}catch(e){}if(window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
-.catch(function(){m.textContent='Something went wrong. Try again.';}).then(function(){b.disabled=false;});});})();
+.catch(function(){m.textContent='Something went wrong. Try again.';}).then(function(){b.disabled=false;if(window.vicTurnstile)window.vicTurnstile.reset(f);});});})();
 </script>`;
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────
 
-export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, createRateLimiter, config, resend, slack = null }) {
+export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true }) {
   const subscribeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10 });
   const supported = typeof store.addSubscriber === 'function';
 
@@ -305,6 +305,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     if (body.company) return res.json({ ok: true });
     const email = normalizeEmail(body.email);
     if (!email) return res.status(400).json({ ok: false, message: 'Enter a valid email address.' });
+    if (!(await verifyHuman(req))) return res.status(400).json({ ok: false, error: 'turnstile-failed', message: "We couldn't confirm you're not a bot. Please try again." });
     try {
       const sub = await store.addSubscriber({ email, source: 'site' });
       if (sub.status === 'active') return res.json({ ok: true, already: true, message: "You're already on the list!" });

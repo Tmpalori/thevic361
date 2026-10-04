@@ -333,7 +333,7 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
     <h1 class="page-title">${escHtml(pkg.name)}</h1>
     <p class="page-lead">${escHtml(pkg.price)}. ${escHtml(pkg.blurb)}</p>
     ${e._form ? `<p class="co-error co-error--form">${escHtml(e._form)}</p>` : ''}
-    <form class="co-form" method="post" action="/advertise/checkout">
+    <form class="co-form" method="post" action="/advertise/checkout" data-turnstile>
       <input type="hidden" name="package" value="${escHtml(pkg.key)}">
       <div class="hp-field" aria-hidden="true"><label>Company <input name="company" tabindex="-1" autocomplete="off"></label></div>
       ${fields}
@@ -591,7 +591,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     });
   }
 
-  function registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml }) {
+  function registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman = async () => true }) {
     const limiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20 });
 
     app.get('/advertise/checkout', async (req, res, next) => {
@@ -613,6 +613,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         if (typeof body.company === 'string' && body.company.trim()) return res.redirect(303, '/advertise');
         const ip = req.ip || req.socket.remoteAddress;
         if (!limiter.check(ip).ok) return fail({ _form: 'Too many attempts. Try again in an hour.' }, 429);
+        if (!(await verifyHuman(req))) return fail({ _form: "We couldn't confirm you're not a bot. Please try again." });
 
         // Re-read and save the hold under one lock, so a week booked seconds
         // ago (or right now, by someone else) is caught.

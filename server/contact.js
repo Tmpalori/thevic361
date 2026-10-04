@@ -31,7 +31,7 @@ export function renderContactPage({ siteUrl, values = {}, errors = {}, sent = fa
     : `<h1 class="page-title">Contact us</h1>
     <p class="page-lead">Questions about advertising, an event, or a listing? Send us a note and we'll get back to you, usually within a day.</p>
     ${e._form ? `<p class="co-error co-error--form">${escHtml(e._form)}</p>` : ''}
-    <form class="co-form" method="post" action="/contact">
+    <form class="co-form" method="post" action="/contact" data-turnstile>
       <div class="hp-field" aria-hidden="true"><label>Company <input name="company" tabindex="-1" autocomplete="off"></label></div>
       ${field('topic', 'What is this about?', `<select id="c-topic" name="topic">${CONTACT_TOPICS.map(([k, l]) => `<option value="${k}"${v.topic === k ? ' selected' : ''}>${escHtml(l)}</option>`).join('')}</select>`)}
       ${field('name', 'Your name', `<input id="c-name" name="name" required maxlength="80" value="${escHtml(v.name || '')}"${e.name ? ' aria-invalid="true"' : ''}>`, e.name)}
@@ -49,7 +49,7 @@ export function renderContactPage({ siteUrl, values = {}, errors = {}, sent = fa
   });
 }
 
-export function registerContact(app, { siteUrl, slack, createRateLimiter, sendHtml }) {
+export function registerContact(app, { siteUrl, slack, createRateLimiter, sendHtml, verifyHuman = async () => true }) {
   const limiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5 });
 
   app.get('/contact', (req, res) => {
@@ -68,6 +68,7 @@ export function registerContact(app, { siteUrl, slack, createRateLimiter, sendHt
       if (clean(b.company, 200)) return sendHtml(res, renderContactPage({ siteUrl, sent: true }), 200, 'no-store');
       const fail = (errors, status = 400) => sendHtml(res, renderContactPage({ siteUrl, values, errors }), status, 'no-store');
       if (!limiter.check(req.ip || req.socket.remoteAddress).ok) return fail({ _form: 'Too many messages from here. Try again in an hour.' }, 429);
+      if (!(await verifyHuman(req))) return fail({ _form: "We couldn't confirm you're not a bot. Please try again." });
       const errors = {};
       if (!values.name) errors.name = 'Please add your name.';
       const email = normalizeEmail(values.email);
