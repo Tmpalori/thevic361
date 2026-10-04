@@ -122,7 +122,7 @@ jobs:
       - name: Send Slack this week's venues to tag
         if: always() && github.event_name == 'schedule' && hashFiles('docs/social/latest/outreach.txt') != ''
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |
           [ "$(TZ=America/Chicago date +%u)" = "1" ] || exit 0
           [ -s docs/social/latest/outreach.txt ] || exit 0
@@ -132,5 +132,5 @@ jobs:
       - name: Tell Slack it failed
         if: failure()
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: python3 scripts/slack_notify.py "🚨 Social kit (build or Facebook/Instagram post) failed" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

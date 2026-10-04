@@ -39,6 +39,26 @@ describe('createSlack', () => {
     expect(slackEscape('<a>')).toBe('&lt;a&gt;');
   });
 
+  it('routes each kind of message to its own channel, falling back to the main URL', async () => {
+    const H = (n) => `https://hooks.slack.com/services/T/B/${n}`;
+    const sent = [];
+    const fetchImpl = async (u) => { sent.push(u.split('/').pop()); return { ok: true }; };
+    const s = createSlack(slackConfig({ SLACK_WEBHOOK_URL: H('main'), SLACK_ALERTS_WEBHOOK_URL: H('alerts'),
+      SLACK_SALES_WEBHOOK_URL: 'https://evil.example/x' }), { fetchImpl });
+    await s.notify({ title: 'Sold', channel: 'sales' });
+    await s.notify({ title: 'Submitted' });
+    await s.alert('k', 'Broke');
+    expect(sent).toEqual(['main', 'main', 'alerts']);
+
+    // Only a channel URL set: that channel works, the rest stay quiet.
+    sent.length = 0;
+    const only = createSlack(slackConfig({ SLACK_SALES_WEBHOOK_URL: H('sales') }), { fetchImpl });
+    expect(only.enabled).toBe(true);
+    expect(await only.notify({ title: 'Sold', channel: 'sales' })).toBe(true);
+    expect(await only.notify({ title: 'Submitted' })).toBe(false);
+    expect(sent).toEqual(['sales']);
+  });
+
   it('never throws when Slack is down', async () => {
     const s = createSlack(slackConfig({ SLACK_WEBHOOK_URL: 'https://hooks.slack.com/x' }), { fetchImpl: async () => { throw new Error('down'); } });
     expect(await s.notify({ title: 'x' })).toBe(false);
