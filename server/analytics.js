@@ -17,17 +17,34 @@ import crypto from 'node:crypto';
 import { localDateStr, addDays } from './seo.js';
 
 // Known crawlers, checked in order. Anything else bot-like is "Other bot".
+// The third field sorts AI bots by what the visit means:
+//   ask       an assistant fetched the page to answer someone's question
+//             right now (they read us through the AI instead of visiting)
+//   search    an AI search engine indexing pages it can cite and link to
+//   training  copying pages to train a model; sends nothing back
 const BOTS = [
   ['Googlebot', /googlebot|google-inspectiontool|storebot-google/i],
   ['Bingbot', /bingbot|bingpreview/i],
-  ['GPTBot (ChatGPT)', /gptbot|oai-searchbot|chatgpt-user/i],
-  ['ClaudeBot', /claudebot|claude-searchbot|claude-user|anthropic-ai/i],
-  ['PerplexityBot', /perplexitybot|perplexity-user/i],
+  ['ChatGPT (answering someone)', /chatgpt-user/i, 'ask'],
+  ['ChatGPT search', /oai-searchbot/i, 'search'],
+  ['GPTBot (AI training)', /gptbot/i, 'training'],
+  ['Claude (answering someone)', /claude-user/i, 'ask'],
+  ['Claude search', /claude-searchbot/i, 'search'],
+  ['ClaudeBot (AI training)', /claudebot|anthropic-ai/i, 'training'],
+  ['Perplexity (answering someone)', /perplexity-user/i, 'ask'],
+  ['Perplexity search', /perplexitybot/i, 'search'],
+  ['Meta AI (answering someone)', /meta-externalfetcher/i, 'ask'],
+  ['Meta AI (AI training)', /meta-externalagent/i, 'training'],
+  ['Common Crawl (AI training)', /ccbot/i, 'training'],
+  ['Bytespider (AI training)', /bytespider/i, 'training'],
   ['Applebot', /applebot/i],
   ['DuckDuckBot', /duckduckbot/i],
-  ['Facebook preview', /facebookexternalhit|facebot|meta-externalagent/i],
+  ['Facebook preview', /facebookexternalhit|facebot/i],
   ['Other bot', /bot\b|bot\/|crawl|spider|slurp|preview|headless|lighthouse|python-requests|curl\/|wget|scrapy|httpclient|go-http/i]
 ];
+const AI_BOT_KIND = new Map(BOTS.filter(b => b[2]).map(([name, , kind]) => [name, kind]));
+// Rows recorded before the AI bots were split up.
+AI_BOT_KIND.set('GPTBot (ChatGPT)', 'search').set('ClaudeBot', 'search').set('PerplexityBot', 'search');
 
 export function botName(ua) {
   const s = String(ua || '');
@@ -38,12 +55,14 @@ export function botName(ua) {
 
 // Group referrers into sources people recognize.
 const SOURCES = [
+  ['Gemini', /^(gemini|bard)\.google\.com$/],
   ['Google', /(^|\.)google\./],
   ['Bing', /(^|\.)bing\.com$/],
   ['ChatGPT', /(^|\.)(chatgpt\.com|openai\.com)$/],
   ['Perplexity', /(^|\.)perplexity\.ai$/],
   ['Claude', /(^|\.)claude\.ai$/],
-  ['Copilot', /(^|\.)copilot\.microsoft\.com$/],
+  ['Copilot', /(^|\.)(copilot\.microsoft\.com|copilot\.com)$/],
+  ['Meta AI', /(^|\.)meta\.ai$/],
   ['DuckDuckGo', /(^|\.)duckduckgo\.com$/],
   ['Facebook', /(^|\.)(facebook\.com|fb\.com|fb\.me|messenger\.com)$/],
   ['Instagram', /(^|\.)instagram\.com$/],
@@ -52,6 +71,20 @@ const SOURCES = [
   ['Nextdoor', /(^|\.)nextdoor\.com$/],
   ['Newsletter', /(^|\.)(beehiiv\.com|mail\.google\.com|outlook\.live\.com)$/]
 ];
+
+export const AI_SOURCES = new Set(['ChatGPT', 'Perplexity', 'Claude', 'Copilot', 'Gemini', 'Meta AI']);
+
+// AI apps often send no referrer but tag links instead (ChatGPT adds
+// ?utm_source=chatgpt.com). Only known sources count; anything else is noise.
+const UTM_NAMES = { chatgpt: 'ChatGPT', openai: 'ChatGPT', perplexity: 'Perplexity', claude: 'Claude',
+  copilot: 'Copilot', gemini: 'Gemini', newsletter: 'Newsletter' };
+export function utmSource(utm) {
+  const v = String(utm || '').toLowerCase().trim().slice(0, 100);
+  if (!v) return null;
+  const bare = v.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+  for (const [name, re] of SOURCES) if (re.test(bare)) return name;
+  return UTM_NAMES[bare.split('.')[0]] || null;
+}
 
 export function referrerSource(ref, siteHost) {
   let host = '';
@@ -83,17 +116,19 @@ function cleanPath(p) {
   return s.startsWith('/') ? s : '/';
 }
 
-// Middleware: record HTML page hits from known crawlers (humans come in
-// through the beacon). Runs after the response is sent; failures are logged
-// and never affect the request.
+// Middleware: record page hits from known crawlers (humans come in through
+// the beacon): HTML pages plus the machine-readable feeds AI assistants
+// read (/events.json, /llms.txt). Runs after the response is sent; failures
+// are logged and never affect the request.
 export function crawlerMiddleware(store) {
   return (req, res, next) => {
-    if (req.method !== 'GET' || req.path.startsWith('/api/') || req.path.startsWith('/admin')) return next();
+    if (req.method !== 'GET' || req.path.startsWith('/api/') || req.path.startsWith('/admin') ||
+      req.path === '/robots.txt') return next();
     const bot = botName(req.get('user-agent'));
     if (!bot || bot === 'Other bot') return next();
     res.on('finish', () => {
       const type = String(res.get('content-type') || '');
-      if (res.statusCode !== 200 || !type.includes('text/html')) return;
+      if (res.statusCode !== 200 || !/text\/html|application\/json|text\/plain/.test(type)) return;
       store.recordTraffic({
         day: localDateStr(new Date()), kind: 'crawl', path: cleanPath(req.path), bot
       }).catch(err => console.warn('[traffic] crawl record failed:', err.message));
@@ -109,7 +144,9 @@ export function beaconRow(body, { ip, ua, secret, siteHost, now }) {
   const day = localDateStr(now);
   const base = { day, path: cleanPath(body.path), visitor: visitorHash(ip, ua, day, secret) };
   if (body.kind === 'view') {
-    const { source, host } = referrerSource(String(body.ref || '').slice(0, 500), siteHost);
+    let { source, host } = referrerSource(String(body.ref || '').slice(0, 500), siteHost);
+    const tagged = source === 'Direct' ? utmSource(body.utm) : null;
+    if (tagged) source = tagged;
     return { ...base, kind: 'view', ref_source: source, ref_host: host };
   }
   if (body.kind === 'click' && CLICK_TYPES.has(body.type)) {
@@ -130,6 +167,23 @@ function countBy(rows, keyFn, limit) {
 function uniqueVisitors(rows) {
   // One visitor per (day, visitor hash); multi-day ranges sum daily uniques.
   return new Set(rows.map(r => `${r.day}|${r.visitor}`)).size;
+}
+
+// How AI shows up: people it sent here, and bots reading on its behalf.
+function aiSummary(views, crawls) {
+  const sent = views.filter(r => AI_SOURCES.has(r.ref_source));
+  const kind = (k) => crawls.filter(r => AI_BOT_KIND.get(r.bot) === k);
+  const asks = kind('ask');
+  return {
+    sent_visitors: uniqueVisitors(sent),
+    sent_views: sent.length,
+    sent_by: countBy(sent, r => r.ref_source, 10),
+    answer_reads: asks.length,
+    answer_reads_by: countBy(asks, r => r.bot, 10),
+    answer_pages: countBy(asks, r => r.path, 10),
+    search_crawls: kind('search').length,
+    training_crawls: kind('training').length
+  };
 }
 
 // Build the admin Traffic payload from raw rows.
@@ -165,6 +219,7 @@ export function summarize(rows, { now, days = 30 }) {
     clicks: countBy(clicks, r => r.click_type, 20).map(c => ({ ...c, label: CLICK_LABELS[c.key] || c.key })),
     top_clicked: countBy(clicks.filter(r => r.click_type === 'event_click' || r.click_type === 'sponsor_click'),
       r => r.click_url, 10),
+    ai: aiSummary(views, crawls),
     crawlers: countBy(crawls, r => r.bot, 12),
     crawler_pages: countBy(crawls, r => r.path, 10)
   };

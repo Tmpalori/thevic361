@@ -1167,7 +1167,7 @@ export async function createApp(opts = {}) {
       ['Event venues in Victoria, TX', '/venues', 'every venue we track, with its upcoming events'],
       ...activeSeasons(payload.events, ctx.archived, ctx.now).map(s => [s.title, s.path, s.description])
     ];
-    res.type('text/plain; charset=utf-8').send(renderLlmsTxt(payload.events, { ...ctx, extraLinks }));
+    res.type('text/plain; charset=utf-8').send(renderLlmsTxt(payload.events, { ...ctx, extraLinks, sponsor: payload.sponsor || null }));
   }));
 
   // The social kit lives at docs/social/latest/index.html; static serving

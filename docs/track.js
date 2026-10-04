@@ -33,7 +33,9 @@
   }
   window.vic361Track = track;  // app.js filter chips report through this
 
-  beacon({ kind: 'view', ref: document.referrer || '' });
+  var utm = '';
+  try { utm = new URLSearchParams(location.search).get('utm_source') || ''; } catch (e) { /* old browser */ }
+  beacon({ kind: 'view', ref: document.referrer || '', utm: utm });
 
   document.addEventListener('click', function (e) {
     var a = e.target && e.target.closest ? e.target.closest('a') : null;

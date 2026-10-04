@@ -175,7 +175,7 @@ There is no linter configured. Match the existing style (4-space Python, 2-space
 
 ## SEO / AI search
 
-Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` renders events into plain HTML from the same published payload as `/events.json`: the homepage (injected into `docs/index.html`), intent pages (`/today`, `/this-weekend`, `/free-things-to-do`, `/kids-and-family`, `/live-music`, `/food-and-drink`), one page per event at `/events/<date>-<slug>` with schema.org `Event` JSON-LD, `/about`, `/sitemap.xml`, and `/llms.txt`. `docs/app.js` still re-renders the homepage in the browser and powers admin preview. Keep the two event renderers' markup in sync. Every published event is also written to an archive (`event_archive` table / `event_archive` key in the file store) so its page keeps working after the week rotates out. `featured: true` (set from the admin edit modal) pins an event to the top of its day; `/advertise` sells it.
+Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` renders events into plain HTML from the same published payload as `/events.json`: the homepage (injected into `docs/index.html`), intent pages (`/today`, `/this-weekend`, `/free-things-to-do`, `/kids-and-family`, `/live-music`, `/food-and-drink`), one page per event at `/events/<date>-<slug>` with schema.org `Event` JSON-LD, `/about`, `/sitemap.xml`, and `/llms.txt`. `docs/app.js` still re-renders the homepage in the browser and powers admin preview. Keep the two event renderers' markup in sync. Every published event is also written to an archive (`event_archive` table / `event_archive` key in the file store) so its page keeps working after the week rotates out. `featured: true` (set from the admin edit modal) pins an event to the top of its day; `/advertise` sells it. `/llms.txt` lists the week's sponsor and the Vic's Picks in their own sections, labeled as paid, so AI answers drawn from it carry them too.
 
 ## Venues, guides, social kit
 
@@ -183,7 +183,7 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 
 ## Traffic stats
 
-`server/analytics.js` powers the admin **Traffic** tab. People are counted from a `docs/track.js` beacon (`POST /api/track`: page views and sponsor/event/subscribe clicks; skipped in a browser signed into the admin); search and AI crawlers are counted server-side by user agent. Rows go to the `traffic` table (Postgres, ~400 days kept) with a daily salted visitor hash and no IPs or cookies. `GET /api/admin/traffic?days=N` returns the summary.
+`server/analytics.js` powers the admin **Traffic** tab. People are counted from a `docs/track.js` beacon (`POST /api/track`: page views and sponsor/event/subscribe clicks; skipped in a browser signed into the admin); search and AI crawlers are counted server-side by user agent (HTML pages plus `/events.json` and `/llms.txt`). AI bots are tagged `ask` (an assistant fetched the page to answer someone, e.g. ChatGPT-User), `search` or `training`; the summary's `ai` block reports people sent by AI referrers (or `utm_source`, which ChatGPT adds when there's no referrer) and those three counts. Rows go to the `traffic` table (Postgres, ~400 days kept) with a daily salted visitor hash and no IPs or cookies. `GET /api/admin/traffic?days=N` returns the summary.
 
 ## Newsletter
 

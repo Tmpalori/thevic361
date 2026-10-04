@@ -1609,3 +1609,7 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 /* Turnstile spam check (docs/turnstile.js): invisible unless Cloudflare needs a click. */
 .ts-mount { margin: 0.5rem 0; }
 .ts-mount:empty { display: none; }
+
+/* Vic's Pick note under an event page title */
+.event-pick { margin: var(--space-2, 0.5rem) 0; font-size: var(--text-sm); color: var(--color-text-muted); font-weight: 700; }
+.event-pick .badge { margin-right: 0.35rem; }

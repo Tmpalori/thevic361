@@ -55,8 +55,13 @@ const settle = () => new Promise(r => setTimeout(r, 50));
 
 describe('analytics helpers', () => {
   it('names crawlers and lets browsers through', () => {
-    expect(botName('Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)')).toBe('GPTBot (ChatGPT)');
-    expect(botName('Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0)')).toBe('ClaudeBot');
+    expect(botName('Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)')).toBe('GPTBot (AI training)');
+    expect(botName('Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0)')).toBe('ClaudeBot (AI training)');
+    expect(botName('Mozilla/5.0 (compatible; ChatGPT-User/1.0; +https://openai.com/bot)')).toBe('ChatGPT (answering someone)');
+    expect(botName('Mozilla/5.0 (compatible; OAI-SearchBot/1.0)')).toBe('ChatGPT search');
+    expect(botName('Mozilla/5.0 (compatible; Perplexity-User/1.0)')).toBe('Perplexity (answering someone)');
+    expect(botName('meta-externalagent/1.1')).toBe('Meta AI (AI training)');
+    expect(botName('facebookexternalhit/1.1')).toBe('Facebook preview');
     expect(botName('Mozilla/5.0 (compatible; Googlebot/2.1)')).toBe('Googlebot');
     expect(botName('curl/8.6.0')).toBe('Other bot');
     expect(botName(UA)).toBeNull();
@@ -65,11 +70,41 @@ describe('analytics helpers', () => {
   it('groups referrers', () => {
     expect(referrerSource('https://www.google.com/', 'www.thevic361.com').source).toBe('Google');
     expect(referrerSource('https://chatgpt.com/', 'www.thevic361.com').source).toBe('ChatGPT');
+    expect(referrerSource('https://gemini.google.com/app', 'www.thevic361.com').source).toBe('Gemini');
+    expect(referrerSource('https://www.meta.ai/', 'www.thevic361.com').source).toBe('Meta AI');
     expect(referrerSource('https://l.facebook.com/l.php?u=x', 'www.thevic361.com').source).toBe('Facebook');
     expect(referrerSource('https://www.thevic361.com/live-music', 'www.thevic361.com').source).toBe('Direct');
     expect(referrerSource('', 'www.thevic361.com').source).toBe('Direct');
     expect(referrerSource('https://victoriaadvocate.com/x', 'www.thevic361.com'))
       .toEqual({ source: 'Other sites', host: 'victoriaadvocate.com' });
+  });
+
+  it('credits AI apps that send no referrer but tag the link', () => {
+    const ctx = { ip: '1.1.1.1', ua: UA, secret: 's', siteHost: 'www.thevic361.com', now: NOW };
+    expect(beaconRow({ kind: 'view', ref: '', utm: 'chatgpt.com' }, ctx).ref_source).toBe('ChatGPT');
+    expect(beaconRow({ kind: 'view', ref: '', utm: 'perplexity' }, ctx).ref_source).toBe('Perplexity');
+    expect(beaconRow({ kind: 'view', ref: '', utm: 'spam<script>' }, ctx).ref_source).toBe('Direct');
+    // A real referrer wins over the tag.
+    expect(beaconRow({ kind: 'view', ref: 'https://www.google.com/', utm: 'chatgpt.com' }, ctx).ref_source).toBe('Google');
+  });
+
+  it('sums up how AI uses the site', () => {
+    const ctx = { ip: '1.1.1.1', ua: UA, secret: 's', siteHost: 'www.thevic361.com', now: NOW };
+    const day = beaconRow({ kind: 'view', path: '/' }, ctx).day;
+    const rows = [
+      beaconRow({ kind: 'view', path: '/', ref: 'https://chatgpt.com/' }, ctx),
+      beaconRow({ kind: 'view', path: '/x', ref: 'https://chatgpt.com/' }, ctx),
+      beaconRow({ kind: 'view', path: '/', ref: 'https://www.google.com/' }, ctx),
+      { day, kind: 'crawl', path: '/this-weekend', bot: 'ChatGPT (answering someone)' },
+      { day, kind: 'crawl', path: '/events.json', bot: 'Claude (answering someone)' },
+      { day, kind: 'crawl', path: '/', bot: 'ChatGPT search' },
+      { day, kind: 'crawl', path: '/', bot: 'GPTBot (AI training)' },
+      { day, kind: 'crawl', path: '/', bot: 'Googlebot' }
+    ];
+    const { ai } = summarize(rows, { now: NOW, days: 7 });
+    expect(ai).toMatchObject({ sent_visitors: 1, sent_views: 2, answer_reads: 2, search_crawls: 1, training_crawls: 1 });
+    expect(ai.sent_by).toEqual([{ key: 'ChatGPT', count: 2 }]);
+    expect(ai.answer_pages.map(p => p.key).sort()).toEqual(['/events.json', '/this-weekend']);
   });
 
   it('rejects unknown click types and bot beacons', () => {
@@ -101,6 +136,8 @@ describe('traffic endpoints', () => {
     await beacon({ kind: 'click', type: 'sponsor_click', url: 'https://acme.example', path: '/' });
     await beacon({ kind: 'view', path: '/' }, 'curl/8.6.0'); // ignored
     await fetch(baseUrl + '/about', { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; GPTBot/1.2)' } });
+    await fetch(baseUrl + '/llms.txt', { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ChatGPT-User/1.0)' } });
+    await fetch(baseUrl + '/robots.txt', { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ChatGPT-User/1.0)' } }); // not a read
     await fetch(baseUrl + '/about', { headers: { 'User-Agent': UA } }); // humans come via beacon only
     await settle();
 
@@ -113,8 +150,9 @@ describe('traffic endpoints', () => {
     expect(t.totals.today).toEqual({ visitors: 1, views: 2 });
     expect(t.sources.map(s => s.key).sort()).toEqual(['Direct', 'Google']);
     expect(t.clicks).toEqual([{ key: 'sponsor_click', count: 1, label: 'Sponsor clicks' }]);
-    expect(t.crawlers).toEqual([{ key: 'GPTBot (ChatGPT)', count: 1 }]);
-    expect(t.crawler_pages).toEqual([{ key: '/about', count: 1 }]);
+    expect(t.crawlers.sort((a, b) => a.key.localeCompare(b.key))).toEqual([
+      { key: 'ChatGPT (answering someone)', count: 1 }, { key: 'GPTBot (AI training)', count: 1 }]);
+    expect(t.ai).toMatchObject({ answer_reads: 1, training_crawls: 1, answer_pages: [{ key: '/llms.txt', count: 1 }] });
   });
 
   it('ignores malformed beacons', async () => {
