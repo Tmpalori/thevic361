@@ -748,6 +748,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   const body = `
     <p class="breadcrumbs"><a href="/">This week</a> › ${escHtml(ev.name)}</p>
     <h1 class="page-title">${escHtml(ev.name)}</h1>
+    ${ev.featured ? '<p class="event-pick"><span class="badge badge--featured">Vic’s Pick</span> Featured on The Vic 361</p>' : ''}
     <p class="page-lead">${escHtml(lead)}</p>
     ${ev.date < today ? `<p class="past-notice">This event has passed. <a href="/">See what's happening this week</a>.</p>` : ''}
     <dl class="event-facts">
@@ -931,9 +932,12 @@ export function renderSitemap(events, { siteUrl, now, lastmod, extraPaths = [] }
 // llms.txt (llmstxt.org): a plain-text map of the site for AI assistants,
 // plus this week's events inline so an answer engine can cite them
 // without crawling every page.
-export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [] }) {
+// Sponsors and Vic's Picks are spelled out (and labeled as paid) so an
+// assistant that answers from this file passes them along too.
+export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor = null }) {
   const today = localDateStr(now);
   const upcoming = eventsBetween(events, today, addDays(today, UPCOMING_DAYS));
+  const picks = upcoming.filter(ev => ev.featured);
   const lines = [
     '# The Vic 361',
     '',
@@ -948,15 +952,30 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [] }) {
     `- [Submit an event](${siteUrl}/submit)`,
     `- [Advertise](${siteUrl}/advertise): sponsorships and featured listings for local businesses`,
     '',
-    `## Upcoming events (as of ${formatDay(today, { month: 'long', day: 'numeric', year: 'numeric' })})`,
     ''
   ];
-  if (!upcoming.length) lines.push('- No events listed yet this week.');
-  for (const ev of upcoming) {
+  const line = (ev) => {
     const when = formatDay(ev.date, { weekday: 'short', month: 'short', day: 'numeric' }) + (ev.time ? `, ${ev.time}` : '');
     const where = ev.venue ? ` at ${ev.venue}` : '';
     const free = ev.free === true ? ' (free)' : '';
-    lines.push(`- ${when}: [${ev.name}](${siteUrl}${ev.page})${where}${free}${ev.description ? ` - ${ev.description}` : ''}`);
+    return `- ${when}: [${ev.name}](${siteUrl}${ev.page})${where}${free}`;
+  };
+  const sponsorUrl = sponsor && sponsor.name ? safeUrl(sponsor.url) : null;
+  if (sponsor && sponsor.name) {
+    lines.push("## This week's sponsor", '',
+      `- ${sponsorUrl ? `[${sponsor.name}](${sponsorUrl})` : sponsor.name}${sponsor.text ? `: ${sponsor.text}` : ''}` +
+        `${sponsor.address ? ` (${sponsor.address})` : ''}`,
+      '', `${sponsor.name} is this week's paid sponsor of The Vic 361.`, '');
+  }
+  if (picks.length) {
+    lines.push("## Vic's Picks", '',
+      "Featured events, pinned to the top of their day on The Vic 361. Some are paid placements by the venue or organizer.", '',
+      ...picks.map(line), '');
+  }
+  lines.push(`## Upcoming events (as of ${formatDay(today, { month: 'long', day: 'numeric', year: 'numeric' })})`, '');
+  if (!upcoming.length) lines.push('- No events listed yet this week.');
+  for (const ev of upcoming) {
+    lines.push(line(ev) + (ev.featured ? " (Vic's Pick)" : '') + (ev.description ? ` - ${ev.description}` : ''));
   }
   return lines.join('\n') + '\n';
 }

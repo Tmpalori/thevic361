@@ -1565,6 +1565,18 @@
     trafficRows(document.getElementById('traffic-top-clicked'), t.top_clicked, 'No event or sponsor clicks yet.',
       r => escapeHtml(r.key.length > 60 ? r.key.slice(0, 57) + '…' : r.key));
     trafficRows(document.getElementById('traffic-crawlers'), t.crawlers, 'No crawler visits yet.');
+    const ai = t.ai;
+    const aiEl = document.getElementById('traffic-ai');
+    if (ai && aiEl) {
+      const item = (label, value) => '<div class="sources-summary__item"><span class="sources-summary__label">' +
+        escapeHtml(label) + '</span><span class="sources-summary__value">' + escapeHtml(value) + '</span></div>';
+      aiEl.innerHTML = item('People sent by AI', ai.sent_visitors + ' visitors · ' + ai.sent_views + ' views') +
+        item('Read by AI to answer someone', ai.answer_reads + ' times') +
+        item('AI search crawls', String(ai.search_crawls)) +
+        item('AI training crawls', String(ai.training_crawls));
+      trafficRows(document.getElementById('traffic-ai-sent'), ai.sent_by, 'No visits from AI yet.');
+      trafficRows(document.getElementById('traffic-ai-pages'), ai.answer_pages, 'None yet.', link);
+    }
     trafficRows(document.getElementById('traffic-referrers'), t.referrer_sites, 'None yet.');
   }
 
