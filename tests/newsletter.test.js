@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore, } from '../server/db.js';
 import { withPages } from '../server/seo.js';
-import { renderWeekly, normalizeEmail } from '../server/newsletter.js';
+import { renderWeekly, renderWelcomeEmail, normalizeEmail } from '../server/newsletter.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -84,6 +84,19 @@ describe('newsletter content', () => {
   });
 });
 
+describe('welcome email', () => {
+  it('lists the coming week with Vic\'s Picks first and escapes event names', () => {
+    const mail = renderWelcomeEmail(withPages(EVENTS), { siteUrl: 'https://www.thevic361.com', now: NOW, sponsor: null,
+      unsubscribeUrl: 'https://www.thevic361.com/unsubscribe?token=t', address: 'PO Box 1, Victoria, TX' });
+    expect(mail.subject).toBe('Welcome to The Vic 361');
+    expect(mail.html.indexOf('Farmers Market')).toBeLessThan(mail.html.indexOf('Friday &lt;Live&gt; Music'));
+    expect(mail.html).not.toContain('<Live>');
+    expect(mail.html).not.toContain('Last Week'); // already past
+    expect(mail.text).toContain('Saturday 8:00 AM: Farmers Market');
+    expect(mail.text).toContain('Unsubscribe: https://www.thevic361.com/unsubscribe?token=t');
+  });
+});
+
 describe('signup flow', () => {
   it('double opt-in: pending, confirmation email, confirm link activates', async () => {
     await startApp();
@@ -100,10 +113,39 @@ describe('signup flow', () => {
     expect(c.status).toBe(200);
     expect(await c.text()).toContain('You&#39;re subscribed');
     expect((await store.countSubscribers()).active).toBe(1);
+    await new Promise(r => setTimeout(r, 50)); // the welcome email goes out after the page
+    expect(sent.single).toHaveLength(2);
 
     // Signing up again while active sends nothing.
     await post('/api/subscribe', { email: 'fan@example.com' });
-    expect(sent.single).toHaveLength(1);
+    expect(sent.single).toHaveLength(2);
+  });
+
+  it('sends one welcome email and one Slack ping on the first confirm only', async () => {
+    const pings = [];
+    await startApp({ slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async () => {} } });
+    await post('/api/subscribe', { email: 'new@example.com' });
+    const token = sent.single[0].html.match(/confirm\?token=([^"&]+)/)[1];
+    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`);
+    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`); // second click, or a mail scanner
+    await new Promise(r => setTimeout(r, 50));
+    const welcomes = sent.single.filter(m => m.subject === 'Welcome to The Vic 361');
+    expect(welcomes).toHaveLength(1);
+    expect(welcomes[0].to).toEqual(['new@example.com']);
+    expect(welcomes[0].headers['List-Unsubscribe']).toContain('/unsubscribe?token=');
+    expect(welcomes[0].html).toContain('Farmers Market');
+    expect(welcomes[0].html).toContain('Acme Tacos');
+    expect(welcomes[0].html).toContain('123 Main St, Victoria, TX 77901');
+    expect(pings.filter(p => p.title.includes('New newsletter subscriber'))).toHaveLength(1);
+  });
+
+  it('holds the welcome email when no mailing address is set', async () => {
+    await startApp({ newsletterAddress: '' });
+    await post('/api/subscribe', { email: 'new@example.com' });
+    const token = sent.single[0].html.match(/confirm\?token=([^"&]+)/)[1];
+    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`);
+    await new Promise(r => setTimeout(r, 50));
+    expect(sent.single.filter(m => m.subject === 'Welcome to The Vic 361')).toHaveLength(0);
   });
 
   it('honeypot submissions are dropped silently', async () => {
