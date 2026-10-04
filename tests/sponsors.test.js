@@ -271,7 +271,8 @@ describe('booking safety', () => {
     const [a, b] = await Promise.all([form(weekly('alpha')), form(weekly('beta'))]);
     expect([a.status, b.status].sort()).toEqual([303, 400]);
     expect(sessions).toHaveLength(1);
-    expect(sessions[0].params.payment_method_types).toEqual(['card']);
+    expect(sessions[0].params.payment_method_types).toBeUndefined();
+    expect(sessions[0].params.integration_identifier).toMatch(/^vic361_sponsor_checkout_[a-z]{8}$/);
   });
 
   it('a second payment for a sold week is flagged for refund, not put live', async () => {
@@ -315,5 +316,70 @@ describe('same event matching', () => {
       { date: '2026-10-10', name: 'Live Music', venue: 'Moonshine Drinkery Victoria' })).toBe(true);
     expect(sameEvent({ date: '2026-10-10', name: 'Live Music', venue: '' },
       { date: '2026-10-10', name: 'Live Music', venue: 'Aero Crafters' })).toBe(true);
+  });
+});
+
+describe('Stripe best practices', () => {
+  const weekly = (who) => ({ package: 'weekly', week: '2026-10-26', business: who, text: 'x', url: `${who}.example`, email: `${who}@x.example` });
+
+  it('a slow (bank) payment holds the week as processing, then goes live or frees the week', async () => {
+    await startApp();
+    await form(weekly('alpha'));
+    const s = sessions[0];
+    await completed(s, { payment_status: 'unpaid' });
+    let [order] = await store.listSponsorOrders();
+    expect(order.status).toBe('processing');
+    // Week stays taken while the money is in flight, even after the 35-min hold.
+    const page = await (await fetch(baseUrl + '/advertise/checkout?package=weekly')).text();
+    expect(page).toMatch(/value="2026-10-26"[^>]*disabled/);
+
+    await webhook({ type: 'checkout.session.async_payment_failed', data: { object: { id: s.id, client_reference_id: s.params.client_reference_id } } });
+    [order] = await store.listSponsorOrders();
+    expect(order.status).toBe('failed');
+
+    // A later success (e.g. a retried payment) still goes live.
+    await webhook({ type: 'checkout.session.async_payment_succeeded', data: { object: { id: s.id, client_reference_id: s.params.client_reference_id, payment_status: 'paid', amount_total: 30000 } } });
+    [order] = await store.listSponsorOrders();
+    expect(order.status).toBe('paid');
+  });
+
+  it('uses a catalog price when the client can make one, and falls back to inline pricing', async () => {
+    const stripe = {
+      ensurePrice: async (pkg) => `price_${pkg.key}`,
+      createCheckoutSession: async (params, key) => { sessions.push({ params, key, id: 'cs_1' }); return { id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' }; }
+    };
+    sessions = [];
+    await startApp({ stripe });
+    sessions = [];
+    await form(weekly('alpha'));
+    expect(sessions[0].params.line_items[0]).toEqual({ quantity: 1, price: 'price_weekly' });
+
+    stripe.ensurePrice = async () => { throw new Error('catalog down'); };
+    await form({ ...weekly('beta'), week: '2026-11-02' });
+    expect(sessions[1].params.line_items[0].price_data.unit_amount).toBe(30000);
+  });
+});
+
+describe('Stripe client', () => {
+  it('pins the API version and creates a lookup-key price once', async () => {
+    const { createStripe, STRIPE_API_VERSION } = await import('../server/sponsors.js');
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init });
+      const ok = (b) => ({ ok: true, status: 200, json: async () => b });
+      if (url.includes('/prices?')) return ok({ data: [] });
+      if (url.endsWith('/products')) return ok({ id: 'prod_1' });
+      if (url.endsWith('/prices')) return ok({ id: 'price_1' });
+      return ok({});
+    };
+    const client = createStripe('rk_test_x', fetchImpl);
+    const pkg = { key: 'partner', name: 'Venue partner', amount: 15000, interval: 'month' };
+    expect(await client.ensurePrice(pkg)).toBe('price_1');
+    expect(await client.ensurePrice(pkg)).toBe('price_1'); // cached
+    expect(calls).toHaveLength(3);
+    expect(calls.every(c => c.init.headers['Stripe-Version'] === STRIPE_API_VERSION)).toBe(true);
+    expect(calls[0].url).toContain('lookup_keys%5B%5D=vic361_partner_15000_month');
+    expect(calls[2].init.body).toContain('recurring%5Binterval%5D=month');
+    expect(calls[2].init.body).toContain('lookup_key=vic361_partner_15000_month');
   });
 });

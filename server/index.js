@@ -1208,7 +1208,8 @@ export async function createApp(opts = {}) {
       { key: 'newsletter_auto', label: 'Newsletter sends itself Mondays', ok: Boolean(newsletter.cronSecret), level: 'recommended',
         fix: 'Set NEWSLETTER_CRON_SECRET in Railway and GitHub, and the NEWSLETTER_AUTOSEND repo variable to 1.' },
       { key: 'stripe', label: 'Sponsor payments (Stripe)', ok: stripeCfg.enabled, level: 'recommended',
-        fix: 'Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET in Railway; webhook URL: ' + siteUrl + '/api/stripe/webhook' },
+        fix: 'In Stripe: create a restricted key (Checkout Sessions, Products and Prices: write) and a webhook to ' + siteUrl +
+          '/api/stripe/webhook on API version 2026-09-30.endive. Put them in Railway as STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.' },
       { key: 'pull_now', label: '"Pull now" button (GitHub token)', ok: github.isConfigured(), level: 'optional',
         fix: 'Set GITHUB_TOKEN in Railway (fine-grained, Actions: write on this repo).' },
       { key: 'spam', label: 'Spam protection on forms (Turnstile)', ok: Boolean(turnstileSecret && turnstileSiteKey), level: 'optional',
