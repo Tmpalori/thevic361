@@ -1,6 +1,6 @@
 # ─── Uptime check ───────────────────────────────────────────────────────────
 # Hourly: the homepage and /events.json must answer, and the events feed must
-# have events. Pings Slack (SLACK_WEBHOOK_URL secret) when they don't, so a
+# have events. Pings Slack (SLACK_ALERTS_WEBHOOK_URL, else SLACK_WEBHOOK_URL) when they don't, so a
 # dead site doesn't go unnoticed until someone texts about it. Once a day it
 # also flags a stale feed: nothing published for 8+ days.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ jobs:
       - name: Check the live site
         env:
           SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |
           fail() { echo "::error::$1"; python3 scripts/slack_notify.py "🚨 thevic361.com: $1" --link "$SITE"; exit 1; }
           # Two tries a minute apart, so one slow deploy restart isn't an alert.

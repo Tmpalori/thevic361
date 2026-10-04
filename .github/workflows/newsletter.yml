@@ -36,5 +36,5 @@ jobs:
       - name: Tell Slack it failed
         if: failure()
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: python3 scripts/slack_notify.py "🚨 Monday newsletter send failed" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

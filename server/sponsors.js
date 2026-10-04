@@ -417,7 +417,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     }
     if (slack) {
       const pkg = packageFor(order.kind);
-      slack.notify({
+      slack.notify({ channel: 'sales',
         title: `💰 New sponsor: ${order.business}`,
         fields: [['Package', pkg ? pkg.name : order.kind], ['Paid', `$${Math.round((order.amount || 0) / 100)}${order.kind === 'partner' ? '/mo' : ''}`],
           ['Contact', order.email],
@@ -487,7 +487,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         if (!order || !['processing', 'pending'].includes(order.status)) return;
         await save({ ...order, status: 'failed' });
         if (slack) {
-          slack.notify({
+          slack.notify({ channel: 'sales',
             title: `⚠️ Sponsor payment didn't go through: ${order.business}`,
             fields: [['Package', order.kind], ['Contact', order.email]],
             text: order.kind === 'weekly' ? `Week of ${order.week_start} is open again.` : 'Nothing went live.'
@@ -502,7 +502,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           (obj.parent && obj.parent.subscription_details && obj.parent.subscription_details.subscription) || null;
         const order = findBy(list, 'subscription_id', subId);
         if (order && slack) {
-          slack.notify({
+          slack.notify({ channel: 'sales',
             title: `⚠️ Venue partner card declined: ${order.business}`,
             fields: [['Venue', order.venue_name], ['Contact', order.email]],
             text: 'Stripe will retry automatically. Their badges pause if the subscription goes past due.'
@@ -540,7 +540,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         if (status !== order.status) {
           await save({ ...order, status });
           if (slack && status !== 'active') {
-            slack.notify({
+            slack.notify({ channel: 'sales',
               title: status === 'cancelled' ? `👋 Venue partner cancelled: ${order.business}` : `⚠️ Venue partner payment issue: ${order.business}`,
               fields: [['Venue', order.venue_name], ['Contact', order.email]],
               text: status === 'cancelled' ? 'Their events are no longer marked Vic’s Pick.' : 'Stripe couldn’t charge them, so their Vic’s Pick badges are paused until it does.'
@@ -557,7 +557,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         if (event.type === 'charge.refunded' && obj.refunded === false) return; // partial refund: leave it live
         await save({ ...order, status: 'refunded', hidden_from: null });
         if (slack) {
-          slack.notify({
+          slack.notify({ channel: 'sales',
             title: event.type === 'charge.refunded' ? `↩️ Sponsor refunded: ${order.business}` : `⚠️ Sponsor disputed a charge: ${order.business}`,
             fields: [['Contact', order.email], ['Order', order.id]],
             text: 'Their placement is off the site.'
