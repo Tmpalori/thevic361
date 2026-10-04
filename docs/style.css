@@ -1398,6 +1398,10 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 .footer-bottom { color: #B8AEEF; font-weight: 700; }
 .site-footer .btn--outline { background: var(--sun); color: var(--ink); }
 .site-footer .btn--outline:hover { background: #fff; }
+/* The footer redefines --color-text as light for the navy band, so the
+   signup box needs its own dark-on-white colors (light and dark mode). */
+.site-footer .signup-form input[type="email"] { background: #fff; color: #1F1A3D; }
+.site-footer .signup-form input[type="email"]::placeholder { color: #6B6590; opacity: 1; }
 
 /* ─── Server-rendered pages ─── */
 .page-title { font-weight: 700; }
