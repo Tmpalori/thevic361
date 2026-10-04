@@ -268,9 +268,10 @@ class FileStore {
       const data = await this._read();
       const sub = data.subscribers.find(x => x.token === token && x.status !== 'unsubscribed');
       if (!sub) return null;
-      if (sub.status !== 'active') Object.assign(sub, { status: 'active', confirmed_at: nowIso() });
+      const newly = sub.status !== 'active';
+      if (newly) Object.assign(sub, { status: 'active', confirmed_at: nowIso() });
       await this._write(data);
-      return sub;
+      return { ...sub, newly_confirmed: newly };
     });
   }
 
@@ -681,9 +682,14 @@ class PgStore {
   async confirmSubscriber(token) {
     if (!token) return null;
     await this.ready();
+    // newly_confirmed: was pending until this call (the welcome email goes out once).
     const r = await this.pool.query(
-      `UPDATE subscribers SET status = 'active', confirmed_at = COALESCE(confirmed_at, NOW())
-       WHERE token = $1 AND status <> 'unsubscribed' RETURNING *`, [token]);
+      `WITH prev AS (
+         SELECT id, status FROM subscribers WHERE token = $1 AND status <> 'unsubscribed' FOR UPDATE
+       )
+       UPDATE subscribers s SET status = 'active', confirmed_at = COALESCE(s.confirmed_at, NOW())
+       FROM prev WHERE s.id = prev.id
+       RETURNING s.*, (prev.status <> 'active') AS newly_confirmed`, [token]);
     return r.rows[0] || null;
   }
 

@@ -1206,7 +1206,7 @@ export async function createApp(opts = {}) {
     const env = process.env;
     const ghSecrets = `https://github.com/${github.owner}/${github.repo}/settings/secrets/actions`;
     const checks = [
-      { key: 'database', label: 'Database', ok: storeBundle.kind === 'pg', level: 'required',
+      { key: 'database', label: 'Database', ok: storeBundle.kind === 'postgres', level: 'required',
         fix: 'Add a Postgres database in Railway so events and subscribers survive deploys.' },
       { key: 'login', label: 'Admin login', ok: auth.configured, level: 'required',
         fix: 'Set ADMIN_USERNAME, ADMIN_PASSWORD and ADMIN_SESSION_SECRET in Railway.' },

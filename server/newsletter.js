@@ -20,7 +20,7 @@
 
 import crypto from 'node:crypto';
 import {
-  SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout
+  SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays
 } from './seo.js';
 
 const RESEND_API = 'https://api.resend.com';
@@ -73,7 +73,7 @@ export function createResend(apiKey, fetchImpl = globalThis.fetch) {
     return json;
   }
   return {
-    send: (msg) => call('/emails', msg),
+    send: (msg, key) => call('/emails', msg, key),
     batch: (msgs, key) => call('/emails/batch', msgs, key)
   };
 }
@@ -138,6 +138,16 @@ ${ev.description ? `<div style="color:${C.muted};font-size:13px;margin-top:2px;"
 </td></tr>`;
 }
 
+function sponsorHtml(sponsor) {
+  return sponsor && sponsor.name ? `
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;background:${C.sunLight};border:3px dashed ${C.ink};border-radius:16px;"><tr><td style="padding:14px 16px;">
+<span style="display:inline-block;font-family:${DISPLAY};font-size:11px;font-weight:bold;letter-spacing:.5px;background:${C.sunset};color:${C.ink};border:2px solid ${C.ink};border-radius:999px;padding:1px 10px;">THIS WEEK'S SPONSOR</span>
+<div style="font-family:${DISPLAY};font-size:20px;font-weight:bold;margin:6px 0 2px;">${escHtml(sponsor.name)}</div>
+${sponsor.text ? `<div style="font-size:14px;">${escHtml(sponsor.text)}</div>` : ''}
+${safeUrl(sponsor.url) && sponsor.cta ? `<a href="${escHtml(safeUrl(sponsor.url))}" style="display:inline-block;margin-top:10px;background:#fff;color:${C.ink};font-family:${DISPLAY};font-weight:bold;padding:6px 14px;border:2px solid ${C.ink};border-radius:999px;text-decoration:none;">${escHtml(sponsor.cta)} →</a>` : ''}
+</td></tr></table>` : '';
+}
+
 // The weekly issue: the rest of this week (today through Sunday).
 export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, address }) {
   const today = localDateStr(now);
@@ -160,13 +170,7 @@ export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, ad
 ${list.length > PER_DAY ? `<p style="margin:8px 0 0;font-size:13px;font-weight:bold;"><a href="${siteUrl}/" style="color:${C.accent};">+${list.length - PER_DAY} more on ${escHtml(formatDay(d, { weekday: 'long' }))} →</a></p>` : ''}
 </td></tr></table>`).join('');
 
-  const sponsorBlock = sponsor && sponsor.name ? `
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;background:${C.sunLight};border:3px dashed ${C.ink};border-radius:16px;"><tr><td style="padding:14px 16px;">
-<span style="display:inline-block;font-family:${DISPLAY};font-size:11px;font-weight:bold;letter-spacing:.5px;background:${C.sunset};color:${C.ink};border:2px solid ${C.ink};border-radius:999px;padding:1px 10px;">THIS WEEK'S SPONSOR</span>
-<div style="font-family:${DISPLAY};font-size:20px;font-weight:bold;margin:6px 0 2px;">${escHtml(sponsor.name)}</div>
-${sponsor.text ? `<div style="font-size:14px;">${escHtml(sponsor.text)}</div>` : ''}
-${safeUrl(sponsor.url) && sponsor.cta ? `<a href="${escHtml(safeUrl(sponsor.url))}" style="display:inline-block;margin-top:10px;background:#fff;color:${C.ink};font-family:${DISPLAY};font-weight:bold;padding:6px 14px;border:2px solid ${C.ink};border-radius:999px;text-decoration:none;">${escHtml(sponsor.cta)} →</a>` : ''}
-</td></tr></table>` : '';
+  const sponsorBlock = sponsorHtml(sponsor);
 
   const pill = (href, label) => `<a href="${siteUrl}${href}" style="display:inline-block;margin:6px 4px 0 0;font-family:${DISPLAY};font-weight:bold;font-size:13px;color:${C.ink};background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:2px 10px;text-decoration:none;">${label}</a>`;
   const bodyHtml = `
@@ -194,6 +198,39 @@ export function renderConfirmEmail({ siteUrl, confirmUrl, address }) {
     html: emailShell({ title: 'One tap to confirm', preheader: 'Confirm to get Victoria events every week', bodyHtml, siteUrl,
       footerHtml: `${escHtml(SITE_NAME)} · ${escHtml(address || 'Victoria, TX')}` }),
     text: `Confirm your subscription to The Vic 361: ${confirmUrl}\n\nDidn't sign up? Ignore this email.`
+  };
+}
+
+// Sent once, right after someone confirms: what to expect, a few events
+// they can use now (no waiting until Monday), the sponsor, and a nudge to
+// share.
+const WELCOME_PICKS = 5;
+export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeUrl, address }) {
+  const today = localDateStr(now);
+  const soon = sortEvents((events || []).filter(e => e.date >= today && e.date <= addDays(today, 6)));
+  const picks = [...soon.filter(e => e.featured), ...soon.filter(e => !e.featured)].slice(0, WELCOME_PICKS);
+  const dayLabel = (d) => d === today ? 'Today' : formatDay(d, { weekday: 'long' });
+  const coming = picks.length ? `
+<p style="margin:22px 0 6px;font-family:${DISPLAY};font-size:19px;font-weight:bold;">Coming up this week</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${picks.map(e =>
+    eventRow({ ...e, time: [dayLabel(e.date), e.time].filter(Boolean).join(', ') }, siteUrl)).join('')}</table>
+${soon.length > picks.length ? `<p style="margin:10px 0 0;font-size:13px;font-weight:bold;"><a href="${siteUrl}/" style="color:${C.accent};">+${soon.length - picks.length} more this week →</a></p>` : ''}` : '';
+  const bodyHtml = `
+<p style="margin:18px 0 4px;font-size:16px;"><strong>You're in!</strong> Every Monday morning you'll get the week's events in Victoria, TX: concerts, markets, festivals, family stuff and more, all in one email.</p>
+${coming}${sponsorHtml(sponsor)}
+<p style="margin:26px 0 0;text-align:center;">${btn(`${siteUrl}/`, "See this week's events")}</p>
+<p style="margin:22px 0 0;font-size:14px;color:${C.muted};">Know someone who's always asking what there is to do in Victoria? Forward them this email or send them to <a href="${siteUrl}/" style="color:${C.accent};font-weight:bold;">thevic361.com</a>.</p>`;
+  const text = [
+    "You're in! Every Monday morning you'll get the week's events in Victoria, TX.", '',
+    ...(picks.length ? ['COMING UP THIS WEEK', ...picks.map(e =>
+      `- ${dayLabel(e.date)}${e.time ? ' ' + e.time : ''}: ${e.name}${e.venue ? ' @ ' + e.venue : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
+    `This week's events: ${siteUrl}/`, '', `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
+  ].join('\n');
+  return {
+    subject: 'Welcome to The Vic 361',
+    html: emailShell({ title: 'Welcome to The Vic 361', preheader: picks.length ? `Coming up: ${picks.slice(0, 3).map(e => e.name).join(' · ')}` : "Victoria's events, every Monday",
+      bodyHtml, siteUrl, footerHtml: footer({ siteUrl, unsubscribeUrl, address }) }),
+    text
   };
 }
 
@@ -326,8 +363,27 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     }
   });
 
+  async function welcome(sub) {
+    if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', sub.email]] });
+    if (!config.enabled || !config.address) return; // never send without the required mailing address
+    try {
+      const payload = await getPublicPayload();
+      const unsubscribeUrl = `${siteUrl}/unsubscribe?token=${encodeURIComponent(sub.token)}`;
+      const mail = renderWelcomeEmail(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl, address: config.address });
+      await resend.send({
+        from: config.from, to: [sub.email], subject: mail.subject, html: mail.html, text: mail.text,
+        ...(config.replyTo ? { reply_to: config.replyTo } : {}),
+        headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
+      }, `vic361-welcome-${sub.id || sub.token}`);
+    } catch (err) {
+      console.warn('[newsletter] welcome email failed:', err.message);
+    }
+  }
+
   app.get('/subscribe/confirm', async (req, res) => {
     const sub = supported ? await store.confirmSubscriber(String(req.query.token || '')) : null;
+    // Only the first confirm: a second click on the same link sends nothing.
+    if (sub && sub.newly_confirmed) welcome(sub);
     res.status(sub ? 200 : 404).type('html').send(sub
       ? page("You're subscribed", 'The week\'s events will land in your inbox every Monday morning.')
       : page('Link expired', 'That confirmation link isn\'t valid anymore. Sign up again from the homepage.'));
