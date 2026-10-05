@@ -88,6 +88,7 @@ thevic361/
 │   ├── github.js                 # GitHub Contents API + workflow_dispatch
 │   ├── rateLimit.js              # in-memory sliding-window limiter
 │   ├── analytics.js              # first-party visitor stats for the admin Traffic tab
+│   ├── metaPixel.js              # /pixel.js — Meta Pixel for ads, off until META_PIXEL_ID is set
 │   ├── seo.js                    # server-rendered pages: home, intent pages, /events/:slug, /about, sitemap.xml, llms.txt
 │   ├── sources.js                # /api/admin/sources payload builder
 │   ├── turnstile.js              # Cloudflare Turnstile verify
@@ -184,6 +185,8 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 ## Traffic stats
 
 `server/analytics.js` powers the admin **Traffic** tab. People are counted from a `docs/track.js` beacon (`POST /api/track`: page views and sponsor/event/subscribe clicks; skipped in a browser signed into the admin); search and AI crawlers are counted server-side by user agent (HTML pages plus `/events.json` and `/llms.txt`). AI bots are tagged `ask` (an assistant fetched the page to answer someone, e.g. ChatGPT-User), `search` or `training`; the summary's `ai` block reports people sent by AI referrers (or `utm_source`, which ChatGPT adds when there's no referrer) and those three counts. Rows go to the `traffic` table (Postgres, ~400 days kept) with a daily salted visitor hash and no IPs or cookies. `GET /api/admin/traffic?days=N` returns the summary.
+
+**Meta ads.** `/pixel.js` (`server/metaPixel.js`) loads the Meta Pixel on public pages when `META_PIXEL_ID` is set and is an empty script otherwise; it skips the same admin/preview/social-kit visits as `track.js`. It reports `PageView`, and `track.js` reports `Lead` when a newsletter signup succeeds. Ad links should end in `?utm_source={{site_source_name}}&utm_medium=paid&utm_campaign={{campaign.name}}`: a tap on an ad has the same facebook.com/instagram.com referrer as a free post, so `utm_medium=paid` is what puts it under **Meta ads** in the Traffic tab (`paidSource` in `server/analytics.js`; other paid sources show as **Other ads**).
 
 ## Newsletter
 
@@ -285,6 +288,7 @@ Full reference is in [`RAILWAY.md`](./RAILWAY.md). Quick list:
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | — | Turn on self-serve sponsor checkout (server/sponsors.js). Webhook endpoint: `https://www.thevic361.com/api/stripe/webhook` with events `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired`, `customer.subscription.updated`, `customer.subscription.deleted` |
 | `SLACK_WEBHOOK_URL` | — | Slack incoming webhook for owner pings (server/slack.js). Set it in Railway (production) and as a GitHub Actions secret for workflow alerts |
 | `SLACK_SALES_WEBHOOK_URL`, `SLACK_ACTIVITY_WEBHOOK_URL`, `SLACK_ALERTS_WEBHOOK_URL` | `SLACK_WEBHOOK_URL` | Optional per-channel webhooks (sales: Railway; activity and alerts: Railway and GitHub secrets) |
+| `META_PIXEL_ID` | — | Meta Pixel ID (digits, from Meta Events Manager). Turns on `/pixel.js` for ads (server/metaPixel.js) |
 | `PORT` | `3000` | Express listen port |
 
 PR/staging Railway environments do **not** automatically inherit `ADMIN_*` vars — set them per-environment or use Railway's shared variables feature.

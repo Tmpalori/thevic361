@@ -694,6 +694,7 @@ ${body}
   </div>
 </main>
 ${footerHtml()}
+<script src="/pixel.js" defer></script>
 <script src="/track.js" defer></script>
 <script src="/turnstile.js" defer></script>
 </body>
