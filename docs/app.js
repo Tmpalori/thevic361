@@ -409,8 +409,12 @@
         }
 
         // New & Notable
+        // The section (and its divider) only shows when there's something in it.
         if (notableList) {
-          notableList.innerHTML = renderNotable(data.new_and_notable);
+          var notableHtml = renderNotable(data.new_and_notable);
+          notableList.innerHTML = notableHtml;
+          var notableSection = document.getElementById('new-notable');
+          if (notableSection) notableSection.hidden = !notableHtml;
         }
 
         // Sponsor

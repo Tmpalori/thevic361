@@ -1621,3 +1621,6 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 /* "See next week" under the homepage list; "← This week" on /next-week */
 .week-nav { margin: var(--space-4, 1rem) 0; font-weight: 700; }
 .week-nav--next { text-align: center; margin-top: var(--space-6, 1.5rem); }
+
+/* Sections toggled with the hidden attribute stay hidden whatever their display rule. */
+#new-notable[hidden] { display: none; }
