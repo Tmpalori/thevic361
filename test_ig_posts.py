@@ -528,3 +528,63 @@ def test_ig_posts_no_tiered_ig_venues_short_circuits(monkeypatch, tmp_path):
         out = ce.fetch_apify_instagram_posts(14)
     assert out == []
     mock_post.assert_not_called()
+
+
+def test_ig_posts_weekdays_come_from_code_not_model(monkeypatch):
+    """J Welch Farms regression: the model mis-dated "every Friday" music onto
+    Sundays and Thursday bingo onto Mondays. Recurring events are now expanded
+    from the stated weekday, and one-time dates that don't fall on the stated
+    weekday are dropped."""
+    monkeypatch.setenv("IG_POSTS_ENABLED", "1")
+    monkeypatch.setenv("APIFY_TOKEN", "fake")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
+
+    start, end = ce._WINDOW_START, ce._WINDOW_END
+    days = [start + timedelta(days=i) for i in range((end - start).days + 1)]
+    fridays = [d for d in days if d.weekday() == 4]
+    a_monday = next(d for d in days if d.weekday() == 0)
+    a_thursday = next(d for d in days if d.weekday() == 3)
+    ai_payload = {"choices": [{"message": {"content": json.dumps([
+        # Recurring with a wrong date from the model: the date is ignored.
+        {"date": a_monday.isoformat(), "weekday": "Friday", "recurring": True,
+         "name": "Live Music", "time": "7:00 PM", "source_post_index": 1},
+        # One-time, but the date isn't a Thursday: dropped.
+        {"date": a_monday.isoformat(), "weekday": "Thursday", "recurring": False,
+         "name": "Bingo Night", "time": "7:00 PM", "source_post_index": 1},
+        # One-time on the right weekday: kept.
+        {"date": a_thursday.isoformat(), "weekday": "Thursday", "recurring": False,
+         "name": "Trivia Night", "time": "7:00 PM", "source_post_index": 1},
+        # Recurring with no usable weekday: dropped.
+        {"date": "", "weekday": "someday", "recurring": True, "name": "Mystery"},
+    ])}}]}
+    prompts = []
+
+    def fake_post(url, **kwargs):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        if "instagram-post-scraper" in url:
+            resp.json.return_value = [{"caption": "Live music EVERY Friday!", "url": "https://instagram.com/p/x",
+                                       "timestamp": "2026-09-22T00:00:00"}]
+        else:
+            prompts.append(kwargs.get("json", {}).get("messages", [{}])[0].get("content", ""))
+            resp.json.return_value = ai_payload
+        return resp
+
+    monkeypatch.setattr(ce, "_IG_POSTS_MAX_VENUES", 1)
+    with patch("collect_events.requests.post", side_effect=fake_post):
+        out = ce.fetch_apify_instagram_posts(14)
+
+    assert '"weekday"' in prompts[0] and "Never carry those dates forward" in prompts[0]
+    music = sorted(e["date"] for e in out if e["name"] == "Live Music")
+    assert music == [d.isoformat() for d in fridays]
+    assert not [e for e in out if e["name"] in ("Bingo Night", "Mystery")]
+    assert [e["date"] for e in out if e["name"] == "Trivia Night"] == [a_thursday.isoformat()]
+
+
+def test_post_event_dates_without_weekday_keeps_legacy_shape():
+    start, end = ce._WINDOW_START, ce._WINDOW_END
+    d = start + timedelta(days=2)
+    assert ce._post_event_dates({"date": d.isoformat(), "name": "X"}, start, end) == [d]
+    assert ce._post_event_dates({"date": (end + timedelta(days=1)).isoformat()}, start, end) == []
+    assert ce._post_event_dates({"date": "nope"}, start, end) == []

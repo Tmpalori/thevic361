@@ -204,6 +204,48 @@ recurring:
     url: "https://aerocrafters.pub"
     # ⚠️ UNVERIFIED — assumes every Saturday. Confirm weekly via Facebook relay.
 
+  # ── J WELCH FARMS (weekly schedule) ─────────────────────────────────────
+  # Baseline so the farm shows the right days even without a fresh post.
+  # VERIFIED: @jwelchfarms Instagram post 2026-09-22 ("Thursday the doors open
+  # at 6PM & Bingo starts at 7! Live music is EVERY Friday & Saturday! &
+  # brunch on Sundays") + venues.json notes (live music Fri/Sat 7-10pm).
+
+  - name: "Bingo Night at J Welch Farms"
+    day: thursday
+    time: "7:00 PM"
+    venue: "J Welch Farms"
+    description: "Weekly bingo night. Doors open at 6 PM, games start at 7. Reservations: 361-412-7677."
+    icons: [community]
+    free: false
+    url: "https://www.instagram.com/jwelchfarms/"
+
+  - name: "Live Music at J Welch Farms"
+    day: friday
+    time: "7:00 PM – 10:00 PM"
+    venue: "J Welch Farms"
+    description: "Live music every Friday night at the farm. Reservations: 361-412-7677."
+    icons: [music]
+    free: false
+    url: "https://www.instagram.com/jwelchfarms/"
+
+  - name: "Live Music at J Welch Farms"
+    day: saturday
+    time: "7:00 PM – 10:00 PM"
+    venue: "J Welch Farms"
+    description: "Live music every Saturday night at the farm. Reservations: 361-412-7677."
+    icons: [music]
+    free: false
+    url: "https://www.instagram.com/jwelchfarms/"
+
+  - name: "Sunday Brunch at J Welch Farms"
+    day: sunday
+    time: "10:00 AM – 3:00 PM"
+    venue: "J Welch Farms"
+    description: "Sunday brunch at the farm. Reservations: 361-412-7677."
+    icons: [food]
+    free: false
+    url: "https://www.instagram.com/jwelchfarms/"
+
 
 
 

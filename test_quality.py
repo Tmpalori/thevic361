@@ -94,6 +94,15 @@ def test_different_events_do_not_match():
     assert not ce.is_same_event(ev("Tejas Fest", date="2026-10-02"), ev("Tejas Fest", date="2026-10-03"))
 
 
+def test_same_event_ignores_venue_and_weekday_words():
+    # A social post's "Brunch" and the curated "Sunday Brunch at J Welch Farms".
+    assert ce.is_same_event(ev("Brunch", venue="J Welch Farms"), ev("Sunday Brunch at J Welch Farms", venue="J Welch Farms"))
+    assert ce.is_same_event(ev("Live Music", venue="J Welch Farms"), ev("Live Music at J Welch Farms", venue="J Welch Farms"))
+    assert not ce.is_same_event(ev("Bingo Night", venue="J Welch Farms"), ev("Sunday Brunch at J Welch Farms", venue="J Welch Farms"))
+    # Needs both venues: a blank venue isn't enough to merge on one word.
+    assert not ce.is_same_event(ev("Brunch", venue=""), ev("Sunday Brunch at J Welch Farms", venue="J Welch Farms"))
+
+
 def test_merge_prefers_official_source_and_fills_gaps():
     out = ce.merge_events([
         ev("Tejas Fest 2026", time="05:30 PM", address="101 N Main St", source="allevents",

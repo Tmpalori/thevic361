@@ -1782,7 +1782,19 @@ def is_same_event(a, b):
     small, big = (set(ta), set(tb)) if len(ta) <= len(tb) else (set(tb), set(ta))
     if len(small) >= 2 and small <= big and _same_place(a, b):
         return True
+    # Same name once the venue and weekday are taken out ("Brunch" vs
+    # "Sunday Brunch at J Welch Farms"), both naming the same place.
+    va, vb = (a.get("venue") or "").strip(), (b.get("venue") or "").strip()
+    if va and vb and _same_place(a, b):
+        drop = set(_name_tokens(va)) | set(_name_tokens(vb)) | _WEEKDAY_TOKENS
+        ra, rb = set(ta) - drop, set(tb) - drop
+        if ra and ra == rb:
+            return True
     return False
+
+
+_WEEKDAY_TOKENS = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+                   "mondays", "tuesdays", "wednesdays", "thursdays", "fridays", "saturdays", "sundays"}
 
 
 # Higher wins when two sources describe the same event: an official
@@ -3048,12 +3060,14 @@ Posts:
 {posts_blob}
 
 Return ONLY a JSON array of upcoming events mentioned in these posts. Each object:
-{{"date":"YYYY-MM-DD","name":"Event Name","time":"7:00 PM or empty string","venue":"Where it happens if NOT at {venue_name} itself, else empty string","description":"One short sentence or empty string","free":true_or_false,"source_post_index":N}}
+{{"date":"YYYY-MM-DD","weekday":"Friday","recurring":true_or_false,"name":"Event Name","time":"7:00 PM or empty string","venue":"Where it happens if NOT at {venue_name} itself, else empty string","description":"One short sentence or empty string","free":true_or_false,"source_post_index":N}}
 
 Rules:
-- Only emit events whose ACTUAL DATE falls between {today_str} and {end_str}, regardless of when the post was made. A 20-day-old post announcing "Live music every Friday at 8pm" should produce one entry per upcoming Friday in that window.
+- "weekday" is the day of the week the post gives for the event (e.g. "Thursday"). Copy it from the post; don't work it out from a date.
+- Recurring events the post says happen EVERY week ("every Wednesday", "live music every Friday & Saturday", "Trivia Tuesdays", "brunch on Sundays"): emit ONE object per weekday with "recurring": true and that "weekday". Leave "date" empty; dates are filled in later. A 20-day-old post saying "Live music every Friday" still counts.
+- Everything else is a one-time event: "recurring": false, with its ACTUAL "date" between {today_str} and {end_str}, regardless of when the post was made.
+- A dated schedule for one particular week ("This week @ the farm: Sept 24 bingo, Sept 25 music") lists one-time events for those dates only. Never carry those dates forward to later weeks; if the dates are before {today_str}, skip them (but keep any "every week" line in the same post as recurring).
 - For relative dates ("this Friday", "tomorrow", "next Saturday"), resolve them against the post's own posted-on date — then check the resolved date is in the window.
-- Recurring events ("every Wednesday", "Trivia Tuesdays", "weekly karaoke") MUST be expanded into one entry per upcoming occurrence in the window. Do not emit a single placeholder.
 - Skip posts that are pure promo, photo dumps, customer thank-yous, or undated announcements.
 - Skip events that already happened (post-date BEFORE today's date with no recurring signal).
 - Only include events held in Victoria, TX or elsewhere in Victoria County. Skip events in other towns (Cuero, Port Lavaca, Goliad, Edna, Yoakum, Corpus Christi, Houston, etc.).
@@ -3063,9 +3077,8 @@ Rules:
         content = _openai_chat(
             api_key,
             [{"role": "user", "content": prompt}],
-            # Recurring expansion ("every Wednesday" × 3 weeks) can produce
-            # 4–8 entries per post × ~50 posts, and reasoning tokens share
-            # this budget, so leave plenty of headroom.
+            # Reasoning tokens share this budget with up to ~50 posts' worth
+            # of events, so leave plenty of headroom.
             max_tokens=12000,
             timeout=60,
         )
@@ -3099,6 +3112,43 @@ def _post_event_venue(r, account_name, account_address):
     if named and named.lower() not in account_name.lower() and account_name.lower() not in named.lower():
         return named, ""
     return account_name, account_address
+
+
+_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
+def _post_event_dates(r, window_start, window_end):
+    """Dates for one event the model pulled from a post, or [] to drop it.
+
+    Models are unreliable at calendar math: J Welch Farms' "bingo Thursday,
+    music every Friday & Saturday" post came back as bingo on Mondays and
+    music on Sundays. So the model only reports the weekday the post states,
+    and the dates come from here:
+      - recurring (every week): every matching weekday in the window.
+      - one-time: the model's date, kept only if it's in the window and, when
+        the model gave a weekday, actually falls on that weekday.
+    """
+    wd = str(r.get("weekday") or "").strip().lower()
+    dow = _WEEKDAYS.index(wd) if wd in _WEEKDAYS else None
+    if r.get("recurring") is True:
+        if dow is None:
+            return []
+        out, d = [], window_start
+        while d <= window_end:
+            if d.weekday() == dow:
+                out.append(d)
+            d += timedelta(days=1)
+        return out
+    date_str = str(r.get("date") or "").strip()
+    try:
+        d_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return []
+    if not (window_start <= d_obj <= window_end):
+        return []
+    if dow is not None and d_obj.weekday() != dow:
+        return []
+    return [d_obj]
 
 
 def fetch_apify_facebook_posts(days_ahead=14):
@@ -3233,18 +3283,13 @@ def fetch_apify_facebook_posts(days_ahead=14):
         # Hand the posts to OpenAI for event extraction
         raw = _extract_events_from_posts_via_ai(venue_name, posts)
         kept = 0
+        seen = set()
         for r in raw:
             if not isinstance(r, dict):
                 continue
-            date_str = (r.get("date") or "").strip()
             name = (r.get("name") or "").strip()
-            if not date_str or not name:
-                continue
-            try:
-                d_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-            except ValueError:
-                continue
-            if not in_window(d_obj):
+            dates = _post_event_dates(r, _WINDOW_START, _WINDOW_END) if name else []
+            if not dates:
                 continue
 
             # Try to attach a source URL: prefer the post's URL when the model
@@ -3267,18 +3312,23 @@ def fetch_apify_facebook_posts(days_ahead=14):
             # elsewhere; the model names the real venue when it isn't theirs.
             ev_venue, address = _post_event_venue(r, venue_name, (venue.get("address") or "").strip())
 
-            events.append({
-                "date": d_obj.strftime("%Y-%m-%d"),
-                "name": name,
-                "time": time_str,
-                "venue": ev_venue,
-                "address": address,
-                "description": description,
-                "icons": classify_icons(name, description, venue_name),
-                "free": bool(r.get("free", False)) or guess_free(name, description, venue_name),
-                "url": source_url,
-            })
-            kept += 1
+            for d_obj in dates:
+                key = (d_obj, name.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                events.append({
+                    "date": d_obj.strftime("%Y-%m-%d"),
+                    "name": name,
+                    "time": time_str,
+                    "venue": ev_venue,
+                    "address": address,
+                    "description": description,
+                    "icons": classify_icons(name, description, venue_name),
+                    "free": bool(r.get("free", False)) or guess_free(name, description, venue_name),
+                    "url": source_url,
+                })
+                kept += 1
         venue_stats.append(f"{venue_name}: {len(posts)} posts → {kept} events")
 
     print(f"  [Apify FB Posts] Extracted {len(events)} events across {len(high_conf)} venues")
@@ -3593,19 +3643,14 @@ def fetch_apify_instagram_posts(days_ahead=14):
 
         raw = _extract_events_from_posts_via_ai(venue_name, normalized)
         kept = 0
+        seen = set()
         ig_profile_url = f"https://www.instagram.com/{username}/"
         for r in raw:
             if not isinstance(r, dict):
                 continue
-            date_str = (r.get("date") or "").strip()
             name = (r.get("name") or "").strip()
-            if not date_str or not name:
-                continue
-            try:
-                d_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-            except ValueError:
-                continue
-            if not in_window(d_obj):
+            dates = _post_event_dates(r, _WINDOW_START, _WINDOW_END) if name else []
+            if not dates:
                 continue
 
             source_url = ig_profile_url
@@ -3621,18 +3666,23 @@ def fetch_apify_instagram_posts(days_ahead=14):
             # elsewhere; the model names the real venue when it isn't theirs.
             ev_venue, address = _post_event_venue(r, venue_name, (venue.get("address") or "").strip())
 
-            events.append({
-                "date": d_obj.strftime("%Y-%m-%d"),
-                "name": name,
-                "time": time_str,
-                "venue": ev_venue,
-                "address": address,
-                "description": description,
-                "icons": classify_icons(name, description, venue_name),
-                "free": bool(r.get("free", False)) or guess_free(name, description, venue_name),
-                "url": source_url,
-            })
-            kept += 1
+            for d_obj in dates:
+                key = (d_obj, name.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                events.append({
+                    "date": d_obj.strftime("%Y-%m-%d"),
+                    "name": name,
+                    "time": time_str,
+                    "venue": ev_venue,
+                    "address": address,
+                    "description": description,
+                    "icons": classify_icons(name, description, venue_name),
+                    "free": bool(r.get("free", False)) or guess_free(name, description, venue_name),
+                    "url": source_url,
+                })
+                kept += 1
         venue_stats.append(f"{venue_name} [{tier}]: {len(normalized)} posts → {kept} events")
 
     print(
