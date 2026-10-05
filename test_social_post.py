@@ -20,13 +20,17 @@ class FakeResp:
 
 class FakeSession:
     """Answers Graph calls in order of a simple router and records them."""
-    def __init__(self, fail=None):
-        self.calls, self.n, self.fail = [], 0, fail or ""
 
-    def request(self, method, url, data=None, timeout=None):
-        self.calls.append((method, url.split("/", 4)[-1], dict(data or {})))
-        self.n += 1
+    def __init__(self, fail=None, page_token=None):
+        self.calls, self.n, self.fail, self.page_token = [], 0, fail or "", page_token
+
+    def request(self, method, url, data=None, params=None, timeout=None):
+        sent = dict(params or data or {})
+        self.calls.append((method, url.split("/", 4)[-1], sent))
         path = url.split("/", 4)[-1]
+        if method == "GET" and sent.get("fields") == "access_token":  # Page token lookup
+            return FakeResp({"access_token": self.page_token, "id": path} if self.page_token else {"id": path})
+        self.n += 1
         if self.fail and self.fail in path:
             return FakeResp({"error": {"message": "nope"}}, 400)
         if path.endswith("/photos") or path.endswith("/media"):
@@ -156,3 +160,29 @@ def test_today_kind_posts(tmp_path, monkeypatch):
     sess = FakeSession()
     assert sp.main(["--kind", "today", "--kit-dir", str(tmp_path), "--no-wait"], session=sess) == 0
     assert next(c for c in sess.calls if c[1] == "page9/feed")[2]["message"] == "Today FB"
+
+
+def test_system_user_token_is_swapped_for_the_page_token(tmp_path, monkeypatch):
+    # 2026-10-05: the first real run failed with "(#200) Unpublished posts
+    # must be posted to a page as the page itself" (a system-user token).
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "system-user-tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+    sess = FakeSession(page_token="page-tok")
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(write_kit(tmp_path)), "--no-wait"], session=sess) == 0
+    lookup = next(c for c in sess.calls if c[0] == "GET" and c[2].get("fields") == "access_token")
+    assert lookup[1] == "page9" and lookup[2]["access_token"] == "system-user-tok"
+    posts = [c for c in sess.calls if c[0] == "POST"]
+    assert posts and all(c[2]["access_token"] == "page-tok" for c in posts)
+
+
+def test_get_calls_send_their_parameters_in_the_query_string():
+    seen = {}
+
+    class S:
+        def request(self, method, url, timeout=None, **kw):
+            seen.update(kw)
+            return FakeResp({"status_code": "FINISHED"})
+    sp._graph("GET", "123", S(), fields="status_code", access_token="t")
+    assert seen == {"params": {"fields": "status_code", "access_token": "t"}}
+
