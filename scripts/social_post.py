@@ -9,8 +9,11 @@ the other days post "today".
 
 Needs (GitHub Actions secrets):
   META_PAGE_ID        Facebook Page id
-  META_PAGE_TOKEN     long-lived Page access token with pages_manage_posts,
-                      instagram_basic, instagram_content_publish
+  META_PAGE_TOKEN     a Page access token, or a system-user token with the
+                      Page assigned (the Page's own token is looked up);
+                      pages_show_list, pages_read_engagement,
+                      pages_manage_posts (+ instagram_basic,
+                      instagram_content_publish for Instagram)
   IG_USER_ID          Instagram business account id linked to the Page
                       (optional; Facebook still posts without it)
 
@@ -43,7 +46,10 @@ def pick_slides(slides, limit=MAX_CAROUSEL):
 
 
 def _graph(method, path, session, **params):
-    r = session.request(method, f"{GRAPH}/{path}", data=params, timeout=60)
+    # GET parameters go in the query string; Graph ignores a GET body, so
+    # the access token and fields would never arrive.
+    where = {"params": params} if method == "GET" else {"data": params}
+    r = session.request(method, f"{GRAPH}/{path}", timeout=60, **where)
     try:
         body = r.json()
     except ValueError:
@@ -128,6 +134,19 @@ def post_instagram_reel(ig_user_id, token, video_url, caption, session, poll_sle
                   creation_id=item["id"], access_token=token)["id"]
 
 
+def page_token(page_id, token, session):
+    """The Page's own access token. Posting photos needs it ("Unpublished
+    posts must be posted to a page as the page itself"); a system-user or
+    user token with access to the Page can look it up, so META_PAGE_TOKEN may
+    hold either. A token that's already the Page's is returned as is."""
+    try:
+        body = _graph("GET", page_id, session, fields="access_token", access_token=token)
+    except PostError as e:
+        print(f"Couldn't look up the Page token ({e}); posting with META_PAGE_TOKEN as given.")
+        return token
+    return body.get("access_token") or token
+
+
 def main(argv=None, session=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--kind", choices=["week", "weekend", "today"], required=True)
@@ -150,6 +169,7 @@ def main(argv=None, session=None):
         print(f"No events in the {args.kind} kit; not posting an empty list.")
         return 0
 
+    token = page_token(page_id, token, session)
     base = f"{SITE}/social/latest"
     urls = [f"{base}/{name}" for name in pick_slides(kit["slides"])]
     reel_url = f"{base}/{kit['reel']}" if kit.get("reel") else None
