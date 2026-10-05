@@ -99,9 +99,56 @@ const DISPLAY = "'Fredoka','Baloo 2','Trebuchet MS',Arial,sans-serif";
 const BODY = "'Nunito','Helvetica Neue',Arial,sans-serif";
 const btn = (href, label) => `<a href="${escHtml(href)}" style="display:inline-block;background:${C.accent};color:#fff;font-family:${DISPLAY};font-weight:bold;font-size:16px;padding:11px 22px;border:3px solid ${C.ink};border-radius:999px;box-shadow:3px 3px 0 ${C.ink};text-decoration:none;">${escHtml(label)}</a>`;
 
+// ─── Dark mode ───────────────────────────────────────────────────────────
+// Email apps decide how a message looks in dark mode, and they disagree:
+//   - Apple Mail honors color-scheme "light only" and leaves it alone.
+//   - Outlook (web, new Mac/Windows, phone) recolors anyway, but it never
+//     recolors background *images*, and it marks what it recolored with
+//     data-ogsc (text) / data-ogsb (background), which a <style> can target.
+//   - Classic Outlook for Windows inverts everything; Gmail's apps recolor
+//     too. Nothing reliable stops them, so the design has to read well
+//     inverted (solid backgrounds, dark outlines, no mid-tone text).
+// darkSafe() runs over the finished HTML: every inline background color is
+// also painted as a one-color gradient (an image to Outlook), and every
+// colored element gets a class the Outlook rules use to put its colors back.
+const HEX = /#[0-9a-f]{3}(?:[0-9a-f]{3})?\b/i;
+const colorKey = c => c.slice(1).toLowerCase();
+
+export function darkSafe(html) {
+  const bgs = new Set(), texts = new Set();
+  const body = html.replace(/<(table|td|div|span|a|p|body)\b([^>]*?)\sstyle="([^"]*)"([^>]*)>/gi, (tag, name, before, style, after) => {
+    const classes = [];
+    let bgHex = null;
+    style = style.replace(/(^|;)\s*background(?:-color)?\s*:\s*(#[0-9a-f]{3,6})\s*(?=;|$)/i, (m, sep, hex) => {
+      bgHex = hex;
+      bgs.add(colorKey(hex));
+      classes.push(`b-${colorKey(hex)}`);
+      return `${sep}background-color:${hex};background-image:linear-gradient(${hex},${hex})`;
+    });
+    const fg = /(^|;)\s*color\s*:\s*(#[0-9a-f]{3,6})/i.exec(style);
+    if (fg) { texts.add(colorKey(fg[2])); classes.push(`t-${colorKey(fg[2])}`); }
+    if (!classes.length) return tag;
+    let attrs = `${before}${after}`;
+    // Classic Outlook for Windows reads the old bgcolor attribute.
+    const bgcolor = bgHex && /^(table|td|body)$/i.test(name) && !/\bbgcolor=/i.test(attrs) ? ` bgcolor="${bgHex}"` : '';
+    if (/\bclass="/i.test(attrs)) attrs = attrs.replace(/\bclass="([^"]*)"/i, (m, c) => `class="${c} ${classes.join(' ')}"`);
+    else attrs += ` class="${classes.join(' ')}"`;
+    return `<${name}${attrs}${bgcolor} style="${style}">`;
+  });
+  const rules = [
+    // Outlook marks the recolored element itself or a wrapper; cover both.
+    ...[...bgs].map(k => `[data-ogsb].b-${k},[data-ogsb] .b-${k}{background-color:#${k} !important;background-image:linear-gradient(#${k},#${k}) !important}`),
+    ...[...texts].map(k => `[data-ogsc].t-${k},[data-ogsc] .t-${k}{color:#${k} !important}`)
+  ];
+  // Two blocks: Gmail drops a whole <style> it doesn't understand, and the
+  // Outlook attribute selectors are the part it might not.
+  const head = `<style>:root{color-scheme:light only;supported-color-schemes:light only}</style>\n<style>${rules.join('\n')}</style>`;
+  return body.replace('</head>', () => `${head}</head>`);
+}
+
 function emailShell({ title, preheader, bodyHtml, footerHtml, siteUrl }) {
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light only"><title>${escHtml(title)}</title>
+  return darkSafe(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only"><title>${escHtml(title)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@400;700;800&display=swap" rel="stylesheet"></head>
 <body style="margin:0;padding:0;background:${C.bg};">
 <span style="display:none;max-height:0;overflow:hidden;opacity:0;">${escHtml(preheader || '')}</span>
@@ -113,7 +160,7 @@ function emailShell({ title, preheader, bodyHtml, footerHtml, siteUrl }) {
 <tr><td style="background:${C.sky};padding:0;line-height:0;border-bottom:3px solid ${C.ink};"><img src="${siteUrl}/email/skyline.png" width="600" alt="" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>
 <tr><td style="padding:8px 22px 26px;font-family:${BODY};color:${C.ink};font-size:15px;line-height:1.5;">${bodyHtml}</td></tr>
 <tr><td style="background:${C.navy};padding:18px 24px;border-top:3px solid ${C.ink};font-family:${BODY};color:#D6CFFF;font-size:12px;line-height:1.6;font-weight:bold;">${footerHtml}</td></tr>
-</table></td></tr></table></body></html>`;
+</table></td></tr></table></body></html>`);
 }
 
 function footer({ siteUrl, unsubscribeUrl, address }) {
