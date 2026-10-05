@@ -132,4 +132,13 @@ describe('New & Notable section', () => {
     expect(section.hidden).toBe(false);
     expect(section.textContent).toContain('New Taco Spot');
   });
+
+  it('links an item to its source when it has a safe URL', async () => {
+    const section = await bootWith({ last_updated: 'x', events: [], new_and_notable: [
+      { name: 'Linked', description: 'd', tag: 'new', icon: 'food', url: 'https://news.example/a' },
+      { name: 'Bad link', description: 'd', tag: 'new', icon: 'food', url: 'javascript:alert(1)' }] });
+    const links = [...section.querySelectorAll('a.notable-name')];
+    expect(links.map(a => a.getAttribute('href'))).toEqual(['https://news.example/a']);
+    expect(section.innerHTML).not.toContain('javascript:');
+  });
 });

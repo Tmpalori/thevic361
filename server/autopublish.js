@@ -47,6 +47,25 @@ function sortKey(ev) {
 // 2: auto-added events the collector no longer finds are taken down.
 export const AUTO_PUBLISH_RULES = 2;
 
+// New & Notable: this run's items first, then earlier finds still under
+// three weeks old (items carry the date the collector found them).
+const NOTABLE_KEEP_DAYS = 21;
+const NOTABLE_MAX = 6;
+export function mergeNotable(fresh, prior, today) {
+  const cutoff = new Date(Date.parse(today + 'T00:00:00Z') - NOTABLE_KEEP_DAYS * 864e5).toISOString().slice(0, 10);
+  const out = [];
+  const seen = new Set();
+  const add = (n) => {
+    const k = String(n && n.name || '').toLowerCase().trim();
+    if (!k || seen.has(k)) return;
+    seen.add(k);
+    out.push(n);
+  };
+  (fresh || []).forEach(add);
+  (prior || []).filter(n => n && typeof n.added === 'string' && n.added >= cutoff).forEach(add);
+  return out.slice(0, NOTABLE_MAX);
+}
+
 // The new run must have at least this share of the events this module has
 // up before it may take any of them down.
 const REPLACE_MIN_RATIO = 0.6;
@@ -130,6 +149,11 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     const stillPresent = new Set(events.map(eventKeyOf));
     const payload = {
       ...extras,
+      // Candidates from before New & Notable was automated have no list:
+      // keep whatever is published.
+      ...(Array.isArray(candidates.new_and_notable)
+        ? { new_and_notable: mergeNotable(candidates.new_and_notable, extras.new_and_notable, today) }
+        : {}),
       last_updated: now,
       events,
       auto_publish: {

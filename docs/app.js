@@ -240,7 +240,9 @@
         '<span class="notable-icon" aria-hidden="true">' + icon + '</span>' +
         '<div class="notable-details">' +
           '<span class="badge ' + tagClass + '">' + tagText + '</span> ' +
-          '<span class="notable-name">' + escHtml(item.name) + '</span>' +
+          (safeHref(item.url)
+            ? '<a class="notable-name" href="' + safeHref(item.url) + '" target="_blank" rel="noopener noreferrer">' + escHtml(item.name) + '</a>'
+            : '<span class="notable-name">' + escHtml(item.name) + '</span>') +
           '<div class="notable-desc">' + escHtml(item.description) + '</div>' +
         '</div>' +
       '</li>';

@@ -1624,3 +1624,4 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 
 /* Sections toggled with the hidden attribute stay hidden whatever their display rule. */
 #new-notable[hidden] { display: none; }
+a.notable-name { color: inherit; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 2px; }

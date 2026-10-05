@@ -494,3 +494,40 @@ def test_worship_and_members_only_are_filtered_but_church_festivals_stay():
             "Massive Garage Sale", "Meet and Greet with Santa", "Bingo Night", "Symphonic Spooktacular"]
     assert all(ce.non_event_reason({"name": n}) for n in drop), [n for n in drop if not ce.non_event_reason({"name": n})]
     assert not any(ce.non_event_reason({"name": n}) for n in keep), [n for n in keep if ce.non_event_reason({"name": n})]
+
+
+def test_gemini_notable_keeps_linked_grounded_items(monkeypatch):
+    import collect_events as ce
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    items = [
+        {"name": "Ellianos Coffee opens on Airline Rd", "description": "Double drive-thru at 605 E. Airline Road.",
+         "tag": "new", "icon": "food", "url": "https://www.victoriaadvocate.com/news/ellianos"},
+        {"name": "Made-up bistro", "description": "x", "tag": "coming", "icon": "food",
+         "url": "https://invented.example/bistro"},
+        {"name": "New church campus opens", "description": "A new worship center.", "tag": "new",
+         "icon": "community", "url": "https://www.victoriaadvocate.com/news/church"},
+        {"name": "No link shop", "description": "x", "tag": "new", "icon": "shopping", "url": ""},
+        {"name": "Odd icon arcade", "description": "Arcade on Navarro.", "tag": "weird", "icon": "laser",
+         "url": "https://www.victoriaadvocate.com/news/arcade"},
+    ]
+    calls = []
+
+    def post(url, json=None, timeout=None, headers=None):
+        calls.append(json)
+        return _gemini_reply(items, hosts=("victoriaadvocate.com",))
+
+    class Page:
+        status_code, text = 404, ""
+
+    out = ce.fetch_gemini_notable(post=post, get=lambda u: Page())
+    assert [n["name"] for n in out] == ["Ellianos Coffee opens on Airline Rd", "Odd icon arcade"]
+    assert out[0]["url"].startswith("https://www.victoriaadvocate.com/")
+    assert out[0]["added"] == ce.now_central().date().isoformat()
+    assert out[1]["tag"] == "new" and out[1]["icon"] == "community"  # unknown values fall back
+    assert calls[0]["tools"] == [{"google_search": {}}]
+
+
+def test_gemini_notable_off_without_key(monkeypatch):
+    import collect_events as ce
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert ce.fetch_gemini_notable(post=lambda *a, **k: 1 / 0) == []
