@@ -140,3 +140,20 @@ def test_caption_points_to_the_signup_page():
                        _d(2026, 10, 9), _d(2026, 10, 9), "today")
     assert "Get the list free every Monday: https://www.thevic361.com/subscribe" in caps["facebook"]
     assert "Get the list free every Monday: link in bio" in caps["instagram"]
+
+
+def test_outreach_slack_is_short_and_actionable(tmp_path):
+    import json as _json
+    vf = tmp_path / "venues.json"
+    vf.write_text(_json.dumps([{"name": f"Bar {i}", "instagram_url": f"https://www.instagram.com/bar{i}/"} for i in range(12)]))
+    groups = {date(2026, 10, 9): [{"name": f"Show | {i}", "venue": f"Bar {i}", "page": f"/events/2026-10-09-show-{i}"}
+                                  for i in range(12)] + [{"name": "Fish Fry", "venue": "No Socials Hall"}]}
+    msg = sk.outreach_slack(groups, venues_path=str(vf))
+    lines = msg.splitlines()
+    assert lines[0].startswith("📣 *12 venues on this week's list you can tag.*")
+    assert len(lines) == 1 + 8 + 1                       # headline, 8 venues, "and 4 more"
+    assert lines[1] == "• <https://www.instagram.com/bar0/|Bar 0> → <https://www.thevic361.com/events/2026-10-09-show-0|Show / 0>"
+    assert "No Socials Hall" not in msg                  # nothing to tag, so not listed
+    assert lines[-1] == "…and 4 more: <https://www.thevic361.com/social/latest/outreach.txt|full list>"
+    assert sk.outreach_slack({date(2026, 10, 9): [{"name": "x", "venue": "No Socials Hall"}]}, venues_path=str(vf)) == ""
+
