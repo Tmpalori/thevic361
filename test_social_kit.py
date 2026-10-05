@@ -106,3 +106,37 @@ def test_kinds_rebuild_keeps_other_kits(tmp_path):
     assert m2["generated_for"] == "2026-10-09"
     assert m2["kits"]["week"] == m["kits"]["week"] and (out / "week-1.png").exists()
     assert m2["kits"]["today"]["events"] == 1
+
+
+def test_branded_slides_markup():
+    import social_slides as ss
+    from datetime import date as _d
+    ev = lambda name, day, **kw: {"name": name, "date": day, "time": "7:00 PM", "venue": "Weber <Brewing>", "icons": ["music", "nope"], **kw}
+    groups = {_d(2026, 10, 9): [ev(f"Show {i}", "2026-10-09") for i in range(12)],
+              _d(2026, 10, 10): [ev("Pumpkin Patch", "2026-10-10", featured=True, free=True)]}
+    names, doc = ss.slides_html(groups, _d(2026, 10, 9), _d(2026, 10, 11), "weekend")
+    # Cover, 12 Friday events split evenly 4/4/4, Saturday, call to action.
+    assert names == [f"weekend-{n}.png" for n in range(1, 7)]
+    assert doc.count('<section class="slide"') == 6
+    assert doc.count("(part ") == 3
+    assert "Weber &lt;Brewing&gt;" in doc and "<Brewing>" not in doc   # escaped
+    assert '#i-music' in doc and '#i-nope' not in doc                  # only known icons
+    assert "#FF7A3D" in doc and "#B9A6FF" in doc                       # Friday sunset, Saturday lilac (site colors)
+    assert "★ Vic’s Pick" in doc and ">Free<" in doc
+    assert "thevic361.com/subscribe" in doc
+    assert "30 things to do" not in doc and "13 things to do" in doc
+
+
+def test_branded_render_falls_back_without_chrome(tmp_path, monkeypatch):
+    import social_slides as ss
+    from datetime import date as _d
+    monkeypatch.setattr(ss, "find_chrome", lambda: None)
+    assert ss.render({}, _d(2026, 10, 9), _d(2026, 10, 9), "today", str(tmp_path)) is None
+
+
+def test_caption_points_to_the_signup_page():
+    from datetime import date as _d
+    caps = sk.captions({_d(2026, 10, 9): [{"name": "Live Music", "date": "2026-10-09", "time": "7 PM"}]},
+                       _d(2026, 10, 9), _d(2026, 10, 9), "today")
+    assert "Get the list free every Monday: https://www.thevic361.com/subscribe" in caps["facebook"]
+    assert "Get the list free every Monday: link in bio" in caps["instagram"]
