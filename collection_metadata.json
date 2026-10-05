@@ -1,116 +1,123 @@
 {
-  "last_run_at": "2026-09-28T01:40:37",
+  "last_run_at": "2026-10-05T01:27:09",
   "window_start": "2026-09-28",
-  "window_end": "2026-10-12",
+  "window_end": "2026-10-18",
   "days_ahead": 14,
   "candidates_only": true,
-  "merged_count": 115,
-  "raw_count": 154,
+  "merged_count": 181,
+  "raw_count": 284,
   "sources": [
     {
       "name": "local_events",
-      "count": 36,
+      "count": 63,
       "status": "ok",
-      "started_at": "2026-09-28T01:24:41",
-      "finished_at": "2026-09-28T01:24:42"
+      "started_at": "2026-10-05T00:54:17",
+      "finished_at": "2026-10-05T00:54:17"
     },
     {
       "name": "google_sheet",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-09-28T01:24:42",
-      "finished_at": "2026-09-28T01:24:42"
+      "started_at": "2026-10-05T00:54:17",
+      "finished_at": "2026-10-05T00:54:18"
     },
     {
       "name": "city_calendar",
-      "count": 5,
+      "count": 18,
       "status": "ok",
-      "started_at": "2026-09-28T01:24:42",
-      "finished_at": "2026-09-28T01:24:49"
+      "started_at": "2026-10-05T00:54:18",
+      "finished_at": "2026-10-05T00:54:53"
     },
     {
       "name": "chamber",
-      "count": 2,
+      "count": 3,
       "status": "ok",
-      "started_at": "2026-09-28T01:24:49",
-      "finished_at": "2026-09-28T01:24:50"
+      "started_at": "2026-10-05T00:54:53",
+      "finished_at": "2026-10-05T00:54:55"
     },
     {
       "name": "library",
-      "count": 20,
+      "count": 30,
       "status": "ok",
-      "started_at": "2026-09-28T01:24:50",
-      "finished_at": "2026-09-28T01:24:52"
+      "started_at": "2026-10-05T00:54:55",
+      "finished_at": "2026-10-05T00:54:56"
     },
     {
       "name": "moonshine",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-09-28T01:24:52",
-      "finished_at": "2026-09-28T01:24:52"
+      "started_at": "2026-10-05T00:54:56",
+      "finished_at": "2026-10-05T00:54:57"
     },
     {
       "name": "vtx_artwalk",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-09-28T01:24:52",
-      "finished_at": "2026-09-28T01:24:53"
+      "started_at": "2026-10-05T00:54:57",
+      "finished_at": "2026-10-05T00:54:57"
     },
     {
       "name": "jwelch",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-09-28T01:24:53",
-      "finished_at": "2026-09-28T01:24:56"
+      "started_at": "2026-10-05T00:54:57",
+      "finished_at": "2026-10-05T00:55:04"
     },
     {
       "name": "theatre_victoria",
       "count": 3,
       "status": "ok",
-      "started_at": "2026-09-28T01:24:56",
-      "finished_at": "2026-09-28T01:24:56"
+      "started_at": "2026-10-05T00:55:04",
+      "finished_at": "2026-10-05T00:55:04"
     },
     {
       "name": "generals",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-09-28T01:24:56",
-      "finished_at": "2026-09-28T01:24:57"
+      "started_at": "2026-10-05T00:55:04",
+      "finished_at": "2026-10-05T00:55:05"
     },
     {
       "name": "allevents",
-      "count": 21,
+      "count": 28,
       "status": "ok",
-      "started_at": "2026-09-28T01:24:57",
-      "finished_at": "2026-09-28T01:24:58"
+      "started_at": "2026-10-05T00:55:05",
+      "finished_at": "2026-10-05T00:55:14"
+    },
+    {
+      "name": "gemini_search",
+      "count": 31,
+      "status": "ok",
+      "started_at": "2026-10-05T00:55:14",
+      "finished_at": "2026-10-05T00:56:35"
     },
     {
       "name": "apify_facebook",
-      "count": 1,
+      "count": 7,
       "status": "ok",
-      "started_at": "2026-09-28T01:24:58",
-      "finished_at": "2026-09-28T01:25:54"
+      "started_at": "2026-10-05T00:56:35",
+      "finished_at": "2026-10-05T00:57:24"
+    },
+    {
+      "name": "apify_eventbrite",
+      "count": 13,
+      "status": "ok",
+      "started_at": "2026-10-05T00:57:24",
+      "finished_at": "2026-10-05T00:58:50"
     },
     {
       "name": "apify_facebook_posts",
-      "count": 4,
+      "count": 50,
       "status": "ok",
-      "started_at": "2026-09-28T01:25:54",
-      "finished_at": "2026-09-28T01:33:20"
+      "started_at": "2026-10-05T00:58:50",
+      "finished_at": "2026-10-05T01:14:20"
     },
     {
       "name": "apify_instagram_posts",
-      "count": 30,
+      "count": 38,
       "status": "ok",
-      "started_at": "2026-09-28T01:33:20",
-      "finished_at": "2026-09-28T01:39:05"
-    },
-    {
-      "name": "perplexity",
-      "count": 32,
-      "status": "ok",
-      "started_at": "2026-09-28T01:39:05",
-      "finished_at": "2026-09-28T01:39:46"
+      "started_at": "2026-10-05T01:14:20",
+      "finished_at": "2026-10-05T01:23:23"
     }
   ]
 }
