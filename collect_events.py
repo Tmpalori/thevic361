@@ -882,6 +882,11 @@ def fetch_library_events(days_ahead=7):
                 "time": time_str,
                 "venue": "Victoria Public Library",
                 "address": "302 N. Main St.",
+                # The calendar cards never say where a program meets, so
+                # this is a guess: off-site programs (Bookish Society Book
+                # Club at Vida Cafe) are listed here too. Lets the dedupe
+                # merge them with a listing that names the real place.
+                "_venue_guess": True,
                 "description": description,
                 "icons": classify_icons(title, description, "Victoria Public Library"),
                 "free": True,
@@ -1847,6 +1852,25 @@ def _near_place(a, b):
     return bool(wa & wb)
 
 
+def _start_minutes(t):
+    """Start of a time string in minutes after midnight, or None.
+    "6:00PM – 7:00PM" and "6:00 PM – 7:00 PM" both give 1080."""
+    m = re.search(r"(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s*m", t or "", re.IGNORECASE)
+    if not m:
+        return None
+    return (int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0)) * 60 + int(m.group(2) or 0)
+
+
+def _guessed_place_same_start(a, b):
+    """One side's venue is a source's default guess (library programs are
+    all filed under the library), and both start at the same minute: the
+    venues disagreeing doesn't make them two events."""
+    if not (a.get("_venue_guess") or b.get("_venue_guess")):
+        return False
+    sa, sb = _start_minutes(a.get("time")), _start_minutes(b.get("time"))
+    return sa is not None and sa == sb
+
+
 def is_same_event(a, b):
     """Fuzzy match for two events on the same date.
 
@@ -1859,7 +1883,7 @@ def is_same_event(a, b):
         return False
     sa, sb = " ".join(ta), " ".join(tb)
     if sa == sb or SequenceMatcher(None, sa, sb).ratio() >= 0.85:
-        return _near_place(a, b)
+        return _near_place(a, b) or _guessed_place_same_start(a, b)
     # One name contains the other ("6th Realm Night Market" vs "6th Realm
     # Night Market Street spots"): only a match at the same place, so
     # "Tejas Fest" doesn't swallow "Chihuahua Races at Tejas Fest".
@@ -1926,6 +1950,11 @@ def _merge_pair(old, new):
             and other["venue"].lower() not in _NON_PLACE_NAMES:
         merged["venue"] = other["venue"]
         merged["address"] = other.get("address") or ""
+    # A guessed venue gives way to one a source actually stated.
+    if merged.get("_venue_guess") and other.get("venue") and not other.get("_venue_guess"):
+        merged["venue"] = other["venue"]
+        merged["address"] = other.get("address") or ""
+    merged["_venue_guess"] = bool(merged.get("_venue_guess") and other.get("_venue_guess"))
     # The shorter name is usually the clean one ("Tejas Fest" over "Tejas
     # Fest 2026 - Presented by ...").
     if other.get("name") and len(other["name"]) < len(merged.get("name") or ""):
@@ -2050,6 +2079,8 @@ def merge_events(all_events, days_ahead=7, venues=None):
         }
         if ev.get("_source"):
             new_entry["_source"] = ev["_source"]
+        if ev.get("_venue_guess"):
+            new_entry["_venue_guess"] = True
         if not new_entry["name"]:
             continue
         clean_venue(new_entry, venues)
@@ -2082,6 +2113,7 @@ def merge_events(all_events, days_ahead=7, venues=None):
 
     final = [e for d in by_date.values() for e in d]
     for e in final:
+        e.pop("_venue_guess", None)  # dedupe-only; never reaches candidates.json
         # Keep a single public-facing source string for the admin pill.
         srcs = e.pop("_sources", None)
         if srcs and len(srcs) > 1:
