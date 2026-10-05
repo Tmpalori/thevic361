@@ -9,15 +9,16 @@
 #
 # Schedule note (DST drift): GitHub Actions cron runs in UTC and does NOT
 # observe US daylight-saving transitions. The fixed cron below means the
-# job fires:
-#   - 6:00 PM Central during CDT (Mar–Nov, UTC-5)
-#   - 5:00 PM Central during CST (Nov–Mar, UTC-6)
-# The 1-hour shift twice a year is intentional and acceptable — the digest
-# job and the admin's Sunday-evening review window both have plenty of
-# slack. If you need an exact 6:00 PM Central year-round, switch to two
-# scheduled triggers gated by month, or move the trigger to a service that
-# honors timezones (e.g. Railway cron). Do NOT silently "fix" the cron each
-# DST switch — that's an unsignalled drift the audit flagged.
+# job is scheduled for:
+#   - 3:23 PM Central during CDT (Mar–Nov, UTC-5)
+#   - 2:23 PM Central during CST (Nov–Mar, UTC-6)
+# The 1-hour shift twice a year is intentional and acceptable. Do NOT
+# silently "fix" the cron each DST switch.
+# Why mid-afternoon and minute 23 (Oct 2026): GitHub queues scheduled runs
+# at busy times, worst on the hour. The old 23:00 UTC (6 PM CDT) slot
+# routinely started 45–90 minutes late, so the week's events showed up
+# mid-evening. An off-the-hour afternoon slot lands well before evening
+# even when delayed. server/sources.js mirrors this time for the admin.
 # Also runs on manual trigger (workflow_dispatch).
 #
 # Google Maps venue discovery removed (Apr 2026): production runs showed
@@ -51,14 +52,14 @@ name: Weekly Collect
 
 on:
   schedule:
-    # 23:00 UTC every Sunday. = 6 PM CDT (Mar–Nov) / 5 PM CST (Nov–Mar).
-    # See header comment for why we accept this 1-hour DST drift.
-    - cron: '0 23 * * 0'
+    # 20:23 UTC every Sunday. = 3:23 PM CDT (Mar–Nov) / 2:23 PM CST (Nov–Mar).
+    # See header comment for the DST drift and why it's off the hour.
+    - cron: '23 20 * * 0'
     # Midweek refresh (Wednesday, same time) so events announced after
     # Sunday still make the site. Added alongside, not instead of, the
     # Sunday cron above. Each run's candidates.json redeploys the site,
     # which auto-publishes them (server/autopublish.js).
-    - cron: '0 23 * * 3'
+    - cron: '23 20 * * 3'
   workflow_dispatch:       # Manual trigger from GitHub UI
 
 permissions:

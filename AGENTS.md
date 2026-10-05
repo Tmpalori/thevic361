@@ -230,7 +230,7 @@ These files / behaviors are load-bearing and **must not change** in a normal PR.
 2. **`candidates.json`** in a feature PR — it's a runtime artifact written by the weekly workflow.
 3. **`collection_metadata.json`** in a feature PR — same, runtime artifact.
 4. **`.last-published-digest-*` files** — markers from the decommissioned reply-to-email approval flow. Leave alone.
-5. **The `weekly-collect.yml` cron expression `0 23 * * 0`.** The 1-hour DST drift is intentional and documented in the workflow header. Do not "fix" it.
+5. **The `weekly-collect.yml` cron expressions `23 20 * * 0` and `23 20 * * 3`.** The 1-hour DST drift is intentional and documented in the workflow header. Do not "fix" it. (Moved from `0 23` in Oct 2026 at the owner's request, because GitHub started the on-the-hour evening slot 45–90 min late; keep `server/sources.js` in sync if it ever changes.)
 6. **Step / job timeouts in `weekly-collect.yml`.** Each value is justified by a specific run ID in the comments. Don't lower without strong reason.
 7. **The `--candidates-only` flag default behavior.** Default is *off* (so local runs still write `events.json`); CI explicitly sets it.
 8. **`server/auth.js` — the HMAC-SHA256 token format.** Single algorithm, no `alg` header. Do not switch to a JWT lib.

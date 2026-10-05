@@ -7,10 +7,10 @@
  *   - last successful collection run timestamp (file mtime fallback)
  *   - next scheduled auto-pull time, computed from the Weekly Collect cron
  *
- * The cron in `.github/workflows/weekly-collect.yml` is `0 23 * * 0` — every
- * Sunday at 23:00 UTC. That's 6 PM CDT (Mar–Nov, UTC-5) or 5 PM CST
- * (Nov–Mar, UTC-6); the workflow file documents that DST drift as
- * intentional. We compute the next run as the next Sunday at 23:00 UTC.
+ * The crons in `.github/workflows/weekly-collect.yml` are `23 20 * * 0` and
+ * `23 20 * * 3` — Sunday and Wednesday at 20:23 UTC. That's 3:23 PM CDT
+ * (Mar–Nov, UTC-5) or 2:23 PM CST (Nov–Mar, UTC-6); the workflow file
+ * documents that DST drift as intentional.
  *
  * If `collection_metadata.json` is missing (e.g. the workflow hasn't run yet
  * after this code shipped), the response falls back to "unknown" but still
@@ -44,14 +44,16 @@ const KNOWN_SOURCES = [
 const KNOWN_BY_NAME = new Map(KNOWN_SOURCES.map(s => [s.name, s]));
 
 // Next scheduled collect strictly AFTER `now`: weekly-collect.yml runs at
-// 23:00 UTC on Sunday (`0 23 * * 0`) and Wednesday (`0 23 * * 3`). The
+// 20:23 UTC on Sunday (`23 20 * * 0`) and Wednesday (`23 20 * * 3`). The
 // Central-time equivalent shifts an hour around DST but the UTC instant is
-// exact.
+// exact. (GitHub may start a scheduled run some minutes late.)
 const RUN_DAYS = [0, 3];
+const RUN_HOUR_UTC = 20;
+const RUN_MINUTE_UTC = 23;
 export function nextWeeklyRunUtc(now) {
   const ref = now ? new Date(now.getTime()) : new Date();
   for (let add = 0; add <= 7; add++) {
-    const t = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate() + add, 23, 0, 0, 0));
+    const t = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate() + add, RUN_HOUR_UTC, RUN_MINUTE_UTC, 0, 0));
     if (RUN_DAYS.includes(t.getUTCDay()) && t.getTime() > ref.getTime()) return t;
   }
   return null;
@@ -123,8 +125,8 @@ export function buildSourcesPayload({ metadata, mtime, now, githubConfigured, ac
     ok: true,
     last_run_at: lastRunAt,
     next_run_at: next.toISOString(),
-    next_run_cron: '0 23 * * 0,3',
-    next_run_note: 'Sundays and Wednesdays, about 6 PM Central',
+    next_run_cron: '23 20 * * 0,3',
+    next_run_note: 'Sundays and Wednesdays, mid-afternoon Central (about 3:30 PM)',
     metadata_present: Boolean(metadata),
     merged_count: metadata && typeof metadata.merged_count === 'number'
       ? metadata.merged_count : null,
