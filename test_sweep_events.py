@@ -59,9 +59,10 @@ def test_report_lists_each_problem_once_with_links():
     found = sw.combine([(0, "wrong_date", "name says Monday")], [(0, "wrong_date", "dup from AI"), (0, "other", "x")])
     assert kinds(found) == [(0, "other"), (0, "wrong_date")]
     head, lines = sw.report(events, found, ai_ran=True, days=14)
-    assert head.startswith("🔎 Event check: 1 event to look at (1 events in the next 14 days)")
-    assert "<https://www.thevic361.com/events/2026-10-06-monday-bingo|Monday Bingo>" in lines[1]
-    assert "Tue Oct 6" in lines[1] and "*wrong day?*" in lines[1]
+    assert head.startswith("🔎 Event check: 1 to look at (1 events in the next 14 days)")
+    assert lines[0] == "*To look at:*"
+    assert "<https://www.thevic361.com/events/2026-10-06-monday-bingo|Monday Bingo>" in lines[2]
+    assert "Tue Oct 6" in lines[2] and "*wrong day?*" in lines[2]
 
 
 def test_window_is_today_through_n_days():
@@ -70,3 +71,54 @@ def test_window_is_today_through_n_days():
               ev("Last day", date="2026-10-17"), ev("Too far", date="2026-10-18")]
     got = sw.upcoming(events, datetime.date(2026, 10, 4), 14)
     assert [e["name"] for e in got] == ["Today", "Last day"]
+
+
+class FakeResp:
+    def __init__(self, data):
+        self.data = data
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self.data
+
+
+def test_only_certain_rule_findings_get_hidden():
+    events = [ev("Monday Night Bingo", page="/events/a"), ev("St. Mary's Parish Fall Festival", page="/events/b"),
+              ev("Late Show", time="3:00 AM", page="/events/c")]
+    picks = sw.to_hide(events, sw.rule_findings(events))
+    assert [(i, k) for i, k, _ in picks] == [(1, "religious")]   # wrong day and odd time stay flags
+
+
+def test_hide_posts_pages_and_reads_back_what_happened():
+    events = [ev("A", page="/events/a"), ev("B", page="/events/b"), ev("C", page="/events/c")]
+    picks = [(0, "religious", "church event"), (1, "duplicate", "same as X"), (2, "not_an_event", "job post")]
+    answer = {"ok": True, "hidden": [{"page": "/events/a"}],
+              "skipped": [{"page": "/events/b", "why": "restored-by-admin"}, {"page": "/events/c", "why": "not-live"}]}
+    with patch.object(sw.requests, "post", return_value=FakeResp(answer)) as post:
+        hidden, restored = sw.hide(events, picks, "s3cret")
+    assert hidden == {0} and restored == {1}
+    kw = post.call_args.kwargs
+    assert kw["headers"]["X-Cron-Secret"] == "s3cret"
+    assert kw["json"]["hide"][0] == {"page": "/events/a", "reason": "religious / church event: church event"}
+
+
+def test_hide_does_nothing_without_a_secret_or_with_too_many():
+    events = [ev(str(n), page=f"/events/{n}") for n in range(12)]
+    picks = [(n, "not_an_event", "x") for n in range(12)]
+    with patch.object(sw.requests, "post") as post:
+        assert sw.hide(events, picks[:2], "") == (set(), set())
+        assert sw.hide(events, picks, "s3cret") == (set(), set())
+    post.assert_not_called()
+
+
+def test_report_splits_hidden_from_flags():
+    events = [ev("Church Fish Fry", venue="St. Mary's", page="/events/a"), ev("Monday Bingo", page="/events/b")]
+    found = [(0, "religious", "church event"), (1, "wrong_date", "name says Monday")]
+    head, lines = sw.report(events, found, ai_ran=True, days=14, hidden={0})
+    assert head.startswith("🔎 Event check: hid 1, 1 to look at")
+    assert lines[0].startswith("*Hidden automatically*")
+    assert "Church Fish Fry" in lines[1]
+    assert lines[2] == "*To look at:*" and "Monday Bingo" in lines[3]
+

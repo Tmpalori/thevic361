@@ -5,8 +5,10 @@ Runs from .github/workflows/event-check.yml after each collect (once
 auto-publish has updated the site) and on Monday morning before the
 newsletter. Reads the live /events.json, so it checks what people actually
 see, hand edits included, and posts one Slack message: what to look at, or
-that everything looks fine. It never changes anything; fixes happen in the
-admin.
+that everything looks fine. What a rule is sure about (church events,
+non-events, exact duplicates) it hides on its own through the site's
+/api/event-check/hide (server/eventcheck.js; never deletes, restore on admin
+Home); judgment calls, and everything the AI finds, only get reported.
 
 Two passes:
   - Rules (free): the collector's own duplicate, out-of-area and non-event
@@ -40,6 +42,11 @@ WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", 
 AI_KINDS = {"duplicate", "wrong_date", "not_an_event", "out_of_area", "religious", "odd_time", "other"}
 MAX_LINES = 12  # in Slack; the job summary lists everything
 RELIGIOUS_REASONS = {"religious event", "church event", "worship service"}  # collect_events.non_event_reason
+# Rule findings certain enough to hide without asking. Wrong days and odd
+# times stay flags: the fix is an edit, not a removal. AI findings are never
+# acted on.
+AUTO_HIDE = {"religious", "not_an_event", "duplicate"}
+MAX_HIDE = 10  # server/eventcheck.js MAX_PER_RUN; more than this means a rule went wrong
 
 
 def upcoming(events, today, days):
@@ -160,18 +167,58 @@ def describe(e):
     return f"{when} · {name}{where}"
 
 
-def report(events, findings, ai_ran, days):
+def to_hide(events, rules):
+    """The rule findings to hide: one per event, certain kinds only."""
+    out, seen = [], set()
+    for i, kind, why in rules:
+        if kind in AUTO_HIDE and i not in seen and events[i].get("page"):
+            seen.add(i)
+            out.append((i, kind, why))
+    return out
+
+
+def hide(events, picks, secret):
+    """Ask the site to hide picks. Returns (hidden indexes, indexes to drop
+    from the report because the admin restored them before)."""
+    if not picks or not secret:
+        return set(), set()
+    if len(picks) > MAX_HIDE:
+        print(f"Not hiding: {len(picks)} events is more than {MAX_HIDE}; reporting them instead.")
+        return set(), set()
+    body = {"hide": [{"page": events[i]["page"], "reason": f"{LABEL.get(k, k)}: {why}"[:120]} for i, k, why in picks]}
+    try:
+        r = requests.post(f"{SITE}/api/event-check/hide", json=body, timeout=30,
+                          headers={"X-Cron-Secret": secret, "User-Agent": "vic361-event-check"})
+        r.raise_for_status()
+        out = r.json()
+    except Exception as e:  # noqa: BLE001 - still report everything
+        print(f"Hiding failed: {e}")
+        return set(), set()
+    by_page = {events[i]["page"]: i for i, _, _ in picks}
+    hidden = {by_page[h["page"]] for h in out.get("hidden") or [] if h.get("page") in by_page}
+    restored = {by_page[x["page"]] for x in out.get("skipped") or []
+                if x.get("why") == "restored-by-admin" and x.get("page") in by_page}
+    return hidden, restored
+
+
+def report(events, findings, ai_ran, days, hidden=()):
+    """Slack text: what was hidden, then what to look at."""
     scope = f"{len(events)} events in the next {days} days"
+    gone = [f for f in findings if f[0] in hidden]
+    look = [f for f in findings if f[0] not in hidden]
+    note = "" if ai_ran else " (Rules only; the AI check didn't run.)"
     if not findings:
-        head = f"🔎 Event check: {scope}, nothing looks off."
-        if not ai_ran:
-            head += " (Rules only; the AI check didn't run.)"
-        return head, []
-    n = len({i for i, _, _ in findings})
-    head = f"🔎 Event check: {n} event{'s' if n != 1 else ''} to look at ({scope})"
-    if not ai_ran:
-        head += ". Rules only; the AI check didn't run"
-    lines = [f"• {describe(events[i])}: *{LABEL.get(kind, kind)}*, {why}" for i, kind, why in findings]
+        return f"🔎 Event check: {scope}, nothing looks off.{note}", []
+    nh, nl = len({f[0] for f in gone}), len({f[0] for f in look})
+    parts = ([f"hid {nh}"] if nh else []) + ([f"{nl} to look at"] if nl else [])
+    head = f"🔎 Event check: {', '.join(parts)} ({scope}){note}"
+    lines = []
+    if gone:
+        lines.append("*Hidden automatically* (nothing deleted; Restore on the admin Home tab):")
+        lines += [f"• {describe(events[i])}: *{LABEL.get(kind, kind)}*, {why}" for i, kind, why in gone]
+    if look:
+        lines.append("*To look at:*")
+        lines += [f"• {describe(events[i])}: *{LABEL.get(kind, kind)}*, {why}" for i, kind, why in look]
     return head, lines
 
 
@@ -188,8 +235,11 @@ def main(argv=None):
     rules = rule_findings(events)
     key = os.environ.get("OPENAI_API_KEY", "").strip()
     ai = ai_findings(events, key) if key and events else None
-    findings = combine(rules, ai)
-    head, lines = report(events, findings, ai is not None, args.days)
+    secret = "" if args.dry_run else os.environ.get("EVENT_CHECK_SECRET", "").strip()
+    hidden, restored = hide(events, to_hide(events, rules), secret)
+    # Anything the admin restored stays restored, and isn't nagged about.
+    findings = [f for f in combine(rules, ai) if f[0] not in restored]
+    head, lines = report(events, findings, ai is not None, args.days, hidden)
 
     text = "\n".join([head] + lines[:MAX_LINES] +
                      ([f"…and {len(lines) - MAX_LINES} more in the run summary."] if len(lines) > MAX_LINES else []))

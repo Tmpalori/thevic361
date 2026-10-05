@@ -1,6 +1,10 @@
 # Event check — one look over the live event list for anything off
 # (scripts/sweep_events.py): duplicates, wrong days, non-events, church
-# events, odd times. Posts one Slack message either way; never edits.
+# events, odd times. Rule-certain church events, non-events and exact
+# duplicates are hidden (server/eventcheck.js; never deleted, restore on
+# admin Home); everything else is reported. One Slack message either way.
+# Hiding needs EVENT_CHECK_SECRET (or NEWSLETTER_CRON_SECRET) set the same
+# in Railway and here; without it the check only reports.
 #
 # When:
 #   - after each successful Weekly Collect, once auto-publish has put the
@@ -61,6 +65,7 @@ jobs:
           SITE_URL: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          EVENT_CHECK_SECRET: ${{ secrets.EVENT_CHECK_SECRET || secrets.NEWSLETTER_CRON_SECRET }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: python3 scripts/sweep_events.py
 

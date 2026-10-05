@@ -27,6 +27,7 @@ import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
+import { registerEventCheck, withoutHidden, hiddenPages } from './eventcheck.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { stripeConfig, createStripe, createSponsors } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
@@ -961,7 +962,8 @@ export async function createApp(opts = {}) {
         } catch (err) {
           console.warn('[events] overlay skipped:', err.message);
         }
-        return { ...published, events: withPages(events), source: 'store' };
+        // Events the event check hid stay published but off the site.
+        return { ...published, events: withoutHidden(withPages(events), published), source: 'store' };
       }
     } catch (err) {
       console.warn('[events] published lookup failed:', err.message);
@@ -1003,8 +1005,8 @@ export async function createApp(opts = {}) {
 
   async function serveEventsJson(req, res, next) {
     try {
-      // auto_publish is bookkeeping for server/autopublish.js, not public.
-      const { source, auto_publish: _auto, ...payload } = await getPublicPayload();
+      // auto_publish and the hidden lists are bookkeeping, not public.
+      const { source, auto_publish: _auto, hidden: _h, hidden_restored: _r, ...payload } = await getPublicPayload();
       if (source === 'empty') return next();
       // Store-backed payloads change on publish; the bundled file only on deploy.
       if (source === 'store') res.set('Cache-Control', 'no-store');
@@ -1030,6 +1032,14 @@ export async function createApp(opts = {}) {
   // ─── Newsletter (Resend; see server/newsletter.js) ───
   const newsletter = newsletterConfig(process.env, opts);
   const nlResend = opts.resend || createResend(newsletter.apiKey);
+  // Event check (server/eventcheck.js): hide what the weekly check is sure
+  // about, restore from admin Home.
+  registerEventCheck(app, {
+    store, requireAdmin, nowFn: () => (opts.now || (() => new Date()))(),
+    secret: opts.eventCheckSecret ?? (process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || ''),
+    loadVisible: async () => (await loadPublicPayload()).events
+  });
+
   registerNewsletter(app, {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
     getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman
@@ -1075,7 +1085,8 @@ export async function createApp(opts = {}) {
   const pageHandler = render => async (req, res, next) => {
     try {
       const payload = await getPublicPayload();
-      const archived = await listArchived();
+      // Hidden events keep their archive row; keep their pages off too.
+      const archived = withoutHidden(await listArchived(), payload);
       const now = nowFn();
       res.locals.seasons = activeSeasons(payload.events, archived, now);
       await render(req, res, payload, { siteUrl, now, sponsor: payload.sponsor || null, archived, venues });
@@ -1105,6 +1116,7 @@ export async function createApp(opts = {}) {
   }
 
   async function findEvent(payload, page) {
+    if (hiddenPages(payload).has(page)) return null;
     let ev = payload.events.find(e => e.page === page);
     if (!ev && typeof store.getArchivedEvent === 'function') {
       ev = await store.getArchivedEvent(page);
@@ -1229,6 +1241,9 @@ export async function createApp(opts = {}) {
       { key: 'stripe', label: 'Sponsor payments (Stripe)', ok: stripeCfg.enabled, level: 'recommended',
         fix: 'In Stripe: create a restricted key (Checkout Sessions, Products and Prices: write) and a webhook to ' + siteUrl +
           '/api/stripe/webhook on API version 2026-09-30.endive. Put them in Railway as STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.' },
+      { key: 'event_check', label: 'Event check hides church events, non-events and duplicates',
+        ok: Boolean(opts.eventCheckSecret ?? (env.EVENT_CHECK_SECRET || env.NEWSLETTER_CRON_SECRET)), level: 'recommended', link: ghSecrets,
+        fix: 'Set EVENT_CHECK_SECRET in Railway and as a GitHub secret (any long random string, the same in both). Until then the check only reports to Slack.' },
       { key: 'pull_now', label: '"Pull now" button (GitHub token)', ok: github.isConfigured(), level: 'optional',
         fix: 'Set GITHUB_TOKEN in Railway (fine-grained, Actions: write on this repo).' },
       { key: 'spam', label: 'Spam protection on forms (Turnstile)', ok: Boolean(turnstileSecret && turnstileSiteKey), level: 'optional',
@@ -1243,9 +1258,11 @@ export async function createApp(opts = {}) {
     try {
       const pub = (await store.getPublished()) || {};
       const today = localDateStr(nowFn());
-      const events = Array.isArray(pub.events) ? pub.events : [];
+      // What visitors see: less anything the event check hid.
+      const events = withoutHidden(withPages(Array.isArray(pub.events) ? pub.events : []), pub);
       status.live_events = events.length;
       status.upcoming_events = events.filter(e => e && e.date >= today).length;
+      status.hidden_events = (pub.hidden || []).filter(h => h.date >= today).length;
       status.auto_published_at = (pub.auto_publish && pub.auto_publish.at) || null;
       status.published_at = pub.last_updated || null;
     } catch { /* leave blank */ }
