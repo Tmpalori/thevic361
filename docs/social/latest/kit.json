@@ -1,43 +1,63 @@
 {
-  "generated_for": "2026-10-04",
-  "build": "37222041561-1",
+  "generated_for": "2026-10-05",
+  "build": "37267497401-1",
   "kits": {
     "week": {
       "slides": [
         "week-1.png",
         "week-2.png",
-        "week-3.png"
+        "week-3.png",
+        "week-4.png",
+        "week-5.png",
+        "week-6.png",
+        "week-7.png",
+        "week-8.png",
+        "week-9.png",
+        "week-10.png",
+        "week-11.png",
+        "week-12.png",
+        "week-13.png",
+        "week-14.png",
+        "week-15.png",
+        "week-16.png",
+        "week-17.png"
       ],
       "captions": {
-        "facebook": "This week in Victoria, TX (Oct 4): 3 events\n\nSUNDAY\n• 7 PM Live Music @ J Welch Farms\n• Brunch @ J Welch Farms\n• Jack Motley and Friends creative circle @ Weber Brewing\n\nFull list and details: https://www.thevic361.com/\n\n#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361\n",
-        "instagram": "This week in Victoria, TX (Oct 4): 3 events\n\nSUNDAY\n• 7 PM Live Music @ J Welch Farms\n• Brunch @ J Welch Farms\n• Jack Motley and Friends creative circle @ Weber Brewing\n\nFull list: link in bio (thevic361.com)\n\n@jwelchfarms @weberbrewing\n\n#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361\n"
+        "facebook": "This week in Victoria, TX (Oct 5–11): 70 events\n\nMONDAY\n• 10 AM Victoria Texas Historic Mystery @ DeLeon City Plaza\n• 10 AM Spooky Season: Victoria Historic Ghost Mystery @ DeLeon City Plaza\n• 5:30 PM Palace Bingo — Monday @ Palace Bingo\n• 5:30 PM Mixed Media Monday: Textured Art Ghosts @ Victoria Public Library (free)\n…plus 3 more\n\nTUESDAY\n• 4 PM Community Connection Party @ 3102 Miori Ln., Victoria, TX, United States, Texas 77901 (free)\n• 5 PM Pool Shark Tuesdays — Free Pool @ Dodge City Saloon (free)\n• 5:30 PM Palace Bingo — Tuesday @ Palace Bingo\n• 5:30 PM Healthy South Texas - Cooking Well Exploring Cultures @ Victoria Public Library (free)\n…plus 3 more\n\nWEDNESDAY\n• 9 AM Victoria Farmers' Market @ Victoria Farmers Market\n• 10 AM Comedy Night in Victoria w/Crux Crawford @ Moonshine Drinkery\n• 6 PM Pickleball Games @ Victoria Public Library (free)\n• 6 PM Pickleball Games @ Youth Sports Complex (free)\n…plus 7 more\n\nTHURSDAY\n• 7 AM 2026 Hole Lotta Fun Golf Tournament @ The Club at Colony Creek\n• 9:30 AM Toddler Story Time @ Victoria Public Library (free)\n• 5:30 PM Story Strolls — Audiobook Walking Group @ Riverside Park (free)\n• 5:30 PM PRE-K RACE VISD @ Victoria Public Library (free)\n…plus 11 more\n\nFRIDAY\n• 8 AM Youth Mental Health First Aid Training Course @ Gulf Bend Center\n• 7 PM Live Music @ J Welch Farms\n• 7 PM Victorias ONLY Haunted Attraction! @ 78 Tate Rd.\n• 7 PM The Chosen- Season 6 episode 1 Watch Party @ 501 Sam Houston Dr. (free)\n…plus 8 more\n\nSATURDAY\n• 7:30 AM 2026 Citizens Run Against Cancer Half Marathon & 5K @ Downtown Victoria / Riverside Park / DeLeon Plaza\n• 9 AM Victoria Farmers' Market @ Victoria Farmers Market\n• 12 PM Chess Club @ Victoria Public Library (free)\n• 1 PM Coast Writers @ Victoria Public Library (free)\n…plus 9 more\n\nSUNDAY\n• 10 AM Sunday Brunch @ The PumpHouse Riverside Restaurant & Bar\n• 11 AM 2026 Our Lady of Victory Parish Fall Festival @ Victoria Community Center\n• 12:30 PM Champagne Sundaze Hallo-Queen Drag Loteria 2026 @ Moonshine Drinkery\n• 1 PM National Coming Out Day @ Victoria, TX @ 103 Santa Rosa Downtown (free)\n…plus 1 more\n\nFull list and details: https://www.thevic361.com/\n\n#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361\n",
+        "instagram": "This week in Victoria, TX (Oct 5–11): 70 events\n\nMONDAY\n• 10 AM Victoria Texas Historic Mystery @ DeLeon City Plaza\n• 10 AM Spooky Season: Victoria Historic Ghost Mystery @ DeLeon City Plaza\n• 5:30 PM Palace Bingo — Monday @ Palace Bingo\n• 5:30 PM Mixed Media Monday: Textured Art Ghosts @ Victoria Public Library (free)\n…plus 3 more\n\nTUESDAY\n• 4 PM Community Connection Party @ 3102 Miori Ln., Victoria, TX, United States, Texas 77901 (free)\n• 5 PM Pool Shark Tuesdays — Free Pool @ Dodge City Saloon (free)\n• 5:30 PM Palace Bingo — Tuesday @ Palace Bingo\n• 5:30 PM Healthy South Texas - Cooking Well Exploring Cultures @ Victoria Public Library (free)\n…plus 3 more\n\nWEDNESDAY\n• 9 AM Victoria Farmers' Market @ Victoria Farmers Market\n• 10 AM Comedy Night in Victoria w/Crux Crawford @ Moonshine Drinkery\n• 6 PM Pickleball Games @ Victoria Public Library (free)\n• 6 PM Pickleball Games @ Youth Sports Complex (free)\n…plus 7 more\n\nTHURSDAY\n• 7 AM 2026 Hole Lotta Fun Golf Tournament @ The Club at Colony Creek\n• 9:30 AM Toddler Story Time @ Victoria Public Library (free)\n• 5:30 PM Story Strolls — Audiobook Walking Group @ Riverside Park (free)\n• 5:30 PM PRE-K RACE VISD @ Victoria Public Library (free)\n…plus 11 more\n\nFRIDAY\n• 8 AM Youth Mental Health First Aid Training Course @ Gulf Bend Center\n• 7 PM Live Music @ J Welch Farms\n• 7 PM Victorias ONLY Haunted Attraction! @ 78 Tate Rd.\n• 7 PM The Chosen- Season 6 episode 1 Watch Party @ 501 Sam Houston Dr. (free)\n…plus 8 more\n\nSATURDAY\n• 7:30 AM 2026 Citizens Run Against Cancer Half Marathon & 5K @ Downtown Victoria / Riverside Park / DeLeon Plaza\n• 9 AM Victoria Farmers' Market @ Victoria Farmers Market\n• 12 PM Chess Club @ Victoria Public Library (free)\n• 1 PM Coast Writers @ Victoria Public Library (free)\n…plus 9 more\n\nSUNDAY\n• 10 AM Sunday Brunch @ The PumpHouse Riverside Restaurant & Bar\n• 11 AM 2026 Our Lady of Victory Parish Fall Festival @ Victoria Community Center\n• 12:30 PM Champagne Sundaze Hallo-Queen Drag Loteria 2026 @ Moonshine Drinkery\n• 1 PM National Coming Out Day @ Victoria, TX @ 103 Santa Rosa Downtown (free)\n…plus 1 more\n\nFull list: link in bio (thevic361.com)\n\n@mdrinkery @dodgecityvictoriatx @weberbrewing @victoriafarmersmarket @aerocrafters @lacantinavictoria @shooters_bar4705 @jwelchfarms @theatrevictoria @5dtavern_victoria @thenavemuseum @victoriapumphouse\n\n#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361\n"
       },
-      "events": 3
+      "events": 70
     },
     "weekend": {
       "slides": [
         "weekend-1.png",
         "weekend-2.png",
-        "weekend-3.png"
+        "weekend-3.png",
+        "weekend-4.png",
+        "weekend-5.png",
+        "weekend-6.png",
+        "weekend-7.png",
+        "weekend-8.png"
       ],
       "captions": {
-        "facebook": "This weekend in Victoria, TX (Oct 4): 3 events\n\nSUNDAY\n• 7 PM Live Music @ J Welch Farms\n• Brunch @ J Welch Farms\n• Jack Motley and Friends creative circle @ Weber Brewing\n\nFull list and details: https://www.thevic361.com/this-weekend\n\n#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361\n",
-        "instagram": "This weekend in Victoria, TX (Oct 4): 3 events\n\nSUNDAY\n• 7 PM Live Music @ J Welch Farms\n• Brunch @ J Welch Farms\n• Jack Motley and Friends creative circle @ Weber Brewing\n\nFull list: link in bio (thevic361.com)\n\n@jwelchfarms @weberbrewing\n\n#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361\n"
+        "facebook": "This weekend in Victoria, TX (Oct 9–11): 30 events\n\nFRIDAY\n• 8 AM Youth Mental Health First Aid Training Course @ Gulf Bend Center\n• 7 PM Live Music @ J Welch Farms\n• 7 PM Victorias ONLY Haunted Attraction! @ 78 Tate Rd.\n• 7 PM The Chosen- Season 6 episode 1 Watch Party @ 501 Sam Houston Dr. (free)\n…plus 8 more\n\nSATURDAY\n• 7:30 AM 2026 Citizens Run Against Cancer Half Marathon & 5K @ Downtown Victoria / Riverside Park / DeLeon Plaza\n• 9 AM Victoria Farmers' Market @ Victoria Farmers Market\n• 12 PM Chess Club @ Victoria Public Library (free)\n• 1 PM Coast Writers @ Victoria Public Library (free)\n…plus 9 more\n\nSUNDAY\n• 10 AM Sunday Brunch @ The PumpHouse Riverside Restaurant & Bar\n• 11 AM 2026 Our Lady of Victory Parish Fall Festival @ Victoria Community Center\n• 12:30 PM Champagne Sundaze Hallo-Queen Drag Loteria 2026 @ Moonshine Drinkery\n• 1 PM National Coming Out Day @ Victoria, TX @ 103 Santa Rosa Downtown (free)\n…plus 1 more\n\nFull list and details: https://www.thevic361.com/this-weekend\n\n#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361\n",
+        "instagram": "This weekend in Victoria, TX (Oct 9–11): 30 events\n\nFRIDAY\n• 8 AM Youth Mental Health First Aid Training Course @ Gulf Bend Center\n• 7 PM Live Music @ J Welch Farms\n• 7 PM Victorias ONLY Haunted Attraction! @ 78 Tate Rd.\n• 7 PM The Chosen- Season 6 episode 1 Watch Party @ 501 Sam Houston Dr. (free)\n…plus 8 more\n\nSATURDAY\n• 7:30 AM 2026 Citizens Run Against Cancer Half Marathon & 5K @ Downtown Victoria / Riverside Park / DeLeon Plaza\n• 9 AM Victoria Farmers' Market @ Victoria Farmers Market\n• 12 PM Chess Club @ Victoria Public Library (free)\n• 1 PM Coast Writers @ Victoria Public Library (free)\n…plus 9 more\n\nSUNDAY\n• 10 AM Sunday Brunch @ The PumpHouse Riverside Restaurant & Bar\n• 11 AM 2026 Our Lady of Victory Parish Fall Festival @ Victoria Community Center\n• 12:30 PM Champagne Sundaze Hallo-Queen Drag Loteria 2026 @ Moonshine Drinkery\n• 1 PM National Coming Out Day @ Victoria, TX @ 103 Santa Rosa Downtown (free)\n…plus 1 more\n\nFull list: link in bio (thevic361.com)\n\n@jwelchfarms @aerocrafters @theatrevictoria @lacantinavictoria @thenavemuseum @mdrinkery @weberbrewing @victoriafarmersmarket @victoriapumphouse\n\n#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361\n"
       },
-      "events": 3,
+      "events": 30,
       "reel": "weekend.mp4"
     },
     "today": {
       "slides": [
         "today-1.png",
         "today-2.png",
-        "today-3.png"
+        "today-3.png",
+        "today-4.png"
       ],
       "captions": {
-        "facebook": "Today in Victoria, TX (Oct 4): 3 events\n\n• 7 PM Live Music @ J Welch Farms\n• Brunch @ J Welch Farms\n• Jack Motley and Friends creative circle @ Weber Brewing\n\nFull list and details: https://www.thevic361.com/today\n\n#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361\n",
-        "instagram": "Today in Victoria, TX (Oct 4): 3 events\n\n• 7 PM Live Music @ J Welch Farms\n• Brunch @ J Welch Farms\n• Jack Motley and Friends creative circle @ Weber Brewing\n\nFull list: link in bio (thevic361.com)\n\n@jwelchfarms @weberbrewing\n\n#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361\n"
+        "facebook": "Today in Victoria, TX (Oct 5): 7 events\n\n• 10 AM Victoria Texas Historic Mystery @ DeLeon City Plaza\n• 10 AM Spooky Season: Victoria Historic Ghost Mystery @ DeLeon City Plaza\n• 5:30 PM Palace Bingo — Monday @ Palace Bingo\n• 5:30 PM Mixed Media Monday: Textured Art Ghosts @ Victoria Public Library (free)\n• 6:30 PM VARRA Monday Night Run @ Riverside Stadium Parking Lot (free)\n• 7 PM Foodies + New Friends: Victoria | Dinner Meetup (DUOS EDITION) @ Restaurant of the Week\n• Monday Movie Nights @ Moonshine Drinkery\n\nFull list and details: https://www.thevic361.com/today\n\n#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361\n",
+        "instagram": "Today in Victoria, TX (Oct 5): 7 events\n\n• 10 AM Victoria Texas Historic Mystery @ DeLeon City Plaza\n• 10 AM Spooky Season: Victoria Historic Ghost Mystery @ DeLeon City Plaza\n• 5:30 PM Palace Bingo — Monday @ Palace Bingo\n• 5:30 PM Mixed Media Monday: Textured Art Ghosts @ Victoria Public Library (free)\n• 6:30 PM VARRA Monday Night Run @ Riverside Stadium Parking Lot (free)\n• 7 PM Foodies + New Friends: Victoria | Dinner Meetup (DUOS EDITION) @ Restaurant of the Week\n• Monday Movie Nights @ Moonshine Drinkery\n\nFull list: link in bio (thevic361.com)\n\n@mdrinkery\n\n#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361\n"
       },
-      "events": 3
+      "events": 7
     }
   }
 }
