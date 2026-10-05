@@ -1301,12 +1301,10 @@ if (isMain) {
     bootSlack.alert(`rejection:${err && err.message}`, 'Unhandled error in the server', (err && err.message) || String(err));
   });
   createApp().then(({ app, storeBundle }) => {
+    // No "deployed" ping: every merge redeploys, so it was noise. A failed
+    // boot or a crash still alerts (below and above).
     app.listen(port, () => {
       console.log(`[thevic361] listening on :${port} (storage=${storeBundle.kind})`);
-      if (cfg.environment === 'production') {
-        bootSlack.notify({ title: '✅ The Vic 361 deployed', text: `Live on ${storeBundle.kind} storage.`,
-          footer: cfg.commit ? `deploy ${cfg.commit}` : '' });
-      }
     });
   }).catch(err => {
     console.error('[thevic361] failed to start:', err);
