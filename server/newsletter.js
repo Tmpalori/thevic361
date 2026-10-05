@@ -111,7 +111,6 @@ const btn = (href, label) => `<a href="${escHtml(href)}" style="display:inline-b
 // darkSafe() runs over the finished HTML: every inline background color is
 // also painted as a one-color gradient (an image to Outlook), and every
 // colored element gets a class the Outlook rules use to put its colors back.
-const HEX = /#[0-9a-f]{3}(?:[0-9a-f]{3})?\b/i;
 const colorKey = c => c.slice(1).toLowerCase();
 
 export function darkSafe(html) {
@@ -310,7 +309,7 @@ export function signupFormHtml({ source = 'footer', button = 'Subscribe' } = {})
 f.addEventListener('submit',function(e){e.preventDefault();var b=f.querySelector('button');b.disabled=true;m.textContent='';
 (window.vicTurnstile?window.vicTurnstile.token(f):Promise.resolve('')).then(function(t){return fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value,turnstile_token:t,source:window.vic361Source?window.vic361Source(f.getAttribute('data-source')):f.getAttribute('data-source')})});})
 .then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});})
-.then(function(x){m.textContent=x.ok?(x.j.message||'Check your inbox to confirm.'):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';try{localStorage.setItem('vic361-subscribed','1')}catch(e){}if(window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
+.then(function(x){m.textContent=x.ok?(x.j.message||'Check your inbox to confirm.'):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';try{localStorage.setItem('vic361-subscribed','1')}catch(e){}if(x.j.new&&window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
 .catch(function(){m.textContent='Something went wrong. Try again.';}).then(function(){b.disabled=false;if(window.vicTurnstile)window.vicTurnstile.reset(f);});});})();
 </script>`;
 }
@@ -326,8 +325,12 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0 
   const end = addDays(today, 6);
   const next7 = sortEvents(events.filter(e => e.date >= today && e.date <= end));
   const seen = new Set();
-  const picks = next7.filter(e => e.featured).concat(next7)
-    .filter(e => e.page && !seen.has(e.name) && seen.add(e.name)).slice(0, 5);
+  // Vic's Picks get a spot first, then the list reads in date order with
+  // the day on each line (renderEventItem alone shows only the time).
+  const dayOf = d => d === today ? 'Today' : formatDay(d, { weekday: 'short' });
+  const picks = sortEvents(next7.filter(e => e.featured).concat(next7)
+    .filter(e => e.page && !seen.has(e.name) && seen.add(e.name)).slice(0, 5))
+    .map(e => ({ ...e, time: [dayOf(e.date), e.time].filter(Boolean).join(' · ') }));
   const crowd = subscriberCount >= SHOW_COUNT_FROM
     ? `<p class="sub-crowd">Join ${Math.floor(subscriberCount / 10) * 10}+ Victoria locals who already get it.</p>` : '';
   const proof = picks.length ? `
@@ -360,12 +363,12 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0 
 
 // ─── Routes ──────────────────────────────────────────────────────────────
 
-export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true }) {
+export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true, withNav = async html => html }) {
   const subscribeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10 });
   const supported = typeof store.addSubscriber === 'function';
 
   const page = (title, message) => layout({
-    siteUrl, path: '/subscribe', nav: null, noindex: true, title: `${title} | ${SITE_NAME}`, description: title,
+    siteUrl, path: '/subscribe', nav: null, noindex: true, pixel: false, title: `${title} | ${SITE_NAME}`, description: title,
     body: `<h1 class="page-title">${escHtml(title)}</h1><p class="page-lead">${message}</p><p><a class="btn btn--primary" href="/">See this week's events</a></p>`
   });
 
@@ -457,12 +460,12 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       if (!config.enabled) {
         await store.confirmSubscriber(sub.token);
         if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', email], ['From', source]] });
-        return res.json({ ok: true, message: "You're on the list! See you Monday." });
+        return res.json({ ok: true, new: Boolean(sub.new_signup), message: "You're on the list! See you Monday." });
       }
       const confirmUrl = `${siteUrl}/subscribe/confirm?token=${encodeURIComponent(sub.token)}`;
       const mail = renderConfirmEmail({ siteUrl, confirmUrl, address: config.address });
       await resend.send({ from: config.from, to: [email], subject: mail.subject, html: mail.html, text: mail.text });
-      res.json({ ok: true });
+      res.json({ ok: true, new: Boolean(sub.new_signup) });
     } catch (err) {
       console.error('[newsletter] subscribe failed:', err.message);
       res.status(500).json({ ok: false, message: 'Something went wrong. Try again.' });
@@ -492,7 +495,8 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       let count = 0;
       if (supported) { try { count = (await store.countSubscribers()).active || 0; } catch { /* page still works */ } }
       res.set('Cache-Control', 'public, max-age=300');
-      res.type('html').send(renderSubscribePage(payload.events, { siteUrl, now: nowFn(), subscriberCount: count }));
+      // withNav (server/index.js) adds the seasonal tabs other pages get.
+      res.type('html').send(await withNav(renderSubscribePage(payload.events, { siteUrl, now: nowFn(), subscriberCount: count }), '/subscribe'));
     } catch (err) {
       next(err);
     }
@@ -511,7 +515,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     const token = String(req.query.token || '');
     // GET only shows a button: link scanners in mail systems follow GETs.
     res.type('html').send(layout({
-      siteUrl, path: '/unsubscribe', nav: null, noindex: true, title: `Unsubscribe | ${SITE_NAME}`, description: 'Unsubscribe',
+      siteUrl, path: '/unsubscribe', nav: null, noindex: true, pixel: false, title: `Unsubscribe | ${SITE_NAME}`, description: 'Unsubscribe',
       body: `<h1 class="page-title">Unsubscribe</h1><p class="page-lead">Stop getting The Vic 361 newsletter?</p>
 <form method="post" action="/unsubscribe?token=${encodeURIComponent(token)}"><button class="btn btn--primary" type="submit">Unsubscribe</button></form>`
     }));

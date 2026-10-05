@@ -636,6 +636,7 @@ function footerHtml() {
             <li><a href="/venues">Venues</a></li>
             <li><a href="/advertise">Advertise</a></li>
             <li><a href="/contact">Contact</a></li>
+            <li><a href="/privacy">Privacy</a></li>
           </ul>
         </div>
       </div>
@@ -654,7 +655,10 @@ export function breadcrumbLd(siteUrl, trail) {
   };
 }
 
-export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = '/og-image.png' }) {
+// pixel: false leaves the Meta Pixel off a page. Pages reached from links
+// carrying a subscriber's token (confirm, unsubscribe) use it: the pixel
+// reports the full URL to Meta, token included.
+export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = '/og-image.png', pixel = true }) {
   const url = siteUrl + path;
   return `<!DOCTYPE html>
 <html lang="en">
@@ -694,8 +698,7 @@ ${body}
   </div>
 </main>
 ${footerHtml()}
-<script src="/pixel.js" defer></script>
-<script src="/track.js" defer></script>
+${pixel ? '<script src="/pixel.js" defer></script>\n' : ''}<script src="/track.js" defer></script>
 <script src="/turnstile.js" defer></script>
 </body>
 </html>`;
@@ -791,6 +794,41 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
     siteUrl, path: ev.page, nav: null,
     title: `${ev.name} · ${formatDay(ev.date, { month: 'short', day: 'numeric' })} | ${SITE_NAME}`,
     description: description.slice(0, 300), body, ld
+  });
+}
+
+// Plain-language privacy notice. Meta's Business Tools terms require one
+// once the Pixel runs; it also covers analytics, the newsletter and forms.
+export const PRIVACY_UPDATED = 'October 5, 2026';
+export function renderPrivacyPage({ siteUrl }) {
+  const body = `
+    <h1 class="page-title">Privacy</h1>
+    <p class="page-lead">The Vic 361 is a free events guide for Victoria, Texas. This page explains what we collect, why, and the choices you have. Last updated ${PRIVACY_UPDATED}.</p>
+    <h2 class="section-heading">What you give us</h2>
+    <ul>
+      <li><strong>Newsletter:</strong> your email address, so we can send the weekly list. Every email has a one-click unsubscribe link. We don't sell or share your address.</li>
+      <li><strong>Event submissions and contact messages:</strong> what you type into those forms, used to review your event or answer you.</li>
+      <li><strong>Sponsor purchases:</strong> payments are handled by Stripe; we never see your card number. We keep your name, email, business and order details.</li>
+    </ul>
+    <h2 class="section-heading">What we measure</h2>
+    <ul>
+      <li><strong>Our own visit counts:</strong> which pages are viewed and which links are clicked, so we know what's useful. We don't use cookies for this and don't store IP addresses; a visitor is a one-way code that changes every day.</li>
+      <li><strong>Google Analytics</strong> measures visits to the site and uses cookies. See <a href="https://policies.google.com/technologies/partner-sites" rel="noopener">how Google uses this data</a>.</li>
+      <li><strong>Meta Pixel:</strong> when we advertise on Facebook and Instagram, the Meta Pixel tells Meta that someone visited from an ad or signed up for the newsletter, so we can see whether our ads work and show them to people likely to be interested. Meta may combine this with what it knows about your Meta account. It's never loaded on the newsletter confirm or unsubscribe pages. You can control this in your <a href="https://www.facebook.com/adpreferences/ad_settings" rel="noopener">Meta ad settings</a>.</li>
+    </ul>
+    <h2 class="section-heading">Services we use</h2>
+    <p>Railway hosts the site and its database; Resend delivers our emails; Cloudflare Turnstile checks that forms are sent by people, not bots; Stripe takes sponsor payments. Each only gets what it needs to do that job.</p>
+    <h2 class="section-heading">Your choices</h2>
+    <ul>
+      <li>Unsubscribe from any newsletter with the link at the bottom, any time.</li>
+      <li>Block or delete cookies in your browser settings; the site works without them.</li>
+      <li>Ask us to see or delete what we have about you through our <a href="/contact">contact page</a>.</li>
+    </ul>`;
+  return layout({
+    siteUrl, path: '/privacy',
+    title: `Privacy | ${SITE_NAME}`,
+    description: 'What The Vic 361 collects, why, and the choices you have.',
+    body
   });
 }
 

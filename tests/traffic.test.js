@@ -207,6 +207,13 @@ describe('Meta Pixel script', () => {
     expect(js).toContain('vic361_admin_session');
   });
 
+  it('never runs on token pages', async () => {
+    const js = await (await fetch(await pixelApp('123456789012345'))).text();
+    expect(js).toContain("/[?&]token=/.test(location.search)");
+    expect(js).toContain("'/subscribe/confirm'");
+    expect(js).toContain("'/unsubscribe'");
+  });
+
   it('ignores an ID that is not a number', async () => {
     const js = await (await fetch(await pixelApp("123'); alert(1); ('"))).text();
     expect(js).not.toMatch(/fbq|alert/);

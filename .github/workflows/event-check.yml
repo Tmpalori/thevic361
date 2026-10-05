@@ -40,20 +40,30 @@ jobs:
         run: pip install -r requirements.txt
 
       # The collect run commits candidates.json; Railway redeploys and
-      # auto-publish runs on boot. Wait (up to 15 min) for the live list's
-      # last_updated to move past the collect run's start, then check it.
+      # auto-publish runs on boot. Wait (up to 15 min) until the live list
+      # was published after these candidates were made (candidates.json's
+      # own last_updated, from the commit this job checked out), then
+      # check it. Timestamps are compared as times: the collector writes
+      # Central time, the site UTC.
       - name: Wait for the new events to go live
         if: github.event_name == 'workflow_run'
-        env:
-          SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
-          SINCE: ${{ github.event.workflow_run.created_at }}
         run: |
-          for i in $(seq 1 30); do
-            updated=$(curl -s "$SITE/events.json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('last_updated') or '')" || true)
-            if [ -n "$updated" ] && [ "$updated" \> "$SINCE" ]; then echo "Live list updated at $updated"; exit 0; fi
-            sleep 30
-          done
-          echo "::warning::Live list didn't update within 15 minutes; checking what's there now."
+          python3 - <<'PY'
+          import json, time, urllib.request
+          from datetime import datetime
+          made = datetime.fromisoformat(json.load(open("candidates.json"))["last_updated"].replace("Z", "+00:00"))
+          for _ in range(30):
+              try:
+                  live = json.load(urllib.request.urlopen("${{ vars.SITE_URL || 'https://www.thevic361.com' }}/events.json", timeout=30))
+                  updated = datetime.fromisoformat((live.get("last_updated") or "").replace("Z", "+00:00"))
+                  if updated >= made:
+                      print(f"Live list updated at {updated}, candidates made {made}")
+                      raise SystemExit(0)
+              except (ValueError, OSError) as e:
+                  print(f"waiting: {e}")
+              time.sleep(30)
+          print("::warning::Live list didn't update within 15 minutes; checking what's there now.")
+          PY
 
       - name: Check the live events
         timeout-minutes: 5

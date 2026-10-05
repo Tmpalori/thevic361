@@ -165,6 +165,25 @@ describe('seasonal guides', () => {
     expect(seasonMatches(by('/crawfish'), { name: 'Crawfish Boil', date: '2026-10-10' })).toBe(false);
   });
 
+  it('keeps look-alike names off the holiday guides', () => {
+    const by = p => SEASONS.find(s => s.path === p);
+    const no = (p, name, date, description = '') => expect(seasonMatches(by(p), { name, date, description }), name).toBe(false);
+    const yes = (p, name, date) => expect(seasonMatches(by(p), { name, date }), name).toBe(true);
+    no('/easter-events', 'Order of the Eastern Star fish fry', '2027-04-03');
+    no('/christmas-events', 'Soul Sacrifice, Santana Tribute', '2026-12-05');
+    no('/christmas-events', 'Mass at Santa Rosa', '2026-12-06');
+    yes('/christmas-events', 'Photos with Santa', '2026-12-05');
+    no('/st-patricks-day', 'Pancake Breakfast', '2027-03-06', 'sausage, breakfast patty and coffee');
+    no('/st-patricks-day', 'Featuring pianist Patrick Smith', '2027-03-06');
+    no('/st-patricks-day', "Fish Fry at St. Patrick's Catholic Church", '2027-03-13');
+    yes('/st-patricks-day', "St. Patrick's Day Pub Crawl", '2027-03-17');
+    no('/mothers-day', "Mother's Day Out open house", '2027-05-04');
+    no('/new-years-eve', 'Kenny Nye live', '2026-12-29');
+    no('/new-years-eve', 'New Year, New You yoga', '2027-01-20');
+    yes('/new-years-eve', "New Year's Eve Bash", '2026-12-31');
+    yes('/halloween-events', 'Halloween Costume Swap', '2026-09-23');
+  });
+
   it('in-season guide lists matching events and shows in the nav', async () => {
     await startApp();
     const r = await get('/halloween-events');
