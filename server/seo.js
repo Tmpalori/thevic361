@@ -141,6 +141,19 @@ export const HUB_PAGES = [
       : 'No date-night events are listed in Victoria, TX right now'
   },
   {
+    path: '/next-week',
+    nav: 'Next Week',
+    hidden: true,
+    title: 'Things To Do in Victoria, TX Next Week',
+    h1: 'Things to do in Victoria, TX next week',
+    description: 'Events in Victoria, Texas next week, Monday through Sunday: live music, festivals, family events, markets, and more.',
+    range: 'next-week',
+    weekLink: { href: '/', label: '← This week' },
+    lead: (n, label) => n
+      ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} in Victoria, TX next week (${label})`
+      : `Nothing is listed in Victoria, TX for next week (${label}) yet. New events are added every Sunday and Wednesday`
+  },
+  {
     path: '/this-weekend-with-kids',
     nav: 'Weekend with Kids',
     hidden: true,
@@ -287,6 +300,10 @@ export function currentWeek(today) {
 
 export function dateRange(kind, today) {
   if (kind === 'today') return [today, today];
+  if (kind === 'next-week') {
+    const monday = addDays(currentWeek(today)[0], 7);
+    return [monday, addDays(monday, 6)];
+  }
   if (kind === 'weekend') {
     // Mon–Thu: the coming Fri–Sun. Fri–Sun: from today through Sunday.
     const dow = weekday(today);
@@ -722,6 +739,7 @@ export function renderHubPage(page, events, { siteUrl, now, sponsor }) {
   const body = `
     <h1 class="page-title">${escHtml(page.h1)}</h1>
     <p class="page-lead">${escHtml(lead)}</p>
+    ${page.weekLink ? `<p class="week-nav"><a href="${escHtml(page.weekLink.href)}">${escHtml(page.weekLink.label)}</a></p>` : ''}
     ${list.length ? `<p class="share-row"><button type="button" class="share-btn share-btn--list" data-share-url="${escHtml(siteUrl + page.path)}" data-share-text="${escHtml(page.h1)}" data-track="share_list">Share this list</button></p>` : ''}
     ${list.length
       ? renderGrouped(list, today)

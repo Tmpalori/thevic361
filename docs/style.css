@@ -1617,3 +1617,7 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 /* Vic's Pick note under an event page title */
 .event-pick { margin: var(--space-2, 0.5rem) 0; font-size: var(--text-sm); color: var(--color-text-muted); font-weight: 700; }
 .event-pick .badge { margin-right: 0.35rem; }
+
+/* "See next week" under the homepage list; "← This week" on /next-week */
+.week-nav { margin: var(--space-4, 1rem) 0; font-weight: 700; }
+.week-nav--next { text-align: center; margin-top: var(--space-6, 1.5rem); }
