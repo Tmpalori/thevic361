@@ -559,3 +559,43 @@ def test_guessed_venue_still_needs_the_same_start_time():
     assert not ce.is_same_event(ev("Open Mic Night", venue="Weber Brewing", time="7:00 PM"),
                                 ev("Open Mic Night", venue="Aero Crafters", time="7:00 PM"))
 
+
+
+def test_cut_off_names_are_caught_and_dropped():
+    # 2026-10-08: post text cut at 400 chars became these names.
+    assert ce.cut_off_name_reason("Scenic Root — Plant a")
+    assert ce.cut_off_name_reason("Scenic Root — Once Upon...")
+    assert ce.cut_off_name_reason("Live Music with…")
+    for ok in ["Plant and Sip with Scenic Root", "Paint & Sip", "Once Upon A Time", "Bring Your Own",
+               "Q&A", "Trivia w/ Sam", "Stand By Me", "A"]:
+        assert ce.cut_off_name_reason(ok) is None, ok
+    out = ce.merge_events([
+        ev("Scenic Root — Plant a", date="2026-10-08", venue="Moonshine Drinkery", source="apify_instagram_posts"),
+        ev("Once Upon A Plant: Maas Edition", date="2026-10-08", venue="Moonshine Drinkery", source="allevents"),
+    ], venues=[])
+    assert [e["name"] for e in out] == ["Once Upon A Plant: Maas Edition"]
+
+
+def test_post_text_is_cut_on_a_word_and_marked():
+    long = "Big week! " * 100 + "Scenic Root will be out on Thursday, 10/8 for a Plant and Sip!!"
+    cut = ce._trim_post_text(long, limit=1000)
+    assert cut.endswith(" [post continues]")
+    assert not cut[:-len(" [post continues]")].endswith(("Bi", "wee"))
+    short = "Scenic Root will be out on Thursday, 10/8 for a Plant and Sip!!"
+    assert ce._trim_post_text(short) == short
+
+
+def test_post_prompt_gets_the_whole_post_and_the_naming_rules(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    caption = ("🌿 " + "Fall is here and we have so much going on this month at the bar. " * 6 +
+               "Scenic Root will be out on Thursday, 10/8 for a Plant and Sip!!🪴")
+    assert len(caption) > 400
+    seen = {}
+    def fake_chat(key, messages, max_tokens, timeout):
+        seen["prompt"] = messages[0]["content"]
+        return "[]"
+    monkeypatch.setattr(ce, "_openai_chat", fake_chat)
+    ce._extract_events_from_posts_via_ai("Moonshine Drinkery", [{"text": caption, "timestamp": "2026-10-04"}])
+    assert "for a Plant and Sip!!" in seen["prompt"]
+    assert "Plant and Sip with Scenic Root" in seen["prompt"]
+    assert "Don't add performers" in seen["prompt"]

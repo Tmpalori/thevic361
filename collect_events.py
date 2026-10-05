@@ -2012,6 +2012,25 @@ _MEMBERS_ONLY_RE = re.compile(
     r"|\bmeeting\s*$", re.IGNORECASE)
 
 
+# Last words that mean a name was cut mid-phrase ("Scenic Root — Plant a",
+# "Scenic Root — Once Upon..."). "Bring Your Own" / "Pay What You Can" style
+# names end in other words, so this stays narrow.
+_DANGLING_WORDS = {"a", "an", "the", "and", "or", "for", "with", "of", "at", "to", "in", "on", "&", "by", "from", "w"}
+
+
+def cut_off_name_reason(name):
+    """Why a name looks cut off mid-phrase, or None."""
+    n = (name or "").strip()
+    if not n:
+        return None
+    if n.endswith(("...", "…")):
+        return "name ends in …"
+    last = re.findall(r"[A-Za-z&]+", n.lower())
+    if len(last) >= 2 and last[-1] in _DANGLING_WORDS:
+        return f"name ends in “{n.split()[-1]}”"
+    return None
+
+
 def non_event_reason(ev):
     """Return why a scraped item isn't an attendable event, or None."""
     name = ev.get("name") or ""
@@ -2093,6 +2112,12 @@ def merge_events(all_events, days_ahead=7, venues=None):
                 dropped_area.append(f"{new_entry['name'][:50]} ({reason})")
                 continue
             reason = non_event_reason(new_entry)
+            if reason:
+                dropped_junk.append(f"{new_entry['name'][:50]} ({reason})")
+                continue
+            # A cut-off name would go live as nonsense; the same event
+            # usually comes in whole from another source anyway.
+            reason = cut_off_name_reason(new_entry["name"])
             if reason:
                 dropped_junk.append(f"{new_entry['name'][:50]} ({reason})")
                 continue
@@ -3161,6 +3186,20 @@ def _venue_high_confidence(venues):
     return [v for v in venues if (v.get("confidence") or "").lower() == "high"]
 
 
+POST_TEXT_LIMIT = 1500
+
+
+def _trim_post_text(text, limit=POST_TEXT_LIMIT):
+    """Cut a post at a word boundary, ending in a marker the prompt explains."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    space = cut.rfind(" ")
+    if space > limit * 0.6:
+        cut = cut[:space]
+    return cut.rstrip() + " [post continues]"
+
+
 def _extract_events_from_posts_via_ai(venue_name, posts):
     """Send a venue's recent posts to OpenAI and parse out events.
 
@@ -3176,14 +3215,16 @@ def _extract_events_from_posts_via_ai(venue_name, posts):
     today_str = today.strftime("%Y-%m-%d")
     end_str = end_date.strftime("%Y-%m-%d")
 
-    # Build a compact post digest — trimming each post to ~400 chars to keep
-    # the prompt under 4k tokens even with 25 posts.
+    # Build the post digest. Each post is cut at POST_TEXT_LIMIT characters
+    # on a word boundary and marked, so the model never sees half a phrase:
+    # the old 400-character cut turned "…for a Plant and Sip!!" into an event
+    # named "Scenic Root — Plant a" (2026-10-08).
     lines = []
     for i, p in enumerate(posts, start=1):
         text = (p.get("text") or p.get("caption") or "").strip()
         if not text:
             continue
-        text = re.sub(r"\s+", " ", text)[:400]
+        text = _trim_post_text(re.sub(r"\s+", " ", text))
         post_date = (p.get("time") or p.get("timestamp") or p.get("date") or "")[:10]
         lines.append(f"[{i}] (posted {post_date}) {text}")
     if not lines:
@@ -3204,6 +3245,9 @@ Rules:
 - Everything else is a one-time event: "recurring": false, with its ACTUAL "date" between {today_str} and {end_str}, regardless of when the post was made.
 - A dated schedule for one particular week ("This week @ the farm: Sept 24 bingo, Sept 25 music") lists one-time events for those dates only. Never carry those dates forward to later weeks; if the dates are before {today_str}, skip them (but keep any "every week" line in the same post as recurring).
 - For relative dates ("this Friday", "tomorrow", "next Saturday"), resolve them against the post's own posted-on date — then check the resolved date is in the window.
+- "name" is the event's own name as the post gives it ("Plant and Sip", "Trivia Night", "Fall Market"). When a guest business or performer is the draw, add them: "Plant and Sip with Scenic Root". Never build a name from a cut-off or partial phrase, and never end a name with "a", "the", "and", "for" or "...".
+- "description" says only what the post says. Don't add performers, live music, food or other details the post doesn't mention.
+- A post ending in "[post continues]" was cut short; use only what you can read and don't guess the rest.
 - Skip posts that are pure promo, photo dumps, customer thank-yous, or undated announcements.
 - Skip events that already happened (post-date BEFORE today's date with no recurring signal).
 - Only include events held in Victoria, TX or elsewhere in Victoria County. Skip events in other towns (Cuero, Port Lavaca, Goliad, Edna, Yoakum, Corpus Christi, Houston, etc.).

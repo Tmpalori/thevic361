@@ -70,3 +70,11 @@ def test_window_is_today_through_n_days():
               ev("Last day", date="2026-10-17"), ev("Too far", date="2026-10-18")]
     got = sw.upcoming(events, datetime.date(2026, 10, 4), 14)
     assert [e["name"] for e in got] == ["Today", "Last day"]
+
+
+def test_live_cut_off_names_are_flagged_not_hidden():
+    events = [ev("Scenic Root — Plant a", page="/events/a")]
+    found = sw.rule_findings(events)
+    assert [(i, k) for i, k, _ in found] == [(0, "other")]
+    assert "cut off" in found[0][2]
+
