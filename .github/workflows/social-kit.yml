@@ -11,7 +11,8 @@
 # schedule only when the SOCIAL_AUTOPOST repo variable is 1 and the
 # META_PAGE_ID / META_PAGE_TOKEN (+ optional IG_USER_ID) secrets are set.
 # Monday posts "this week", Thursday "this weekend", other days "today".
-# Monday also sends Slack the venues on this week's list (outreach.txt) so
+# Monday also sends Slack a short list of this week's taggable venues
+# (outreach-slack.txt; the full list is outreach.txt) so
 # they can be sent their link to reshare.
 
 name: Social Kit
@@ -120,14 +121,15 @@ jobs:
           exit 1
 
       - name: Send Slack this week's venues to tag
-        if: always() && github.event_name == 'schedule' && hashFiles('docs/social/latest/outreach.txt') != ''
+        if: always() && github.event_name == 'schedule' && hashFiles('docs/social/latest/outreach-slack.txt') != ''
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |
           [ "$(TZ=America/Chicago date +%u)" = "1" ] || exit 0
-          [ -s docs/social/latest/outreach.txt ] || exit 0
-          python3 scripts/slack_notify.py "📣 Venues on this week's list. Send each one its link; they usually reshare:
-          $(head -25 docs/social/latest/outreach.txt)"
+          [ -s docs/social/latest/outreach-slack.txt ] || exit 0
+          # Short version (scripts/social_kit.py outreach_slack); the full
+          # list stays in outreach.txt, linked from the message.
+          python3 scripts/slack_notify.py "$(cat docs/social/latest/outreach-slack.txt)"
 
       - name: Tell Slack it failed
         if: failure()

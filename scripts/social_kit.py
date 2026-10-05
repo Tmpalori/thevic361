@@ -6,6 +6,7 @@ docs/social/latest/:
   - week-N.png / weekend-N.png / today-N.png   Instagram/Facebook slides (1080x1350)
   - weekend.mp4                  the weekend slides as a vertical Reel (needs ffmpeg)
   - outreach.txt                 venues on this week's list, to send their link
+  - outreach-slack.txt           the short Monday Slack version (taggable venues only)
   - captions.txt                 Facebook + Instagram captions
   - index.html                   phone-friendly page to save slides and copy captions
 
@@ -375,6 +376,39 @@ def outreach(groups, venues_path=VENUES_FILE):
     return lines
 
 
+def outreach_slack(groups, venues_path=VENUES_FILE, limit=8):
+    """The Monday Slack nudge: short. Only venues with an Instagram/Facebook
+    to send to, one line each with the long URLs behind Slack links, and a
+    pointer to outreach.txt for the rest. (It used to paste 25 raw lines.)"""
+    try:
+        with open(venues_path) as f:
+            venues = {_norm(v.get("name")): v for v in json.load(f) if v.get("name")}
+    except (OSError, ValueError):
+        venues = {}
+    seen, rows = set(), []
+    for evs in groups.values():
+        for e in evs:
+            key = _norm(e.get("venue"))
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            v = venues.get(key) or next((v for n, v in venues.items() if n and (n in key or key in n)), {})
+            where = v.get("instagram_url") or v.get("facebook_page") or ""
+            if not where:
+                continue
+            page = f"{SITE}{e['page']}" if e.get("page") else f"{SITE}/"
+            clean = lambda t: str(t).replace("|", "/").replace("<", "").replace(">", "")
+            rows.append(f"• <{where}|{clean(e['venue'])}> → <{page}|{clean(e['name'])}>")
+    if not rows:
+        return ""
+    more = len(rows) - limit
+    lines = [f"📣 *{len(rows)} venues on this week's list you can tag.* Send each its event link; they often reshare."]
+    lines += rows[:limit]
+    if more > 0:
+        lines.append(f"…and {more} more: <{SITE}/social/latest/outreach.txt|full list>")
+    return "\n".join(lines)
+
+
 def render_page(kits, generated_at):
     sections = []
     for kind, kit in kits.items():
@@ -479,6 +513,8 @@ def main(argv=None):
     if week_groups is not None:
         with open(os.path.join(args.out, "outreach.txt"), "w") as f:
             f.write("\n".join(outreach(week_groups)) + "\n")
+        with open(os.path.join(args.out, "outreach-slack.txt"), "w") as f:
+            f.write(outreach_slack(week_groups))
 
     kits = {k: kits[k] for k in KINDS if k in kits}
     with open(os.path.join(args.out, "captions.txt"), "w") as f:
