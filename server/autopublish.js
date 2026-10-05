@@ -7,7 +7,12 @@
  *
  * The admin stays in charge:
  *   - Events already published that are still upcoming are kept as-is
- *     (including anything the admin added by hand).
+ *     (including anything the admin added by hand or edited).
+ *   - Events this module added on an earlier run that the new run no longer
+ *     finds are taken down: the collector fixed or dropped them (e.g. a
+ *     misread Instagram post). Skipped when the new run looks broken (far
+ *     fewer events than this module has up), so one failed run can't empty
+ *     the week.
  *   - An event this module added that the admin later removed is remembered
  *     and not re-added next run.
  *   - Approved community submissions are included.
@@ -37,6 +42,15 @@ function sortKey(ev) {
   return `${ev.date}|${String(mins).padStart(4, '0')}`;
 }
 
+// Bump when the publish rules change so the next boot re-applies them to
+// the current candidates (otherwise an unchanged candidates.json is skipped).
+// 2: auto-added events the collector no longer finds are taken down.
+export const AUTO_PUBLISH_RULES = 2;
+
+// The new run must have at least this share of the events this module has
+// up before it may take any of them down.
+const REPLACE_MIN_RATIO = 0.6;
+
 export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, slack = null, siteUrl, archiveEvents = () => {} }) {
   async function run({ force = false } = {}) {
     let candidates;
@@ -49,17 +63,46 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     const fresh = Array.isArray(candidates && candidates.events) ? candidates.events : [];
     const prior = (await store.getPublished()) || {};
     const state = prior.auto_publish || {};
-    if (!force && from && state.from === from) return { ok: true, skipped: 'already-published', from };
+    if (!force && from && state.from === from && state.rules === AUTO_PUBLISH_RULES) {
+      return { ok: true, skipped: 'already-published', from };
+    }
 
     const today = localDateStr(nowFn());
     const upcoming = ev => ev && ev.date >= today && ev.name;
-    const kept = (Array.isArray(prior.events) ? prior.events : []).filter(upcoming);
+    const priorUpcoming = (Array.isArray(prior.events) ? prior.events : []).filter(upcoming);
+
+    // Retire events this module added before that the new run no longer has.
+    // Hand-added and hand-edited events are never touched.
+    const autoKeys = new Set(state.keys || []);
+    let edited = new Set();
+    try {
+      if (typeof store.listEventEdits === 'function') {
+        edited = new Set((await store.listEventEdits()).map(e => e.original_key));
+      }
+    } catch (err) {
+      console.warn('[auto-publish] event edits unavailable, retiring nothing:', err.message);
+      edited = null;
+    }
+    const freshUpcoming = fresh.filter(upcoming);
+    const ours = priorUpcoming.filter(ev => autoKeys.has(eventKeyOf(ev)));
+    const healthy = freshUpcoming.length >= ours.length * REPLACE_MIN_RATIO;
+    const stillFound = ev => freshUpcoming.some(f => eventKeyOf(f) === eventKeyOf(ev) || sameEvent(f, ev));
+    const retired = edited && healthy
+      ? ours.filter(ev => !edited.has(eventKeyOf(ev)) && !stillFound(ev))
+      : [];
+    const retiredKeys = new Set(retired.map(eventKeyOf));
+    const kept = priorUpcoming.filter(ev => !retiredKeys.has(eventKeyOf(ev)));
     const keptKeys = new Set(kept.map(eventKeyOf));
+    if (!healthy && ours.length) {
+      console.warn(`[auto-publish] new run has ${freshUpcoming.length} upcoming events vs ${ours.length} auto-published; retiring nothing`);
+    }
 
     // Auto-added last time but missing now: the admin took it down.
+    // (Retired events aren't "rejected": if a later run finds them again,
+    // they come back.)
     const rejected = new Set([
       ...(state.rejected || []),
-      ...(state.keys || []).filter(k => !keptKeys.has(k))
+      ...(state.keys || []).filter(k => !keptKeys.has(k) && !retiredKeys.has(k))
     ].filter(k => k.slice(0, 10) >= today));
 
     let approved = [];
@@ -93,18 +136,20 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
         from: from || null,
         at: now,
         keys: [...new Set([...(state.keys || []).filter(k => stillPresent.has(k)), ...added])],
-        rejected: [...rejected]
+        rejected: [...rejected],
+        rules: AUTO_PUBLISH_RULES
       }
     };
     await store.setPublished(payload);
     archiveEvents(events);
 
-    const result = { ok: true, published: events.length, added: added.length, kept: kept.length, skipped_removed: skippedRejected, from };
+    const result = { ok: true, published: events.length, added: added.length, kept: kept.length, retired: retired.length, skipped_removed: skippedRejected, from };
     console.log('[auto-publish]', JSON.stringify(result));
     if (slack) {
       slack.notify({
         title: `🗓️ Published ${events.length} events automatically`,
-        fields: [['New this run', added.length], ['Kept from before', kept.length], ['Skipped (you removed)', skippedRejected]],
+        fields: [['New this run', added.length], ['Kept from before', kept.length],
+          ['Taken down (no longer found)', retired.length], ['Skipped (you removed)', skippedRejected]],
         text: events.length ? '' : 'No upcoming events were found. Check the collector run.',
         link: `${siteUrl}/admin.html`, footer: 'Edit or remove anything in admin'
       });

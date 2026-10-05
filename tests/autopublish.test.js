@@ -125,6 +125,68 @@ describe('auto-publish', () => {
     expect((await store.getPublished()).auto_publish.at).toBe(at);
   });
 
+  it('takes down auto-added events the new run no longer finds, but never hand-added or edited ones', async () => {
+    const key = ev => [ev.date, ev.name, ev.venue].join('|');
+    const wrongBingo = { date: '2026-10-05', name: 'Bingo Night', time: '7:00 PM', venue: 'J Welch Farms' };
+    const wrongMusic = { date: '2026-10-11', name: 'Live Music', time: '7:00 PM', venue: 'J Welch Farms' };
+    const editedAuto = { date: '2026-10-07', name: 'Trivia', time: '7:00 PM', venue: 'Shooters' };
+    const stillFound = { date: '2026-10-09', name: 'Friday Live Music', time: '8:00 PM', venue: 'Aero Crafters' };
+    const handAdded = { date: '2026-10-12', name: 'Hand Pick', time: '6:00 PM', venue: 'Somewhere' };
+    await start({
+      candidates: CANDIDATES,
+      published: {
+        last_updated: '2026-10-03T00:00:00Z',
+        events: [wrongBingo, wrongMusic, editedAuto, stillFound, handAdded],
+        auto_publish: { from: 'older', keys: [wrongBingo, wrongMusic, editedAuto, stillFound].map(key), rejected: [] }
+      }
+    });
+    await store.upsertEventEdit({ original_key: key(editedAuto), payload: { ...editedAuto, time: '8:00 PM' } });
+
+    const r = await runNow();
+    expect(r.retired).toBe(2);
+    const names = (await live()).events.map(e => `${e.date} ${e.name}`);
+    expect(names).not.toContain('2026-10-05 Bingo Night');
+    expect(names).not.toContain('2026-10-11 Live Music');
+    expect(names).toEqual(expect.arrayContaining(['2026-10-07 Trivia', '2026-10-09 Friday Live Music', '2026-10-12 Hand Pick']));
+    expect(sent[0].fields).toContainEqual(['Taken down (no longer found)', 2]);
+
+    // Retired isn't "removed by the admin": a later run that finds it again brings it back.
+    const state = (await store.getPublished()).auto_publish;
+    expect(state.rejected).not.toContain(key(wrongBingo));
+    await fs.writeFile(path.join(tmpDir, 'candidates.json'), JSON.stringify({
+      last_updated: 'next', events: [...CANDIDATES.events, wrongBingo]
+    }));
+    await runNow();
+    expect((await live()).events.map(e => `${e.date} ${e.name}`)).toContain('2026-10-05 Bingo Night');
+  });
+
+  it('takes nothing down when the new run looks broken', async () => {
+    const ours = Array.from({ length: 10 }, (_, i) => ({ date: '2026-10-08', name: `Event ${i}`, time: '7:00 PM', venue: `V${i}` }));
+    await start({
+      candidates: { last_updated: 'broken', events: [{ date: '2026-10-09', name: 'Lonely', venue: 'X' }] },
+      published: { events: ours, auto_publish: { from: 'older', keys: ours.map(e => [e.date, e.name, e.venue].join('|')) } }
+    });
+    const r = await runNow();
+    expect(r.retired).toBe(0);
+    expect((await live()).events).toHaveLength(11);
+  });
+
+  it('re-applies new publish rules on boot even when candidates are unchanged', async () => {
+    const wrong = { date: '2026-10-05', name: 'Bingo Night', time: '7:00 PM', venue: 'J Welch Farms' };
+    await start({
+      candidates: CANDIDATES,
+      // Published by the old rules from these same candidates (no "rules" marker).
+      published: {
+        events: [wrong, ...CANDIDATES.events.slice(1).map(({ _source, ...e }) => e)],
+        auto_publish: { from: CANDIDATES.last_updated, keys: [[wrong.date, wrong.name, wrong.venue].join('|')] }
+      },
+      extra: { autoPublish: true, autoPublishDelayMs: 0 }
+    });
+    await new Promise(r => setTimeout(r, 100));
+    expect((await live()).events.map(e => e.name)).not.toContain('Bingo Night');
+    expect((await store.getPublished()).auto_publish.rules).toBe(2);
+  });
+
   it('is off by default outside production', async () => {
     await start({ candidates: CANDIDATES });
     await new Promise(r => setTimeout(r, 50));

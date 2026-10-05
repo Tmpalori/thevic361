@@ -73,9 +73,9 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    # Per-step timeouts below keep any single phase bounded. 30 min is the
+    # Per-step timeouts below keep any single phase bounded; this is the
     # overall safety net — see header comment.
-    timeout-minutes: 40
+    timeout-minutes: 55
     env:
       # Force line-buffered stdout for every Python step so progress logs
       # appear in real time. The Apr-29 cancellation showed nothing between
@@ -107,7 +107,9 @@ jobs:
         # Bumped 15 → 25 after run 25127431431 (PR #45 IG seed) timed out
         # in AI Review with 111 events. Internal venue caps below keep the
         # scrape phase bounded so this tail fits.
-        timeout-minutes: 35
+        # 35 → 50 (Oct 2026): with Gemini search added, the Oct 4 run's
+        # collector step took 33 minutes, too close to the old cap.
+        timeout-minutes: 50
         env:
           OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
           # Optional repo variable to swap the OpenAI model without a code
