@@ -9,7 +9,7 @@ The Vic 361 is a weekly community-events website for Victoria, TX. It runs a Sun
 1. The weekly workflow runs `collect_events.py --candidates-only`. CI must NEVER overwrite docs/events.json. test_collect_events_safety.py pins this — do not break it.
 2. docs/events.json is a curated bundled FALLBACK, not the source of truth. Only the admin Save & Publish flow may write it.
 3. The legacy ADMIN_TOKEN fallback in server/index.js stays. The browser-side GitHub PAT path in docs/admin.js stays. Both are documented bypasses.
-4. weekly-collect.yml's `0 23 * * 0` cron drifts 1 hour with US DST. That drift is intentional and documented in the workflow header. Do not "fix" it.
+4. weekly-collect.yml's `23 20 * * 0` / `23 20 * * 3` crons drift 1 hour with US DST. That drift is intentional and documented in the workflow header. Do not "fix" it. Keep server/sources.js in sync if the time changes.
 5. server/auth.js uses a custom HMAC-SHA256 token format with no `alg` header. Don't replace with a JWT library.
 
 ## Conventions

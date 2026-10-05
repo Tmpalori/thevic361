@@ -20,31 +20,36 @@ import {
 } from '../server/sources.js';
 
 describe('nextWeeklyRunUtc', () => {
-  it('returns Wednesday 23:00 UTC after a Monday morning', () => {
-    // Mon 2026-04-27 09:00 UTC -> Wed 2026-04-29 23:00 UTC
+  it('returns Wednesday 20:23 UTC after a Monday morning', () => {
+    // Mon 2026-04-27 09:00 UTC -> Wed 2026-04-29 20:23 UTC
     const now = new Date(Date.UTC(2026, 3, 27, 9, 0, 0));
     const next = nextWeeklyRunUtc(now);
-    expect(next.toISOString()).toBe('2026-04-29T23:00:00.000Z');
+    expect(next.toISOString()).toBe('2026-04-29T20:23:00.000Z');
   });
 
-  it('returns Sunday 23:00 UTC after Wednesday night', () => {
-    // Wed 2026-04-29 23:30 UTC -> Sun 2026-05-03 23:00 UTC
+  it('returns Sunday 20:23 UTC after Wednesday night', () => {
+    // Wed 2026-04-29 23:30 UTC -> Sun 2026-05-03 20:23 UTC
     const next = nextWeeklyRunUtc(new Date(Date.UTC(2026, 3, 29, 23, 30, 0)));
-    expect(next.toISOString()).toBe('2026-05-03T23:00:00.000Z');
+    expect(next.toISOString()).toBe('2026-05-03T20:23:00.000Z');
   });
 
-  it('returns the same Sunday 23:00 UTC if called before that on Sunday', () => {
-    // Sun 2026-05-03 12:00 UTC -> Sun 2026-05-03 23:00 UTC
+  it('returns the same Sunday 20:23 UTC if called before that on Sunday', () => {
+    // Sun 2026-05-03 12:00 UTC -> Sun 2026-05-03 20:23 UTC
     const now = new Date(Date.UTC(2026, 4, 3, 12, 0, 0));
     const next = nextWeeklyRunUtc(now);
-    expect(next.toISOString()).toBe('2026-05-03T23:00:00.000Z');
+    expect(next.toISOString()).toBe('2026-05-03T20:23:00.000Z');
   });
 
-  it('rolls forward to Wednesday when called after 23:00 UTC on Sunday', () => {
-    // Sun 2026-05-03 23:30 UTC -> Wed 2026-05-06 23:00 UTC
+  it('rolls forward to Wednesday once Sunday 20:23 UTC has passed', () => {
+    expect(nextWeeklyRunUtc(new Date(Date.UTC(2026, 4, 3, 20, 24, 0))).toISOString()).toBe('2026-05-06T20:23:00.000Z');
+    expect(nextWeeklyRunUtc(new Date(Date.UTC(2026, 4, 3, 20, 22, 0))).toISOString()).toBe('2026-05-03T20:23:00.000Z');
+  });
+
+  it('rolls forward to Wednesday when called late Sunday evening', () => {
+    // Sun 2026-05-03 23:30 UTC -> Wed 2026-05-06 20:23 UTC
     const now = new Date(Date.UTC(2026, 4, 3, 23, 30, 0));
     const next = nextWeeklyRunUtc(now);
-    expect(next.toISOString()).toBe('2026-05-06T23:00:00.000Z');
+    expect(next.toISOString()).toBe('2026-05-06T20:23:00.000Z');
   });
 });
 
@@ -60,7 +65,7 @@ describe('buildSourcesPayload', () => {
     expect(payload.ok).toBe(true);
     expect(payload.metadata_present).toBe(false);
     expect(payload.last_run_at).toBeNull();
-    expect(payload.next_run_at).toBe('2026-04-29T23:00:00.000Z');
+    expect(payload.next_run_at).toBe('2026-04-29T20:23:00.000Z');
     expect(payload.trigger_enabled).toBe(false);
     expect(payload.actions_url).toBe('https://github.com/Tmpalori/thevic361/actions/workflows/weekly-collect.yml');
     expect(payload.save_publish_unaffected).toBe(true);
