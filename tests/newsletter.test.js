@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore, } from '../server/db.js';
 import { withPages } from '../server/seo.js';
-import { renderWeekly, renderWelcomeEmail, normalizeEmail, signupSource, renderSubscribePage } from '../server/newsletter.js';
+import { renderWeekly, renderWelcomeEmail, normalizeEmail, signupSource, renderSubscribePage, darkSafe } from '../server/newsletter.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -81,6 +81,33 @@ describe('newsletter content', () => {
     expect(normalizeEmail('  Me@Example.COM ')).toBe('me@example.com');
     expect(normalizeEmail('nope')).toBeNull();
     expect(normalizeEmail('a@b.co"><script>')).toBeNull();
+  });
+});
+
+describe('dark mode', () => {
+  it('paints backgrounds as images and tags colors so Outlook can be put back', () => {
+    const out = darkSafe('<html><head></head><body style="margin:0;background:#FFF4D6;">' +
+      '<td class="x" style="background:#3DBE8B;padding:4px;color:#1F1A3D;">a</td>' +
+      '<a href="#" style="color:#4B3FD1;">b</a><span style="font-weight:bold">c</span></body></html>');
+    expect(out).toContain('<body class="b-fff4d6" bgcolor="#FFF4D6" style="margin:0;background-color:#FFF4D6;background-image:linear-gradient(#FFF4D6,#FFF4D6);">');
+    expect(out).toContain('<td class="x b-3dbe8b t-1f1a3d" bgcolor="#3DBE8B" style="background-color:#3DBE8B;background-image:linear-gradient(#3DBE8B,#3DBE8B);padding:4px;color:#1F1A3D;">');
+    expect(out).toContain('<a href="#" class="t-4b3fd1" style="color:#4B3FD1;">');
+    expect(out).toContain('<span style="font-weight:bold">c</span>');
+    expect(out).toContain('[data-ogsb].b-3dbe8b,[data-ogsb] .b-3dbe8b{background-color:#3dbe8b !important');
+    expect(out).toContain('[data-ogsc].t-4b3fd1,[data-ogsc] .t-4b3fd1{color:#4b3fd1 !important}');
+    expect(out).toContain(':root{color-scheme:light only;supported-color-schemes:light only}');
+  });
+
+  it('every email ships the light-only signals and no bare background colors', () => {
+    const issue = renderWeekly(withPages(EVENTS), {
+      siteUrl: 'https://www.thevic361.com', now: NOW, sponsor: { name: 'Acme', text: 'x', cta: 'Go', url: 'https://a.example' },
+      unsubscribeUrl: 'u', address: 'a'
+    });
+    expect(issue.html).toContain('<meta name="supported-color-schemes" content="light only">');
+    expect(issue.html).toContain('[data-ogsb]');
+    expect(issue.html).not.toMatch(/style="[^"]*(^|;)background:#/i);
+    const welcome = renderWelcomeEmail(withPages(EVENTS), { siteUrl: 'https://www.thevic361.com', now: NOW, sponsor: null, unsubscribeUrl: 'u', address: 'a' });
+    expect(welcome.html).toContain('linear-gradient(#FFF4D6,#FFF4D6)');
   });
 });
 
