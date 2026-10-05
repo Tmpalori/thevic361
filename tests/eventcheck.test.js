@@ -22,14 +22,16 @@ const CHURCH = '/events/2026-10-07-parish-fall-festival';
 
 let tmpDir, server, baseUrl, store;
 
-async function startApp(extra = {}) {
-  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-check-'));
+async function startApp(extra = {}, { events = EVENTS, now = NOW, keepStore = false, bundled = { events: [] } } = {}) {
+  if (!keepStore) {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-check-'));
+    store = new FileStore(path.join(tmpDir, 's.json'));
+    await store.setPublished({ last_updated: 'x', events, sponsor: null });
+  }
   const eventsFile = path.join(tmpDir, 'events.json');
-  await fs.writeFile(eventsFile, JSON.stringify({ events: [] }));
-  store = new FileStore(path.join(tmpDir, 's.json'));
-  await store.setPublished({ last_updated: 'x', events: EVENTS, sponsor: null });
+  await fs.writeFile(eventsFile, JSON.stringify(bundled));
   const { app } = await createApp({
-    storeBundle: { kind: 'file', store }, eventsFile, trustProxy: false, now: () => NOW,
+    storeBundle: { kind: 'file', store }, eventsFile, trustProxy: false, now: () => now,
     siteUrl: 'https://www.thevic361.com', eventCheckSecret: 'check-secret', autoPublish: false,
     adminUsername: 'a', adminPassword: 'b', adminSessionSecret: 'c', ...extra
   });
@@ -92,11 +94,19 @@ describe('event check: hiding', () => {
     expect(out.hidden).toEqual([]);
     expect(out.skipped.map(s => s.why)).toEqual(['not-live', 'not-live', 'not-live']);
 
-    const many = Array.from({ length: 11 }, () => ({ page: CHURCH }));
-    const r = await hide(many);
+    // Repeats of one event are one hide, not eleven.
+    const same = await hide(Array.from({ length: 11 }, () => ({ page: CHURCH })));
+    expect(same.status).toBe(200);
+  });
+
+  it('refuses a suspiciously big batch, counting only what it would hide', async () => {
+    const many = Array.from({ length: 11 }, (_, n) => ({ date: '2026-10-09', name: `Thing ${n}`, venue: 'Hall' }));
+    await startApp({}, { events: many });
+    const pages = (await (await fetch(baseUrl + '/events.json')).json()).events.map(e => ({ page: e.page }));
+    const r = await hide(pages);
     expect(r.status).toBe(400);
     expect((await r.json()).error).toBe('too-many');
-    expect(await names()).toContain('Parish Fall Festival');
+    expect((await names())).toHaveLength(11);
   });
 
   it('survives the admin Save & Publish', async () => {
@@ -119,7 +129,7 @@ describe('event check: restoring', () => {
     expect(list.hidden[0].key).toBe("2026-10-07|Parish Fall Festival|St. Mary's Church");
 
     expect((await fetch(baseUrl + '/api/admin/hidden')).status).toBe(401);
-    const r = await post('/api/admin/hidden/restore', { page: CHURCH }, h);
+    const r = await post('/api/admin/hidden/restore', { key: list.hidden[0].key }, h);
     expect(r.status).toBe(200);
     expect(await names()).toContain('Parish Fall Festival');
 
@@ -131,7 +141,59 @@ describe('event check: restoring', () => {
 
   it('restoring something that is not hidden is a 404', async () => {
     await startApp();
-    const r = await post('/api/admin/hidden/restore', { page: CHURCH }, await auth());
+    const r = await post('/api/admin/hidden/restore', { key: "2026-10-07|Parish Fall Festival|St. Mary's Church" }, await auth());
     expect(r.status).toBe(404);
   });
 });
+
+describe('event check: identity, not page URL', () => {
+  const BINGO = [
+    { date: '2026-10-09', name: 'Bingo', time: '5:00 PM', venue: 'VFW Post 4146' },
+    { date: '2026-10-09', name: 'Bingo', time: '7:00 PM', venue: "St. Mary's Church" }
+  ];
+  const visible = async () => (await (await fetch(baseUrl + '/events.json')).json()).events.map(e => `${e.venue}@${e.page}`);
+
+  it('hiding one same-named event never moves to another when the list changes', async () => {
+    await startApp({}, { events: BINGO });
+    expect(await visible()).toEqual(['VFW Post 4146@/events/2026-10-09-bingo', "St. Mary's Church@/events/2026-10-09-bingo-2"]);
+    await hide([{ page: '/events/2026-10-09-bingo-2' }]);
+    expect(await visible()).toEqual(['VFW Post 4146@/events/2026-10-09-bingo']);
+    // An earlier Bingo is published: slugs renumber, the church one stays hidden.
+    await store.setPublished({ ...(await store.getPublished()),
+      events: [{ date: '2026-10-09', name: 'Bingo', time: '3:00 PM', venue: 'Elks Lodge' }, ...BINGO] });
+    const now = await visible();
+    expect(now.map(v => v.split('@')[0])).toEqual(['Elks Lodge', 'VFW Post 4146']);
+  });
+
+  it('renaming a hidden event in the admin keeps it hidden', async () => {
+    await startApp();
+    await hide([{ page: CHURCH }]);
+    const h = await auth();
+    const r = await post('/api/admin/event-edits', {
+      original_key: "2026-10-07|Parish Fall Festival|St. Mary's Church",
+      payload: { ...EVENTS[1], name: 'Parish Fall Festival Night', description: 'Games, food and a cake walk.' }
+    }, h);
+    expect(r.status).toBeLessThan(300);
+    expect(await names()).not.toContain('Parish Fall Festival Night');
+    expect(await names()).not.toContain('Parish Fall Festival');
+  });
+
+  it('a hidden event stays hidden after its date passes, archive included', async () => {
+    await startApp();
+    await hide([{ page: CHURCH }]);
+    await new Promise(r => server.close(r)); server = null;
+    // Two days later, another hide runs (it used to prune past entries).
+    await startApp({}, { keepStore: true, now: new Date('2026-10-09T17:00:00Z') });
+    await hide([{ page: '/events/2026-10-12-nothing' }]);
+    expect((await fetch(baseUrl + CHURCH)).status).toBe(404);
+    expect((await store.getPublished()).hidden.map(h => h.page)).toContain(CHURCH);
+  });
+
+  it('the bundled backup copy honors the hidden list too', async () => {
+    await startApp({}, { bundled: { events: EVENTS, hidden: [{ key: "2026-10-07|Parish Fall Festival|St. Mary's Church", date: '2026-10-07' }] } });
+    await store.setPublished(null);
+    expect(await names()).not.toContain('Parish Fall Festival');
+    expect(await names()).toContain('Taco Tuesday');
+  });
+});
+

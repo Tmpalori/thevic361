@@ -7,9 +7,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "scripts"))
 import sweep_events as sw  # noqa: E402
 
 
-def ev(name, date="2026-10-06", time="", venue="", description="", page=None):
+def ev(name, date="2026-10-06", time="", venue="", description="", page=None, **extra):
     return {"name": name, "date": date, "time": time, "venue": venue, "description": description,
-            "address": "", "page": page or f"/events/{date}-x"}
+            "address": "", "page": page or f"/events/{date}-x", **extra}
 
 
 def kinds(findings):
@@ -87,8 +87,38 @@ class FakeResp:
 def test_only_certain_rule_findings_get_hidden():
     events = [ev("Monday Night Bingo", page="/events/a"), ev("St. Mary's Parish Fall Festival", page="/events/b"),
               ev("Late Show", time="3:00 AM", page="/events/c")]
-    picks = sw.to_hide(events, sw.rule_findings(events))
+    picks, _ = sw.to_hide(events, sw.rule_findings(events))
     assert [(i, k) for i, k, _ in picks] == [(1, "religious")]   # wrong day and odd time stay flags
+
+
+def test_duplicates_hidden_only_when_exact_unfeatured_and_the_poorer_copy_goes():
+    rich = dict(url="https://x.example", description="All the details.")
+    # Exact twins: the copy with less detail is hidden, wherever it sits.
+    events = [ev("Trivia Night", venue="Weber Brewing", time="7:00 PM", page="/events/a"),
+              ev("Trivia Night!", venue="Weber Brewing", time="7 PM", page="/events/b", **rich)]
+    picks, resolved = sw.to_hide(events, sw.rule_findings(events))
+    assert [(i, k) for i, k, _ in picks] == [(0, "duplicate")]
+    assert resolved == {1: 0}
+    # Fuzzy matches (name contains the other) are reported, not hidden.
+    events = [ev("Fall Festival", venue="DeLeon Plaza", time="10:00 AM", page="/events/a"),
+              ev("Victoria Fall Festival", venue="DeLeon Plaza", time="10:00 AM", page="/events/b")]
+    rules = sw.rule_findings(events)
+    assert any(k == "duplicate" for _, k, _ in rules)
+    assert sw.to_hide(events, rules)[0] == []
+    # A featured (paid) listing is never auto-hidden, nor is its twin.
+    events = [ev("Trivia Night", venue="Weber Brewing", time="7:00 PM", page="/events/a", featured=True),
+              ev("Trivia Night", venue="Weber Brewing", time="7:00 PM", page="/events/b")]
+    assert sw.to_hide(events, sw.rule_findings(events))[0] == []
+
+
+class FakeResp:
+    def __init__(self, data, status=200):
+        self.data, self.status_code = data, status
+        self.ok = status < 400
+        self.headers = {"content-type": "application/json"}
+
+    def json(self):
+        return self.data
 
 
 def test_hide_posts_pages_and_reads_back_what_happened():
@@ -97,20 +127,28 @@ def test_hide_posts_pages_and_reads_back_what_happened():
     answer = {"ok": True, "hidden": [{"page": "/events/a"}],
               "skipped": [{"page": "/events/b", "why": "restored-by-admin"}, {"page": "/events/c", "why": "not-live"}]}
     with patch.object(sw.requests, "post", return_value=FakeResp(answer)) as post:
-        hidden, restored = sw.hide(events, picks, "s3cret")
-    assert hidden == {0} and restored == {1}
+        hidden, restored, problem = sw.hide(events, picks, "s3cret")
+    assert hidden == {0} and restored == {1} and problem is None
     kw = post.call_args.kwargs
     assert kw["headers"]["X-Cron-Secret"] == "s3cret"
     assert kw["json"]["hide"][0] == {"page": "/events/a", "reason": "religious / church event: church event"}
 
 
-def test_hide_does_nothing_without_a_secret_or_with_too_many():
-    events = [ev(str(n), page=f"/events/{n}") for n in range(12)]
-    picks = [(n, "not_an_event", "x") for n in range(12)]
+def test_hide_failures_are_reported_not_swallowed():
+    events = [ev("A", page="/events/a")]
+    picks = [(0, "religious", "church event")]
+    with patch.object(sw.requests, "post", return_value=FakeResp({"ok": False, "error": "unauthorized"}, 401)):
+        assert "rejected the secret" in sw.hide(events, picks, "wrong")[2]
+    with patch.object(sw.requests, "post", return_value=FakeResp({"ok": False, "error": "too-many", "message": "Refusing to hide 11"}, 400)):
+        assert "Refusing to hide 11" in sw.hide(events, picks, "s3cret")[2]
+    with patch.object(sw.requests, "post", side_effect=OSError("timeout")):
+        assert "timeout" in sw.hide(events, picks, "s3cret")[2]
     with patch.object(sw.requests, "post") as post:
-        assert sw.hide(events, picks[:2], "") == (set(), set())
-        assert sw.hide(events, picks, "s3cret") == (set(), set())
+        assert sw.hide(events, picks, "") == (set(), set(), None)   # report-only setup
     post.assert_not_called()
+    head, _ = sw.report(events, [(0, "religious", "church event")], ai_ran=True, days=14,
+                        problem="auto-hide failed: HTTP 500")
+    assert "⚠️ auto-hide failed: HTTP 500" in head
 
 
 def test_report_splits_hidden_from_flags():
@@ -121,4 +159,3 @@ def test_report_splits_hidden_from_flags():
     assert lines[0].startswith("*Hidden automatically*")
     assert "Church Fish Fry" in lines[1]
     assert lines[2] == "*To look at:*" and "Monday Bingo" in lines[3]
-

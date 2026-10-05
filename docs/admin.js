@@ -720,7 +720,9 @@
       const events = Array.isArray(json.events) ? json.events : [];
       const keys = new Set(events.map(eventKey));
       state.publishedKeys = keys;
-      state.hiddenKeys = new Set((await loadHidden()).map(h => h.key));
+      // Match on the original key and the shown (edited) one: the list
+      // here has the edits overlay applied.
+      state.hiddenKeys = new Set((await loadHidden()).flatMap(h => [h.key, h.shown_key].filter(Boolean)));
       // The live site is the starting point: everything on it starts checked.
       // Live events that aren't in this week's candidates (kept from an
       // earlier collect, approved submissions, hand-added) are added to the
@@ -1405,14 +1407,14 @@
       '<strong>' + escapeHtml(h.name || h.page) + '</strong> <span class="home-check__state">' +
       escapeHtml([h.date, h.venue].filter(Boolean).join(' · ')) + '</span>' +
       '<p class="home-check__fix">' + escapeHtml(h.reason || 'Hidden by the event check') +
-      ' <button type="button" class="btn btn--outline" data-restore="' + escapeHtml(h.page) + '">Restore</button></p>' +
+      ' <button type="button" class="btn btn--outline" data-restore="' + escapeHtml(h.key) + '">Restore</button></p>' +
       '</div></li>').join('');
     list.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', async () => {
       b.disabled = true;
       b.textContent = 'Restoring…';
       try {
         const { res, json } = await adminFetch('/api/admin/hidden/restore', {
-          method: 'POST', body: JSON.stringify({ page: b.dataset.restore }), headers: { 'Content-Type': 'application/json' }
+          method: 'POST', body: JSON.stringify({ key: b.dataset.restore }), headers: { 'Content-Type': 'application/json' }
         });
         if (!res.ok || !json || !json.ok) throw new Error((json && json.error) || ('HTTP ' + res.status));
         renderHiddenOnHome();

@@ -27,7 +27,7 @@ import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
-import { registerEventCheck, withoutHidden, hiddenPages } from './eventcheck.js';
+import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys } from './eventcheck.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { stripeConfig, createStripe, createSponsors } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
@@ -948,6 +948,18 @@ export async function createApp(opts = {}) {
     return sponsors.apply(await loadPublicPayload());
   }
 
+  // The public events of a published payload, with the edits overlay
+  // applied and hidden events left out, still carrying original keys.
+  async function visibleFrom(published) {
+    let edits = [];
+    try {
+      edits = await store.listEventEdits();
+    } catch (err) {
+      console.warn('[events] overlay skipped:', err.message);
+    }
+    return visibleKeyed(published, edits);
+  }
+
   async function loadPublicPayload() {
     try {
       const published = await store.getPublished();
@@ -955,22 +967,18 @@ export async function createApp(opts = {}) {
         // The published payload keeps original event identities; the
         // overlay maps original_key -> corrected shape so a correction made
         // between publishes shows up without another Save & Publish.
-        let events = Array.isArray(published.events) ? published.events : [];
-        try {
-          const edits = await store.listEventEdits();
-          events = applyEventEdits(events, edits);
-        } catch (err) {
-          console.warn('[events] overlay skipped:', err.message);
-        }
-        // Events the event check hid stay published but off the site.
-        return { ...published, events: withoutHidden(withPages(events), published), source: 'store' };
+        // Events the event check hid stay published but off the site
+        // (server/eventcheck.js matches them by original key).
+        return { ...published, events: stripKeys(await visibleFrom(published)), source: 'store' };
       }
     } catch (err) {
       console.warn('[events] published lookup failed:', err.message);
     }
     try {
       const bundled = await readJsonFile(eventsFile);
-      return { ...bundled, events: withPages(bundled.events), source: 'bundled' };
+      // The bundled copy can carry a `hidden` list too (Save & Publish
+      // commits the whole payload), so a database outage hides the same.
+      return { ...bundled, events: stripKeys(visibleKeyed(bundled, [])), source: 'bundled' };
     } catch (err) {
       console.warn('[events] bundled events.json unreadable:', err.message);
       return { events: [], source: 'empty' };
@@ -1037,7 +1045,7 @@ export async function createApp(opts = {}) {
   registerEventCheck(app, {
     store, requireAdmin, nowFn: () => (opts.now || (() => new Date()))(),
     secret: opts.eventCheckSecret ?? (process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || ''),
-    loadVisible: async () => (await loadPublicPayload()).events
+    loadVisibleKeyed: async () => visibleFrom((await store.getPublished()) || {})
   });
 
   registerNewsletter(app, {
@@ -1120,10 +1128,11 @@ export async function createApp(opts = {}) {
   }
 
   async function findEvent(payload, page) {
-    if (hiddenPages(payload).has(page)) return null;
     let ev = payload.events.find(e => e.page === page);
     if (!ev && typeof store.getArchivedEvent === 'function') {
       ev = await store.getArchivedEvent(page);
+      // A hidden event's archived copy stays hidden.
+      if (ev && !withoutHidden([{ ...ev, page }], payload).length) ev = null;
     }
     return ev || null;
   }
@@ -1267,7 +1276,7 @@ export async function createApp(opts = {}) {
       const pub = (await store.getPublished()) || {};
       const today = localDateStr(nowFn());
       // What visitors see: less anything the event check hid.
-      const events = withoutHidden(withPages(Array.isArray(pub.events) ? pub.events : []), pub);
+      const events = visibleKeyed(pub, []);
       status.live_events = events.length;
       status.upcoming_events = events.filter(e => e && e.date >= today).length;
       status.hidden_events = (pub.hidden || []).filter(h => h.date >= today).length;
