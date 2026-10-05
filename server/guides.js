@@ -224,7 +224,8 @@ export const SEASONS = [
     title: "St. Patrick's Day Events in Victoria, TX", h1: "St. Patrick's Day in Victoria, TX",
     description: "St. Patrick's Day events in Victoria, TX: pub crawls, Irish music, green beer, and family fun.",
     intro: "Pub crawls, Irish music, and wearing green around Victoria.",
-    match: /(st\.?|saint)\s*patrick|st\.?\s*patty|st\.?\s*paddy/i
+    match: /\b(st\.?|saint)\s*(patrick['’]?s\s*day|patty['’]?s?\s*day|paddy['’]?s?\s*day|patrick['’]?s\s*(parade|pub|party|celebration|bash|fest))|\bst\.?\s*(patty|paddy)['’]?s?\b(?!\s*(church|parish|school|catholic))/i,
+    exclude: /\b(church|parish|catholic|mass)\b/i
   },
   {
     path: '/spring-break', nav: 'Spring Break', months: [3],
@@ -238,7 +239,7 @@ export const SEASONS = [
     title: 'Easter Events in Victoria, TX', h1: 'Easter events in Victoria, TX',
     description: 'Easter events in Victoria, TX: egg hunts, Easter Bunny photos, and spring family events.',
     intro: 'Egg hunts, Easter Bunny photos, and spring family events around Victoria.',
-    match: /easter|egg\s*hunt|eggstravaganza|egg[\s-]*stravaganza/i
+    match: /\beaster\b|egg\s*hunt|eggstravaganza|egg[\s-]*stravaganza/i
   },
   {
     path: '/earth-day', nav: 'Earth Day', months: [4],
@@ -259,7 +260,8 @@ export const SEASONS = [
     title: "Mother's Day Events in Victoria, TX", h1: "Mother's Day in Victoria, TX",
     description: "Mother's Day events in Victoria, TX: brunches, markets, and things to do with Mom.",
     intro: "Brunches, markets, and things to do with Mom around Victoria.",
-    match: /mother['’]?s\s*day|mom['’]?s\s*day/i
+    match: /mother['’]?s\s*day|mom['’]?s\s*day/i,
+    exclude: /day\s*out\b/i  // "Mother's Day Out" is a preschool program
   },
   {
     path: '/bach-festival', nav: 'Bach Festival', months: [5, 6],
@@ -287,7 +289,8 @@ export const SEASONS = [
     title: "Father's Day Events in Victoria, TX", h1: "Father's Day in Victoria, TX",
     description: "Father's Day events in Victoria, TX: cookouts, car shows, fishing, and things to do with Dad.",
     intro: "Cookouts, car shows, and things to do with Dad around Victoria.",
-    match: /father['’]?s\s*day|dad['’]?s\s*day/i
+    match: /father['’]?s\s*day|dad['’]?s\s*day/i,
+    exclude: /day\s*out\b/i
   },
   {
     path: '/fourth-of-july', nav: 'July 4th', months: [6, 7],
@@ -325,7 +328,7 @@ export const SEASONS = [
     match: /tejas\s*fest/i
   },
   {
-    path: '/halloween-events', nav: 'Halloween', months: [10],
+    path: '/halloween-events', nav: 'Halloween', months: [9, 10],  // haunted houses open in late September
     title: 'Halloween Events in Victoria, TX', h1: 'Halloween events in Victoria, TX',
     description: 'Halloween events in Victoria, TX: trunk or treats, haunted houses, costume parties, fall festivals, and pumpkin patches.',
     intro: 'Trunk or treats, haunted houses, costume parties, fall festivals, and pumpkin patches around Victoria.',
@@ -357,14 +360,14 @@ export const SEASONS = [
     title: 'Christmas Events in Victoria, TX', h1: 'Christmas and holiday events in Victoria, TX',
     description: 'Christmas events in Victoria, TX: lighted parades, holiday markets, Santa visits, light displays, and holiday concerts.',
     intro: 'Lighted parades, holiday markets, Santa visits, light displays, and holiday concerts around Victoria.',
-    match: /christmas|holiday\s*(market|parade|lights?|concert|bazaar|festival|party|show|open\s*house)|santa|lighted\s*parade|light(s)?\s*(display|show|tour)|nutcracker|carol(s|ing)\b|winter\s*wonderland|jingle/i
+    match: /christmas|holiday\s*(market|parade|lights?|concert|bazaar|festival|party|show|open\s*house)|\bsanta\b(?!\s*(rosa|fe|clara|ana|cruz|maria|barbara|monica))|lighted\s*parade|light(s)?\s*(display|show|tour)|nutcracker|carol(s|ing)\b|winter\s*wonderland|jingle/i
   },
   {
     path: '/new-years-eve', nav: "New Year's Eve", months: [12, 1],
     title: "New Year's Eve in Victoria, TX", h1: "New Year's Eve in Victoria, TX",
     description: "New Year's Eve parties and events in Victoria, TX.",
     intro: "Parties, countdowns, and live music to ring in the new year in Victoria.",
-    match: /new\s*year|nye\b/i,
+    match: /new\s*year['’]?s?\s*(eve|party|bash|celebration|countdown|ball|gala|dance)|\bnye\s*(party|bash|celebration|countdown|gala|ball|dance)|countdown\s*to\s*20\d\d/i,
     exclude: /lunar|chinese|vietnamese|t[eế]t\b/i
   }
 ];
@@ -379,15 +382,19 @@ export function seasonMatches(season, ev) {
   return !month || season.months.includes(month);
 }
 
+// Upcoming comes from the live list only: the archive also holds events
+// that were taken down or renamed since, and those mustn't keep a guide
+// (and its nav tab) alive. The archive supplies past events.
 function seasonEvents(season, live, archived, today) {
+  const match = ev => ev && ev.page && seasonMatches(season, ev);
+  const upcoming = sortEvents(live.filter(e => match(e) && e.date >= today));
   const byPage = new Map();
   for (const ev of [...archived, ...live]) {
-    if (ev && ev.page && seasonMatches(season, ev)) byPage.set(ev.page, ev);
+    if (match(ev) && ev.date < today && ev.date >= addDays(today, -400)) byPage.set(ev.page, ev);
   }
-  const all = [...byPage.values()];
   return {
-    upcoming: sortEvents(all.filter(e => e.date >= today)),
-    past: sortEvents(all.filter(e => e.date < today && e.date >= addDays(today, -400))).reverse().slice(0, 12)
+    upcoming,
+    past: sortEvents([...byPage.values()]).reverse().slice(0, 12)
   };
 }
 

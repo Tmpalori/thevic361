@@ -52,6 +52,14 @@ async function token() {
 
 // Writes land after the 204, so wait for them.
 const settle = () => new Promise(r => setTimeout(r, 50));
+// Wait until n rows are stored (up to 2s): a fixed 50ms was too short on
+// busy CI runners for crawler rows, written after the response finishes.
+async function settleRows(n) {
+  for (let i = 0; i < 40; i++) {
+    if ((await store.listTraffic('2026-01-01')).length >= n) return;
+    await new Promise(r => setTimeout(r, 50));
+  }
+}
 
 describe('analytics helpers', () => {
   it('names crawlers and lets browsers through', () => {
@@ -152,7 +160,8 @@ describe('traffic endpoints', () => {
     await fetch(baseUrl + '/llms.txt', { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ChatGPT-User/1.0)' } });
     await fetch(baseUrl + '/robots.txt', { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ChatGPT-User/1.0)' } }); // not a read
     await fetch(baseUrl + '/about', { headers: { 'User-Agent': UA } }); // humans come via beacon only
-    await settle();
+    await settleRows(5);  // 2 views + 1 click + 2 crawls
+    await settle();       // and nothing more
 
     const unauth = await fetch(baseUrl + '/api/admin/traffic');
     expect(unauth.status).toBe(401);
@@ -205,6 +214,13 @@ describe('Meta Pixel script', () => {
     expect(js).toContain("fbq('init', '123456789012345')");
     expect(js).toContain("fbq('track', 'PageView')");
     expect(js).toContain('vic361_admin_session');
+  });
+
+  it('never runs on token pages', async () => {
+    const js = await (await fetch(await pixelApp('123456789012345'))).text();
+    expect(js).toContain("/[?&]token=/.test(location.search)");
+    expect(js).toContain("'/subscribe/confirm'");
+    expect(js).toContain("'/unsubscribe'");
   });
 
   it('ignores an ID that is not a number', async () => {
