@@ -559,3 +559,49 @@ def test_guessed_venue_still_needs_the_same_start_time():
     assert not ce.is_same_event(ev("Open Mic Night", venue="Weber Brewing", time="7:00 PM"),
                                 ev("Open Mic Night", venue="Aero Crafters", time="7:00 PM"))
 
+
+
+def test_guessed_library_venue_needs_more_than_a_shared_start():
+    lib = lambda name, time: ev(name, date="2026-10-06", venue="Victoria Public Library", address="302 N. Main St.",
+                                time=time, source="library", _venue_guess=True)
+    # Generic name at another venue, same start: two events (review finding).
+    assert not ce.is_same_event(lib("Story Time", "10:00AM – 10:30AM"),
+                                ev("Story Time", date="2026-10-06", venue="Barnes & Noble", time="10:00 AM", source="allevents"))
+    # The city calendar republishes library programs: same event.
+    assert ce.is_same_event(lib("Pickleball Games", "6:00PM – 7:30PM"),
+                            ev("Pickleball Games", date="2026-10-06", venue="Youth Sports Complex",
+                               time="6:00 PM – 7:30 PM", source="city_calendar"))
+    # Anyone else: only with the same full time range.
+    assert ce.is_same_event(lib("Teen Craft", "4:00PM – 5:00PM"),
+                            ev("Teen Craft", date="2026-10-06", venue="Nave Museum", time="4:00 PM - 5:00 PM", source="allevents"))
+    # "6-8 PM" starts at 6, so it doesn't match an 8 PM listing.
+    assert not ce.is_same_event(lib("Live Music", "6-8 PM"),
+                                ev("Live Music", date="2026-10-06", venue="Pumphouse", time="8:00 PM", source="city_calendar"))
+
+
+def test_guessed_venue_never_gives_way_to_an_organizer_or_a_copy_of_itself():
+    venues = [{"name": "Discover Victoria Texas", "category": "Tourism / Events Aggregator"}]
+    out = ce.merge_events([
+        ev("Teen Book Club", date="2026-10-06", venue="Victoria Public Library", address="302 N. Main St.",
+           time="6:00PM", source="library", _venue_guess=True),
+        ev("Teen Book Club", date="2026-10-06", venue="Discover Victoria Texas", time="6:00 PM",
+           source="apify_facebook_posts"),
+    ], venues=venues)
+    assert len(out) == 1 and out[0]["venue"] == "Victoria Public Library" and out[0]["address"] == "302 N. Main St."
+    # An aggregator repeating the library's venue keeps the guess, so the
+    # city calendar's real place still merges in afterwards.
+    out = ce.merge_events([
+        ev("Book Club", date="2026-10-06", venue="Victoria Public Library", time="6:00PM – 7:00PM",
+           source="library", _venue_guess=True),
+        ev("Book Club", date="2026-10-06", venue="Victoria Public Library", time="6:00 PM", source="gemini_search"),
+        ev("Book Club", date="2026-10-06", venue="Vida Cafe", time="6:00 PM – 7:00 PM", source="city_calendar"),
+    ], venues=[])
+    assert [e["venue"] for e in out] == ["Vida Cafe"]
+
+
+def test_start_minutes_reads_ranges_and_words():
+    assert ce._start_minutes("6-8 PM") == 18 * 60
+    assert ce._start_minutes("6:30-8 PM") == 18 * 60 + 30
+    assert ce._start_minutes("Noon") == 12 * 60
+    assert ce._start_minutes("6 p.m.") == 18 * 60
+    assert ce._start_minutes("All day") is None

@@ -37,7 +37,7 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import {
   HUB_PAGES, localDateStr, withPages, renderHome, renderHubPage, renderEventPage,
-  renderAboutPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
+  renderAboutPage, renderPrivacyPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
   , fillSeasonalNav
 } from './seo.js';
 import {
@@ -1042,7 +1042,11 @@ export async function createApp(opts = {}) {
 
   registerNewsletter(app, {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
-    getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman
+    getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman,
+    withNav: async (html, path) => {
+      const payload = await getPublicPayload();
+      return fillSeasonalNav(html, activeSeasons(payload.events, await listArchived(), nowFn()), path);
+    }
   });
 
   // ─── Server-rendered pages (SEO + AI crawlers) ───
@@ -1171,10 +1175,14 @@ export async function createApp(opts = {}) {
     sendHtml(res, renderAboutPage(ctx));
   }));
 
+  app.get('/privacy', pageHandler(async (req, res, payload, ctx) => {
+    sendHtml(res, renderPrivacyPage(ctx));
+  }));
+
   app.get('/sitemap.xml', pageHandler(async (req, res, payload, ctx) => {
     res.set('Cache-Control', 'public, max-age=300');
     const extraPaths = [
-      '/venues', '/subscribe',
+      '/venues', '/subscribe', '/privacy',
       ...activeSeasons(payload.events, ctx.archived, ctx.now).map(s => s.path),
       ...venuesWithEvents(venues, payload.events, ctx.archived, ctx.now).map(v => v.path)
     ];

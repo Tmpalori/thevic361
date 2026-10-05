@@ -1854,21 +1854,62 @@ def _near_place(a, b):
 
 def _start_minutes(t):
     """Start of a time string in minutes after midnight, or None.
-    "6:00PM – 7:00PM" and "6:00 PM – 7:00 PM" both give 1080."""
-    m = re.search(r"(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s*m", t or "", re.IGNORECASE)
+    "6:00PM – 7:00PM" and "6:00 PM – 7:00 PM" give 1080; in "6-8 PM" the
+    start borrows the range's am/pm (1080, not 8 PM); "Noon" is 720."""
+    t = (t or "").strip()
+    if re.match(r"noon\b", t, re.IGNORECASE):
+        return 720
+    if re.match(r"midnight\b", t, re.IGNORECASE):
+        return 0
+    m = re.match(r"(\d{1,2})(?::(\d{2}))?\s*(?:([ap])\.?\s*m\.?)?", t, re.IGNORECASE)
     if not m:
         return None
-    return (int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0)) * 60 + int(m.group(2) or 0)
+    ampm = m.group(3)
+    if not ampm:
+        later = re.search(r"\d\s*([ap])\.?\s*m", t[m.end():], re.IGNORECASE)
+        if not later:
+            return None
+        ampm = later.group(1)
+    hour = int(m.group(1))
+    if hour > 12:
+        return None
+    return (hour % 12 + (12 if ampm.lower() == "p" else 0)) * 60 + int(m.group(2) or 0)
+
+
+def _time_range(t):
+    """(start, end) minutes for a time string; end None when not given."""
+    t = (t or "").strip()
+    parts = re.split(r"\s*(?:–|—|-|to)\s*", t, maxsplit=1)
+    start = _start_minutes(t)
+    end = _start_minutes(parts[1]) if len(parts) == 2 else None
+    return start, end
+
+
+# Sources that republish the library's own programs with the real meeting
+# place (the city calendar lists them with the library as contact).
+_GUESS_CONFIRMING_SOURCES = {"city_calendar"}
+
+
+def _sources_of(e):
+    return set(e.get("_sources") or []) | ({e["_source"]} if e.get("_source") else set())
 
 
 def _guessed_place_same_start(a, b):
     """One side's venue is a source's default guess (library programs are
-    all filed under the library), and both start at the same minute: the
-    venues disagreeing doesn't make them two events."""
-    if not (a.get("_venue_guess") or b.get("_venue_guess")):
+    all filed under the library) and the venues disagree. Same event when
+    both start at the same minute AND either the other side is a source
+    that republishes library programs, or the full time ranges match.
+    Generic names ("Story Time" at the library and at Barnes & Noble, both
+    10 AM) stay two events."""
+    guess, other = (a, b) if a.get("_venue_guess") else (b, a)
+    if not guess.get("_venue_guess") or other.get("_venue_guess"):
         return False
-    sa, sb = _start_minutes(a.get("time")), _start_minutes(b.get("time"))
-    return sa is not None and sa == sb
+    ga, gb = _time_range(guess.get("time")), _time_range(other.get("time"))
+    if ga[0] is None or ga[0] != gb[0]:
+        return False
+    if _sources_of(other) & _GUESS_CONFIRMING_SOURCES:
+        return True
+    return ga[1] is not None and ga[1] == gb[1]
 
 
 def is_same_event(a, b):
@@ -1950,11 +1991,20 @@ def _merge_pair(old, new):
             and other["venue"].lower() not in _NON_PLACE_NAMES:
         merged["venue"] = other["venue"]
         merged["address"] = other.get("address") or ""
-    # A guessed venue gives way to one a source actually stated.
-    if merged.get("_venue_guess") and other.get("venue") and not other.get("_venue_guess"):
+    # A guessed venue gives way to one a source actually stated, but not to
+    # an organizer account ("Discover Victoria Texas") and not to a copy of
+    # the guess itself (an aggregator repeating "Victoria Public Library").
+    other_states_place = (other.get("venue") and not other.get("_venue_guess")
+                          and other["venue"].lower() not in _NON_PLACE_NAMES)
+    if merged.get("_venue_guess") and other_states_place and not _same_place(merged, other):
         merged["venue"] = other["venue"]
         merged["address"] = other.get("address") or ""
-    merged["_venue_guess"] = bool(merged.get("_venue_guess") and other.get("_venue_guess"))
+        merged["_venue_guess"] = False
+    else:
+        # The venue is still only the library's default (or a copy of it):
+        # keep the flag so a later listing with the real place can merge.
+        merged["_venue_guess"] = bool(merged.get("_venue_guess")
+                                      or (other.get("_venue_guess") and _same_place(merged, other)))
     # The shorter name is usually the clean one ("Tejas Fest" over "Tejas
     # Fest 2026 - Presented by ...").
     if other.get("name") and len(other["name"]) < len(merged.get("name") or ""):

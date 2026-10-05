@@ -219,7 +219,8 @@
         if (x.ok) {
           form.email.value = '';
           try { localStorage.setItem(SUB_KEY, '1'); } catch (e2) { /* private mode */ }
-          if (window.vic361Track) window.vic361Track('subscribe_click', { link_url: 'list-card' });
+          // Only a genuinely new signup counts (not "already on the list").
+          if (x.j.new && window.vic361Track) window.vic361Track('subscribe_click', { link_url: 'list-card' });
         }
       }).catch(function () {
         msg.textContent = 'Something went wrong. Try again.';
@@ -399,9 +400,7 @@
               var sec = document.getElementById('day-' + todayIdx);
               if (sec) {
                 var stickyHeader = document.getElementById('site-header');
-                var stickyLegend = document.querySelector('.icon-legend');
-                var stickyHeight = (stickyHeader ? stickyHeader.offsetHeight : 0) +
-                                   (stickyLegend ? stickyLegend.offsetHeight : 0) + 8;
+                var stickyHeight = (stickyHeader ? stickyHeader.offsetHeight : 0) + 8;
                 var offset = sec.getBoundingClientRect().top + window.pageYOffset - stickyHeight;
                 window.scrollTo({ top: offset, behavior: 'smooth' });
               }
@@ -520,6 +519,22 @@
       safeHref: safeHref,
       renderEvent: renderEvent
     };
+  }
+
+  // The Icons Guide opens as a panel over the list; close it on a tap
+  // outside it or Esc, like any other popover, instead of only on its button.
+  var iconGuide = document.querySelector('.icon-guide');
+  if (iconGuide) {
+    document.addEventListener('click', function (e) {
+      if (iconGuide.open && !iconGuide.contains(e.target)) iconGuide.open = false;
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && iconGuide.open) {
+        iconGuide.open = false;
+        var summary = iconGuide.querySelector('summary');
+        if (summary) summary.focus();
+      }
+    });
   }
 
   // Run on DOM ready
