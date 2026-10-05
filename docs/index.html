@@ -95,12 +95,14 @@
       <!-- Last updated -->
       <p class="last-updated" id="last-updated"></p>
 
-      <!-- Skip to today (shown by JS when today isn't Monday) -->
-      <div id="skip-today-bar" style="display:none; margin-bottom:1rem;"></div>
-
-      <!-- Icon guide: tucked away so it doesn't crowd the top of the page -->
+      <!-- One row of buttons above the list: Skip to Today (app.js shows it
+           when today isn't Monday), Next week, and the icon key, which opens
+           as a panel over the list so the row doesn't jump. -->
+      <div class="top-actions">
+        <span id="skip-today-bar" hidden></span>
+        <a class="btn btn--outline" href="/next-week">Next week →</a>
       <details class="icon-guide">
-        <summary>What do the icons mean?</summary>
+        <summary class="btn btn--outline">Icons Guide</summary>
         <div class="legend-inner">
           <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-food"></use></svg> Food</span>
           <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-music"></use></svg> Music</span>
@@ -113,6 +115,7 @@
           <span class="legend-item"><svg class="ico icon" aria-hidden="true" focusable="false"><use href="./icons.svg#i-free"></use></svg> Free</span>
         </div>
       </details>
+      </div>
 
       <!-- Events rendered here by JS -->
       <div id="events-container">
@@ -180,6 +183,7 @@
   </footer>
 
   <script src="./app.js"></script>
+  <script src="./pixel.js" defer></script>
   <script src="./track.js" defer></script>
   <script src="./turnstile.js" defer></script>
 </body>

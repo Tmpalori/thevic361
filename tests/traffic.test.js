@@ -88,6 +88,19 @@ describe('analytics helpers', () => {
     expect(beaconRow({ kind: 'view', ref: 'https://www.google.com/', utm: 'chatgpt.com' }, ctx).ref_source).toBe('Google');
   });
 
+  it('splits Meta ad taps from free Facebook and Instagram visits', () => {
+    const ctx = { ip: '1.1.1.1', ua: UA, secret: 's', siteHost: 'www.thevic361.com', now: NOW };
+    const view = b => beaconRow({ kind: 'view', ...b }, ctx).ref_source;
+    expect(view({ ref: 'https://l.facebook.com/l.php?u=x', utm: 'fb', utm_medium: 'paid' })).toBe('Meta ads');
+    expect(view({ ref: 'https://l.instagram.com/', utm: 'ig', utm_medium: 'paid' })).toBe('Meta ads');
+    // In-app browsers often drop the referrer; the tag still says Meta.
+    expect(view({ ref: '', utm: 'facebook', utm_medium: 'PAID' })).toBe('Meta ads');
+    expect(view({ ref: '', utm: 'google', utm_medium: 'cpc' })).toBe('Other ads');
+    // No paid medium: a free post is still Facebook.
+    expect(view({ ref: 'https://l.facebook.com/l.php?u=x', utm: 'fb' })).toBe('Facebook');
+    expect(view({ ref: 'https://l.facebook.com/l.php?u=x', utm: 'fb', utm_medium: 'social' })).toBe('Facebook');
+  });
+
   it('sums up how AI uses the site', () => {
     const ctx = { ip: '1.1.1.1', ua: UA, secret: 's', siteHost: 'www.thevic361.com', now: NOW };
     const day = beaconRow({ kind: 'view', path: '/' }, ctx).day;
@@ -162,5 +175,40 @@ describe('traffic endpoints', () => {
     await beacon({ kind: 'nope' });
     await settle();
     expect(await store.listTraffic('2026-01-01')).toEqual([]);
+  });
+});
+
+describe('Meta Pixel script', () => {
+  async function pixelApp(metaPixelId) {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-pixel-'));
+    const eventsFile = path.join(tmpDir, 'events.json');
+    await fs.writeFile(eventsFile, JSON.stringify({ events: [] }));
+    const { app } = await createApp({
+      storeBundle: { kind: 'file', store: new FileStore(path.join(tmpDir, 's.json')) },
+      eventsFile, trustProxy: false, now: () => NOW, metaPixelId
+    });
+    server = http.createServer(app);
+    await new Promise(r => server.listen(0, r));
+    return `http://127.0.0.1:${server.address().port}/pixel.js`;
+  }
+
+  it('is an empty script until META_PIXEL_ID is set', async () => {
+    const r = await fetch(await pixelApp(''));
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toMatch(/javascript/);
+    const js = await r.text();
+    expect(js).not.toMatch(/fbq|facebook/);
+  });
+
+  it('loads the pixel with the configured ID and skips the admin', async () => {
+    const js = await (await fetch(await pixelApp('123456789012345'))).text();
+    expect(js).toContain("fbq('init', '123456789012345')");
+    expect(js).toContain("fbq('track', 'PageView')");
+    expect(js).toContain('vic361_admin_session');
+  });
+
+  it('ignores an ID that is not a number', async () => {
+    const js = await (await fetch(await pixelApp("123'); alert(1); ('"))).text();
+    expect(js).not.toMatch(/fbq|alert/);
   });
 });

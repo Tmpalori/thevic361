@@ -189,9 +189,134 @@ export function venuesWithEvents(venues, live, archived, now) {
 
 // ─── Seasonal guides ─────────────────────────────────────────────────────
 
-// months: 1-12 when the page shows in the nav and gets indexed even if
-// empty. match: tested against name + description.
+// A guide shows (nav, sitemap, llms.txt, indexed) only while the collector
+// has an upcoming event that matches it, so an empty "Easter" tab never sits
+// in the menu. months: 1-12 an event's date must fall in to count, which
+// keeps a "Holiday BBQ" in September off the Christmas page. match: tested
+// against name + description. Listed in calendar order (the nav order).
+// Only things tied to a time of year belong here; year-round draws like
+// car shows are categories, not seasons. Apostrophes in titles can be
+// straight or curly, so match both.
 export const SEASONS = [
+  {
+    path: '/crawfish', nav: 'Crawfish', months: [1, 2, 3, 4, 5, 6],
+    title: 'Crawfish Boils in Victoria, TX', h1: 'Crawfish boils in Victoria, TX',
+    description: 'Crawfish boils, crawfish festivals, and all-you-can-eat crawfish nights in Victoria, TX.',
+    intro: 'Crawfish boils, festivals, and all-you-can-eat nights while the season lasts.',
+    match: /crawfish|crawdad|mudbug/i
+  },
+  {
+    path: '/valentines-day', nav: "Valentine's", months: [2],
+    title: "Valentine's Day Events in Victoria, TX", h1: "Valentine's Day in Victoria, TX",
+    description: "Valentine's Day events in Victoria, TX: date nights, dinners, dances, and Galentine's parties.",
+    intro: "Date nights, special dinners, dances, and Galentine's parties around Victoria.",
+    match: /valentine|galentine/i
+  },
+  {
+    path: '/mardi-gras', nav: 'Mardi Gras', months: [2, 3],
+    title: 'Mardi Gras Events in Victoria, TX', h1: 'Mardi Gras in Victoria, TX',
+    description: 'Mardi Gras events in Victoria, TX: Fat Tuesday parties, crawfish, king cake, and parades.',
+    intro: 'Fat Tuesday parties, crawfish boils, king cake, and parades around Victoria.',
+    match: /mardi\s*gras|fat\s*tuesday/i
+  },
+  {
+    path: '/st-patricks-day', nav: "St. Patrick's", months: [3],
+    title: "St. Patrick's Day Events in Victoria, TX", h1: "St. Patrick's Day in Victoria, TX",
+    description: "St. Patrick's Day events in Victoria, TX: pub crawls, Irish music, green beer, and family fun.",
+    intro: "Pub crawls, Irish music, and wearing green around Victoria.",
+    match: /(st\.?|saint)\s*patrick|st\.?\s*patty|st\.?\s*paddy/i
+  },
+  {
+    path: '/spring-break', nav: 'Spring Break', months: [3],
+    title: 'Spring Break in Victoria, TX', h1: 'Spring Break things to do in Victoria, TX',
+    description: 'Spring Break activities in Victoria, TX: camps, kids programs, and family outings.',
+    intro: 'Camps, kids programs, and family outings to fill the week off school.',
+    match: /spring\s*break/i
+  },
+  {
+    path: '/easter-events', nav: 'Easter', months: [3, 4],
+    title: 'Easter Events in Victoria, TX', h1: 'Easter events in Victoria, TX',
+    description: 'Easter events in Victoria, TX: egg hunts, Easter Bunny photos, and spring family events.',
+    intro: 'Egg hunts, Easter Bunny photos, and spring family events around Victoria.',
+    match: /easter|egg\s*hunt|eggstravaganza|egg[\s-]*stravaganza/i
+  },
+  {
+    path: '/earth-day', nav: 'Earth Day', months: [4],
+    title: 'Earth Day Events in Victoria, TX', h1: 'Earth Day in Victoria, TX',
+    description: 'Earth Day events in Victoria, TX: cleanups, tree plantings, nature programs, and recycling drives.',
+    intro: 'Cleanups, tree plantings, nature programs, and recycling drives around Victoria.',
+    match: /earth\s*day|arbor\s*day/i
+  },
+  {
+    path: '/cinco-de-mayo', nav: 'Cinco de Mayo', months: [5],
+    title: 'Cinco de Mayo in Victoria, TX', h1: 'Cinco de Mayo in Victoria, TX',
+    description: 'Cinco de Mayo events in Victoria, TX: festivals, live music, folklórico, and food.',
+    intro: 'Festivals, live music, folklórico, and food specials around Victoria.',
+    match: /cinco\s*de\s*mayo/i
+  },
+  {
+    path: '/mothers-day', nav: "Mother's Day", months: [5],
+    title: "Mother's Day Events in Victoria, TX", h1: "Mother's Day in Victoria, TX",
+    description: "Mother's Day events in Victoria, TX: brunches, markets, and things to do with Mom.",
+    intro: "Brunches, markets, and things to do with Mom around Victoria.",
+    match: /mother['’]?s\s*day|mom['’]?s\s*day/i
+  },
+  {
+    path: '/bach-festival', nav: 'Bach Festival', months: [5, 6],
+    title: 'Victoria Bach Festival', h1: 'Victoria Bach Festival events',
+    description: 'Victoria Bach Festival concerts and events in Victoria, TX.',
+    intro: 'Concerts and events from the Victoria Bach Festival, one of Texas\'s longest-running classical music festivals.',
+    match: /bach\s*fest/i
+  },
+  {
+    path: '/memorial-day', nav: 'Memorial Day', months: [5],
+    title: 'Memorial Day Events in Victoria, TX', h1: 'Memorial Day in Victoria, TX',
+    description: 'Memorial Day events in Victoria, TX: ceremonies, remembrances, and holiday weekend things to do.',
+    intro: 'Ceremonies honoring the fallen, and things to do over the long weekend.',
+    match: /memorial\s*day/i
+  },
+  {
+    path: '/juneteenth', nav: 'Juneteenth', months: [6],
+    title: 'Juneteenth in Victoria, TX', h1: 'Juneteenth in Victoria, TX',
+    description: 'Juneteenth celebrations in Victoria, TX: festivals, parades, cookouts, and live music.',
+    intro: 'Festivals, parades, cookouts, and live music celebrating Juneteenth in Victoria.',
+    match: /juneteenth|emancipation\s*day/i
+  },
+  {
+    path: '/fathers-day', nav: "Father's Day", months: [6],
+    title: "Father's Day Events in Victoria, TX", h1: "Father's Day in Victoria, TX",
+    description: "Father's Day events in Victoria, TX: cookouts, car shows, fishing, and things to do with Dad.",
+    intro: "Cookouts, car shows, and things to do with Dad around Victoria.",
+    match: /father['’]?s\s*day|dad['’]?s\s*day/i
+  },
+  {
+    path: '/fourth-of-july', nav: 'July 4th', months: [6, 7],
+    title: 'Fourth of July in Victoria, TX', h1: 'Fourth of July events in Victoria, TX',
+    description: 'Fourth of July events in Victoria, TX: fireworks, parades, and Independence Day celebrations.',
+    intro: 'Fireworks, parades, and Independence Day celebrations around Victoria.',
+    match: /fourth\s*of\s*july|july\s*4|4th\s*of\s*july|independence\s*day|firework/i
+  },
+  {
+    path: '/back-to-school', nav: 'Back to School', months: [7, 8],
+    title: 'Back to School Events in Victoria, TX', h1: 'Back to school in Victoria, TX',
+    description: 'Back-to-school events in Victoria, TX: free school supply giveaways, backpack drives, and kids events.',
+    intro: 'School supply giveaways, backpack drives, and kids events before the first day.',
+    match: /back[\s-]*to[\s-]*school|school\s*suppl(y|ies)|backpack\s*(giveaway|drive|bash)/i
+  },
+  {
+    path: '/labor-day', nav: 'Labor Day', months: [9],
+    title: 'Labor Day Weekend in Victoria, TX', h1: 'Labor Day weekend in Victoria, TX',
+    description: 'Labor Day weekend events in Victoria, TX: cookouts, live music, and things to do.',
+    intro: 'Cookouts, live music, and things to do over the long weekend.',
+    match: /labor\s*day/i
+  },
+  {
+    path: '/oktoberfest', nav: 'Oktoberfest', months: [9, 10, 11],
+    title: 'Oktoberfest in Victoria, TX', h1: 'Oktoberfest in Victoria, TX',
+    description: 'Oktoberfest celebrations in Victoria, TX: German beer, brats, polka, and fall festivals.',
+    intro: 'German beer, brats, polka, and stein-hoisting around Victoria.',
+    match: /o[ck]tober\s*fest|wurst\s*fest|german\s*fest|polka\s*fest/i
+  },
   {
     path: '/tejas-fest', nav: 'Tejas Fest', months: [9, 10],
     title: 'Tejas Fest in Victoria, TX', h1: 'Tejas Fest in Victoria, TX',
@@ -205,6 +330,20 @@ export const SEASONS = [
     description: 'Halloween events in Victoria, TX: trunk or treats, haunted houses, costume parties, fall festivals, and pumpkin patches.',
     intro: 'Trunk or treats, haunted houses, costume parties, fall festivals, and pumpkin patches around Victoria.',
     match: /hallowe+n|trunk[\s-]*or[\s-]*treat|haunted|costume|spooky|pumpkin|fall\s*fest|d[ií]a\s*de\s*(los\s*)?muertos|cemetery\s*tour/i
+  },
+  {
+    path: '/dia-de-los-muertos', nav: 'Día de los Muertos', months: [10, 11],
+    title: 'Día de los Muertos in Victoria, TX', h1: 'Día de los Muertos in Victoria, TX',
+    description: 'Día de los Muertos events in Victoria, TX: altars, festivals, calavera face painting, and Day of the Dead celebrations.',
+    intro: 'Ofrendas, festivals, face painting, and Day of the Dead celebrations around Victoria.',
+    match: /d[ií]a\s*de\s*(los\s*)?muertos|day\s*of\s*the\s*dead/i
+  },
+  {
+    path: '/veterans-day', nav: 'Veterans Day', months: [11],
+    title: 'Veterans Day Events in Victoria, TX', h1: 'Veterans Day in Victoria, TX',
+    description: 'Veterans Day events in Victoria, TX: parades, ceremonies, and free meals and deals for veterans.',
+    intro: 'Parades, ceremonies, and thank-yous for veterans around Victoria.',
+    match: /veterans?['’]?\s*day/i
   },
   {
     path: '/thanksgiving-events', nav: 'Thanksgiving', months: [11],
@@ -227,20 +366,6 @@ export const SEASONS = [
     intro: "Parties, countdowns, and live music to ring in the new year in Victoria.",
     match: /new\s*year|nye\b/i,
     exclude: /lunar|chinese|vietnamese|t[eế]t\b/i
-  },
-  {
-    path: '/fourth-of-july', nav: 'July 4th', months: [6, 7],
-    title: 'Fourth of July in Victoria, TX', h1: 'Fourth of July events in Victoria, TX',
-    description: 'Fourth of July events in Victoria, TX: fireworks, parades, and Independence Day celebrations.',
-    intro: 'Fireworks, parades, and Independence Day celebrations around Victoria.',
-    match: /fourth\s*of\s*july|july\s*4|4th\s*of\s*july|independence\s*day|firework/i
-  },
-  {
-    path: '/bach-festival', nav: 'Bach Festival', months: [5, 6],
-    title: 'Victoria Bach Festival', h1: 'Victoria Bach Festival events',
-    description: 'Victoria Bach Festival concerts and events in Victoria, TX.',
-    intro: 'Concerts and events from the Victoria Bach Festival, one of Texas\'s longest-running classical music festivals.',
-    match: /bach\s*fest/i
   }
 ];
 
@@ -252,11 +377,6 @@ export function seasonMatches(season, ev) {
   if (!season.match.test(text) || (season.exclude && season.exclude.test(text))) return false;
   const month = Number(String(ev.date || '').slice(5, 7));
   return !month || season.months.includes(month);
-}
-
-export function inSeason(season, now) {
-  const month = Number(localDateStr(now).slice(5, 7));
-  return season.months.includes(month);
 }
 
 function seasonEvents(season, live, archived, today) {
@@ -271,10 +391,11 @@ function seasonEvents(season, live, archived, today) {
   };
 }
 
-// Seasonal pages that have upcoming events or are in season right now.
+// Seasonal pages with at least one upcoming event. Being in season isn't
+// enough: a guide with nothing on it stays out of the nav and sitemap.
 export function activeSeasons(live, archived, now) {
   const today = localDateStr(now);
-  return SEASONS.filter(s => inSeason(s, now) || seasonEvents(s, live, archived, today).upcoming.length);
+  return SEASONS.filter(s => seasonEvents(s, live, archived, today).upcoming.length);
 }
 
 export function renderSeasonPage(season, live, archived, { siteUrl, now, sponsor }) {
@@ -294,7 +415,9 @@ export function renderSeasonPage(season, live, archived, { siteUrl, now, sponsor
     ${ctaHtml()}`;
   return layout({
     siteUrl, path: season.path,
-    noindex: !upcoming.length && !past.length && !inSeason(season, now),
+    // Old links keep working, but search engines only get the page while
+    // it has something coming up.
+    noindex: !upcoming.length,
     title: `${season.title} | ${SITE_NAME}`,
     description: season.description,
     body,

@@ -27,15 +27,28 @@
     } catch (e) { /* tracking must never break the page */ }
   }
 
+  // Signup forms report subscribe_click with link_url 'form' or 'list-card'
+  // once /api/subscribe accepts the email; plain #subscribe links don't.
+  // That success is the Lead that Meta ads optimize for (server/metaPixel.js).
+  var SIGNUP_DONE = { form: 1, 'list-card': 1 };
+
   function track(type, params) {
     if (typeof window.gtag === 'function') window.gtag('event', type, params || {});
+    if (type === 'subscribe_click' && params && SIGNUP_DONE[params.link_url] && typeof window.fbq === 'function') {
+      window.fbq('track', 'Lead');
+    }
     beacon({ kind: 'click', type: type, url: (params && params.link_url) || '' });
   }
   window.vic361Track = track;  // app.js filter chips report through this
 
-  var utm = '';
-  try { utm = new URLSearchParams(location.search).get('utm_source') || ''; } catch (e) { /* old browser */ }
-  beacon({ kind: 'view', ref: document.referrer || '', utm: utm });
+  // utm_medium=paid marks a tap on an ad (server/analytics.js paidSource).
+  var utm = '', utmMedium = '';
+  try {
+    var q = new URLSearchParams(location.search);
+    utm = q.get('utm_source') || '';
+    utmMedium = q.get('utm_medium') || '';
+  } catch (e) { /* old browser */ }
+  beacon({ kind: 'view', ref: document.referrer || '', utm: utm, utm_medium: utmMedium });
 
   document.addEventListener('click', function (e) {
     var a = e.target && e.target.closest ? e.target.closest('a') : null;

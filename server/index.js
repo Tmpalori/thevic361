@@ -26,6 +26,7 @@ import { createAuth } from './auth.js';
 import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
+import { pixelId, metaPixelJs } from './metaPixel.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { stripeConfig, createStripe, createSponsors } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
@@ -910,6 +911,13 @@ export async function createApp(opts = {}) {
     try { await store.recordTraffic(row); } catch (err) {
       console.warn('[traffic] record failed:', err.message);
     }
+  });
+
+  // Meta Pixel for ads (server/metaPixel.js). Short cache so setting or
+  // changing META_PIXEL_ID takes effect within minutes of a redeploy.
+  const metaPixelScript = metaPixelJs(pixelId(opts.metaPixelId ?? process.env.META_PIXEL_ID));
+  app.get('/pixel.js', (req, res) => {
+    res.type('application/javascript').set('Cache-Control', 'public, max-age=300').send(metaPixelScript);
   });
 
   app.get('/api/admin/traffic', requireAdmin, async (req, res) => {

@@ -86,6 +86,19 @@ export function utmSource(utm) {
   return UTM_NAMES[bare.split('.')[0]] || null;
 }
 
+// A tap on a Meta ad arrives with the same facebook.com / instagram.com
+// referrer as a tap on a free post, so the referrer can't tell them apart.
+// The ad's link carries utm_medium=paid instead, and that tag wins. Meta's
+// {{site_source_name}} URL parameter fills utm_source with fb, ig, an or msg.
+const PAID_MEDIUMS = new Set(['paid', 'paid_social', 'paidsocial', 'cpc', 'ppc', 'ad', 'ads']);
+const META_UTM = /^(fb|ig|an|msg|facebook|instagram|meta|messenger|audience_network)$/;
+export function paidSource(utm, medium, refSource) {
+  if (!PAID_MEDIUMS.has(String(medium || '').toLowerCase().trim())) return null;
+  const src = String(utm || '').toLowerCase().trim();
+  if (META_UTM.test(src) || refSource === 'Facebook' || refSource === 'Instagram') return 'Meta ads';
+  return 'Other ads';
+}
+
 export function referrerSource(ref, siteHost) {
   let host = '';
   try { host = new URL(ref).hostname.toLowerCase(); } catch { return { source: 'Direct', host: '' }; }
@@ -145,7 +158,7 @@ export function beaconRow(body, { ip, ua, secret, siteHost, now }) {
   const base = { day, path: cleanPath(body.path), visitor: visitorHash(ip, ua, day, secret) };
   if (body.kind === 'view') {
     let { source, host } = referrerSource(String(body.ref || '').slice(0, 500), siteHost);
-    const tagged = source === 'Direct' ? utmSource(body.utm) : null;
+    const tagged = paidSource(body.utm, body.utm_medium, source) || (source === 'Direct' ? utmSource(body.utm) : null);
     if (tagged) source = tagged;
     return { ...base, kind: 'view', ref_source: source, ref_host: host };
   }

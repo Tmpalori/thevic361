@@ -406,7 +406,7 @@
               }
             });
             skipBar.appendChild(btn);
-            skipBar.style.display = 'block';
+            skipBar.hidden = false;
           }
         }
 
