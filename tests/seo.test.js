@@ -153,6 +153,25 @@ describe('server-rendered pages', () => {
     expect(r.text).toContain('<link rel="canonical" href="https://www.thevic361.com/this-weekend">');
   });
 
+  it('next-week page lists next Monday to Sunday, and the homepage links to it', async () => {
+    const events = [...EVENTS,
+      { date: '2026-10-12', name: 'Next Monday Bingo', time: '7:00 PM', venue: 'Hall', icons: ['community'] },
+      { date: '2026-10-18', name: 'Next Sunday Brunch', time: '10:00 AM', venue: 'Farm', icons: ['food'] },
+      { date: '2026-10-19', name: 'Week After', time: '7:00 PM', venue: 'Hall', icons: [] }];
+    await startApp(events);
+    const r = await get('/next-week');
+    expect(r.status).toBe(200);
+    expect(r.text).toContain('<title>Things To Do in Victoria, TX Next Week | The Vic 361</title>');
+    expect(r.text).toMatch(/There are 2 events in Victoria, TX next week \(Oct 12 to Oct 18\)/);
+    expect(r.text).toContain('Next Monday Bingo');
+    expect(r.text).toContain('Next Sunday Brunch');
+    expect(r.text).not.toContain('Week After');
+    expect(r.text).not.toContain('Trivia Night'); // this week
+    expect(r.text).toContain('<a href="/">← This week</a>');
+    const home = await get('/');
+    expect(home.text).toContain('<a class="btn btn--outline" href="/next-week">See next week →</a>');
+  });
+
   it('category pages filter by icon and free flag', async () => {
     await startApp();
     const music = await get('/live-music');

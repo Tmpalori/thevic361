@@ -1224,6 +1224,90 @@ def fetch_gemini_events(days_ahead=14, post=None, categories=None, get=None, wor
     return events
 
 
+# ─── GEMINI: NEW & NOTABLE ───────────────────────────────────────────────────
+#
+# The homepage's "New & Notable" box: businesses that just opened in
+# Victoria or have announced an opening. One grounded Gemini search per run;
+# an item is kept only with its own link on a site Gemini cited (or a page
+# that loads and names it), and never for churches/religious items. Each item
+# carries the date it was found ("added"); auto-publish keeps items for three
+# weeks so the box doesn't empty out between runs.
+
+_NOTABLE_ICONS = {"food", "drinks", "shopping", "arts", "music", "outdoors", "family", "community"}
+NOTABLE_MAX = 5
+
+
+def _notable_prompt(today):
+    return (
+        "Use Google Search to find businesses and attractions in Victoria, Texas that opened in the last "
+        f"45 days or have announced they're opening soon, as of {today.isoformat()}: restaurants, cafes, "
+        "bars, shops, entertainment, attractions, parks. Also major new local venues.\n\n"
+        "Return ONLY a JSON array, no prose. Each item: "
+        '{"name": short headline like "Ellianos Coffee opens on Airline Rd", '
+        '"description": one factual sentence with the address or area and the opening date if known, '
+        '"tag": "new" if already open, "coming" if announced but not open yet, '
+        '"icon": one of food, drinks, shopping, arts, music, outdoors, family, community, '
+        '"url": a news article or the business\'s own page about it (never a search page)}.\n'
+        "Only include something if a page you found says it. Skip closings, chains' generic pages, "
+        "churches and religious organizations, anything outside Victoria County, and anything that "
+        "opened more than 45 days ago. At most 6 items. If you find none, return []."
+    )
+
+
+def fetch_gemini_notable(post=None, get=None):
+    """New & Notable items from Gemini + Google Search, or [] when off/failed."""
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key or os.environ.get("GEMINI_ENABLED", "1").strip().lower() in ("0", "false", "no"):
+        return []
+    post = post or requests.post
+    model = os.environ.get("GEMINI_MODEL", "").strip() or _GEMINI_DEFAULT_MODEL
+    today = now_central().date()
+    body = {
+        "contents": [{"role": "user", "parts": [{"text": _notable_prompt(today)}]}],
+        "tools": [{"google_search": {}}],
+        "generationConfig": {"temperature": 0.2},
+    }
+    try:
+        resp = post(GEMINI_URL.format(model=model), json=body, timeout=90,
+                    headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+        if resp.status_code != 200:
+            print(f"  [Gemini notable] HTTP {resp.status_code}: {resp.text[:200]}")
+            return []
+        data = resp.json()
+    except Exception as e:
+        print(f"  [Gemini notable] failed: {e}")
+        return []
+    cand = (data.get("candidates") or [{}])[0]
+    text = "".join(p.get("text", "") for p in ((cand.get("content") or {}).get("parts") or []))
+    grounded = _grounded_hosts(cand)
+    items, seen, dropped = [], set(), Counter()
+    for item in _gemini_json_array(text):
+        name = _clean_text(item.get("name"))[:90]
+        desc = _clean_text(item.get("description"))[:220]
+        url = str(item.get("url") or "").strip()
+        if not name or name.lower() in seen:
+            continue
+        if not re.match(r"https?://", url) or "google." in _host(url) or "vertexaisearch" in _host(url):
+            dropped["no link"] += 1
+            continue
+        if non_event_reason({"name": name, "description": desc}) in ("religious event", "church event", "worship service"):
+            dropped["religious"] += 1
+            continue
+        if not (grounded and _host_matches(_host(url), grounded)) and not _page_mentions(url, name, get=get):
+            dropped["link didn't check out"] += 1
+            continue
+        seen.add(name.lower())
+        tag = item.get("tag") if item.get("tag") in ("new", "coming") else "new"
+        icon = item.get("icon") if item.get("icon") in _NOTABLE_ICONS else "community"
+        items.append({"name": name, "description": desc, "tag": tag, "icon": icon, "url": url,
+                      "added": today.isoformat()})
+        if len(items) >= NOTABLE_MAX:
+            break
+    print(f"  [Gemini notable] {len(items)} items"
+          + (" (dropped: " + ", ".join(f"{v} {k}" for k, v in dropped.items()) + ")" if dropped else ""))
+    return items
+
+
 # ─── OPENAI (shared LLM helper) ─────────────────────────────────────────────
 #
 # Every LLM call in the collector (AI review + FB/IG post extraction) goes
@@ -3861,8 +3945,19 @@ def main():
         print("\n🤖 AI review (descriptions + icons)…")
         merged = ai_review(merged)
 
-    # 5. Load extras
+    # 5. Load extras. Hand-written New & Notable items (extras.yaml) come
+    # first, then what Gemini found this run.
     extras = load_extras(os.path.join(args.local_dir, "extras.yaml"))
+    if not args.skip_web:
+        print("\n✨ New & Notable (Gemini)...")
+        try:
+            found = fetch_gemini_notable()
+        except Exception as e:  # never fail the collect over this box
+            print(f"  [Gemini notable] crashed: {e}")
+            found = []
+        manual = [n for n in (extras["new_and_notable"] or []) if isinstance(n, dict)]
+        names = {str(n.get("name", "")).lower() for n in manual}
+        extras["new_and_notable"] = manual + [n for n in found if n["name"].lower() not in names]
 
     # 6. Build output
     output = {

@@ -105,3 +105,40 @@ describe('escaping on the public homepage', () => {
     expect(div.querySelector('[onmouseover]')).toBeNull();
   });
 });
+
+describe('New & Notable section', () => {
+  async function bootWith(payload) {
+    document.body.innerHTML = '<div id="events-container"></div>' +
+      '<section id="new-notable" hidden><h2>New &amp; Notable</h2><ul id="notable-list"></ul><hr></section>';
+    delete window.__vic361App;
+    window.history.replaceState({}, '', '/');
+    if (!window.matchMedia) {
+      window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
+    }
+    window.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) });
+    (0, eval)(APP_JS); // eslint-disable-line no-eval
+    for (let i = 0; i < 20; i++) await new Promise(r => setTimeout(r, 5));
+    return document.getElementById('new-notable');
+  }
+
+  it('stays hidden when there is nothing new or notable', async () => {
+    const section = await bootWith({ last_updated: 'x', events: [], new_and_notable: [] });
+    expect(section.hidden).toBe(true);
+  });
+
+  it('shows when there are items', async () => {
+    const section = await bootWith({ last_updated: 'x', events: [],
+      new_and_notable: [{ name: 'New Taco Spot', description: 'Opening Friday.', tag: 'new', icon: 'food' }] });
+    expect(section.hidden).toBe(false);
+    expect(section.textContent).toContain('New Taco Spot');
+  });
+
+  it('links an item to its source when it has a safe URL', async () => {
+    const section = await bootWith({ last_updated: 'x', events: [], new_and_notable: [
+      { name: 'Linked', description: 'd', tag: 'new', icon: 'food', url: 'https://news.example/a' },
+      { name: 'Bad link', description: 'd', tag: 'new', icon: 'food', url: 'javascript:alert(1)' }] });
+    const links = [...section.querySelectorAll('a.notable-name')];
+    expect(links.map(a => a.getAttribute('href'))).toEqual(['https://news.example/a']);
+    expect(section.innerHTML).not.toContain('javascript:');
+  });
+});

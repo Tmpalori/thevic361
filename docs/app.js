@@ -240,7 +240,9 @@
         '<span class="notable-icon" aria-hidden="true">' + icon + '</span>' +
         '<div class="notable-details">' +
           '<span class="badge ' + tagClass + '">' + tagText + '</span> ' +
-          '<span class="notable-name">' + escHtml(item.name) + '</span>' +
+          (safeHref(item.url)
+            ? '<a class="notable-name" href="' + safeHref(item.url) + '" target="_blank" rel="noopener noreferrer">' + escHtml(item.name) + '</a>'
+            : '<span class="notable-name">' + escHtml(item.name) + '</span>') +
           '<div class="notable-desc">' + escHtml(item.description) + '</div>' +
         '</div>' +
       '</li>';
@@ -409,8 +411,12 @@
         }
 
         // New & Notable
+        // The section (and its divider) only shows when there's something in it.
         if (notableList) {
-          notableList.innerHTML = renderNotable(data.new_and_notable);
+          var notableHtml = renderNotable(data.new_and_notable);
+          notableList.innerHTML = notableHtml;
+          var notableSection = document.getElementById('new-notable');
+          if (notableSection) notableSection.hidden = !notableHtml;
         }
 
         // Sponsor

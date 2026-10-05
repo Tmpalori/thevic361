@@ -187,6 +187,27 @@ describe('auto-publish', () => {
     expect((await store.getPublished()).auto_publish.rules).toBe(2);
   });
 
+  it('publishes New & Notable from the collector and keeps recent earlier finds for three weeks', async () => {
+    const recent = { name: 'Arcade opens on Navarro', description: 'x', tag: 'new', icon: 'music', url: 'https://a.example', added: '2026-09-25' };
+    const stale = { name: 'Old opening', description: 'x', tag: 'new', icon: 'food', url: 'https://b.example', added: '2026-09-01' };
+    const legacy = { name: 'Hand item from before', description: 'x', tag: 'coming', icon: 'food' }; // no date
+    const fresh = { name: 'Ellianos Coffee opens', description: 'y', tag: 'new', icon: 'food', url: 'https://c.example', added: '2026-10-05' };
+    await start({
+      candidates: { ...CANDIDATES, new_and_notable: [fresh, { ...recent, description: 'dupe by name' }] },
+      published: { events: [], new_and_notable: [recent, stale, legacy] }
+    });
+    await runNow();
+    const d = await live();
+    expect(d.new_and_notable.map(n => n.name)).toEqual(['Ellianos Coffee opens', 'Arcade opens on Navarro']);
+  });
+
+  it('leaves New & Notable alone when the candidates predate it', async () => {
+    const item = { name: 'Kept as is', description: 'x', tag: 'new', icon: 'food' };
+    await start({ candidates: CANDIDATES, published: { events: [], new_and_notable: [item] } });
+    await runNow();
+    expect((await live()).new_and_notable).toEqual([item]);
+  });
+
   it('is off by default outside production', async () => {
     await start({ candidates: CANDIDATES });
     await new Promise(r => setTimeout(r, 50));
