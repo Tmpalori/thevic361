@@ -37,6 +37,7 @@
     if (type === 'subscribe_click' && params && SIGNUP_DONE[params.link_url] && typeof window.fbq === 'function') {
       window.fbq('track', 'Lead');
     }
+    sendView();  // a click is engagement; the view goes first
     beacon({ kind: 'click', type: type, url: (params && params.link_url) || '' });
   }
   window.vic361Track = track;  // app.js filter chips report through this
@@ -48,7 +49,36 @@
     utm = q.get('utm_source') || '';
     utmMedium = q.get('utm_medium') || '';
   } catch (e) { /* old browser */ }
-  beacon({ kind: 'view', ref: document.referrer || '', utm: utm, utm_medium: utmMedium });
+  // A page view counts once someone engages: they scroll, tap, click or
+  // type, or the page has been on screen for 5 seconds. Bots that run
+  // JavaScript and visits that leave straight away never get there, so the
+  // Traffic tab counts people who actually looked. Time in a background tab
+  // doesn't count toward the 5 seconds.
+  var ENGAGED_MS = 5000;
+  var viewSent = false;
+  var shownMs = 0, shownSince = null, timer = null;
+  function sendView() {
+    if (viewSent) return;
+    viewSent = true;
+    clearTimeout(timer);
+    ENGAGE_EVENTS.forEach(function (t) { window.removeEventListener(t, sendView, true); });
+    document.removeEventListener('visibilitychange', onVisibility);
+    beacon({ kind: 'view', ref: document.referrer || '', utm: utm, utm_medium: utmMedium });
+  }
+  function onVisibility() {
+    if (document.visibilityState === 'visible') {
+      shownSince = Date.now();
+      timer = setTimeout(sendView, Math.max(0, ENGAGED_MS - shownMs));
+    } else if (shownSince !== null) {
+      shownMs += Date.now() - shownSince;
+      shownSince = null;
+      clearTimeout(timer);
+    }
+  }
+  var ENGAGE_EVENTS = ['scroll', 'pointerdown', 'keydown', 'touchstart'];
+  ENGAGE_EVENTS.forEach(function (t) { window.addEventListener(t, sendView, { capture: true, passive: true }); });
+  document.addEventListener('visibilitychange', onVisibility);
+  onVisibility();
 
   // Remember for this visit that it started from an ad, so a signup a few
   // pages later still counts as one (server/newsletter.js signupSource).
