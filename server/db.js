@@ -251,14 +251,20 @@ class FileStore {
       let sub = data.subscribers.find(x => x.email === email);
       const now = nowIso();
       if (sub && sub.status === 'active') return sub;
+      let fresh = false;
       if (!sub) {
         sub = { id: newId(), email, status: 'pending', token: newToken(), source, created_at: now };
         data.subscribers.push(sub);
+        fresh = true;
       } else if (sub.status === 'unsubscribed') {
-        Object.assign(sub, { status: 'pending', token: newToken(), unsubscribed_at: null });
+        // Coming back: credit where they came back from.
+        Object.assign(sub, { status: 'pending', token: newToken(), unsubscribed_at: null, source });
+        fresh = true;
       }
       await this._write(data);
-      return sub;
+      // new_signup: a first signup or a comeback, not a re-submit. Only
+      // these count as conversions (docs/track.js Lead).
+      return { ...sub, new_signup: fresh };
     });
   }
 
@@ -669,14 +675,19 @@ class PgStore {
     if (existing && existing.status === 'active') return existing;
     if (existing && existing.status === 'pending') return existing;
     if (existing) {
-      return (await this.pool.query(
-        `UPDATE subscribers SET status = 'pending', token = $2, unsubscribed_at = NULL WHERE email = $1 RETURNING *`,
-        [email, newToken()])).rows[0];
+      // Coming back: credit where they came back from.
+      const row = (await this.pool.query(
+        `UPDATE subscribers SET status = 'pending', token = $2, unsubscribed_at = NULL, source = $3 WHERE email = $1 RETURNING *`,
+        [email, newToken(), source])).rows[0];
+      return { ...row, new_signup: true };
     }
-    return (await this.pool.query(
+    // xmax = 0 means this statement inserted the row (not the conflict path).
+    const row = (await this.pool.query(
       `INSERT INTO subscribers (id, email, status, token, source) VALUES ($1, $2, 'pending', $3, $4)
-       ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING *`,
+       ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING *, (xmax = 0) AS inserted`,
       [newId(), email, newToken(), source])).rows[0];
+    const { inserted, ...sub } = row;
+    return { ...sub, new_signup: Boolean(inserted) };
   }
 
   async confirmSubscriber(token) {

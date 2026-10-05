@@ -592,6 +592,17 @@ code {
   border-color: rgba(34, 139, 90, 0.4);
   color: #228b5a;
 }
+.src-pill--hidden {
+  background: rgba(200, 120, 20, 0.12);
+  border-color: rgba(200, 120, 20, 0.45);
+  color: #a35f0a;
+}
+[data-theme="dark"] .src-pill--hidden {
+  background: rgba(255, 190, 100, 0.14);
+  border-color: rgba(255, 190, 100, 0.45);
+  color: #ffc46b;
+}
+.home-hidden__intro { color: var(--muted, #666); margin: 0 0 12px; }
 [data-theme="dark"] .src-pill--published {
   background: rgba(123, 226, 174, 0.14);
   border-color: rgba(123, 226, 174, 0.45);

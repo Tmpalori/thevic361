@@ -32,6 +32,14 @@
   // That success is the Lead that Meta ads optimize for (server/metaPixel.js).
   var SIGNUP_DONE = { form: 1, 'list-card': 1 };
 
+  // A link to our own /subscribe page (not /subscribe/confirm, not another site's /subscribe).
+  function isOurSubscribeLink(a) {
+    try {
+      var u = new URL(a.href, location.href);
+      return u.host === location.host && /^\/subscribe\/?$/.test(u.pathname);
+    } catch (e) { return false; }
+  }
+
   function track(type, params) {
     if (typeof window.gtag === 'function') window.gtag('event', type, params || {});
     if (type === 'subscribe_click' && params && SIGNUP_DONE[params.link_url] && typeof window.fbq === 'function') {
@@ -82,7 +90,8 @@
 
   // Remember for this visit that it started from an ad, so a signup a few
   // pages later still counts as one (server/newsletter.js signupSource).
-  if (/^paid$/i.test(utmMedium)) { try { sessionStorage.setItem('vic361-ad', '1'); } catch (e) { /* storage blocked */ } }
+  // Same paid mediums as server/analytics.js PAID_MEDIUMS.
+  if (/^\s*(paid|paid_social|paidsocial|cpc|ppc|ads?)\s*$/i.test(utmMedium)) { try { sessionStorage.setItem('vic361-ad', '1'); } catch (e) { /* storage blocked */ } }
   window.vic361Source = function (base) {
     var ad = false;
     try { ad = sessionStorage.getItem('vic361-ad') === '1'; } catch (e) { /* storage blocked */ }
@@ -97,7 +106,7 @@
       track('sponsor_click', { link_url: href });
     } else if (a.closest('.event-entry, .page-actions')) {
       track('event_click', { link_url: href, link_text: a.textContent.trim().slice(0, 100) });
-    } else if (href.indexOf('#subscribe') !== -1 || /^(https?:\/\/[^/]+)?\/subscribe\/?([?#]|$)/.test(href)) {
+    } else if (href.indexOf('#subscribe') !== -1 || isOurSubscribeLink(a)) {
       track('subscribe_click');
     } else if (href.indexOf('/advertise') === 0) {
       track('advertise_click', { link_url: href });

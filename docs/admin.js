@@ -130,6 +130,7 @@
     // so the operator can tell which checked rows are already live vs.
     // session-only picks.
     publishedKeys: new Set(),
+    hiddenKeys: new Set(),   // live events the event check hid (server/eventcheck.js)
     filters: { search: '', category: '', venue: '', week: 'this' }
   };
 
@@ -547,7 +548,9 @@
         const srcPill = '<span class="src-pill src-pill--' + escapeHtml(src) +
           '" title="Source: ' + escapeHtml(sourceLabel(src)) + '">' +
           escapeHtml(sourceLabel(src)) + '</span>';
-        const publishedPill = state.publishedKeys.has(k)
+        const publishedPill = state.hiddenKeys.has(k)
+          ? '<span class="src-pill src-pill--hidden" title="Published, but the event check hid it from the site. Restore it on the Home tab.">Hidden by check</span>'
+          : state.publishedKeys.has(k)
           ? '<span class="src-pill src-pill--published" title="Currently live on thevic361.com">On site</span>'
           : '';
         const submitterMeta = ev._submitter_kind
@@ -717,6 +720,9 @@
       const events = Array.isArray(json.events) ? json.events : [];
       const keys = new Set(events.map(eventKey));
       state.publishedKeys = keys;
+      // Match on the original key and the shown (edited) one: the list
+      // here has the edits overlay applied.
+      state.hiddenKeys = new Set((await loadHidden()).flatMap(h => [h.key, h.shown_key].filter(Boolean)));
       // The live site is the starting point: everything on it starts checked.
       // Live events that aren't in this week's candidates (kept from an
       // earlier collect, approved submissions, hand-added) are added to the
@@ -1380,6 +1386,45 @@
     if (hrs < 48) return hrs + ' hr ago';
     return Math.round(hrs / 24) + ' days ago';
   }
+  // Events the event check hid. Best effort: a failure just shows none.
+  async function loadHidden() {
+    try {
+      const { res, json } = await adminFetch('/api/admin/hidden');
+      return res.ok && json && json.ok && Array.isArray(json.hidden) ? json.hidden : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async function renderHiddenOnHome() {
+    const box = document.getElementById('home-hidden');
+    const list = document.getElementById('home-hidden-list');
+    if (!box || !list) return;
+    const hidden = await loadHidden();
+    box.hidden = !hidden.length;
+    list.innerHTML = hidden.map(h =>
+      '<li class="home-check home-check--no"><span class="home-check__mark" aria-hidden="true">🙈</span><div>' +
+      '<strong>' + escapeHtml(h.name || h.page) + '</strong> <span class="home-check__state">' +
+      escapeHtml([h.date, h.venue].filter(Boolean).join(' · ')) + '</span>' +
+      '<p class="home-check__fix">' + escapeHtml(h.reason || 'Hidden by the event check') +
+      ' <button type="button" class="btn btn--outline" data-restore="' + escapeHtml(h.key) + '">Restore</button></p>' +
+      '</div></li>').join('');
+    list.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true;
+      b.textContent = 'Restoring…';
+      try {
+        const { res, json } = await adminFetch('/api/admin/hidden/restore', {
+          method: 'POST', body: JSON.stringify({ key: b.dataset.restore }), headers: { 'Content-Type': 'application/json' }
+        });
+        if (!res.ok || !json || !json.ok) throw new Error((json && json.error) || ('HTTP ' + res.status));
+        renderHiddenOnHome();
+      } catch (e) {
+        b.disabled = false;
+        b.textContent = 'Restore failed, try again';
+      }
+    }));
+  }
+
   async function loadHome() {
     const el = document.getElementById('home-body');
     const err = document.getElementById('home-error');
@@ -1416,6 +1461,7 @@
       }).join('');
       el.hidden = false;
       el.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => activateTab(b.dataset.goto)));
+      renderHiddenOnHome();
     } catch (e) {
       err.hidden = false;
       err.textContent = e.message || String(e);

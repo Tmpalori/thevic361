@@ -84,6 +84,60 @@ describe('newsletter content', () => {
   });
 });
 
+describe('review fixes: signups and privacy', () => {
+  it('only a first signup (or a comeback) is reported as new', async () => {
+    await startApp({ resendApiKey: '' });
+    const first = await (await post('/api/subscribe', { email: 'a@example.com', source: 'footer' })).json();
+    expect(first.new).toBe(true);
+    const again = await (await post('/api/subscribe', { email: 'a@example.com' })).json();
+    expect(again).toMatchObject({ ok: true, already: true });
+    expect(again.new).toBeUndefined();
+    const bot = await (await post('/api/subscribe', { email: 'b@example.com', company: 'spam' })).json();
+    expect(bot).toEqual({ ok: true });
+  });
+
+  it('a pending re-submit is not new; a comeback is, with its new source', async () => {
+    await startApp();
+    expect((await (await post('/api/subscribe', { email: 'p@example.com', source: 'footer' })).json()).new).toBe(true);
+    expect((await (await post('/api/subscribe', { email: 'p@example.com', source: 'footer' })).json()).new).toBe(false);
+    const sub = (await store.listSubscribers({ status: 'pending' }))[0];
+    await store.confirmSubscriber(sub.token);
+    await store.unsubscribe(sub.token);
+    const back = await (await post('/api/subscribe', { email: 'p@example.com', source: 'subscribe-page:ad' })).json();
+    expect(back.new).toBe(true);
+    expect((await store.listSubscribers({ status: 'pending' }))[0].source).toBe('subscribe-page:ad');
+  });
+
+  it('pages reached by token links never load the Meta Pixel', async () => {
+    await startApp();
+    await post('/api/subscribe', { email: 't@example.com' });
+    const sub = (await store.listSubscribers({ status: 'pending' }))[0];
+    const confirm = await (await fetch(`${baseUrl}/subscribe/confirm?token=${sub.token}`)).text();
+    const unsub = await (await fetch(`${baseUrl}/unsubscribe?token=${sub.token}`)).text();
+    expect(confirm).not.toContain('/pixel.js');
+    expect(unsub).not.toContain('/pixel.js');
+    expect(await (await fetch(baseUrl + '/subscribe')).text()).toContain('/pixel.js');
+  });
+
+  it('/subscribe gets the seasonal tabs and shows the day on each pick', async () => {
+    await startApp();
+    const html = await (await fetch(baseUrl + '/subscribe')).text();
+    expect(html).not.toContain('SEASONAL_NAV');
+    expect(html).toMatch(/event-time">Fri · 8:00 PM</);
+    expect(html).toMatch(/event-time">Sat · 8:00 AM</);
+  });
+
+  it('has a privacy page linked from every footer', async () => {
+    await startApp();
+    const r = await fetch(baseUrl + '/privacy');
+    expect(r.status).toBe(200);
+    const html = await r.text();
+    expect(html).toContain('Meta Pixel');
+    expect(html).toContain('Google Analytics');
+    for (const p of ['/', '/about']) expect(await (await fetch(baseUrl + p)).text()).toContain('href="/privacy"');
+  });
+});
+
 describe('dark mode', () => {
   it('paints backgrounds as images and tags colors so Outlook can be put back', () => {
     const out = darkSafe('<html><head></head><body style="margin:0;background:#FFF4D6;">' +
@@ -220,9 +274,9 @@ describe('signup page', () => {
     expect(html).toContain('id="signup-form"');
     expect(html).toContain('data-source="subscribe-page"');
     expect(html).toContain('Subscribe free');
-    // Proof: upcoming events, Vic's Pick first, last week's left out.
+    // Proof: upcoming events in date order with their day, last week's left out.
     expect(html).toContain('2 things to do in Victoria in the next seven days');
-    expect(html.indexOf('Farmers Market')).toBeLessThan(html.indexOf('Friday &lt;Live&gt; Music'));
+    expect(html.indexOf('Friday &lt;Live&gt; Music')).toBeLessThan(html.indexOf('Farmers Market'));
     expect(html).not.toContain('Last Week');
     expect(html).toContain('<link rel="canonical" href="https://www.thevic361.com/subscribe">');
     expect(html).not.toContain('noindex');
