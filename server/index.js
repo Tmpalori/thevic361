@@ -1162,7 +1162,7 @@ export async function createApp(opts = {}) {
   app.get('/sitemap.xml', pageHandler(async (req, res, payload, ctx) => {
     res.set('Cache-Control', 'public, max-age=300');
     const extraPaths = [
-      '/venues',
+      '/venues', '/subscribe',
       ...activeSeasons(payload.events, ctx.archived, ctx.now).map(s => s.path),
       ...venuesWithEvents(venues, payload.events, ctx.archived, ctx.now).map(v => v.path)
     ];
