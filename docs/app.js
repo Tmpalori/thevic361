@@ -209,7 +209,8 @@
       tokenP.then(function (t) {
         return fetch('/api/subscribe', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: form.email.value, company: form.company.value, turnstile_token: t })
+          body: JSON.stringify({ email: form.email.value, company: form.company.value, turnstile_token: t,
+            source: window.vic361Source ? window.vic361Source('list-card') : 'list-card' })
         });
       }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });

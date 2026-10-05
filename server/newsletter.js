@@ -5,7 +5,12 @@
  * there's no confirmation step); once it's set, signups are double opt-in.
  *
  *   - Signup: POST /api/subscribe → pending subscriber + confirmation email
- *     (double opt-in, so nobody can sign up someone else).
+ *     (double opt-in, so nobody can sign up someone else). Forms say where
+ *     they are (`source`); docs/track.js adds ":ad" for visitors who
+ *     arrived from a paid ad, so the Slack ping shows what's working.
+ *   - GET /subscribe is the signup page every Subscribe button points at
+ *     (and where ads should land): the pitch, the form, and a taste of
+ *     this week's events.
  *   - GET /subscribe/confirm?token=… activates; /unsubscribe?token=… shows a
  *     one-button page and POST /unsubscribe (also the RFC 8058 one-click
  *     target mail clients use) removes them.
@@ -20,7 +25,7 @@
 
 import crypto from 'node:crypto';
 import {
-  SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays
+  SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem
 } from './seo.js';
 
 const RESEND_API = 'https://api.resend.com';
@@ -113,7 +118,8 @@ function emailShell({ title, preheader, bodyHtml, footerHtml, siteUrl }) {
 
 function footer({ siteUrl, unsubscribeUrl, address }) {
   const a = 'color:#FFC93C;';
-  return `You're getting this because you subscribed at <a href="${siteUrl}" style="${a}">thevic361.com</a>.<br>
+  return `Forwarded this? <a href="${siteUrl}/subscribe" style="${a}">Get it free every Monday</a>.<br>
+You're getting this because you subscribed at <a href="${siteUrl}" style="${a}">thevic361.com</a>.<br>
 <a href="${escHtml(unsubscribeUrl)}" style="${a}">Unsubscribe</a> · <a href="${siteUrl}/advertise" style="${a}">Advertise</a> · <a href="${siteUrl}/submit" style="${a}">Submit an event</a><br>
 ${escHtml(SITE_NAME)}${address ? ` · ${escHtml(address)}` : ' · Victoria, TX'}`;
 }
@@ -234,23 +240,75 @@ ${coming}${sponsorHtml(sponsor)}
   };
 }
 
-// Newsletter signup form in the homepage footer.
-export function signupFormHtml() {
-  return `<form class="signup-form" id="signup-form" action="/api/subscribe" method="post" novalidate data-turnstile="fetch">
+// Where a signup came from. Forms send one of these; ":ad" means the visitor
+// first landed from a paid ad (docs/track.js). Anything else is "site".
+const SIGNUP_SOURCES = new Set(['footer', 'list-card', 'subscribe-page']);
+export function signupSource(raw) {
+  const [base, tag] = String(raw || '').split(':');
+  if (!SIGNUP_SOURCES.has(base)) return 'site';
+  return tag === 'ad' ? `${base}:ad` : base;
+}
+
+// Newsletter signup form: the homepage footer and the /subscribe page.
+export function signupFormHtml({ source = 'footer', button = 'Subscribe' } = {}) {
+  return `<form class="signup-form" id="signup-form" action="/api/subscribe" method="post" novalidate data-turnstile="fetch" data-source="${escHtml(source)}">
   <label for="signup-email" class="visually-hidden">Email address</label>
   <input id="signup-email" name="email" type="email" required autocomplete="email" placeholder="you@example.com">
   <input type="text" name="company" tabindex="-1" autocomplete="off" class="hp-field" aria-hidden="true">
-  <button type="submit" class="btn btn--primary">Subscribe</button>
+  <button type="submit" class="btn btn--primary">${escHtml(button)}</button>
   <p class="signup-msg" id="signup-msg" role="status" aria-live="polite"></p>
 </form>
 <script>
 (function(){var f=document.getElementById('signup-form');if(!f)return;var m=document.getElementById('signup-msg');
 f.addEventListener('submit',function(e){e.preventDefault();var b=f.querySelector('button');b.disabled=true;m.textContent='';
-(window.vicTurnstile?window.vicTurnstile.token(f):Promise.resolve('')).then(function(t){return fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value,turnstile_token:t})});})
+(window.vicTurnstile?window.vicTurnstile.token(f):Promise.resolve('')).then(function(t){return fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value,turnstile_token:t,source:window.vic361Source?window.vic361Source(f.getAttribute('data-source')):f.getAttribute('data-source')})});})
 .then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});})
 .then(function(x){m.textContent=x.ok?(x.j.message||'Check your inbox to confirm.'):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';try{localStorage.setItem('vic361-subscribed','1')}catch(e){}if(window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
 .catch(function(){m.textContent='Something went wrong. Try again.';}).then(function(){b.disabled=false;if(window.vicTurnstile)window.vicTurnstile.reset(f);});});})();
 </script>`;
+}
+
+// ─── Signup page ─────────────────────────────────────────────────────────
+
+const SHOW_COUNT_FROM = 100; // "Join 40 locals" undersells; say nothing until it's a real crowd
+
+// The signup page: what you get, the form, then proof (real events from
+// the next seven days) for people who scroll before deciding.
+export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0 }) {
+  const today = localDateStr(now);
+  const end = addDays(today, 6);
+  const next7 = sortEvents(events.filter(e => e.date >= today && e.date <= end));
+  const seen = new Set();
+  const picks = next7.filter(e => e.featured).concat(next7)
+    .filter(e => e.page && !seen.has(e.name) && seen.add(e.name)).slice(0, 5);
+  const crowd = subscriberCount >= SHOW_COUNT_FROM
+    ? `<p class="sub-crowd">Join ${Math.floor(subscriberCount / 10) * 10}+ Victoria locals who already get it.</p>` : '';
+  const proof = picks.length ? `
+    <h2 class="section-heading">Coming up in the next week</h2>
+    <p class="sub-proof-lead">${next7.length} things to do in Victoria in the next seven days, including:</p>
+    <ul class="event-list sub-picks" role="list">${picks.map(renderEventItem).join('')}</ul>
+    <p class="sub-again"><a class="btn btn--primary" href="#signup-email">Get the full list every Monday</a> <a class="btn btn--outline" href="/">See this week's events</a></p>` : '';
+  const body = `
+    <section class="sub-hero">
+      <p class="sub-kicker">Free · Every Monday · Victoria, TX</p>
+      <h1 class="page-title">Victoria's best events, in your inbox every Monday.</h1>
+      <p class="page-lead">One email a week with what's going on around town: live music, festivals, markets, family days, and new spots opening.</p>
+      ${signupFormHtml({ source: 'subscribe-page', button: 'Subscribe free' })}
+      <p class="sub-fine">No spam, ever. Unsubscribe with one click.</p>
+      ${crowd}
+    </section>
+    <ul class="sub-perks" role="list">
+      <li><strong>Every Monday morning.</strong> The whole week, day by day, before you make plans.</li>
+      <li><strong>Free things to do</strong> marked, so you can find them fast.</li>
+      <li><strong>New &amp; notable:</strong> places that just opened and things you haven't heard about yet.</li>
+    </ul>
+    ${proof}`;
+  return layout({
+    siteUrl, path: '/subscribe', nav: null,
+    title: `Free Weekly Events Newsletter for Victoria, TX | ${SITE_NAME}`,
+    description: "Get Victoria, TX's best events in your inbox every Monday: live music, festivals, markets, family events, and new spots. Free, no spam.",
+    body
+  });
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────
@@ -344,13 +402,14 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     if (!email) return res.status(400).json({ ok: false, message: 'Enter a valid email address.' });
     if (!(await verifyHuman(req))) return res.status(400).json({ ok: false, error: 'turnstile-failed', message: "We couldn't confirm you're not a bot. Please try again." });
     try {
-      const sub = await store.addSubscriber({ email, source: 'site' });
+      const source = signupSource(body.source);
+      const sub = await store.addSubscriber({ email, source });
       if (sub.status === 'active') return res.json({ ok: true, already: true, message: "You're already on the list!" });
       // No email service yet: keep the signup (they asked for it on our own
       // form) and skip the confirmation email we can't send.
       if (!config.enabled) {
         await store.confirmSubscriber(sub.token);
-        if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', email]] });
+        if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', email], ['From', source]] });
         return res.json({ ok: true, message: "You're on the list! See you Monday." });
       }
       const confirmUrl = `${siteUrl}/subscribe/confirm?token=${encodeURIComponent(sub.token)}`;
@@ -364,7 +423,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   });
 
   async function welcome(sub) {
-    if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', sub.email]] });
+    if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', sub.email], ...(sub.source ? [['From', sub.source]] : [])] });
     if (!config.enabled || !config.address) return; // never send without the required mailing address
     try {
       const payload = await getPublicPayload();
@@ -380,13 +439,25 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     }
   }
 
+  app.get('/subscribe', async (req, res, next) => {
+    try {
+      const payload = await getPublicPayload();
+      let count = 0;
+      if (supported) { try { count = (await store.countSubscribers()).active || 0; } catch { /* page still works */ } }
+      res.set('Cache-Control', 'public, max-age=300');
+      res.type('html').send(renderSubscribePage(payload.events, { siteUrl, now: nowFn(), subscriberCount: count }));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   app.get('/subscribe/confirm', async (req, res) => {
     const sub = supported ? await store.confirmSubscriber(String(req.query.token || '')) : null;
     // Only the first confirm: a second click on the same link sends nothing.
     if (sub && sub.newly_confirmed) welcome(sub);
     res.status(sub ? 200 : 404).type('html').send(sub
       ? page("You're subscribed", 'The week\'s events will land in your inbox every Monday morning.')
-      : page('Link expired', 'That confirmation link isn\'t valid anymore. Sign up again from the homepage.'));
+      : page('Link expired', 'That confirmation link isn\'t valid anymore. <a href="/subscribe">Sign up again</a>.'));
   });
 
   app.get('/unsubscribe', async (req, res) => {
@@ -403,7 +474,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   app.post('/unsubscribe', async (req, res) => {
     const ok = supported ? await store.unsubscribe(String(req.query.token || '')) : false;
     res.status(ok ? 200 : 404).type('html').send(ok
-      ? page("You're unsubscribed", 'You won\'t get any more newsletters. You can sign up again anytime on the homepage.')
+      ? page("You're unsubscribed", 'You won\'t get any more newsletters. You can <a href="/subscribe">sign up again</a> anytime.')
       : page('Link expired', 'That unsubscribe link isn\'t valid.'));
   });
 

@@ -1659,3 +1659,27 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 /* Sections toggled with the hidden attribute stay hidden whatever their display rule. */
 #new-notable[hidden] { display: none; }
 a.notable-name { color: inherit; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 2px; }
+
+/* /subscribe: the signup page every Subscribe button points at. */
+.sub-hero {
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: 24px;
+  box-shadow: var(--shadow-md);
+  padding: var(--space-6, 1.5rem) var(--space-5, 1.25rem);
+  margin: var(--space-4, 1rem) 0 var(--space-6, 1.5rem);
+}
+.sub-kicker { margin: 0 0 var(--space-2); font-weight: 800; font-size: var(--text-sm); color: var(--color-primary); letter-spacing: 0.02em; }
+.sub-hero .page-title { margin-top: 0; }
+.sub-hero .signup-form { margin-top: var(--space-4, 1rem); max-width: 520px; }
+.sub-hero .signup-form input[type="email"] { flex: 1 1 220px; font-size: 1.05rem; padding-block: 0.7em; }
+.sub-hero .signup-form .btn { font-size: 1.05rem; }
+.sub-fine { margin: var(--space-1) 0 0; font-size: var(--text-sm); color: var(--color-text-muted); font-weight: 700; }
+.sub-crowd { margin: var(--space-3) 0 0; font-weight: 800; }
+.sub-perks { list-style: none; padding: 0; margin: 0 0 var(--space-6, 1.5rem); display: grid; gap: var(--space-3); }
+.sub-perks li { padding-left: 2rem; position: relative; }
+.sub-perks li::before { content: "✓"; position: absolute; left: 0; top: 0; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--cactus); color: var(--ink); font-weight: 900; display: grid; place-items: center; font-size: 0.85rem; border: 2px solid var(--ink); }
+.sub-proof-lead { font-weight: 700; color: var(--color-text-muted); }
+.sub-picks { margin-bottom: var(--space-4, 1rem); }
+.sub-again { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-6, 1.5rem); }
+

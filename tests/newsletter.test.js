@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore, } from '../server/db.js';
 import { withPages } from '../server/seo.js';
-import { renderWeekly, renderWelcomeEmail, normalizeEmail } from '../server/newsletter.js';
+import { renderWeekly, renderWelcomeEmail, normalizeEmail, signupSource, renderSubscribePage } from '../server/newsletter.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -180,6 +180,65 @@ describe('signup flow', () => {
     expect((await r.json()).message).toContain('on the list');
     expect(sent.single).toHaveLength(0);
     expect((await store.countSubscribers()).active).toBe(1);
+  });
+});
+
+describe('signup page', () => {
+  it('/subscribe has the pitch, a form tagged subscribe-page, and the next week of events', async () => {
+    await startApp();
+    const r = await fetch(baseUrl + '/subscribe');
+    expect(r.status).toBe(200);
+    const html = await r.text();
+    expect(html).toContain('in your inbox every Monday');
+    expect(html).toContain('id="signup-form"');
+    expect(html).toContain('data-source="subscribe-page"');
+    expect(html).toContain('Subscribe free');
+    // Proof: upcoming events, Vic's Pick first, last week's left out.
+    expect(html).toContain('2 things to do in Victoria in the next seven days');
+    expect(html.indexOf('Farmers Market')).toBeLessThan(html.indexOf('Friday &lt;Live&gt; Music'));
+    expect(html).not.toContain('Last Week');
+    expect(html).toContain('<link rel="canonical" href="https://www.thevic361.com/subscribe">');
+    expect(html).not.toContain('noindex');
+    expect(html).not.toContain('Victoria locals who already get it'); // no count until there's a crowd
+  });
+
+  it('shows the subscriber count only once it is a real crowd', () => {
+    const page = n => renderSubscribePage([], { siteUrl: 'https://x', now: NOW, subscriberCount: n });
+    expect(page(99)).not.toContain('locals who already get it');
+    expect(page(137)).toContain('Join 130+ Victoria locals');
+  });
+
+  it('every Subscribe button on the site points at /subscribe', async () => {
+    await startApp();
+    for (const p of ['/', '/this-weekend', '/about']) {
+      const html = await (await fetch(baseUrl + p)).text();
+      expect(html).toContain('href="/subscribe"');
+      expect(html).not.toContain('href="/#subscribe"');
+      expect(html).not.toContain('href="#subscribe"');
+    }
+    expect(await (await fetch(baseUrl + '/sitemap.xml')).text()).toContain('<loc>https://www.thevic361.com/subscribe</loc>');
+  });
+
+  it('records where a signup came from, ad visits included', async () => {
+    expect(signupSource('subscribe-page')).toBe('subscribe-page');
+    expect(signupSource('list-card:ad')).toBe('list-card:ad');
+    expect(signupSource('footer:bogus')).toBe('footer');
+    expect(signupSource('<script>')).toBe('site');
+    expect(signupSource(undefined)).toBe('site');
+    await startApp({ resendApiKey: '' });
+    await post('/api/subscribe', { email: 'ad@example.com', source: 'subscribe-page:ad' });
+    await post('/api/subscribe', { email: 'old@example.com' });
+    const subs = await store.listSubscribers({ status: 'active' });
+    expect(Object.fromEntries(subs.map(x => [x.email, x.source]))).toEqual({
+      'ad@example.com': 'subscribe-page:ad', 'old@example.com': 'site'
+    });
+  });
+
+  it('newsletter footer invites forwarded readers to subscribe', () => {
+    const issue = renderWeekly(withPages(EVENTS), {
+      siteUrl: 'https://www.thevic361.com', now: NOW, sponsor: null, unsubscribeUrl: 'u', address: 'a'
+    });
+    expect(issue.html).toContain('Forwarded this? <a href="https://www.thevic361.com/subscribe"');
   });
 });
 

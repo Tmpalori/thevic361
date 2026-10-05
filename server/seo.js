@@ -605,7 +605,7 @@ function headerHtml() {
       </a>
       <div class="header-actions">
         <a href="/submit" class="btn btn--outline desktop-submit">Submit an Event</a>
-        <a href="/#subscribe" class="btn btn--primary">Subscribe</a>
+        <a href="/subscribe" class="btn btn--primary">Subscribe</a>
       </div>
     </div>
   </header>`;
@@ -619,7 +619,7 @@ function footerHtml() {
         <div class="footer-section">
           <h2>Stay in the loop</h2>
           <p>Get Victoria's best events in your inbox every week.</p>
-          <a href="/#subscribe" class="btn btn--primary">Subscribe free</a>
+          <a href="/subscribe" class="btn btn--primary">Subscribe free</a>
         </div>
         <div class="footer-section">
           <h2>Browse</h2>
@@ -720,7 +720,7 @@ export function sponsorHtml(sponsor) {
 }
 
 export function ctaHtml() {
-  return `<p class="page-cta">Get the full list every week: <a href="/#subscribe">subscribe to The Vic 361 newsletter</a>. Know something we missed? <a href="/submit">Submit an event</a>.</p>`;
+  return `<p class="page-cta">Get the full list every week: <a href="/subscribe">subscribe to The Vic 361 newsletter</a>. Know something we missed? <a href="/submit">Submit an event</a>.</p>`;
 }
 
 // Short "including A, B, and C" clause from the first few names.
@@ -801,7 +801,7 @@ export function renderAboutPage({ siteUrl }) {
     <h2 class="section-heading">How we build the list</h2>
     <p>We gather events from the City of Victoria, the Victoria Public Library, the Chamber of Commerce, local venues, and community submissions. A local editor reviews every event before it's published.</p>
     <h2 class="section-heading">Get it every week</h2>
-    <p><a href="/#subscribe">Subscribe to the newsletter</a> for the week's best events, every Monday.</p>
+    <p><a href="/subscribe">Subscribe to the newsletter</a> for the week's best events, every Monday.</p>
     <h2 class="section-heading">List your event or business</h2>
     <p>Anyone can <a href="/submit">submit an event</a> for free. Venues and businesses can <a href="/advertise">sponsor the newsletter or feature an event</a>.</p>`;
   const ld = [{

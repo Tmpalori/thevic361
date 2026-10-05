@@ -190,7 +190,7 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 
 ## Newsletter
 
-`server/newsletter.js`: double opt-in signup (`POST /api/subscribe` → confirmation email → `/subscribe/confirm`), unsubscribe (`GET` shows a button, `POST /unsubscribe` also serves RFC 8058 one-click), the weekly issue rendered from the published events, and Resend batch sends with one send per week (`newsletter_sends`). Admin Newsletter tab: status, preview, test send, send, import. Subscribers live in the `subscribers` table.
+`server/newsletter.js`: double opt-in signup (`POST /api/subscribe` → confirmation email → `/subscribe/confirm`), unsubscribe (`GET` shows a button, `POST /unsubscribe` also serves RFC 8058 one-click), the weekly issue rendered from the published events, and Resend batch sends with one send per week (`newsletter_sends`). Admin Newsletter tab: status, preview, test send, send, import. Subscribers live in the `subscribers` table. `GET /subscribe` is the signup page every Subscribe button (header, footers, page CTAs) points at, and where ads should land: the pitch, the form, and the next seven days of events as proof; the subscriber count shows only from 100. Each form sends a `source` (`footer`, `list-card`, `subscribe-page`; `signupSource` whitelists them), with `:ad` added when the visit began from a `utm_medium=paid` link (`docs/track.js` remembers it for the session); it's stored on the subscriber and shown in the Slack ping. The weekly email's footer invites forwarded readers to `/subscribe`.
 
 ## Sponsor checkout
 
