@@ -145,6 +145,26 @@ describe('seasonal guides', () => {
     expect(seasonMatches(by('/new-years-eve'), { name: 'Lunar New Year festival', date: '2027-01-29' })).toBe(false);
   });
 
+  it('matches the newer holiday guides', () => {
+    const by = p => SEASONS.find(s => s.path === p);
+    expect(seasonMatches(by('/easter-events'), { name: 'Community Egg Hunt', date: '2027-04-03' })).toBe(true);
+    expect(seasonMatches(by('/easter-events'), { name: 'Easter Egg Hunt', date: '2027-07-03' })).toBe(false);
+    expect(seasonMatches(by('/mothers-day'), { name: 'Mother’s Day Brunch', date: '2027-05-09' })).toBe(true);
+    expect(seasonMatches(by('/st-patricks-day'), { name: "St. Paddy's Pub Crawl", date: '2027-03-17' })).toBe(true);
+    expect(seasonMatches(by('/veterans-day'), { name: "Veterans' Day Parade", date: '2026-11-11' })).toBe(true);
+    expect(seasonMatches(by('/back-to-school'), { name: 'Free School Supplies Giveaway', date: '2027-08-07' })).toBe(true);
+    expect(seasonMatches(by('/dia-de-los-muertos'), { name: 'Day of the Dead Festival', date: '2026-11-01' })).toBe(true);
+    expect(seasonMatches(by('/juneteenth'), { name: 'Juneteenth Celebration', date: '2027-06-19' })).toBe(true);
+  });
+
+  it('matches Oktoberfest and crawfish season', () => {
+    const by = p => SEASONS.find(s => s.path === p);
+    expect(seasonMatches(by('/oktoberfest'), { name: 'Downtown Oktoberfest', date: '2026-10-17' })).toBe(true);
+    expect(seasonMatches(by('/oktoberfest'), { name: 'Oktoberfest', date: '2027-03-01' })).toBe(false);
+    expect(seasonMatches(by('/crawfish'), { name: 'All-You-Can-Eat Crawfish Boil', date: '2027-04-10' })).toBe(true);
+    expect(seasonMatches(by('/crawfish'), { name: 'Crawfish Boil', date: '2026-10-10' })).toBe(false);
+  });
+
   it('in-season guide lists matching events and shows in the nav', async () => {
     await startApp();
     const r = await get('/halloween-events');
@@ -160,6 +180,23 @@ describe('seasonal guides', () => {
   it('out-of-season empty guide is noindexed', async () => {
     await startApp();
     expect((await get('/fourth-of-july')).text).toContain('noindex');
+  });
+
+  it('a guide with nothing upcoming stays out of the nav, even in season', async () => {
+    // Oct 7: Día de los Muertos is in season but nothing matches it.
+    await startApp({ archive: [{ date: '2026-09-07', name: 'Labor Day Cookout', venue: 'Riverside Park' }] });
+    const home = await get('/');
+    expect(home.text).not.toContain('href="/dia-de-los-muertos"');
+    expect((await get('/dia-de-los-muertos')).text).toContain('noindex');
+    // Past events alone don't count either: the page keeps them, unindexed.
+    expect(home.text).not.toContain('href="/labor-day"');
+    const labor = await get('/labor-day');
+    expect(labor.status).toBe(200);
+    expect(labor.text).toContain('Labor Day Cookout');
+    expect(labor.text).toContain('noindex');
+    const sitemap = (await get('/sitemap.xml')).text;
+    expect(sitemap).not.toContain('/dia-de-los-muertos');
+    expect(sitemap).not.toContain('/labor-day');
   });
 
   it('sitemap includes venues with events and active guides only', async () => {
