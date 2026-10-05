@@ -169,8 +169,11 @@ def captions(groups, start, end, kind, handles=None):
         body = [line for line in body if line not in (start.strftime("%A").upper(),)]
     head = f"{title} ({_range_label(start, end)}): {total} events" if total else f"{title} ({_range_label(start, end)})"
     tags = venue_tags(groups, handles or {})
-    fb = "\n".join([head, ""] + body + [f"Full list and details: {SITE}{path}", "", HASHTAGS])
-    ig = "\n".join([head, ""] + body + ["Full list: link in bio (thevic361.com)", ""]
+    # Same call to action as the ad, the slides and the site: the newsletter.
+    fb = "\n".join([head, ""] + body + [f"Full list and details: {SITE}{path}",
+                                          f"📬 Get the list free every Monday: {SITE}/subscribe", "", HASHTAGS])
+    ig = "\n".join([head, ""] + body + ["Full list: link in bio (thevic361.com)",
+                                          "📬 Get the list free every Monday: link in bio", ""]
                     + ([" ".join(tags), ""] if tags else []) + [HASHTAGS])
     return {"facebook": fb.strip() + "\n", "instagram": ig.strip() + "\n"}
 
@@ -238,6 +241,19 @@ def _footer(draw, text="thevic361.com"):
 
 
 def render_slides(groups, start, end, kind, out_dir):
+    """The branded slides (scripts/social_slides.py: the site's fonts, colors,
+    icons and skyline, rendered with headless Chrome); the plain Pillow
+    slides below if that can't run, so a post always goes out."""
+    try:
+        import social_slides
+        names = social_slides.render(groups, start, end, kind, out_dir)
+    except Exception as e:  # noqa: BLE001 - styling must never stop the kit
+        print(f"Branded slides failed ({e}); using plain slides.")
+        names = None
+    return names or render_plain_slides(groups, start, end, kind, out_dir)
+
+
+def render_plain_slides(groups, start, end, kind, out_dir):
     from PIL import Image, ImageDraw
     title = TITLES[kind][1]
     files = []
@@ -319,7 +335,7 @@ def make_reel(out_dir, slides, name="weekend.mp4", seconds=3):
         for s in slides:
             f.write(f"file '{s}'\nduration {seconds}\n")
         f.write(f"file '{slides[-1]}'\n")  # concat demuxer needs the last frame repeated
-    bg = "0x%02X%02X%02X" % BG
+    bg = "0xFFF4D6"  # the slides' cream, so the Reel's padding blends in
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", "reel.txt",
            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
            "-vf", f"scale=1080:1350,pad=1080:1920:0:285:color={bg},fps=30,format=yuv420p",
