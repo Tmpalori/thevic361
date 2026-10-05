@@ -1,0 +1,71 @@
+# Event check — one look over the live event list for anything off
+# (scripts/sweep_events.py): duplicates, wrong days, non-events, church
+# events, odd times. Posts one Slack message either way; never edits.
+#
+# When:
+#   - after each successful Weekly Collect, once auto-publish has put the
+#     new events on the site (the collect commit redeploys Railway, which
+#     publishes on boot, so we wait for /events.json to change)
+#   - Monday 11:43 UTC (6:43 AM CDT), an hour before the newsletter, to
+#     catch anything from Sunday-night edits
+#   - by hand (workflow_dispatch)
+
+name: Event Check
+
+on:
+  workflow_run:
+    workflows: ['Weekly Collect']
+    types: [completed]
+  schedule:
+    - cron: '43 11 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # The collect run commits candidates.json; Railway redeploys and
+      # auto-publish runs on boot. Wait (up to 15 min) for the live list's
+      # last_updated to move past the collect run's start, then check it.
+      - name: Wait for the new events to go live
+        if: github.event_name == 'workflow_run'
+        env:
+          SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+          SINCE: ${{ github.event.workflow_run.created_at }}
+        run: |
+          for i in $(seq 1 30); do
+            updated=$(curl -s "$SITE/events.json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('last_updated') or '')" || true)
+            if [ -n "$updated" ] && [ "$updated" \> "$SINCE" ]; then echo "Live list updated at $updated"; exit 0; fi
+            sleep 30
+          done
+          echo "::warning::Live list didn't update within 15 minutes; checking what's there now."
+
+      - name: Check the live events
+        timeout-minutes: 5
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
+        run: python3 scripts/sweep_events.py
+
+      - name: Tell Slack it failed
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
+        run: python3 scripts/slack_notify.py "🚨 Event check failed" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

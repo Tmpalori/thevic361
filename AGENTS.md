@@ -207,6 +207,10 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 
 `server/autopublish.js`: each collector run commits `candidates.json`, which redeploys the site; on boot in production (`RAILWAY_ENVIRONMENT_NAME=production`, unless `AUTO_PUBLISH=0`) the upcoming candidates plus approved submissions are published to the store. Upcoming events already published are kept; events it added that the admin later removed are remembered (`auto_publish` in the published payload, hidden from `/events.json`) and not re-added. `POST /api/admin/auto-publish` forces a run. The collector drops non-events (`non_event_reason`: job/internship posts, booking ads, awareness-day posts) and decodes HTML entities; with `OPENAI_API_KEY`, the AI review also returns `keep: false` for non-events. `weekly-collect.yml` runs Sunday and Wednesday.
 
+## Event check
+
+`scripts/sweep_events.py` (`.github/workflows/event-check.yml`) looks over the live `/events.json` for the next 14 days after each successful Weekly Collect (once auto-publish has updated the site) and Monday 11:43 UTC, an hour before the newsletter. Rules first, free: the collector's `is_same_event`, `out_of_area_reason` and `non_event_reason` run again over the published list (hand-added events and ones published before a rule existed), plus a weekday in the name that doesn't match the date and starts before 6 AM. Then one OpenAI call (`OPENAI_MODEL`, default gpt-5-mini) over the whole list for what per-event checks can't see, like the same event at two venues; skipped without `OPENAI_API_KEY`. It posts one Slack message to the activity channel (problems with event links, or all clear) and never edits anything. Tests: `test_sweep_events.py`.
+
 ## Slack notifications
 
 The public site publishes no email address: `/contact` (`server/contact.js`) sends messages to Slack, falling back to the server log if Slack is unavailable.
