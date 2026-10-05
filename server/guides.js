@@ -193,10 +193,10 @@ export function venuesWithEvents(venues, live, archived, now) {
 // has an upcoming event that matches it, so an empty "Easter" tab never sits
 // in the menu. months: 1-12 an event's date must fall in to count, which
 // keeps a "Holiday BBQ" in September off the Christmas page. match: tested
-// against name + description. Listed in calendar order (the nav order),
-// with the draws that happen any time of year (rodeos, car shows, cook-offs)
-// last. Apostrophes in titles can be straight or curly, so match both.
-const ALL_YEAR = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+// against name + description. Listed in calendar order (the nav order).
+// Only things tied to a time of year belong here; year-round draws like
+// car shows are categories, not seasons. Apostrophes in titles can be
+// straight or curly, so match both.
 export const SEASONS = [
   {
     path: '/crawfish', nav: 'Crawfish', months: [1, 2, 3, 4, 5, 6],
@@ -366,41 +366,6 @@ export const SEASONS = [
     intro: "Parties, countdowns, and live music to ring in the new year in Victoria.",
     match: /new\s*year|nye\b/i,
     exclude: /lunar|chinese|vietnamese|t[eế]t\b/i
-  },
-  {
-    path: '/rodeo', nav: 'Rodeos', months: ALL_YEAR,
-    title: 'Rodeos and Livestock Shows in Victoria, TX', h1: 'Rodeos and livestock shows in Victoria, TX',
-    description: 'Rodeos, bull riding, barrel racing, and livestock shows in and around Victoria, TX.',
-    intro: 'Rodeos, bull riding, barrel racing, and livestock shows in and around Victoria.',
-    match: /rodeo|livestock\s*show|stock\s*show|bull\s*rid|barrel\s*rac/i
-  },
-  {
-    path: '/car-shows', nav: 'Car Shows', months: ALL_YEAR,
-    title: 'Car Shows in Victoria, TX', h1: 'Car shows in Victoria, TX',
-    description: 'Car shows, truck shows, cruise-ins, and Cars & Coffee meetups in Victoria, TX.',
-    intro: 'Car shows, truck shows, cruise-ins, and Cars & Coffee meetups around Victoria.',
-    match: /car\s*show|truck\s*show|cars?\s*(and|&|n)\s*coffee|cruise[\s-]*in\b|show\s*(and|&|n)\s*shine/i
-  },
-  {
-    path: '/cook-offs', nav: 'Cook-offs', months: ALL_YEAR,
-    title: 'BBQ and Chili Cook-offs in Victoria, TX', h1: 'Cook-offs in Victoria, TX',
-    description: 'BBQ, chili, and gumbo cook-offs in Victoria, TX.',
-    intro: 'BBQ, chili, and gumbo cook-offs, most with tasting for the crowd.',
-    match: /cook[\s-]*off|bbq\s*competition|barbecue\s*competition/i
-  },
-  {
-    path: '/beer-and-wine', nav: 'Beer & Wine', months: ALL_YEAR,
-    title: 'Beer and Wine Festivals in Victoria, TX', h1: 'Beer and wine events in Victoria, TX',
-    description: 'Beer festivals, wine walks, tastings, and brewery events in Victoria, TX.',
-    intro: 'Beer festivals, wine walks, tastings, and brewery events around Victoria.',
-    match: /\b(beer|wine|brew(ery)?|craft\s*beer|margarita|whiskey|bourbon|tequila)\s*(fest(ival)?|walk|crawl|tasting|pairing)s?\b|sip\s*(and|&|n)\s*(shop|stroll|paint)/i
-  },
-  {
-    path: '/fishing', nav: 'Fishing', months: ALL_YEAR,
-    title: 'Fishing Tournaments in Victoria, TX', h1: 'Fishing tournaments in Victoria, TX',
-    description: 'Fishing tournaments, kids fishing derbies, and fishing events in and around Victoria, TX.',
-    intro: 'Fishing tournaments and kids fishing derbies in and around Victoria.',
-    match: /fishing\s*(tournament|derby|rodeo|clinic)|kids?\s*fish(ing)?\s*(day|derby|event)|bass\s*tournament/i
   }
 ];
 
