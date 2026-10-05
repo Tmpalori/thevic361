@@ -1523,6 +1523,10 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
   margin: 0 0 var(--space-4);
 }
 .top-actions .btn { margin: 0; }
+/* Lilac, not the white of the filter chips just below, so the row reads as
+   its own set (and sits with the purple Skip to Today). */
+.top-actions .btn--outline { background: var(--lilac-light); }
+.top-actions .btn--outline:hover { background: var(--sun); }
 .top-actions .skip-today-btn { margin-bottom: 0; }
 #skip-today-bar[hidden] { display: none; }
 .icon-guide { font-size: var(--text-sm); }
