@@ -2,8 +2,10 @@
  *
  * No cookies and no third-party service. Two inputs:
  *   - People: docs/track.js sends a beacon to POST /api/track on each page
- *     view and on the clicks sponsors care about. Crawlers don't run JS, so
- *     these are humans; the beacon skips browsers signed into the admin.
+ *     view and on the clicks sponsors care about. A view is sent only once
+ *     the visitor engages (scroll, tap, click, key) or the page has been on
+ *     screen for 5 seconds, which leaves out JS-running bots and instant
+ *     bounces; the beacon also skips browsers signed into the admin.
  *   - Crawlers: a middleware notes HTML page hits from known search and AI
  *     bots (Googlebot, GPTBot, ClaudeBot, ...), so you can see whether the
  *     SEO work is being picked up.
