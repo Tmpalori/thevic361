@@ -531,3 +531,31 @@ def test_gemini_notable_off_without_key(monkeypatch):
     import collect_events as ce
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert ce.fetch_gemini_notable(post=lambda *a, **k: 1 / 0) == []
+
+
+def test_library_guessed_venue_merges_with_the_real_place():
+    # 2026-10-06: the library calendar files every program under the library;
+    # the city calendar says this one meets at Vida Cafe. Same event.
+    city = ev("Bookish Society Book Club", date="2026-10-06", venue="Vida Cafe",
+              address="105 Spring Green Blvd", time="6:00 PM – 7:00 PM", source="city_calendar",
+              url="https://www.victoriatx.gov/Calendar.aspx?EID=3969")
+    lib = ev("Bookish Society Book Club", date="2026-10-06", venue="Victoria Public Library",
+             address="302 N. Main St.", time="6:00PM – 7:00PM", source="library", _venue_guess=True,
+             url="https://victoriapl.librarycalendar.com/event/bookish-society-book-club-8996")
+    assert ce.is_same_event(city, lib)
+    for order in ([city, lib], [lib, city]):
+        out = ce.merge_events([dict(e) for e in order], venues=[])
+        assert len(out) == 1
+        assert out[0]["venue"] == "Vida Cafe"
+        assert out[0]["address"] == "105 Spring Green Blvd"
+        assert "_venue_guess" not in out[0]
+
+
+def test_guessed_venue_still_needs_the_same_start_time():
+    lib = ev("Book Club", date="2026-10-06", venue="Victoria Public Library", time="6:00 PM", _venue_guess=True)
+    assert not ce.is_same_event(lib, ev("Book Club", date="2026-10-06", venue="Vida Cafe", time="10:00 AM"))
+    assert not ce.is_same_event(lib, ev("Book Club", date="2026-10-06", venue="Vida Cafe"))
+    # Two places that both stated their venue stay apart, as before.
+    assert not ce.is_same_event(ev("Open Mic Night", venue="Weber Brewing", time="7:00 PM"),
+                                ev("Open Mic Night", venue="Aero Crafters", time="7:00 PM"))
+
