@@ -157,6 +157,19 @@ describe('seasonal guides', () => {
     expect(seasonMatches(by('/juneteenth'), { name: 'Juneteenth Celebration', date: '2027-06-19' })).toBe(true);
   });
 
+  it('matches the year-round draws', () => {
+    const by = p => SEASONS.find(s => s.path === p);
+    expect(seasonMatches(by('/oktoberfest'), { name: 'Downtown Oktoberfest', date: '2026-10-17' })).toBe(true);
+    expect(seasonMatches(by('/oktoberfest'), { name: 'Oktoberfest', date: '2027-03-01' })).toBe(false);
+    expect(seasonMatches(by('/crawfish'), { name: 'All-You-Can-Eat Crawfish Boil', date: '2027-04-10' })).toBe(true);
+    expect(seasonMatches(by('/rodeo'), { name: 'Victoria Livestock Show', date: '2027-03-12' })).toBe(true);
+    expect(seasonMatches(by('/car-shows'), { name: 'Cars & Coffee', date: '2026-08-01' })).toBe(true);
+    expect(seasonMatches(by('/cook-offs'), { name: 'Chili Cook-Off', date: '2026-11-07' })).toBe(true);
+    expect(seasonMatches(by('/beer-and-wine'), { name: 'Downtown Wine Walk', date: '2026-10-15' })).toBe(true);
+    expect(seasonMatches(by('/beer-and-wine'), { name: 'Wine Down Wednesday', date: '2026-10-14' })).toBe(false);
+    expect(seasonMatches(by('/fishing'), { name: 'Kids Fishing Derby', date: '2027-06-05' })).toBe(true);
+  });
+
   it('in-season guide lists matching events and shows in the nav', async () => {
     await startApp();
     const r = await get('/halloween-events');
