@@ -561,6 +561,55 @@ def test_guessed_venue_still_needs_the_same_start_time():
 
 
 
+def test_cut_off_names_are_caught_and_dropped():
+    # 2026-10-08: post text cut at 400 chars became these names.
+    assert ce.cut_off_name_reason("Scenic Root — Plant a")
+    assert ce.cut_off_name_reason("Scenic Root — Once Upon...")
+    assert ce.cut_off_name_reason("Live Music with…")
+    assert ce.cut_off_name_reason("Paint and Sip with the")
+    # Real names the first version caught (review of #83).
+    for ok in ["Plant and Sip with Scenic Root", "Paint & Sip", "Once Upon A Time", "Bring Your Own",
+               "Q&A", "Trivia w/ Sam", "Stand By Me", "A",
+               "2026 Stroman High School Mega Reunion Class of 1969-2000", "Countdown to 2027", "Taste of 361",
+               "Teen Lock-In", "Cruise-In", "Sonic Cruise In", "Bring It On", "Game On", "Hands On",
+               "Stand By", "Plan A", "Vitamin A", "Opt In", "Check-in", "Drive-In Movie Night"]:
+        assert ce.cut_off_name_reason(ok) is None, ok
+    out = ce.merge_events([
+        ev("Scenic Root — Plant a", date="2026-10-08", venue="Moonshine Drinkery", source="apify_instagram_posts"),
+        ev("Once Upon A Plant: Maas Edition", date="2026-10-08", venue="Moonshine Drinkery", source="allevents"),
+    ], venues=[])
+    assert [e["name"] for e in out] == ["Once Upon A Plant: Maas Edition"]
+    # Only AI-written names are dropped; an official calendar's name stays
+    # even if it looks odd (the event check flags it instead).
+    out = ce.merge_events([ev("Story Time with the", date="2026-10-08", venue="Library", source="library")], venues=[])
+    assert [e["name"] for e in out] == ["Story Time with the"]
+
+
+def test_post_text_is_cut_on_a_word_and_marked():
+    long = "Big week! " * 100 + "Scenic Root will be out on Thursday, 10/8 for a Plant and Sip!!"
+    cut = ce._trim_post_text(long, limit=1000)
+    assert cut.endswith(" [post continues]")
+    assert not cut[:-len(" [post continues]")].endswith(("Bi", "wee"))
+    short = "Scenic Root will be out on Thursday, 10/8 for a Plant and Sip!!"
+    assert ce._trim_post_text(short) == short
+
+
+def test_post_prompt_gets_the_whole_post_and_the_naming_rules(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    caption = ("🌿 " + "Fall is here and we have so much going on this month at the bar. " * 6 +
+               "Scenic Root will be out on Thursday, 10/8 for a Plant and Sip!!🪴")
+    assert len(caption) > 400
+    seen = {}
+    def fake_chat(key, messages, max_tokens, timeout):
+        seen["prompt"] = messages[0]["content"]
+        return "[]"
+    monkeypatch.setattr(ce, "_openai_chat", fake_chat)
+    ce._extract_events_from_posts_via_ai("Moonshine Drinkery", [{"text": caption, "timestamp": "2026-10-04"}])
+    assert "for a Plant and Sip!!" in seen["prompt"]
+    assert "Plant and Sip with Scenic Root" in seen["prompt"]
+    assert "Don't add performers" in seen["prompt"]
+
+
 def test_guessed_library_venue_needs_more_than_a_shared_start():
     lib = lambda name, time: ev(name, date="2026-10-06", venue="Victoria Public Library", address="302 N. Main St.",
                                 time=time, source="library", _venue_guess=True)

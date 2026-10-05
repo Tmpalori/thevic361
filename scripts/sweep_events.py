@@ -76,6 +76,9 @@ def rule_findings(events):
         start = ce._start_minutes(e.get("time"))
         if start is not None and start < 6 * 60:
             found.append((i, "odd_time", f"starts at {e.get('time')}"))
+        reason = ce.cut_off_name_reason(e.get("name"))
+        if reason:
+            found.append((i, "other", f"name looks cut off ({reason})"))
         reason = ce.out_of_area_reason(dict(e))
         if reason:
             found.append((i, "out_of_area", reason))

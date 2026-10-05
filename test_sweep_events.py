@@ -73,6 +73,14 @@ def test_window_is_today_through_n_days():
     assert [e["name"] for e in got] == ["Today", "Last day"]
 
 
+def test_live_cut_off_names_are_flagged_not_hidden():
+    events = [ev("Scenic Root — Plant a", page="/events/a")]
+    found = sw.rule_findings(events)
+    assert [(i, k) for i, k, _ in found] == [(0, "other")]
+    assert "cut off" in found[0][2]
+    assert sw.to_hide(events, found)[0] == []   # reported, never hidden
+
+
 class FakeResp:
     def __init__(self, data):
         self.data = data
