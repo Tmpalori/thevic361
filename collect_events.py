@@ -1874,6 +1874,22 @@ _WORSHIP_RE = re.compile(
     r"|(?:charities|second) collection|catechism|rcia|ccd)\b", re.IGNORECASE)
 # Worship words inside a public event's name ("Christmas Mass Choir Concert").
 _PUBLIC_EVENT_RE = re.compile(r"\b(concert|choir|festival|fest|fair|fish fry|carnival|bazaar|gala|market|5k|run)\b", re.IGNORECASE)
+# Religious events (the owner doesn't list them, Oct 2026): worship, prayer,
+# Bible study, revivals, gospel/praise music. Checked against the name and
+# description. Church-hosted events are caught separately below.
+_RELIGIOUS_RE = re.compile(
+    r"\b(worship|repentance|revival|praise (?:and|&) worship|praise (?:night|team|service|concert)"
+    r"|gospel|interfaith|prayer|pray(?:ing)?|bible|scripture|sermon|ministr(?:y|ies)|vacation bible school|vbs"
+    r"|youth group|seeking the lord|the lord|jesus|christ\b(?!\s*kindl)|holy (?:spirit|week|hour|communion)"
+    r"|church service|spiritual reflection|evangel\w*|baptism|confirmation class|mass|misa|novena|rosary"
+    r"|adoration|vespers|catechism|rcia)\b", re.IGNORECASE)
+# Church-hosted events (fall festivals, fish fries, bazaars) are left off
+# too, per the owner. Matched on the event's name, venue or description,
+# never the street address ("Church St").
+_CHURCH_HOSTED_RE = re.compile(
+    r"\b(church(?!\s+(?:st|street|ave|avenue|rd|road)\b)|parish|cathedral|chapel|basilica|diocese|congregation"
+    r"|lutheran|catholic|baptist|methodist|presbyterian|episcopal|pentecostal|assembly of god|our lady|synagogue|mosque)\b",
+    re.IGNORECASE)
 # Members/students only: club meetings, orientations, recruiting visits.
 _MEMBERS_ONLY_RE = re.compile(
     r"\b(board meeting|members? meeting|chapter meeting|(?:monthly|regular|general) meeting|meeting of the"
@@ -1890,6 +1906,10 @@ def non_event_reason(ev):
         return "not an event"
     if _WORSHIP_RE.search(name) and not _PUBLIC_EVENT_RE.search(name):
         return "worship service"
+    if _RELIGIOUS_RE.search(name) or _RELIGIOUS_RE.search(ev.get("description") or ""):
+        return "religious event"
+    if any(_CHURCH_HOSTED_RE.search(ev.get(k) or "") for k in ("name", "venue", "description")):
+        return "church event"
     if _MEMBERS_ONLY_RE.search(name):
         return "members or students only"
     # "National Drink Beer Day" with no time is a social post, not a party.

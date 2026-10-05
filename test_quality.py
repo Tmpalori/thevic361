@@ -294,6 +294,30 @@ def test_facebook_events_runs_both_searches_and_dedupes(monkeypatch):
 
 # ─── Non-event filter (2026-10 auto-publish) ────────────────────────────────
 
+def test_religious_and_church_hosted_events_are_dropped():
+    for name, desc in [
+        ("A Service of Seeking the Lord in Repentance", "Public worship service focused on repentance."),
+        ("Uniting Hearts Music Festival", "An interfaith day of music, worship, and fellowship."),
+        ("Wednesday Night Bible Study", ""),
+        ("Gospel Brunch", "Gospel singers and brunch."),
+        ("Fall Revival", ""),
+    ]:
+        assert ce.non_event_reason(ev(name, description=desc)) in ("religious event", "worship service"), name
+    # Church-hosted community events are left off too (owner's call, Oct 2026).
+    assert ce.non_event_reason(ev("Emmanuel Lutheran Church Fall Fun Fest", description="Fall fun.")) == "church event"
+    assert ce.non_event_reason(ev("Luther Fest", venue="Trinity Lutheran Church")) == "church event"
+    assert ce.non_event_reason(ev("2026 Our Lady of Victory Parish Fall Festival")) == "church event"
+    assert ce.non_event_reason(ev("Fish Fry", description="St. Mary church fish fry fundraiser.")) == "church event"
+    for name, desc, venue, address in [
+        ("Christkindl Market", "Holiday market with Christ Kindl vendors.", "", ""),
+        ("Massage Workshop", "", "", ""),
+        ("Corpus Christi Day Trip", "", "", ""),
+        ("Live Music", "", "Church Street Tavern", ""),
+        ("Trivia Night", "", "The Pub", "101 N Church St"),
+    ]:
+        assert ce.non_event_reason(ev(name, description=desc, venue=venue, address=address)) is None, name
+
+
 def test_non_event_reason_catches_listings_not_events():
     assert ce.non_event_reason(ev("Internship Program", venue="The Texas Zoo"))
     assert ce.non_event_reason(ev("Field Trip Booking", venue="J Welch Farms"))
@@ -461,8 +485,12 @@ def test_worship_and_members_only_are_filtered_but_church_festivals_stay():
             "Communion Service", "Cathedral Charities Collection", "Rosary Congress",
             "Catholic Daughters of the Americas Meeting", "Victoria Rotary Club Board Meeting",
             "Way Truth Life (WTL) Meet & Sweets",
-            "Victoria College Physical Therapist Assistant Program Color Ceremony"]
-    keep = ["Our Lady of Victory's 2026 Fall Festival", "Christmas Mass Choir Concert", "Church Fish Fry",
+            "Victoria College Physical Therapist Assistant Program Color Ceremony",
+            # Religious music counts as a religious event (owner's call, Oct 2026).
+            "Christmas Mass Choir Concert",
+            # Church-hosted events are left off too (owner's call, Oct 2026).
+            "Our Lady of Victory's 2026 Fall Festival", "Church Fish Fry"]
+    keep = [
             "Massive Garage Sale", "Meet and Greet with Santa", "Bingo Night", "Symphonic Spooktacular"]
     assert all(ce.non_event_reason({"name": n}) for n in drop), [n for n in drop if not ce.non_event_reason({"name": n})]
     assert not any(ce.non_event_reason({"name": n}) for n in keep), [n for n in keep if ce.non_event_reason({"name": n})]
