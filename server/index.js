@@ -809,7 +809,12 @@ export async function createApp(opts = {}) {
       let target = original_key;
       try {
         const edits = await store.listEventEdits();
-        target = resolveEditKey(edits, original_key);
+        let stored = null;
+        try {
+          const pub = await store.getPublished();
+          stored = new Set(((pub && pub.events) || []).map(eventKeyOf));
+        } catch (_) { /* unknown: follow the edit chain as before */ }
+        target = resolveEditKey(edits, original_key, stored);
         const prev = edits.find(e => e.original_key === target);
         if (prev) previousKey = eventKeyOf(prev.payload);
       } catch (_) { /* no earlier edit to follow */ }
@@ -1317,7 +1322,28 @@ export async function createApp(opts = {}) {
     } catch (err) {
       console.warn('[events] overlay read failed, using the last one:', err.message);
     }
-    return visibleKeyed(published, edits);
+    return visibleKeyed({ ...published, events: await reservePages(published.events) }, edits);
+  }
+
+  // Each stored event with the page it was last archived under (`_page`,
+  // matched by original key), so withPages keeps a same-name, same-date
+  // pair's -2/-3 suffixes where they were first handed out instead of
+  // renumbering them when a newcomer sorts first. Without the archive
+  // (unreadable, or a store without one) pages are numbered as before.
+  async function reservePages(events) {
+    const list = Array.isArray(events) ? events : [];
+    let rows = [];
+    try { rows = await listArchived(); } catch (_) { return list; }
+    if (!rows.length) return list;
+    const pageOf = new Map();
+    for (const row of rows) {
+      const k = row && (row._okey || eventKeyOf(row));
+      if (k && row.page && !pageOf.has(k)) pageOf.set(k, row.page);
+    }
+    return list.map(ev => {
+      const page = ev && pageOf.get(eventKeyOf(ev));
+      return page ? { ...ev, _page: page } : ev;
+    });
   }
 
   // The last payload read from the store. A failed read serves this copy
@@ -1382,7 +1408,7 @@ export async function createApp(opts = {}) {
         if (typeof store.listEventEdits === 'function') edits = await store.listEventEdits();
       } catch (_) { editsOk = false; }
       // Original keys ride along (_okey), so a later rename can be traced.
-      const pages = keyedEvents(events, edits);
+      const pages = keyedEvents(await reservePages(events), edits);
       await store.archiveEvents(pages);
       // Without the overlay every edited event would look taken down.
       if (editsOk) await settleArchive(pages);
@@ -1751,7 +1777,18 @@ export async function createApp(opts = {}) {
         siteUrl, address: newsletter.address, upgradeUrl: paid ? '' : upgradeUrlFor(row), pick: pinned, at: row.created_at,
         pageUrl: live.page ? `${siteUrl}${live.page}` : ''
       });
-      await mailer.send(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
+      // mailer.send never throws; it answers false when Resend failed. A
+      // throw here is what the review's retry path already treats as "try
+      // again" (ai_review.live_pending, then retryLive every review run with
+      // the same idempotency key until the date passes), so a buyer promised
+      // this email isn't left without it after a short Resend outage. With
+      // email off (no Resend set up) there's nothing to retry.
+      const sent = await mailer.send(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
+      if (!sent && mailer.enabled) {
+        const err = new Error('live email failed');
+        err.code = 'live-email-failed';
+        throw err;
+      }
     }
     return true;
   }
@@ -1771,6 +1808,11 @@ export async function createApp(opts = {}) {
       try { live.push(published && published.ok ? await notifyLive(row) : false); } catch (err) {
         console.warn('[submissions] live check/email failed:', err.message);
         live.push(null);
+        // Same as the AI review: the next review run (retryLive) checks
+        // again and sends the "you're live" email.
+        try {
+          await store.update(row.id, { ai_review: { ...(row.ai_review || {}), live_pending: nowFn().toISOString() } });
+        } catch (e) { console.warn('[submissions] live retry mark failed:', e.message); }
       }
     }
     return { published: Boolean(published && published.ok), live };

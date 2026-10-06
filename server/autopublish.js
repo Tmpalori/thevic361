@@ -235,13 +235,25 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       console.warn('[auto-publish] event edits unavailable, retiring nothing:', err.message);
       edited = null;
     }
+    // Read before retiring: approved submissions are in `keys` too (auto-
+    // publish added them) but the collector never lists them, so without
+    // this every one would count as missing and come down on the second run.
+    let approved = [];
+    let approvedRead = true;
+    try {
+      // `submitted` earns the community-submission bonus in the event score.
+      approved = (await store.list({ status: 'approved' })).map(r => ({ ...r.payload, submitted: true })).filter(upcoming);
+    } catch (err) {
+      console.warn('[auto-publish] approved submissions skipped, retiring nothing:', err.message);
+      approvedRead = false;
+    }
     const freshUpcoming = fresh.filter(upcoming);
     const ours = priorUpcoming.filter(ev => autoKeys.has(eventKeyOf(ev)));
     const healthEnd = addDays(today, HEALTH_WINDOW_DAYS);
     const scraped = ev => ev.date <= healthEnd && !ev.curated && ev._source !== 'local_events';
     const healthy = !submissionsOnly &&
       freshUpcoming.filter(scraped).length >= ours.filter(scraped).length * REPLACE_MIN_RATIO;
-    const stillFound = ev => freshUpcoming.some(f => eventKeyOf(f) === eventKeyOf(ev) || sameEvent(f, ev));
+    const stillFound = ev => [...freshUpcoming, ...approved].some(f => eventKeyOf(f) === eventKeyOf(ev) || sameEvent(f, ev));
     // What each key's source was (keys from before rule 6 have none: they
     // still need two misses) and how many runs in a row it's been missing.
     // A miss counts once per collector run (`from`), so a forced re-run or
@@ -255,7 +267,9 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     for (const ev of ours) {
       const k = eventKeyOf(ev);
       if (stillFound(ev)) continue;
-      if (!edited) { // edits unreadable: retire nothing, forget nothing
+      // Edits or approved submissions unreadable: retire nothing, forget
+      // nothing (an unlisted approved submission would look missing).
+      if (!edited || !approvedRead) {
         if (priorMissing[k]) missing[k] = priorMissing[k];
         continue;
       }
@@ -304,14 +318,6 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       if (rejected.has(target) || (!priorKeys.has(target) && !retiredKeys.has(target))) rejected.add(alias);
     }
     const aliases = {};
-
-    let approved = [];
-    try {
-      // `submitted` earns the community-submission bonus in the event score.
-      approved = (await store.list({ status: 'approved' })).map(r => ({ ...r.payload, submitted: true })).filter(upcoming);
-    } catch (err) {
-      console.warn('[auto-publish] approved submissions skipped:', err.message);
-    }
 
     const events = [...kept];
     const added = [];

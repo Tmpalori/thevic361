@@ -502,6 +502,28 @@ describe('paid picks and approvals that aren\'t live yet', () => {
     expect(sent).toHaveLength(1);
   });
 
+  it('a "you\'re live" email that failed to send is retried on a later run (AI review and by hand)', async () => {
+    let down = true;
+    const resend = { send: async (msg, key) => { if (down) throw new Error('resend 503'); sent.push({ ...msg, key }); return { id: 'e' }; },
+      batch: async () => ({ data: [] }) };
+    await startApp({ resend });
+    await store.insert(row('s1'));
+    await store.insert(row('s2', { payload: { ...PAYLOAD, name: 'Pumpkin Patch', date: '2026-10-11' } }));
+    await review([{ id: 's1', decision: 'approve', cleaned: CLEAN }]);
+    await admin('s2', { status: 'approved' });
+    expect(sent).toHaveLength(0);
+    expect((await store.get('s1')).ai_review.live_pending).toBeTruthy();
+    expect((await store.get('s2')).ai_review.live_pending).toBeTruthy();
+    // Still down on the next run: it keeps waiting.
+    await pending();
+    expect((await store.get('s1')).ai_review.live_pending).toBeTruthy();
+    down = false;
+    await pending();
+    expect(sent.map(m => m.key).sort()).toEqual(['vic361-submission-live-s1', 'vic361-submission-live-s2']);
+    expect((await store.get('s1')).ai_review).toMatchObject({ live_pending: null, live: true });
+    expect((await store.get('s2')).ai_review).toMatchObject({ live_pending: null, live: true });
+  });
+
   it('a paid pick approved but not published yet is still reminded about near its date', async () => {
     await startPaid();
     const earlier = new Date(NOW.getTime() - 3600 * 1000).toISOString();

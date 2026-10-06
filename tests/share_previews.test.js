@@ -13,7 +13,7 @@ import http from 'node:http';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
 import { renderEventItem } from '../server/seo.js';
-import { eventCardSvg, eventCardVersion, renderEventCard } from '../server/ogImage.js';
+import { eventCardSvg, eventCardVersion, renderEventCard, stripEmoji } from '../server/ogImage.js';
 
 const DOCS = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs');
 const NOW = new Date('2026-10-07T17:00:00Z');
@@ -33,6 +33,22 @@ describe('event preview card', () => {
   it('renders a 1200x630 PNG', () => {
     const png = renderEventCard({ ...EVENTS[0], page: '/events/2026-10-09-friday-live-music' });
     expect(pngSize(png)).toEqual([1200, 630]);
+  });
+
+  it('drops emoji from the name and place instead of drawing empty boxes', () => {
+    const svg = eventCardSvg({ ...EVENTS[0], name: '🍂 Fall Fun Fest 2026 🍂 Well Appointed 🍷 🍺 ☕️ 1️⃣ 👍🏽 🇺🇸 👨‍👩‍👧', venue: 'Moonshine 🎸' });
+    expect(stripEmoji('🍂 Fall Fun Fest 2026 🍂 Well Appointed 🍷 🍺 ☕️ 👍🏽 🇺🇸 👨‍👩‍👧')).toBe('Fall Fun Fest 2026 Well Appointed');
+    expect(svg).toContain('Fall Fun Fest');
+    expect(svg).not.toMatch(/[\u{1F000}-\u{1FFFF}☕️‍⃣]/u);
+    expect(svg).toMatch(/· Moonshine<\/text>/);
+  });
+
+  it('changes the card URL hash when the renderer changes, so cached cards refresh', async () => {
+    const { createHash } = await import('node:crypto');
+    const ev = EVENTS[0];
+    // The hash shipped before CARD_RENDER_VERSION existed.
+    const old = createHash('sha1').update(JSON.stringify([ev.name, ev.date, ev.time, ev.venue, ev.address, ev.featured === true, ev.free === true])).digest('hex').slice(0, 10);
+    expect(eventCardVersion(ev)).not.toBe(old);
   });
 
   it('escapes the event text in the SVG', () => {
