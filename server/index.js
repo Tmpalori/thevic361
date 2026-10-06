@@ -31,11 +31,11 @@ import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys } from './eventcheck.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { createMailer, renderSubmissionReceived, renderSubmissionLive } from './notify.js';
-import { registerSubmissionReview } from './submissionReview.js';
-import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage } from './sponsors.js';
+import { registerSubmissionReview, isPaidPick } from './submissionReview.js';
+import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage, sameEvent } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
-import { createAutoPublish, unpublishEvent } from './autopublish.js';
+import { createAutoPublish, unpublishEvent, replacePublishedEvent, forgetRemoved } from './autopublish.js';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import {
@@ -183,7 +183,10 @@ export async function createApp(opts = {}) {
     store, siteUrl, config: stripeCfg, slack, mailer, mailAddress: newsletter.address,
     nowFn: () => (opts.now || (() => new Date()))(),
     stripe: opts.stripe || createStripe(stripeCfg.secretKey),
-    getVenues: () => venues
+    getVenues: () => venues,
+    // The public events before placements, to show in the Sponsors tab when
+    // a paid Vic's Pick isn't on the site.
+    getPayload: () => loadPublicPayload()
   });
   sponsors.registerWebhook(app);
 
@@ -348,7 +351,7 @@ export async function createApp(opts = {}) {
       fields: [['Event', ev.name], ['When', [ev.date, ev.time].filter(Boolean).join(' ')], ['Venue', ev.venue],
         ['From', [row.submitter_name, row.submitter_email].filter(Boolean).join(' · ')]],
       text: ev.description ? ev.description.slice(0, 300) : '',
-      link: `${siteUrl}/admin.html`, footer: 'The AI review will publish it or flag it for you within the hour'
+      link: `${siteUrl}/admin.html`, footer: 'The AI review will publish it or flag it for you, usually within the hour'
     });
     // Tell them it worked and what happens next (no-op without Resend).
     if (row.submitter_email && receiptLimiter.check(row.submitter_email.toLowerCase()).ok) {
@@ -446,26 +449,70 @@ export async function createApp(opts = {}) {
     if (typeof body.admin_notes === 'string') {
       patch.admin_notes = body.admin_notes.slice(0, 2000);
     }
+    const oldKey = eventKeyOf(row.payload || {});
+    const rekeyed = Boolean(patch.payload) && eventKeyOf(patch.payload) !== oldKey;
     const history = Array.isArray(row.review_history) ? row.review_history.slice() : [];
     history.push({
       at: nowIso(),
       action: patch.status ? ('status:' + patch.status) : 'edit',
-      note: typeof body.note === 'string' ? body.note.slice(0, 500) : ''
+      note: typeof body.note === 'string' ? body.note.slice(0, 500) : '',
+      // The key it had before this edit, so a later un-approve can still
+      // find the live event if it kept the old one.
+      ...(rekeyed ? { prev_key: oldKey } : {})
     });
     patch.review_history = history;
 
+    const now = (opts.now || (() => new Date()))();
+    const wasApproved = row.status === 'approved';
+    const isApproved = (patch.status || row.status) === 'approved';
     const updated = await store.update(req.params.id, patch);
+    const result = { ok: true, submission: updated, unpublished: false };
+
+    // Editing an approved (live) submission updates the live event too.
+    if (wasApproved && isApproved && patch.payload) {
+      try {
+        result.updated_live = await replacePublishedEvent(store, oldKey, patch.payload, now);
+        if (result.updated_live) archiveEvents(((await store.getPublished()) || {}).events || []);
+      } catch (err) {
+        console.warn('[admin] live update after edit failed:', err.message);
+        result.updated_live = false;
+      }
+    }
+
     // Un-approving takes it off the site too (it may have gone live through
     // auto-publish or the AI review); otherwise it would stay published.
-    let unpublished = false;
-    if (row.status === 'approved' && patch.status && patch.status !== 'approved') {
+    // Tries every key it has had, so an edit before the reject can't leave
+    // the old version up.
+    if (wasApproved && !isApproved) {
+      const keys = [oldKey, eventKeyOf((updated || {}).payload || {}),
+        ...history.map(h => h && h.prev_key).filter(Boolean)];
       try {
-        unpublished = await unpublishEvent(store, eventKeyOf(row.payload || {}), (opts.now || (() => new Date()))());
+        result.unpublished = await unpublishEvent(store, keys, now);
       } catch (err) {
         console.warn('[admin] unpublish after un-approve failed:', err.message);
       }
     }
-    res.json({ ok: true, submission: updated, unpublished });
+    // Someone paid for this one: turning it away needs a refund or a fix.
+    if (isPaidPick(row) && (patch.status === 'rejected' || patch.status === 'duplicate') && patch.status !== row.status) {
+      slack.notify({ channel: 'sales', title: `⚠️ Paid Vic’s Pick marked ${patch.status}: ${(row.payload || {}).name}`,
+        text: `${row.submitter_name || 'The buyer'} (${row.submitter_email || 'no email'}) paid for this pick. ` +
+          (patch.status === 'duplicate'
+            ? 'Check the Sponsors tab shows it on the site (the pin has to find the listed event); if not, refund it in Stripe.'
+            : 'Refund it in Stripe and hide the order in the Sponsors tab.'),
+        link: `${siteUrl}/admin.html` });
+    }
+
+    // Approving by hand publishes it now (approved submissions only, like
+    // the AI review) and emails the submitter once it's live.
+    if (!wasApproved && isApproved && updated) {
+      try { await forgetRemoved(store, eventKeyOf(updated.payload || {})); } catch (err) {
+        console.warn('[admin] clearing removed mark failed:', err.message);
+      }
+      const res2 = await publishApproved([updated]);
+      result.published = res2.published;
+      result.live = res2.live[0];
+    }
+    res.json(result);
   });
 
   // ─── Admin: candidates fetch ──────────────────────────────────────────
@@ -1269,28 +1316,54 @@ export async function createApp(opts = {}) {
   app.post('/api/admin/auto-publish', requireAdmin, async (req, res, next) => {
     try { res.json(await autoPublish.run({ force: true })); } catch (err) { next(err); }
   });
-  // ─── AI review of free submissions (server/submissionReview.js) ───
+  // ─── Approved submissions go live (AI review and manual approval) ───
+  // True when the event is on the public site; then "You're live" goes out
+  // with a link to its page. A paid Vic's Pick also counts when it matched
+  // an event already listed (the pin finds that one).
+  async function notifyLive(row) {
+    const key = eventKeyOf(row.payload);
+    const events = (await getPublicPayload()).events || [];
+    const paid = isPaidPick(row);
+    const live = events.find(e => eventKeyOf(e) === key) || (paid ? events.find(e => sameEvent(row.payload, e)) : null);
+    if (!live) return false;
+    if (row.submitter_email) {
+      const mail = renderSubmissionLive(paid ? { ...row.payload, name: live.name, featured: true } : row.payload, {
+        siteUrl, address: newsletter.address, upgradeUrl: upgradeUrlFor(row), pick: paid,
+        pageUrl: live.page ? `${siteUrl}${live.page}` : ''
+      });
+      await mailer.send(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
+    }
+    return true;
+  }
+
+  // Publish approved submissions now (never the collector's candidates) and
+  // say which of `rows` made it onto the site.
+  async function publishApproved(rows) {
+    let published;
+    try {
+      published = await autoPublish.run({ force: true, quiet: true, submissionsOnly: true });
+    } catch (err) {
+      console.error('[submissions] publish failed:', err.message);
+      return { published: false, live: rows.map(() => false) };
+    }
+    const live = [];
+    for (const row of rows) {
+      try { live.push(published && published.ok ? await notifyLive(row) : false); } catch (err) {
+        console.warn('[submissions] live check/email failed:', err.message);
+        live.push(null);
+      }
+    }
+    return { published: Boolean(published && published.ok), live };
+  }
+
+  // ─── AI review of submissions (server/submissionReview.js) ───
   registerSubmissionReview(app, {
     store, slack, siteUrl,
     nowFn: () => (opts.now || (() => new Date()))(),
     secret: opts.submissionReviewSecret ?? (process.env.SUBMISSION_REVIEW_SECRET || process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || ''),
     autoApprove: opts.submissionAutoApprove ?? process.env.SUBMISSION_AUTOAPPROVE !== '0',
     publish: () => autoPublish.run({ force: true, quiet: true, submissionsOnly: true }),
-    // True when the event is on the public site; then "You're live" goes
-    // out with a link to its page.
-    async onApproved(row) {
-      const key = eventKeyOf(row.payload);
-      const live = ((await getPublicPayload()).events || []).find(e => eventKeyOf(e) === key);
-      if (!live) return false;
-      if (row.submitter_email) {
-        const mail = renderSubmissionLive(row.payload, {
-          siteUrl, address: newsletter.address, upgradeUrl: upgradeUrlFor(row),
-          pageUrl: live.page ? `${siteUrl}${live.page}` : ''
-        });
-        await mailer.send(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
-      }
-      return true;
-    }
+    onApproved: notifyLive
   });
 
   const autoOnBoot = opts.autoPublish ??
