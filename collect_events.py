@@ -240,11 +240,16 @@ def local_horizon_end():
 def _local_extras(ev):
     """Optional YAML fields that ride along to the site.
 
+    curated: always; hand-written events (see below).
     big: a highlight for the homepage's "Coming up" list.
     town: a nearby town (Cuero, Port Lavaca...) for events outside
     Victoria, so the site says where it is instead of "Victoria, TX".
     """
-    out = {}
+    # curated: written by hand, so the event check (scripts/sweep_events.py)
+    # trusts it the way merge_events does: no auto-hiding as religious, out
+    # of area or wrongly dated (the Oct 2026 list has church trunk-or-treats
+    # and nearby-town festivals on purpose).
+    out = {"curated": True}
     if ev.get("big") is True:
         out["big"] = True
     town = str(ev.get("town") or "").strip()
@@ -1649,6 +1654,7 @@ def enrich_thin_events(events, cache_path=None, post=None, get=None, today=None)
     from concurrent.futures import ThreadPoolExecutor
 
     cache = _load_enrich_cache(cache_path) if cache_path else {}
+    cache = {k: v for k, v in cache.items() if isinstance(v, dict) and isinstance(v.get("found", {}), dict)}
     today = today or now_central().date()
     today_s = today.isoformat()
     # Cached finds apply every run: the YAML or post they came from is
@@ -3787,7 +3793,12 @@ def _trim_post_text(text, limit=POST_TEXT_LIMIT):
 # FLYER_IMAGES=0 turns it off.
 FLYER_IMAGES_PER_ACCOUNT = 4
 FLYER_IMAGE_MAX_BYTES = 4_000_000
-_FLYER_TYPES = ("image/jpeg", "image/png", "image/webp", "image/gif")
+# No GIF: the API rejects animated ones, which would lose the whole call.
+_FLYER_TYPES = ("image/jpeg", "image/png", "image/webp")
+# Flyer calls are slower; past this many minutes into a collect, posts go
+# back to text only so the job stays inside its step timeout.
+FLYER_TIME_BUDGET_MIN = 30
+_RUN_STARTED = None
 
 
 def _post_image_urls(p):
@@ -3824,7 +3835,7 @@ def _fetch_image_data_url(url, get=None):
     """Download one image as a data: URL, or None if it isn't a usable image."""
     get = get or requests.get
     try:
-        resp = get(url, timeout=15)
+        resp = get(url, timeout=8)
     except Exception:
         return None
     if getattr(resp, "status_code", 0) != 200:
@@ -3836,20 +3847,35 @@ def _fetch_image_data_url(url, get=None):
     return f"data:{ctype};base64,{base64.b64encode(body).decode('ascii')}"
 
 
+def _post_time(p):
+    return str(p.get("time") or p.get("timestamp") or p.get("date") or "")
+
+
 def _flyers_for(posts, limit=FLYER_IMAGES_PER_ACCOUNT, fetch=None):
-    """[(post number, data URL)] for the newest posts' first image."""
+    """[(post number, data URL)] for the newest posts' first image.
+
+    Newest by post time, not list order: a pinned post (often months old)
+    comes first from the actors and would take a slot.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
     if os.environ.get("FLYER_IMAGES", "").strip().lower() in ("0", "false", "no", "off"):
         return []
+    if _RUN_STARTED is not None and (datetime.now().timestamp() - _RUN_STARTED) > FLYER_TIME_BUDGET_MIN * 60:
+        return []
     fetch = fetch or _fetch_image_data_url
-    out = []
-    for i, p in enumerate(posts, start=1):
-        if len(out) >= limit:
+    picks = []
+    for i, p in sorted(enumerate(posts, start=1), key=lambda ip: _post_time(ip[1]), reverse=True):
+        urls = _post_image_urls(p)
+        if urls:
+            picks.append((i, urls[0]))
+        if len(picks) >= limit:
             break
-        for url in _post_image_urls(p)[:1]:
-            data = fetch(url)
-            if data:
-                out.append((i, data))
-    return out
+    if not picks:
+        return []
+    with ThreadPoolExecutor(max_workers=len(picks)) as pool:
+        datas = list(pool.map(lambda pick: fetch(pick[1]), picks))
+    return sorted((i, data) for (i, _), data in zip(picks, datas) if data)
 
 
 def _extract_events_from_posts_via_ai(venue_name, posts):
@@ -3872,7 +3898,11 @@ def _extract_events_from_posts_via_ai(venue_name, posts):
     # on a word boundary and marked, so the model never sees half a phrase:
     # the old 400-character cut turned "…for a Plant and Sip!!" into an event
     # named "Scenic Root — Plant a" (2026-10-08).
-    flyers = _flyers_for(posts)
+    try:
+        flyers = _flyers_for(posts)
+    except Exception as e:  # a flyer problem must not cost the post text
+        _sentry_warn("flyer images failed", venue=venue_name, error=str(e)[:200])
+        flyers = []
     with_flyer = {i for i, _ in flyers}
     lines = []
     for i, p in enumerate(posts, start=1):
@@ -3917,7 +3947,7 @@ Flyer images: posts marked [flyer image attached] have their image after this te
         content_parts = [{"type": "text", "text": prompt}]
         for i, data_url in flyers:
             content_parts.append({"type": "text", "text": f"Flyer for post [{i}]:"})
-            content_parts.append({"type": "image_url", "image_url": {"url": data_url, "detail": "high"}})
+            content_parts.append({"type": "image_url", "image_url": {"url": data_url, "detail": "auto"}})
         message = {"role": "user", "content": content_parts}
     else:
         message = {"role": "user", "content": prompt}
@@ -3930,7 +3960,7 @@ Flyer images: posts marked [flyer image attached] have their image after this te
             # of events, so leave plenty of headroom.
             max_tokens=12000,
             # Reading flyers takes the model longer than text alone.
-            timeout=120 if flyers else 60,
+            timeout=90 if flyers else 60,
         )
         content = re.sub(r"^```\w*\s*", "", content)
         content = re.sub(r"\s*```\s*$", "", content)
@@ -4609,6 +4639,8 @@ def main():
     print(f"   Collecting next {args.days} days...\n")
 
     reset_source_stats()
+    global _RUN_STARTED
+    _RUN_STARTED = datetime.now().timestamp()  # flyer time budget
     all_events = []
 
     # 1. Local YAML (backbone)
@@ -4690,7 +4722,11 @@ def main():
     # descriptions in (a template would make the event look complete).
     if not args.skip_web:
         print("\n🔎 Filling in thin events…")
-        merged = enrich_thin_events(merged, cache_path=os.path.join(args.local_dir, "enrichment_cache.json"))
+        try:
+            merged = enrich_thin_events(merged, cache_path=os.path.join(args.local_dir, "enrichment_cache.json"))
+        except Exception as e:  # never fail the collect over gap filling
+            print(f"  [Enrich] crashed: {e}")
+            _sentry_exception("enrich_thin_events")
     merged = fill_gaps(merged)
 
     # 7. AI review — polish descriptions + assign icons via OpenAI

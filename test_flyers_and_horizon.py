@@ -55,6 +55,7 @@ def test_fetch_image_data_url_accepts_images_only():
     ok = ce._fetch_image_data_url("u", get=lambda *a, **k: _resp())
     assert ok == "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8jpeg").decode()
     assert ce._fetch_image_data_url("u", get=lambda *a, **k: _resp(ctype="text/html")) is None
+    assert ce._fetch_image_data_url("u", get=lambda *a, **k: _resp(ctype="image/gif")) is None  # API rejects animated
     assert ce._fetch_image_data_url("u", get=lambda *a, **k: _resp(status=403)) is None
     big = b"x" * (ce.FLYER_IMAGE_MAX_BYTES + 1)
     assert ce._fetch_image_data_url("u", get=lambda *a, **k: _resp(body=big)) is None
@@ -95,7 +96,7 @@ def test_flyer_images_go_to_the_model_with_their_post_number(monkeypatch):
     assert content[1] == {"type": "text", "text": "Flyer for post [1]:"}
     assert content[2]["type"] == "image_url"
     assert content[2]["image_url"]["url"].startswith("data:image/png;base64,")
-    assert sent["timeout"] == 120
+    assert sent["timeout"] == 90
 
 
 def test_flyers_capped_per_account(monkeypatch):
@@ -103,6 +104,30 @@ def test_flyers_capped_per_account(monkeypatch):
     _, sent = _run_extract(monkeypatch, posts)
     images = [c for c in sent["messages"][0]["content"] if c["type"] == "image_url"]
     assert len(images) == ce.FLYER_IMAGES_PER_ACCOUNT
+
+
+def test_newest_posts_get_the_flyer_slots_not_pinned_ones(monkeypatch):
+    monkeypatch.setattr(ce, "FLYER_IMAGES_PER_ACCOUNT", 2)
+    posts = [{"text": "pinned", "displayUrl": "https://ig/pinned.jpg", "time": "2026-01-01T00:00:00"},
+             {"text": "a", "displayUrl": "https://ig/a.jpg", "time": "2026-10-03T00:00:00"},
+             {"text": "b", "displayUrl": "https://ig/b.jpg", "time": "2026-10-05T00:00:00"}]
+    got = ce._flyers_for(posts, limit=2, fetch=lambda url: "data:" + url)
+    assert got == [(2, "data:https://ig/a.jpg"), (3, "data:https://ig/b.jpg")]
+
+
+def test_flyers_stop_when_the_run_is_long(monkeypatch):
+    monkeypatch.setattr(ce, "_RUN_STARTED", __import__("time").time() - (ce.FLYER_TIME_BUDGET_MIN + 1) * 60)
+    assert ce._flyers_for([{"text": "x", "displayUrl": "https://ig/1.jpg"}], fetch=lambda u: "data:x") == []
+    monkeypatch.setattr(ce, "_RUN_STARTED", __import__("time").time())
+    assert ce._flyers_for([{"text": "x", "displayUrl": "https://ig/1.jpg"}], fetch=lambda u: "data:x") == [(1, "data:x")]
+
+
+def test_flyer_failure_keeps_the_text(monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("bad")
+    monkeypatch.setattr(ce, "_flyers_for", boom)
+    _, sent = _run_extract(monkeypatch, [{"text": "Trivia Wednesday 7pm", "displayUrl": "https://ig/1.jpg"}])
+    assert isinstance(sent["messages"][0]["content"], str)
 
 
 def test_text_only_posts_unchanged(monkeypatch):
@@ -160,6 +185,7 @@ events:
     for e in out:
         by_name.setdefault(e["name"], []).append(e)
     assert by_name["Pickle Festival"][0]["big"] is True
+    assert all(e.get("curated") is True for e in out)  # hand-written: the event check trusts these
     assert "town" not in by_name["Pickle Festival"][0]
     assert by_name["Turkeyfest"][0]["town"] == "Cuero"
     assert "big" not in by_name["Turkeyfest"][0]
@@ -303,3 +329,12 @@ def test_enrich_off_without_key_and_prunes_past(monkeypatch, tmp_path):
                                 post=lambda *a, **k: pytest.fail("no key, no lookup"))
     assert out[0]["time"] == "7:00 PM"
     assert list(json.loads(cache.read_text())) == [f"{d(3)}|keep me"]
+
+
+def test_digest_reviews_only_the_next_two_weeks(tmp_path):
+    import send_digest as sd
+    t = date.today()
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps({"events": [{"date": (t + timedelta(days=n)).isoformat(), "name": f"E{n}"} for n in (1, 13, 40, 80)]}))
+    assert [e["name"] for e in sd.load_candidates(str(p), all_days=True)[0]] == ["E1", "E13"]
+    assert [e["name"] for e in sd.load_candidates(str(p))[0]] == ["E13"]

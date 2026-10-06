@@ -48,6 +48,11 @@ RELIGIOUS_REASONS = {"religious event", "church event", "worship service"}  # co
 # times stay flags: the fix is an edit, not a removal. AI findings are never
 # acted on.
 AUTO_HIDE = {"religious", "not_an_event", "duplicate", "cut_off"}
+# Hand-written events (curated: true, from local_events.yaml) were checked
+# by a person: church trunk-or-treats and nearby-town festivals are on the
+# list on purpose, and a name like "Movie Night: Friday the 13th" on a
+# Monday is right. Only duplicates and odd times are still worth a look.
+CURATED_SKIP = {"religious", "not_an_event", "out_of_area", "wrong_date", "cut_off", "other"}
 # Duplicates are only hidden when they're exact (same name, venue and start
 # once normalized), or the library's copy of a program the city calendar
 # lists at its real place, and neither copy is a paid/featured listing; the
@@ -196,6 +201,11 @@ def ai_findings(events, api_key):
     return out
 
 
+def trusted(events, findings):
+    """Drop findings a person already settled (curated events, CURATED_SKIP)."""
+    return [f for f in findings if not (events[f[0]].get("curated") is True and f[1] in CURATED_SKIP)]
+
+
 def combine(rule, ai):
     """One entry per event; rules first (they're certain), AI adds the rest."""
     seen, out = set(), []
@@ -339,9 +349,10 @@ def main(argv=None):
     resp.raise_for_status()
     events = upcoming(resp.json().get("events") or [], ce.now_central().date(), args.days)
 
-    rules = rule_findings(events)
+    rules = trusted(events, rule_findings(events))
     key = os.environ.get("OPENAI_API_KEY", "").strip()
     ai = ai_findings(events, key) if key and events else None
+    ai = trusted(events, ai) if ai is not None else None
     secret = "" if args.dry_run else os.environ.get("EVENT_CHECK_SECRET", "").strip()
     picks, resolved = to_hide(events, rules)
     hidden, restored, problem = hide(events, picks, secret)

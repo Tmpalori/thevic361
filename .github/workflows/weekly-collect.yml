@@ -190,8 +190,9 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |
-          n=$(python3 -c "import json;d=json.load(open('candidates.json'));print(len(d.get('events',d) if isinstance(d,dict) else d))" 2>/dev/null || echo "?")
-          python3 scripts/slack_notify.py "🗓️ Collect done: $n events found. They'll publish automatically in a minute; edit or remove any in admin." --link "${{ vars.SITE_URL || 'https://www.thevic361.com' }}/admin.html"
+          # Next 14 days only: hand-added events run 90 days ahead.
+          n=$(python3 -c "import json,datetime as d;e=json.load(open('candidates.json'));e=e.get('events',e) if isinstance(e,dict) else e;end=(d.date.today()+d.timedelta(days=14)).isoformat();print(sum(1 for x in e if x.get('date','')<=end))" 2>/dev/null || echo "?")
+          python3 scripts/slack_notify.py "🗓️ Collect done: $n events in the next two weeks. They'll publish automatically in a minute; edit or remove any in admin." --link "${{ vars.SITE_URL || 'https://www.thevic361.com' }}/admin.html"
 
       - name: Tell Slack it failed
         if: failure()

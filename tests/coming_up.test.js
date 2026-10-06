@@ -39,6 +39,15 @@ describe('coming up', () => {
     ]);
   });
 
+  it('leaves out a festival already running this week', () => {
+    const evs = withPages([
+      { date: '2026-10-11', name: 'Harvest Days', venue: 'X', big: true },
+      { date: '2026-10-12', name: 'Harvest Days', venue: 'X', big: true },
+      { date: '2026-10-20', name: 'Other Fest', venue: 'Y', big: true }
+    ]);
+    expect(comingUpEvents(evs, TODAY).map(e => e.name)).toEqual(['Other Fest']);
+  });
+
   it('shows 4, folds the rest behind Show more, and caps at 20', () => {
     const many = withPages(Array.from({ length: 25 }, (_, i) => ({
       date: `2026-11-${String(i + 1).padStart(2, '0')}`, name: `Fest ${i}`, venue: 'X', big: true

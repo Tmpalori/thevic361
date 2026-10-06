@@ -1088,7 +1088,12 @@ const COMING_UP_SHOWN = 4;
 export function comingUpEvents(events, today) {
   const week = currentWeek(today);
   const last = addDays(today, COMING_UP_DAYS);
-  return sortEvents((events || []).filter(ev => ev.date > week[6] && ev.date <= last && (ev.big === true || ev.featured)))
+  // A festival already running this week (Fri–Sun into next week) is in the
+  // week's list; don't announce its later days as "coming up".
+  const thisWeek = new Set((events || []).filter(ev => ev.date >= week[0] && ev.date <= week[6])
+    .map(ev => `${ev.name}|${ev.town || ''}`));
+  return sortEvents((events || []).filter(ev => ev.date > week[6] && ev.date <= last && (ev.big === true || ev.featured) &&
+    !thisWeek.has(`${ev.name}|${ev.town || ''}`)))
     .sort((a, b) => a.date.localeCompare(b.date))
     // One line per event: a multi-day festival shows its first day.
     .filter((ev, i, arr) => arr.findIndex(o => o.name === ev.name && (o.town || '') === (ev.town || '')) === i)
