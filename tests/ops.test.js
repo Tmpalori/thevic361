@@ -188,7 +188,7 @@ describe('newsletter switch', () => {
     expect(byKey.reply_to.ok).toBe(false);
     expect(byKey.scheduler.ok).toBe(false);
     expect(byKey.meta_pixel.ok).toBe(false);
-    expect(byKey.ai_review.ok).toBe(false);
+    expect(byKey.submission_review.ok).toBe(false);
     expect(byKey.meta_ads.ok).toBeNull();
     expect(byKey.instagram.ok).toBeNull();
   });
