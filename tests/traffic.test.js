@@ -34,7 +34,7 @@ async function startApp(now = NOW) {
 
 afterEach(async () => {
   if (server) await new Promise(r => server.close(r));
-  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   server = null; tmpDir = null;
 });
 
@@ -146,6 +146,15 @@ describe('analytics helpers', () => {
     expect(t.totals.today).toEqual({ visitors: 2, views: 3 });
     expect(t.top_pages[0]).toEqual({ key: '/', count: 2 });
     expect(t.daily).toHaveLength(7);
+  });
+
+  it('totals the whole period picked, not just 30 days', () => {
+    const ctx = { ip: '1.1.1.1', ua: UA, secret: 's', siteHost: 'www.thevic361.com', now: NOW };
+    const today = beaconRow({ kind: 'view', path: '/' }, ctx);
+    const old = beaconRow({ kind: 'view', path: '/' }, { ...ctx, ip: '3.3.3.3', now: new Date(NOW.getTime() - 60 * 86400000) });
+    const t = summarize([today, old], { now: NOW, days: 90 });
+    expect(t.totals.range).toEqual({ visitors: 2, views: 2 });
+    expect(t.totals.week).toEqual({ visitors: 1, views: 1 });
   });
 });
 

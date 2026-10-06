@@ -2,7 +2,11 @@
 # the live published events and commits them to docs/social/latest/, which
 # is served at https://www.thevic361.com/social/latest/ (noindex).
 #
-# Runs every morning at 13:47 UTC (8:47 AM CDT / 7:47 AM CST). Monday
+# Runs every morning at 8:47 AM Central: the site's scheduler
+# (server/scheduler.js) dispatches it with scheduled=true, because GitHub's
+# own cron runs hours late. The 13:47 UTC cron below stays as a fallback and
+# skips itself when the site already dispatched today's run (posted.json
+# also stops a second post). Either way the run is "scheduled": Monday
 # rebuilds the week, weekend and today kits; Thursday the weekend (plus its
 # Reel) and today; other days only today, so the repo isn't rewriting the
 # week's slides daily. It also rebuilds everything when the generator changes.
@@ -42,6 +46,10 @@ on:
         type: choice
         options: [weekend, week, today]
         default: weekend
+      scheduled:
+        description: 'The daily run (set by the site scheduler): build and post like the schedule'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -55,7 +63,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # A late GitHub cron run is skipped when the site's scheduler already
+  # started today's run.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      run: ${{ steps.g.outputs.run }}
+    steps:
+      - id: g
+        env:
+          EVENT: ${{ github.event_name }}
+          SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+        run: |
+          run=true
+          if [ "$EVENT" = "schedule" ] && curl -fsS --max-time 20 "$SITE/api/scheduler/ran?job=social-kit" | grep -q '"ran":true'; then
+            echo "The site's scheduler already ran today's kit; skipping this late cron run."; run=false
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     # Worst case: build, up to 10 min waiting for the deploy, a Reel that
     # takes 6 min to process, and Thursday's second post. The post step has
@@ -80,10 +109,10 @@ jobs:
         id: build
         env:
           PYTHONUNBUFFERED: 1
-          EVENT: ${{ github.event_name }}
+          SCHEDULED: ${{ github.event_name == 'schedule' || inputs.scheduled }}
         run: |
           DOW="$(TZ=America/Chicago date +%u)"
-          if [ "$EVENT" != "schedule" ] || [ "$DOW" = "1" ]; then KINDS=week,weekend,today
+          if [ "$SCHEDULED" != "true" ] || [ "$DOW" = "1" ]; then KINDS=week,weekend,today
           elif [ "$DOW" = "4" ]; then KINDS=weekend,today
           else KINDS=today; fi
           python scripts/social_kit.py --kinds "$KINDS"
@@ -108,14 +137,15 @@ jobs:
         id: post
         timeout-minutes: 22
         if: >-
-          (github.event_name == 'schedule' && vars.SOCIAL_AUTOPOST == '1') ||
-          (github.event_name == 'workflow_dispatch' && inputs.post)
+          ((github.event_name == 'schedule' || inputs.scheduled) && vars.SOCIAL_AUTOPOST == '1') ||
+          (github.event_name == 'workflow_dispatch' && !inputs.scheduled && inputs.post)
         env:
           PYTHONUNBUFFERED: 1
           META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
           META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
-          DISPATCH_KIND: ${{ inputs.kind }}
+          # A scheduled dispatch picks the kind by weekday, like the cron.
+          DISPATCH_KIND: ${{ !inputs.scheduled && inputs.kind || '' }}
         run: |
           DOW="$(TZ=America/Chicago date +%u)"
           if [ -n "$DISPATCH_KIND" ]; then KIND="$DISPATCH_KIND"
@@ -153,7 +183,7 @@ jobs:
 
       - name: Send Slack this week's venues to tag
         # Only after this run's build: otherwise the file is last week's list.
-        if: always() && steps.build.outcome == 'success' && github.event_name == 'schedule' && hashFiles('docs/social/latest/outreach-slack.txt') != ''
+        if: always() && steps.build.outcome == 'success' && (github.event_name == 'schedule' || inputs.scheduled) && hashFiles('docs/social/latest/outreach-slack.txt') != ''
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |

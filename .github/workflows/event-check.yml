@@ -9,10 +9,12 @@
 # When:
 #   - after each successful Weekly Collect, once auto-publish has put the
 #     new events on the site (the collect commit redeploys Railway, which
-#     publishes on boot, so we wait for /events.json to hold the new
-#     candidates)
-#   - Monday 11:43 UTC (6:43 AM CDT), an hour before the newsletter, to
-#     catch anything from Sunday-night edits
+#     publishes on boot, so we wait for /events.json to change)
+#   - Monday 6:43 AM Central, an hour before the newsletter, to catch
+#     anything from Sunday-night edits. The site's scheduler
+#     (server/scheduler.js) dispatches it on time, because GitHub's own
+#     cron runs hours late; the 11:43 UTC cron below is a fallback that
+#     skips itself when the site already ran it
 #   - by hand (workflow_dispatch)
 
 name: Event Check
@@ -29,8 +31,27 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  gate:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      run: ${{ steps.g.outputs.run }}
+    steps:
+      - id: g
+        env:
+          EVENT: ${{ github.event_name }}
+          SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+        run: |
+          run=true
+          if [ "$EVENT" = "schedule" ] && curl -fsS --max-time 20 "$SITE/api/scheduler/ran?job=event-check" | grep -q '"ran":true'; then
+            echo "The site's scheduler already ran Monday's check; skipping this late cron run."; run=false
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

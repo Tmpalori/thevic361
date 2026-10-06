@@ -690,6 +690,47 @@ describe('Home tab', () => {
     expect(items[items.length - 1]).toBe('Database');
     expect(document.getElementById('home-checks').textContent).toContain('Set SLACK_WEBHOOK_URL');
   });
+
+  it('flags a stale collect, shows when the site last changed, and lists contact messages', async () => {
+    const api = bootDom();
+    const old = new Date(Date.now() - 6 * 86400000).toISOString();
+    window.fetch = vi.fn(async (url) => {
+      if (String(url).includes('/api/admin/messages')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, messages: [
+          { id: 'm1', created_at: new Date().toISOString(), topic: 'advertising', name: 'Ann <b>', email: 'ann@shop.example', message: 'Sponsor week?' }
+        ] }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true, checks: [],
+        status: { upcoming_events: 5, collected_at: old, published_at: new Date().toISOString() } }) };
+    });
+    api._state.session = 'tok';
+    await api.loadHome();
+    await new Promise(r => setTimeout(r, 0));
+    const tiles = document.getElementById('home-tiles');
+    expect(tiles.querySelector('.home-tile--warn').textContent).toContain('check the collector');
+    expect(tiles.textContent).toContain('Site last updated');
+    const msgs = document.getElementById('home-messages');
+    expect(msgs.hidden).toBe(false);
+    expect(msgs.textContent).toContain('Sponsor week?');
+    expect(msgs.innerHTML).not.toContain('<b>');
+  });
+});
+
+describe('Traffic totals', () => {
+  afterEach(() => { delete window.__vic361Admin; });
+  const v = n => ({ visitors: n, views: n });
+  const base = { daily: [], top_pages: [], sources: [], referrer_sites: [], clicks: [], top_clicked: [], crawlers: [], crawler_pages: [] };
+
+  it('labels the box with the period picked and doesn\'t repeat 7 days', () => {
+    const api = bootDom();
+    api.renderTraffic({ ...base, days: 7, totals: { today: v(1), week: v(7), range: v(7) } });
+    let text = document.getElementById('traffic-totals').textContent;
+    expect(text.match(/Last 7 days/g)).toHaveLength(1);
+    api.renderTraffic({ ...base, days: 90, totals: { today: v(1), week: v(7), range: v(90) } });
+    text = document.getElementById('traffic-totals').textContent;
+    expect(text).toContain('Last 90 days90 visitors');
+    expect(text).toContain('Last 7 days');
+  });
 });
 
 describe('Events tab safety', () => {

@@ -113,7 +113,7 @@
 
     <!-- ─── HOME TAB ─── -->
     <section id="tab-home" class="tab-panel is-active" role="tabpanel">
-      <p class="tab-intro">The site runs itself: events are collected Sunday and Wednesday afternoons and go live automatically. Check here for anything that needs you.</p>
+      <p class="tab-intro">The site runs itself: events are collected Sunday and Wednesday afternoons and go live automatically, social posts go out every morning around 8:45, and the newsletter goes out Monday at 7:43 AM (Central). Check here for anything that needs you.</p>
       <div id="home-error" class="empty-state empty-state--error" hidden></div>
       <div id="home-body" hidden>
         <div id="home-tiles" class="home-tiles"></div>
@@ -121,6 +121,10 @@
           <h2 class="traffic-h">Hidden by the event check</h2>
           <p class="home-hidden__intro">The check took these off the site because a rule was sure about them (church events, things that aren't events, exact duplicates). Nothing was deleted. Restore one and the check leaves it alone from then on.</p>
           <ul id="home-hidden-list" class="home-checks" role="list"></ul>
+        </div>
+        <div id="home-messages" hidden>
+          <h2 class="traffic-h">Messages from the contact form</h2>
+          <ul id="home-messages-list" class="home-checks" role="list"></ul>
         </div>
         <h2 class="traffic-h">Setup <span id="home-setup-count" class="home-setup-count"></span></h2>
         <ul id="home-checks" class="home-checks" role="list"></ul>
@@ -243,7 +247,7 @@
     <section id="tab-newsletter" class="tab-panel" role="tabpanel" hidden>
 
       <div class="email-nl" id="email-nl">
-        <p class="tab-intro">The weekly email goes out Monday mornings on its own once set up. Preview it or send yourself a test here.</p>
+        <p class="tab-intro">The weekly email goes out on its own Mondays at 7:43 AM Central once set up. Preview it or send yourself a test here.</p>
         <h3 class="traffic-h">Email newsletter</h3>
         <div id="email-nl-status" class="sources-summary"></div>
         <p id="email-nl-warning" class="email-nl-warning" hidden></p>

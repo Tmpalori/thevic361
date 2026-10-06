@@ -277,7 +277,9 @@ export function summarize(rows, { now, days = 30 }) {
     ok: true,
     generated_at: now.toISOString(),
     days,
-    totals: { today: window(1), week: window(7), month: window(Math.min(30, days)) },
+    // range covers the whole period picked (7, 30 or 90 days), matching the
+    // chart and tables below it.
+    totals: { today: window(1), week: window(7), range: window(days) },
     daily,
     top_pages: countBy(views, r => r.path, 15),
     sources: countBy(views, r => r.ref_source || 'Direct', 12),

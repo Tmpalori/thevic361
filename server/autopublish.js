@@ -275,6 +275,13 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     const keptKeys = new Set(kept.map(eventKeyOf));
     if (!healthy && ours.length && !submissionsOnly) {
       console.warn(`[auto-publish] new run has ${freshUpcoming.length} upcoming events vs ${ours.length} auto-published; retiring nothing`);
+      // A scraper probably broke: the week keeps last run's events, but
+      // the owner should know before the next run quietly does the same.
+      if (slack) {
+        slack.alert('collector-unhealthy', 'Collector found far fewer events than last run; nothing was taken down',
+          `${freshUpcoming.length} upcoming events this run vs ${ours.length} published by the last one. Check the Weekly Collect run and the Sources tab.`,
+          `${siteUrl}/admin.html`);
+      }
     }
 
     // Auto-added last time but missing now: the admin took it down.
@@ -407,12 +414,17 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
 
     const result = { ok: true, published: events.length, added: added.length, kept: kept.length, updated, retired: retired.length, skipped_removed: skippedRejected, from };
     console.log('[auto-publish]', JSON.stringify(result));
-    if (slack && !quiet) {
+    const upcomingCount = events.filter(upcoming).length;
+    if (slack && !submissionsOnly && !upcomingCount) {
+      // Nothing coming up on the site is breakage, not news: alerts channel.
+      slack.alert('auto-publish-empty', 'Auto-publish found no upcoming events',
+        'The site has nothing coming up. Check the Weekly Collect run and the Sources tab.', `${siteUrl}/admin.html`);
+    }
+    if (slack && !quiet && upcomingCount) {
       slack.notify({
         title: `🗓️ Published ${events.length} events automatically`,
         fields: [['New this run', added.length], ['Kept from before', kept.length], ['Updated from the collector', updated],
           ['Taken down (no longer found)', retired.length], ['Skipped (you removed)', skippedRejected]],
-        text: events.length ? '' : 'No upcoming events were found. Check the collector run.',
         link: `${siteUrl}/admin.html`, footer: 'Edit or remove anything in admin'
       });
     }

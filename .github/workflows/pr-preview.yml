@@ -2,6 +2,11 @@ name: PR Preview
 
 # Deploys docs/ to https://tmpalori.github.io/thevic361-previews/pr-<N>/ on PR open/sync.
 # Removes the folder when the PR closes.
+#
+# Static files only: the live site is Express (server-rendered pages, /api,
+# events from Postgres), so this copy shows the old bundled events.json and
+# broken forms. Every page gets a banner saying so (scripts/preview_banner.py);
+# Railway's per-PR environment is the real preview.
 
 on:
   pull_request:
@@ -43,6 +48,9 @@ jobs:
           rm -rf "$DEST"
           mkdir -p "$DEST"
           cp -R source/docs/. "$DEST/"
+          # Say on every page that this is a static copy (stale events, no
+          # server pages or /api), so the preview can't mislead a reviewer.
+          python3 source/scripts/preview_banner.py "$DEST" "PR #${PR_NUMBER} preview"
 
       - name: Commit and push preview
         env:
@@ -74,7 +82,9 @@ jobs:
             const prNum = context.payload.pull_request.number;
             const url = `https://tmpalori.github.io/thevic361-previews/pr-${prNum}/`;
             const marker = '<!-- thevic361-preview-bot -->';
-            const body = `${marker}\n🌼 **Preview deployed:** ${url}\n\nUpdates automatically when you push new commits to this PR. Removed when the PR closes.`;
+            const body = `${marker}\n🌼 **Static preview of docs/:** ${url}\n\n` +
+              `This is only the static files: events are the old bundled list, and server-rendered pages (home, event and venue pages), forms and /api calls don't work. ` +
+              `For a real preview, open this PR's Railway environment.\n\nUpdates automatically when you push new commits to this PR. Removed when the PR closes.`;
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner, repo: context.repo.repo, issue_number: prNum
             });

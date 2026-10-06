@@ -1,20 +1,23 @@
-# Newsletter — sends this week's email to subscribers on Monday morning by
-# calling the site's /api/newsletter/cron endpoint (server/newsletter.js),
-# after Sunday-night Save & Publish. 12:43 UTC is 7:43 AM CDT / 6:43 AM CST.
+# Newsletter — backup for the Monday send.
 #
-# Runs every Monday. The NEWSLETTER_CRON_SECRET secret must match the
-# Railway variable of the same name (that's what the admin's "Auto-send
-# Mondays" reflects); if it's missing or wrong the run fails and Slack is
-# told, instead of skipping quietly. A week that was already sent from the
-# admin is skipped. A server error or no answer is tried again twice, a few
-# minutes apart (safe: the send resumes and never mails anyone twice).
-# The same call sends last week's sponsor click reports.
+# The site sends the newsletter itself at 7:43 AM Central
+# (server/scheduler.js), because GitHub's cron runs hours late on this repo.
+# This workflow calls the same send (/api/newsletter/cron, server/newsletter.js)
+# as a fallback: a week that already went out is skipped, and a partly failed
+# one resends only to the people who missed it, so running it is always safe.
+#
+# The on/off switch is the NEWSLETTER_AUTOSEND Railway variable (on unless
+# it is 0); the scheduled run tells the site it's automatic, so it obeys
+# that too. Run it by hand to send now regardless. Needs the
+# NEWSLETTER_CRON_SECRET secret to match the Railway variable of the same
+# name. A 5xx or no answer is tried up to 3 times about 4 minutes apart
+# (safe: the send resumes and never mails anyone twice). The same call sends last week's sponsor click reports.
 
 name: Newsletter
 
 on:
   schedule:
-    - cron: '43 12 * * 1'
+    - cron: '43 12 * * 1'   # 7:43 AM CDT; usually runs hours late (fallback)
   workflow_dispatch:
 
 permissions:
@@ -31,6 +34,7 @@ jobs:
         env:
           SECRET: ${{ secrets.NEWSLETTER_CRON_SECRET }}
           SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+          SCHEDULED: ${{ github.event_name == 'schedule' && '1' || '0' }}
         run: |
           if [ -z "$SECRET" ]; then echo "::error::NEWSLETTER_CRON_SECRET is not set"; exit 1; fi
           # A 5xx or no answer (Railway mid-restart, a Resend blip) is tried
@@ -42,7 +46,7 @@ jobs:
           # won't fix itself, so it fails at once.
           for try in 1 2 3; do
             : > out.json
-            code=$(curl -sS --max-time 300 -o out.json -w '%{http_code}' -X POST -H "X-Cron-Secret: $SECRET" "$SITE/api/newsletter/cron") || true
+            code=$(curl -sS --max-time 300 -o out.json -w '%{http_code}' -X POST -H "X-Cron-Secret: $SECRET" -H "X-Cron-Scheduled: $SCHEDULED" "$SITE/api/newsletter/cron") || true
             cat out.json; echo
             [ "$code" = "200" ] && exit 0
             case "$code" in 5*|000|"") ;; *) break ;; esac

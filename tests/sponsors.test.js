@@ -63,7 +63,7 @@ async function startApp(extra = {}) {
 
 afterEach(async () => {
   if (server) await new Promise(r => server.close(r));
-  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   server = null; tmpDir = null;
 });
 
@@ -130,7 +130,7 @@ describe('advertise page', () => {
     await startApp();
     expect(await (await fetch(baseUrl + '/advertise')).text()).toContain('/advertise/checkout?package=weekly');
     await new Promise(r => server.close(r)); server = null;
-    await fs.rm(tmpDir, { recursive: true, force: true });
+    await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     await startApp({ stripeWebhookSecret: '' });
     expect(await (await fetch(baseUrl + '/advertise')).text()).not.toContain('Buy now');
     const r = await fetch(baseUrl + '/advertise/checkout?package=weekly', { redirect: 'manual' });

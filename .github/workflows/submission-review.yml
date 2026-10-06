@@ -10,7 +10,11 @@
 # set the same in Railway and here, and OPENAI_API_KEY. Set the
 # SUBMISSION_AUTOAPPROVE Railway variable to 0 to have it only flag.
 #
-# When: every 15 minutes (GitHub may run it a little late), or by hand.
+# When: every 15 minutes. The site's scheduler (server/scheduler.js)
+# dispatches it on time, because GitHub's own cron runs hours late; the
+# cron below stays as a fallback. A repeat run is harmless: each submission
+# is decided once, and the concurrency group runs them one at a time.
+# Also by hand.
 
 name: Submission Review
 

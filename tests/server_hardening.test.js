@@ -54,7 +54,7 @@ async function startApp(opts = {}) {
 
 afterEach(async () => {
   if (server) await new Promise(r => server.close(r));
-  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   server = null; tmpDir = null; bundle = null;
 });
 
@@ -229,7 +229,7 @@ describe('the event archive stays bounded', () => {
       await store.archiveEvents([{ page: '/events/old', date: old }, { page: '/events/recent', date: recent }]);
       expect((await store.listArchivedEvents()).map(e => e.page)).toEqual(['/events/recent']);
     } finally {
-      await fs.rm(dir, { recursive: true, force: true });
+      await fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     }
   });
 });
@@ -304,7 +304,7 @@ describe('submissions-only auto-publish on an empty store', () => {
       expect(r.ok).toBe(false);
       expect(await store.getPublished()).toBe(null);
     } finally {
-      await fs.rm(dir, { recursive: true, force: true });
+      await fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     }
   });
 });

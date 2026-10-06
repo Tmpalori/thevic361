@@ -53,6 +53,11 @@ export function newsletterConfig(env = process.env, overrides = {}) {
     testTo: overrides.newsletterTestTo ?? env.NEWSLETTER_TEST_TO ?? ''
   };
   c.enabled = Boolean(c.apiKey);
+  // The one switch for the automatic Monday send (Railway variable): on
+  // unless NEWSLETTER_AUTOSEND=0. The site's scheduler (server/scheduler.js)
+  // sends at 7:43 AM Central; newsletter.yml's late GitHub cron is only a
+  // fallback and is told no when this is off.
+  c.autosend = String(overrides.newsletterAutosend ?? env.NEWSLETTER_AUTOSEND ?? '1') !== '0';
   return c;
 }
 
@@ -686,9 +691,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     const failed = record ? (Array.isArray(record.failed_emails) ? record.failed_emails.length : Number(record.failed) || 0) : 0;
     res.json({
       ok: true, configured: config.enabled, from: config.from, address_set: Boolean(config.address),
-      // The Monday workflow (.github/workflows/newsletter.yml) runs whenever
-      // the secret is set in GitHub; the server can only see its own copy.
-      autosend: Boolean(config.cronSecret), counts, sends, next: { subject: issue.subject, events: issue.total },
+      autosend: config.enabled && config.autosend, counts, sends, next: { subject: issue.subject, events: issue.total },
       this_week_sent: Boolean(record) && !failed,
       this_week_failed: failed,
       this_week_recipients: record ? Number(record.recipients) || 0 : 0
@@ -733,8 +736,35 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     res.json({ ok: true, ...result });
   });
 
-  // Scheduled send (GitHub Actions). Needs the shared secret; refuses when
-  // no secret is configured so the endpoint can't be triggered by anyone.
+  // The automatic Monday send, from the site scheduler or the cron
+  // endpoint. `ok` means done for this week (sent, already sent, nothing to
+  // send); `final` means retrying won't help (setup missing).
+  async function scheduledSend() {
+    const out = await sendWeekly();
+    // Same Monday run: last week's sponsors get their click reports
+    // (server/sponsors.js sendSponsorReports; safe to call more than once).
+    if (onCron) {
+      try { out.sponsor_reports = await onCron(nowFn()); } catch (err) {
+        console.error('[newsletter] sponsor reports failed:', err.message);
+        if (slack) slack.alert('sponsor-reports', 'Sponsor click reports failed', err.message, `${siteUrl}/admin.html`);
+      }
+    }
+    // Monday's automatic send found nothing published for this week.
+    if (slack && out.error === 'no-events') {
+      slack.alert('newsletter-no-events', 'Newsletter skipped: nothing published for this week',
+        'Publish this week\'s picks in admin, then send it from the Newsletter tab.', `${siteUrl}/admin.html`);
+    }
+    if (slack && out.error === 'no-address') {
+      slack.alert('newsletter-no-address', 'Newsletter not sent: no mailing address', out.message, `${siteUrl}/admin.html`);
+    }
+    const done = out.ok || ['already-sent', 'no-events', 'no-subscribers', 'in-progress'].includes(out.error);
+    return { ...out, ok: done, sent_ok: out.ok, final: ['not-configured', 'no-address'].includes(out.error) };
+  }
+
+  // Scheduled send (GitHub Actions fallback, newsletter.yml). Needs the
+  // shared secret; refuses when no secret is configured so the endpoint
+  // can't be triggered by anyone. A run marked X-Cron-Scheduled honors
+  // NEWSLETTER_AUTOSEND=0; a hand-started run sends regardless.
   app.post('/api/newsletter/cron', async (req, res) => {
     const given = Buffer.from(String(req.get('x-cron-secret') || ''));
     const want = Buffer.from(config.cronSecret || '');
@@ -742,28 +772,18 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     // and a non-ASCII header has more bytes than characters.
     const ok = want.length > 0 && given.length === want.length && crypto.timingSafeEqual(given, want);
     if (!ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    if (req.get('x-cron-scheduled') === '1' && !config.autosend) {
+      return res.json({ ok: false, error: 'autosend-off', message: 'NEWSLETTER_AUTOSEND=0 in Railway; not sending automatically.' });
+    }
     try {
-      const out = await sendWeekly();
-      // Same Monday run: last week's sponsors get their click reports
-      // (server/sponsors.js sendSponsorReports; safe to call more than once).
-      if (onCron) {
-        try { out.sponsor_reports = await onCron(nowFn()); } catch (err) {
-          console.error('[newsletter] sponsor reports failed:', err.message);
-          if (slack) slack.alert('sponsor-reports', 'Sponsor click reports failed', err.message, `${siteUrl}/admin.html`);
-        }
-      }
-      // Monday's automatic send found nothing published for this week.
-      if (slack && out.error === 'no-events') {
-        slack.alert('newsletter-no-events', 'Newsletter skipped: nothing published for this week',
-          'Publish this week\'s picks in admin, then send it from the Newsletter tab.', `${siteUrl}/admin.html`);
-      }
-      // already-sent / no-events / in-progress are normal outcomes for a cron, not failures.
-      res.status(out.ok || ['already-sent', 'no-events', 'no-subscribers', 'in-progress'].includes(out.error) ? 200 : 500).json(out);
+      const { ok: done, sent_ok: sentOk, final: _f, ...out } = await scheduledSend();
+      // already-sent / no-events are normal outcomes for a cron, not failures.
+      res.status(done ? 200 : 500).json({ ...out, ok: sentOk });
     } catch (err) {
       if (slack) slack.alert('newsletter-cron', 'Newsletter send crashed', err.message);
       res.status(500).json({ ok: false, error: 'send-failed', message: err.message });
     }
   });
 
-  return { sendWeekly };
+  return { sendWeekly, scheduledSend };
 }

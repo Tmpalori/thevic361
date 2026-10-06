@@ -169,7 +169,7 @@ async function startApp(opts = {}) {
 
 async function stopApp() {
   if (server) await new Promise(r => server.close(r));
-  if (tmpDir) try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch (_) {}
+  if (tmpDir) try { await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); } catch (_) {}
   server = null; tmpDir = null; baseUrl = null;
 }
 

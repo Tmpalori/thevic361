@@ -105,16 +105,19 @@ export function createGithub(opts = {}) {
   // ─── Workflow dispatch ────────────────────────────────────────────────
   // POST /repos/{owner}/{repo}/actions/workflows/{file}/dispatches
   // Triggers a workflow_dispatch event on `branch`. Used by the admin
-  // "Sources" tab to kick the Weekly Collect job between scheduled runs.
+  // "Sources" tab to kick the Weekly Collect job between scheduled runs,
+  // and by the site scheduler to start the daily workflows on time.
   // Returns true on success. Throws an Error with .status on failure.
   // The token must have `actions:write` on the repo (a fine-grained PAT or
   // a classic PAT with `workflow` scope works); plain `contents:write` is
   // not enough. Callers surface the error to the UI.
-  async function dispatchWorkflow(workflowFile, ref) {
+  // `inputs` (strings) go to the workflow's workflow_dispatch inputs; the
+  // site scheduler (server/scheduler.js) passes scheduled=true.
+  async function dispatchWorkflow(workflowFile, ref, inputs) {
     if (!isConfigured()) throw new Error('github-not-configured');
     const url = `https://api.github.com/repos/${owner}/${repo}` +
       `/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
-    const body = JSON.stringify({ ref: ref || branch });
+    const body = JSON.stringify(inputs ? { ref: ref || branch, inputs } : { ref: ref || branch });
     const res = await fetchImpl(url, {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, ghHeaders()),

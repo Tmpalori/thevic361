@@ -45,7 +45,7 @@ async function startApp({ sponsor = null } = {}) {
 
 afterEach(async () => {
   if (server) await new Promise(r => server.close(r));
-  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   server = null; tmpDir = null;
 });
 
