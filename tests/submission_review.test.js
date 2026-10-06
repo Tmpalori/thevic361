@@ -15,7 +15,7 @@ import path from 'node:path';
 import http from 'node:http';
 
 const NOW = new Date('2026-10-05T17:00:00Z');
-let tmpDir, server, baseUrl, store, sent;
+let tmpDir, server, baseUrl, store, sent, bundle;
 
 const PAYLOAD = {
   name: 'FALL CRAFT FAIR!!!', date: '2026-10-10', time: '9:00 AM', end_time: '', venue: 'Community Center',
@@ -44,12 +44,12 @@ async function startApp(extra = {}) {
   await fs.writeFile(eventsFile, JSON.stringify({ events: [] }));
   sent = [];
   const resend = { send: async (msg, key) => { sent.push({ ...msg, key }); return { id: 'e' }; }, batch: async () => ({ data: [] }) };
-  const { app } = await createApp({
+  bundle = await createApp({
     storeBundle: { kind: 'file', store }, eventsFile, candidatesFile, trustProxy: false, now: () => NOW,
     siteUrl: 'https://www.thevic361.com', submissionReviewSecret: 'review-secret', autoPublish: false,
     resendApiKey: 're_test', resend, adminUsername: 'a', adminPassword: 'b', adminSessionSecret: 'c', ...extra
   });
-  server = http.createServer(app);
+  server = http.createServer(bundle.app);
   await new Promise(r => server.listen(0, r));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 }
@@ -61,7 +61,13 @@ afterEach(async () => {
 });
 
 const H = (secret = 'review-secret') => ({ 'Content-Type': 'application/json', 'X-Cron-Secret': secret });
-const pending = (secret) => fetch(baseUrl + '/api/submission-review/pending', { headers: H(secret) });
+// The live retries and paid-pick reminders run after the response; wait
+// for them so a test sees what the run did.
+const pending = async (secret) => {
+  const r = await fetch(baseUrl + '/api/submission-review/pending', { headers: H(secret) });
+  await bundle.submissionReview.idle();
+  return r;
+};
 const review = (reviews, secret) => fetch(baseUrl + '/api/submission-review', { method: 'POST', headers: H(secret), body: JSON.stringify({ reviews }) });
 const CLEAN = { name: 'Fall Craft Fair', description: 'Local crafters and food vendors.', icons: ['shopping', 'food'] };
 
@@ -538,3 +544,40 @@ describe('paid picks and approvals that aren\'t live yet', () => {
   });
 });
 
+
+describe('live retries: refused addresses and Resend hangs', () => {
+  it('an address Resend refuses for good is noted once and not retried every run', async () => {
+    const notes = [];
+    let calls = 0;
+    const resend = { send: async () => { calls++; const e = new Error('Resend /emails HTTP 422: invalid `to`'); e.status = 422; throw e; },
+      batch: async () => ({ data: [] }) };
+    await startApp({ resend, slack: { notify: m => notes.push(m), alert: () => {} } });
+    await store.insert(row('s1', { submitter_email: 'pat@example.com.' }));
+    const body = await (await review([{ id: 's1', decision: 'approve', cleaned: CLEAN }])).json();
+    expect(body.done[0].live).toBe(true);
+    const saved = await store.get('s1');
+    expect(saved.ai_review.live_pending).toBeFalsy();
+    expect(saved.review_history.filter(h => h.action === 'live-email-refused')).toHaveLength(1);
+    expect(notes.filter(n => /email refused/.test(n.title))).toHaveLength(1);
+    await pending();
+    await pending();
+    expect(calls).toBe(1);
+  });
+
+  it('the pending list answers while a live retry hangs on Resend, and the retry still finishes', async () => {
+    let release;
+    const gate = new Promise(r => { release = r; });
+    const resend = { send: async (msg, key) => { await gate; sent.push({ ...msg, key }); return { id: 'e' }; },
+      batch: async () => ({ data: [] }) };
+    await startApp({ resend });
+    await store.insert(row('s1', { status: 'approved', ai_review: { decision: 'approve', live_pending: NOW.toISOString() } }));
+    await store.insert(row('s2'));
+    const r = await fetch(baseUrl + '/api/submission-review/pending', { headers: H(), signal: AbortSignal.timeout(1500) });
+    expect(r.status).toBe(200);
+    expect((await r.json()).submissions.map(s => s.id)).toEqual(['s2']);
+    release();
+    await bundle.submissionReview.idle();
+    expect(sent.map(m => m.key)).toEqual(['vic361-submission-live-s1']);
+    expect((await store.get('s1')).ai_review).toMatchObject({ live_pending: null, live: true });
+  });
+});

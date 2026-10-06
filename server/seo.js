@@ -68,10 +68,11 @@ const ICON_KEYS = new Set(['food', 'music', 'family', 'drinks', 'arts', 'shoppin
 const iconSvg = k => `<svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-${k}"></use></svg>`;
 
 // Start hour (0-23) of an event, or null when it has no clock time.
+// parseTimes, not the first am/pm match: "1-4 PM" starts at 1 PM, and the
+// first match ("4 PM") put an afternoon event on /tonight and /nightlife.
 function startHour(ev) {
-  const m = /(\d{1,2})(?::\d{2})?\s*([ap])\.?m/i.exec(ev.time || '');
-  if (!m) return null;
-  return (Number(m[1]) % 12) + (m[2].toLowerCase() === 'p' ? 12 : 0);
+  const t = parseTimes(ev.time)[0];
+  return t ? Number(t.slice(0, 2)) : null;
 }
 const isEvening = ev => { const h = startHour(ev); return h !== null && h >= 16; };
 
@@ -454,15 +455,21 @@ function nearbyBadge(ev) {
 
 // Venue line under an event name: "Venue · street address", without
 // repeating the address when the venue field already is one.
-export function placeText(ev) {
+export function placeText(ev, sep = ' · ') {
   let venue = (ev.venue || '').trim();
   const addr = (ev.address || '').trim();
   if (/^\d/.test(venue)) venue = venue.split(',')[0].trim();
   if (!venue) return addr;
   const v = venue.toLowerCase(), a = addr.toLowerCase();
   if (!addr || v.includes(a) || a.includes(v)) return venue;
-  return `${venue} · ${addr}`;
+  return `${venue}${sep}${addr}`;
 }
+
+// The same place as prose ("Venue, 1 Main St"): the event page, its .ics
+// LOCATION and the Google Calendar link. A plain venue+address join read
+// "at Victoria, Victoria" or "3102 Miori Ln., 3102 Miori Ln" when the
+// collector put the same place in both fields.
+export const whereText = ev => placeText(ev, ', ');
 
 // Search and category pages ("music in Victoria") aren't a link to the event.
 const LISTING_URL = [
@@ -778,7 +785,8 @@ function headerHtml() {
 }
 
 function footerHtml() {
-  const year = new Date().getUTCFullYear();
+  // Victoria's year: the UTC year turned over at 6 PM on Dec 31.
+  const year = localDateStr(new Date()).slice(0, 4);
   return `<footer class="site-footer">
     <div class="container">
       <div class="footer-grid">
@@ -951,7 +959,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   const today = localDateStr(now);
   const src = safeUrl(ev.url);
   const when = formatDay(ev.date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-  const where = [ev.venue, ev.address].filter(Boolean).join(', ');
+  const where = whereText(ev);
   const time = formatTime(ev.time);
   // "from 10:00 AM to 3:00 PM at The PumpHouse", not "at 10:00 AM – 3:00 PM at …".
   const timePart = !time ? '' : / – /.test(time) ? ` from ${time.replace(' – ', ' to ')}` : `, ${time},`;

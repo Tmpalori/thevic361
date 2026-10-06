@@ -831,6 +831,24 @@ describe('backing out of Stripe', () => {
     expect(order.status).toBe('paid');
     expect(order.submission_id).toBeTruthy();
   });
+
+  it('a payment after cancelling, once others filled the day, is a conflict, not a fourth pick', async () => {
+    const alerts = [];
+    await startApp({ slack: { enabled: true, notify: async () => true, alert: async (key, title, text) => { alerts.push({ key, title, text }); } } });
+    await paidPick('p1'); await paidPick('p2');
+    await pick();
+    const s = sessions[0];
+    await fetch(s.params.cancel_url.replace('https://www.thevic361.com', baseUrl));
+    expect((await pick({ email: 'other@example.com' })).status).toBe(303); // the released spot sells
+    await completed(sessions[1]);
+    await completed(s);                                     // the first buyer pays in a still-open tab
+    const order = (await store.listSponsorOrders()).find(o => o.id === s.params.client_reference_id);
+    expect(order.status).toBe('conflict');
+    expect(order.submission_id).toBeFalsy();
+    expect(alerts.filter(a => a.key === `sponsor-conflict:${order.id}`)).toHaveLength(1);
+    const thanks = await (await fetch(`${baseUrl}/advertise/thanks?order=${order.id}`)).text();
+    expect(thanks).toContain('Vic’s Pick spots filled up');
+  });
 });
 
 describe('confirmation email retries', () => {

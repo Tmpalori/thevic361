@@ -7,6 +7,8 @@
  * public site, never inserted as raw HTML.
  */
 
+import { normalizeEmail } from './newsletter.js';
+
 const MAX_NAME = 200;
 const MAX_VENUE = 200;
 const MAX_ADDRESS = 300;
@@ -81,8 +83,10 @@ export function validateSubmission(input, opts = {}) {
   if (!date) errors.date = 'Date is required.';
   else if (!ISO_DATE.test(date)) errors.date = 'Date must look like YYYY-MM-DD.';
   else {
+    // Round-trip it: new Date rolls 2026-11-31 over to Dec 1 instead of
+    // failing, and an event on a day that doesn't exist is on no day list.
     const d = new Date(date + 'T12:00:00Z');
-    if (isNaN(d.getTime())) errors.date = 'Date is invalid.';
+    if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== date) errors.date = 'Date is invalid.';
   }
 
   const time = clean(input.time, MAX_TIME);
@@ -140,7 +144,11 @@ export function validateSubmission(input, opts = {}) {
   const submitter_email = clean(input.submitter_email, MAX_EMAIL);
   if (!submitter_email) {
     if (!adminEdit) errors.submitter_email = 'Email is required.';
-  } else if (!EMAIL_RE.test(submitter_email)) {
+  } else if (!EMAIL_RE.test(submitter_email) || (!adminEdit && !normalizeEmail(submitter_email))) {
+    // The public form also gets the newsletter's stricter check:
+    // "bob@gmail.com." or "bob@gmail..com" passed the loose regex, then
+    // Resend refused every "you're live" email to it. Not on an admin edit,
+    // so a row saved before this can still have its event details fixed.
     errors.submitter_email = 'Email looks invalid.';
   }
 
@@ -197,8 +205,10 @@ export function validateEventEdit(input) {
   if (!date) errors.date = 'Date is required.';
   else if (!ISO_DATE.test(date)) errors.date = 'Date must look like YYYY-MM-DD.';
   else {
+    // Round-trip it: new Date rolls 2026-11-31 over to Dec 1 instead of
+    // failing, and an event on a day that doesn't exist is on no day list.
     const d = new Date(date + 'T12:00:00Z');
-    if (isNaN(d.getTime())) errors.date = 'Date is invalid.';
+    if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== date) errors.date = 'Date is invalid.';
   }
 
   const time = clean(input.time, MAX_TIME);

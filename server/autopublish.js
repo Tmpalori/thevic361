@@ -242,7 +242,7 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     let approvedRead = true;
     try {
       // `submitted` earns the community-submission bonus in the event score.
-      approved = (await store.list({ status: 'approved' })).map(r => ({ ...r.payload, submitted: true })).filter(upcoming);
+      approved = (await store.list({ status: 'approved', fromDate: today })).map(r => ({ ...r.payload, submitted: true })).filter(upcoming);
     } catch (err) {
       console.warn('[auto-publish] approved submissions skipped, retiring nothing:', err.message);
       approvedRead = false;

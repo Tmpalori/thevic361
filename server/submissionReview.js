@@ -122,7 +122,7 @@ export async function remindPaidPicks({ store, slack, nowFn, siteUrl = '', rows:
     const monday = currentWeek(date)[0];
     return newsletterCovers(date, r.created_at) && monday >= today && monday <= addDaysStr(today, REMIND_NEWSLETTER_DAYS);
   };
-  const candidates = given || [...await store.list({ status: 'pending' }), ...await store.list({ status: 'approved' })];
+  const candidates = given || [...await store.list({ status: 'pending' }), ...await store.list({ status: 'approved', fromDate: today })];
   const rows = candidates.filter(r => notLive(r) && isPaidPick(r, paidOrders) && r.payload && soon(r) &&
     now.getTime() - Date.parse(r.created_at || 0) >= REMIND_GRACE_MS);
   const due = rows.filter(r => {
@@ -152,9 +152,11 @@ export async function remindPaidPicks({ store, slack, nowFn, siteUrl = '', rows:
 // again and, once the event is on the site, send its "you're live" email
 // (onApproved). Upcoming dates only; one that published fine but still
 // isn't listed stops retrying (the review's Slack note already said so).
-export async function retryLive({ store, publish, onApproved, nowFn, slack = null, siteUrl = '', rows: given = null }) {
+// `deadline` (a Date.now() value) bounds a run: rows left when it passes
+// keep live_pending for the next run, so a hanging Resend can't stack runs.
+export async function retryLive({ store, publish, onApproved, nowFn, slack = null, siteUrl = '', rows: given = null, deadline = Infinity }) {
   const today = localDateStr(nowFn());
-  const rows = (given || await store.list({ status: 'approved' })).filter(r => r.status === 'approved' &&
+  const rows = (given || await store.list({ status: 'approved', fromDate: today })).filter(r => r.status === 'approved' &&
     r.ai_review && r.ai_review.live_pending && r.payload && String(r.payload.date || '') >= today);
   if (!rows.length) return [];
   let published;
@@ -165,6 +167,7 @@ export async function retryLive({ store, publish, onApproved, nowFn, slack = nul
   if (!published || !published.ok) return [];
   const out = [];
   for (const r of rows) {
+    if (Date.now() > deadline) break;
     let live;
     try { live = Boolean(await onApproved(r)); } catch (err) {
       console.warn('[submission-review] live check/email retry failed:', err.message);
@@ -211,7 +214,39 @@ export function applyCleanup(payload, cleaned) {
 
 // onRun: called (not awaited) on each authenticated pending fetch; the
 // server hangs the sponsor reports on it, since this is its 15-minute cron.
-export function registerSubmissionReview(app, { store, secret, nowFn, autoApprove, publish, onApproved = () => {}, onRun = () => {}, slack = null, siteUrl = '' }) {
+// Returns { idle } (the upkeep run in flight, for tests).
+const UPKEEP_BUDGET_MS = 5 * 60 * 1000;
+export function registerSubmissionReview(app, { store, secret, nowFn, autoApprove, publish, onApproved = () => {}, onRun = () => {}, slack = null, siteUrl = '', upkeepBudgetMs = UPKEEP_BUDGET_MS }) {
+  // Each review run passes through the pending fetch, so it's also when
+  // approvals whose publish failed are retried, and paid picks close to
+  // their date (or their newsletter) and still not live are called out.
+  // After the response, not before it: retryLive is a publish plus up to
+  // 15 s of Resend per row, and during a Resend hang that ran the fetch past
+  // review_submissions.py's 30 s timeout, which only logs a warning, so new
+  // submissions went unreviewed. One run at a time, each within a budget.
+  let upkeep = null;
+  function startUpkeep(orders) {
+    if (upkeep) return upkeep;
+    upkeep = (async () => {
+      let approved = [];
+      try {
+        approved = await store.list({ status: 'approved', fromDate: localDateStr(nowFn()) });
+        const retried = await retryLive({ store, publish, onApproved, nowFn, slack, siteUrl, rows: approved,
+          deadline: Date.now() + upkeepBudgetMs });
+        if (retried.length) approved = await store.list({ status: 'approved', fromDate: localDateStr(nowFn()) });
+      } catch (err) {
+        console.warn('[submission-review] live retry failed:', err.message);
+      }
+      try {
+        const pending = await store.list({ status: 'pending' });
+        await remindPaidPicks({ store, slack, nowFn, siteUrl, rows: [...pending, ...approved], orders });
+      } catch (err) {
+        console.warn('[submission-review] paid pick reminder failed:', err.message);
+      }
+    })().finally(() => { upkeep = null; });
+    return upkeep;
+  }
+
   app.get('/api/submission-review/pending', async (req, res, next) => {
     if (!secretOk(req.get('x-cron-secret'), secret)) return res.status(401).json({ ok: false, error: 'unauthorized' });
     try {
@@ -219,21 +254,6 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
         console.warn('[submission-review] onRun failed:', err.message);
       }
       const orders = await sponsorOrders(store);
-      // Each review run passes through here, so it's also when approvals
-      // whose publish failed are retried, and paid picks close to their
-      // date (or their newsletter) and still not live are called out.
-      let approved = [];
-      try {
-        approved = await store.list({ status: 'approved' });
-        const retried = await retryLive({ store, publish, onApproved, nowFn, slack, siteUrl, rows: approved });
-        if (retried.length) approved = await store.list({ status: 'approved' });
-      } catch (err) {
-        console.warn('[submission-review] live retry failed:', err.message);
-      }
-      const pending = await store.list({ status: 'pending' });
-      try { await remindPaidPicks({ store, slack, nowFn, siteUrl, rows: [...pending, ...approved], orders }); } catch (err) {
-        console.warn('[submission-review] paid pick reminder failed:', err.message);
-      }
       const rows = (await store.list({ status: 'pending' })).filter(awaitingReview);
       // Only what the review needs: no emails, phone numbers or IPs.
       const submissions = rows.slice(0, MAX_PER_RUN).map(r => {
@@ -241,6 +261,7 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
         return { id: r.id, created_at: r.created_at, submitter_kind: r.submitter_kind || 'other', paid: isPaidPick(r, orders), event };
       });
       res.json({ ok: true, auto_approve: autoApprove, submissions });
+      startUpkeep(orders);
     } catch (err) { next(err); }
   });
 
@@ -374,4 +395,6 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
       });
     } catch (err) { next(err); }
   });
+
+  return { idle: () => upkeep || Promise.resolve() };
 }

@@ -35,22 +35,35 @@ export function pickWhere(dateStr, at) {
     : 'featured first in our social posts (that week’s newsletter goes out before we could add it)';
 }
 
+// Resend's answer for a request it will never accept, whatever we retry:
+// 400 and 422 are a malformed or refused message ("bob@gmail.com." as the
+// recipient). Auth (401/403), rate (429), idempotency (409) and server
+// errors can clear up, so they stay retryable.
+export const isPermanentSendError = err => Boolean(err) && (err.status === 400 || err.status === 422);
+
 export function createMailer({ resend, config }) {
+  const enabled = Boolean(config && config.enabled);
+  // 'sent', 'failed' (worth retrying), 'refused' (never will be) or 'off'
+  // (email not set up, or no address). Never throws.
+  async function deliver(to, mail, idempotencyKey) {
+    if (!enabled || !to) return 'off';
+    try {
+      await resend.send({
+        from: config.from, to: [to], subject: mail.subject, html: mail.html, text: mail.text,
+        ...(config.replyTo ? { reply_to: config.replyTo } : {})
+      }, idempotencyKey);
+      return 'sent';
+    } catch (err) {
+      console.warn(`[notify] "${mail.subject}" to a customer failed:`, err.message);
+      return isPermanentSendError(err) ? 'refused' : 'failed';
+    }
+  }
   return {
-    enabled: Boolean(config && config.enabled),
+    enabled,
+    deliver,
     // Resolves to true when sent. Never throws.
     async send(to, mail, idempotencyKey) {
-      if (!config || !config.enabled || !to) return false;
-      try {
-        await resend.send({
-          from: config.from, to: [to], subject: mail.subject, html: mail.html, text: mail.text,
-          ...(config.replyTo ? { reply_to: config.replyTo } : {})
-        }, idempotencyKey);
-        return true;
-      } catch (err) {
-        console.warn(`[notify] "${mail.subject}" to a customer failed:`, err.message);
-        return false;
-      }
+      return (await deliver(to, mail, idempotencyKey)) === 'sent';
     }
   };
 }

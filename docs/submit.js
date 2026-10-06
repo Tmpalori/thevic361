@@ -96,13 +96,15 @@
   }
 
   // Build the time options used by the start/end time selects. 30-minute
-  // increments covering normal event hours (7:00 AM – 1:30 AM next day) keep
-  // the list practical without forcing TBD on people who actually know.
+  // increments covering event hours (5:00 AM – 1:30 AM next day) keep the
+  // list practical without forcing TBD on people who actually know. From
+  // 5 AM, not 7: fun runs and sunrise services start at 6 or 6:30, and with
+  // 7:00 AM the earliest choice they were published at the wrong time.
   function buildTimeOptions() {
     const out = [];
-    // 7am through midnight, then 12:30am, 1:00am, 1:30am as late-night slots.
+    // 5am through midnight, then 12:30am, 1:00am, 1:30am as late-night slots.
     const slots = [];
-    for (let h = 7; h <= 23; h++) slots.push(h * 60, h * 60 + 30);
+    for (let h = 5; h <= 23; h++) slots.push(h * 60, h * 60 + 30);
     slots.push(24 * 60, 24 * 60 + 30, 25 * 60, 25 * 60 + 30); // 12:00am, 12:30am, 1:00am, 1:30am
     for (const m of slots) {
       const hh = Math.floor(m / 60) % 24;

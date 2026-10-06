@@ -53,6 +53,11 @@ describe('submit.html structure', () => {
     expect(Array.from(opts).map(o => o.value).sort()).toEqual(['found_online', 'organizer', 'other']);
   });
 
+  it('offers early-morning start times (a 6:30 AM fun run is not forced to 7:00 AM)', () => {
+    const starts = Array.from(document.querySelectorAll('#f-time option')).map(o => o.value);
+    expect(starts).toEqual(expect.arrayContaining(['5:00 AM', '6:00 AM', '6:30 AM', '7:00 AM', '1:30 AM']));
+  });
+
   it('exposes category checkboxes from the allow-list', () => {
     const cats = Array.from(document.querySelectorAll('input[name="icons"]')).map(c => c.value);
     expect(cats).toEqual(expect.arrayContaining(['music', 'food', 'family', 'community']));
