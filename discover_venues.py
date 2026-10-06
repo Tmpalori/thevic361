@@ -45,9 +45,18 @@ import requests
 # and return [], so each interesting failure prints a GitHub Actions
 # ::warning:: line, which shows as an annotation on the run page.
 
+# Same redaction as collect_events.py: requests puts the URL in connect-error
+# text. Apify gets its token in a header now; this guards anything URL-keyed.
+_URL_SECRET_RE = re.compile(r"([?&](?:token|key|api_key)=)[^&\s)'\"]+", re.I)
+
+
+def _redact_secrets(text: str) -> str:
+    return _URL_SECRET_RE.sub(r"\1***", text)
+
+
 def _annotate(kind: str, message: str, tags: dict) -> None:
     detail = " ".join(f"{k}={v}" for k, v in tags.items())
-    text = f"{message} ({detail})" if detail else str(message)
+    text = _redact_secrets(f"{message} ({detail})" if detail else str(message))
     print(f"::{kind}::{text}".replace("\r", " ").replace("\n", " "), flush=True)
 
 
@@ -361,7 +370,8 @@ def _build_actor_input(search_terms: list[str]) -> dict:
     }
 
 
-def _run_actor_once(post, url: str, payload: dict, *, timeout: int):
+def _run_actor_once(post, url: str, payload: dict, *, timeout: int,
+                    headers: dict | None = None):
     """Single Apify run-sync call. Returns (items, error_kind, status_or_msg).
 
     error_kind is one of:
@@ -376,7 +386,7 @@ def _run_actor_once(post, url: str, payload: dict, *, timeout: int):
             url,
             json=payload,
             timeout=timeout,
-            headers={"Content-Type": "application/json"},
+            headers=headers or {"Content-Type": "application/json"},
         )
     except Exception as e:
         return [], "exc", f"{type(e).__name__}: {e}"
@@ -403,6 +413,7 @@ def _run_actor_with_retries(
     payload: dict,
     *,
     label: str,
+    headers: dict | None = None,
     timeout: int = APIFY_PER_CALL_TIMEOUT,
     max_retries: int = APIFY_MAX_RETRIES,
     sleep=None,
@@ -418,7 +429,7 @@ def _run_actor_with_retries(
     attempts = max_retries + 1
     last_kind = None
     for attempt in range(attempts):
-        items, kind, info = _run_actor_once(post, url, payload, timeout=timeout)
+        items, kind, info = _run_actor_once(post, url, payload, timeout=timeout, headers=headers)
         if kind is None:
             return items
 
@@ -505,10 +516,13 @@ def run_apify_discovery(
     post = http_post or requests.post
     if monotonic is None:
         monotonic = time.monotonic
+    # The token goes in a header, not the URL: a connect error's text holds
+    # the URL, and that text reaches the warnings.
     url = (
         f"https://api.apify.com/v2/acts/{APIFY_GMAPS_ACTOR}"
-        f"/run-sync-get-dataset-items?token={token}&timeout={APIFY_ACTOR_TIMEOUT}"
+        f"/run-sync-get-dataset-items?timeout={APIFY_ACTOR_TIMEOUT}"
     )
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
     all_items: list[dict] = []
     successes = 0
     failures = 0
@@ -538,6 +552,7 @@ def run_apify_discovery(
         items = _run_actor_with_retries(
             post, url, payload,
             label=term,
+            headers=headers,
             timeout=APIFY_PER_CALL_TIMEOUT,
             max_retries=APIFY_MAX_RETRIES,
             sleep=sleep,
