@@ -78,14 +78,14 @@ async function auth() {
 }
 
 describe('database down', () => {
-  it('health answers 503, the fallback feed alerts, and async routes answer 500 instead of hanging', async () => {
+  it('plain health stays up (deploys never fail on a db blip), the fallback feed alerts, and async routes answer 500 instead of hanging', async () => {
     const db = await start();
     expect((await fetch(base + '/api/health')).status).toBe(200);
     const h = await auth();
     db.down = true;
-    const health = await fetch(base + '/api/health');
-    expect(health.status).toBe(503);
-    expect((await health.json()).error).toBe('db-unreachable');
+    // Process-only by design; /api/health?deep=1 (Postgres) is what the
+    // uptime check uses to see the database (tests/health.test.js).
+    expect((await fetch(base + '/api/health')).status).toBe(200);
 
     const feed = await (await fetch(base + '/events.json')).json();
     expect(feed.events[0].name).toBe('Old'); // still serves something

@@ -23,6 +23,7 @@ Times are Central daylight time (an hour earlier in winter). GitHub often starts
 | Sun + Wed 3:23 PM | `weekly-collect.yml` runs the event collector and writes `candidates.json`. A few minutes later the site redeploys and **auto-publishes** the new events; Slack says "Collect done". | Automated |
 | Right after each collect | The event check looks over the live list, hides sure-thing junk and posts to Slack what it hid and anything to look at | Automated |
 | Every 15 min | AI review of free submissions: good ones go live (the submitter gets a "you're live" email), doubtful ones wait in the Submissions tab | Automated |
+| Sun ~9 PM | `weekly-digest.yml` emails a summary of what was collected (for awareness; the events are already live) | Automated |
 | Mon 7:43 AM | Newsletter sends automatically (or press Send in admin) | Automated |
 | When Slack asks | Open [www.thevic361.com/admin.html](https://www.thevic361.com/admin.html): Home tab for what needs you, Events tab to edit or remove an event, then **Save & Publish** | **You** |
 

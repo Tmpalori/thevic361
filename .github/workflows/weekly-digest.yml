@@ -1,0 +1,52 @@
+# ─── The Vic 361 — Weekly Event Digest Email ────────────────────────────────
+# Every Sunday at 9 PM Central (Monday 02:00 UTC during CDT), email Tristen an
+# informational summary of what was collected earlier in the evening. He then
+# uses the admin review workflow (/admin.html, landing in a follow-up PR) to
+# pick events; the newsletter goes out Monday morning.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Weekly Digest
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'    # 9:00 PM Central, Sunday (Monday 02:00 UTC during CDT)
+  workflow_dispatch:        # Manual trigger from GitHub UI
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Send digest email
+        env:
+          SMTP_EMAIL:    ${{ secrets.SMTP_EMAIL }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_HOST:     smtp.gmail.com
+          SMTP_PORT:     '587'
+        run: |
+          python send_digest.py \
+            --candidates ./candidates.json \
+            --to tristen.m.palori@gmail.com \
+            --all-days
+
+      - name: Tell Slack it failed
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
+        run: python3 scripts/slack_notify.py "🚨 Weekly digest email failed" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

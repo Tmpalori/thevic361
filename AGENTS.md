@@ -87,6 +87,7 @@ thevic361/
 ├── README.md, RAILWAY.md, SETUP_GUIDE.md, TRISTEN_WEEKLY_SOP.md, ADMIN_ROADMAP.md
 │
 ├── collect_events.py             # 3.3k LOC monolith — orchestrator + every scraper
+├── send_digest.py                # weekly candidate-summary email (weekly-digest.yml)
 ├── discover_venues.py            # OPT-IN ONLY — Google Maps venue discovery, NOT in CI
 ├── approve_events.py             # LEGACY — decommissioned reply-to-email publisher
 │
@@ -146,6 +147,7 @@ thevic361/
 │   ├── newsletter.yml            # Mon 12:43 — fallback send (the site sends at 7:43 AM CT itself)
 │   ├── social-kit.yml            # daily 13:47 + on generator changes — build kit, commit to main, autopost
 │   ├── meta-ads.yml              # daily 13:37 + manual — Meta ads report / control
+│   ├── weekly-digest.yml         # Mon 02:00 — digest email to Tristen
 │   ├── uptime.yml                # every 5 min — site check (Slack + ntfy push); daily stale-feed check
 │   ├── tests.yml                 # every PR + push to main — npm test + pytest
 │   ├── apify-probe.yml, gemini-probe.yml   # claude/** pushes touching the probes
@@ -182,7 +184,7 @@ npm run dev        # alias to start (no nodemon configured)
 npm test           # vitest run — runs every tests/*.test.js
 ```
 
-### Python (collector + scripts)
+### Python (collector + digest)
 
 ```bash
 pip install -r requirements.txt
@@ -269,10 +271,10 @@ The public site publishes no email address: `/contact` (`server/contact.js`) sen
 
 GitHub cron runs hours late on this repo, so the always-on server is the clock (`server/scheduler.js`, production only, `SCHEDULER=0` turns it off). In Central time, DST-correct: Monday 6:43 AM dispatches `event-check.yml`, Monday 7:43 AM sends the newsletter in-process (`scheduledSend`, retried after 5, 15 and 30 minutes, then an alert), daily 8:37 AM `meta-ads.yml` and 8:47 AM `social-kit.yml` (both with the `scheduled=true` input, so they behave like the cron), daily 9:00 AM `sponsors.sendSponsorReports(now)` when it exists, every 15 minutes `submission-review.yml`, and hourly an in-process site check (database, at least 10 upcoming events, a collect within 8 days; alerts once a day while it lasts, a note when it clears). Each daily/weekly job is claimed once per slot in `scheduler_runs` (one SQL statement, so a restart or overlapping deploy containers can't double-fire); a job missed while the server was down runs later the same day. Dispatch needs `GITHUB_TOKEN` with Actions: write; without it the dispatch jobs are left to GitHub's cron, and a refused token (401/403) alerts once a week and shows on the setup checklist. The GitHub crons stay as fallbacks: social kit, event check and ads report first ask `GET /api/scheduler/ran?job=…` and skip when the site already ran that slot; the newsletter and submission review are idempotent. `newsletter.yml` retries 4 times. The one newsletter switch is the Railway variable `NEWSLETTER_AUTOSEND` (on unless `0`); the cron endpoint honors it for runs marked `X-Cron-Scheduled: 1`. Tests: `tests/scheduler.test.js`, `tests/ops.test.js`.
 
-`/api/health?deep=1` also asks the database and answers 503 when it's down or slow; plain `/api/health` stays process-only so a database blip can't fail a deploy (when the database is down the site serves the old bundled `docs/events.json`, which also alerts). `uptime.yml` (`scripts/uptime_check.py`) checks every 5 minutes; its daily stale check has its own cron (`17 15 * * *`). The server's own hourly check (`server/scheduler.js`) also alerts when fewer than 10 upcoming events are live or the last collect is over 8 days old (`collected_at`). The weekly digest email (`weekly-digest.yml`, `send_digest.py`) is retired: the collect Slack message and the event check cover it, and the `SMTP_EMAIL` / `SMTP_PASSWORD` secrets can be deleted.
+`/api/health?deep=1` also asks the database and answers 503 when it's down or slow; plain `/api/health` stays process-only so a database blip can't fail a deploy (when the database is down the site serves the old bundled `docs/events.json`, which also alerts). `uptime.yml` (`scripts/uptime_check.py`) checks every 5 minutes; its daily stale check has its own cron (`17 15 * * *`). The server's own hourly check (`server/scheduler.js`) also alerts when fewer than 10 upcoming events are live or the last collect is over 8 days old (`collected_at`).
 
 
-`server/slack.js` posts to a Slack incoming webhook (`SLACK_WEBHOOK_URL`, same setup as austincommercialsites.com). No-op when unset. Server pings: new event submission, sponsor paid, venue partner cancelled or payment failing, newsletter sent (or partly failed / skipped because nothing was published), and alerts for 500s, Stripe checkout or webhook failures, crashes and boot failures. Alerts are de-duplicated per key for 15 minutes. Three channels, each optional and falling back to `SLACK_WEBHOOK_URL`: `SLACK_SALES_WEBHOOK_URL` (sponsor orders, refunds, disputes, failed payments), `SLACK_ACTIVITY_WEBHOOK_URL` (submissions, contact messages, subscribers, auto-publish, newsletter sent) and `SLACK_ALERTS_WEBHOOK_URL` (every `alert()`). Pass `channel` to `slack.notify` for new pings. GitHub Actions use `scripts/slack_notify.py`; failure steps read `SLACK_ALERTS_WEBHOOK_URL`, the collect-done and outreach steps read `SLACK_ACTIVITY_WEBHOOK_URL`, both falling back to `SLACK_WEBHOOK_URL`: weekly collect done (candidate count) or failed, social kit / newsletter / ads report failures, tests failing on main, and `uptime.yml` (site check every 5 minutes: alerts once when down, hourly while down, once when back; also a phone push when the `NTFY_TOPIC` secret is set; daily stale-feed check). Auto-publish alerts when a run finds far fewer events than the last (nothing retired), when nothing upcoming is published, and when it can't run on boot.
+`server/slack.js` posts to a Slack incoming webhook (`SLACK_WEBHOOK_URL`, same setup as austincommercialsites.com). No-op when unset. Server pings: new event submission, sponsor paid, venue partner cancelled or payment failing, newsletter sent (or partly failed / skipped because nothing was published), and alerts for 500s, Stripe checkout or webhook failures, crashes and boot failures. Alerts are de-duplicated per key for 15 minutes. Three channels, each optional and falling back to `SLACK_WEBHOOK_URL`: `SLACK_SALES_WEBHOOK_URL` (sponsor orders, refunds, disputes, failed payments), `SLACK_ACTIVITY_WEBHOOK_URL` (submissions, contact messages, subscribers, auto-publish, newsletter sent) and `SLACK_ALERTS_WEBHOOK_URL` (every `alert()`). Pass `channel` to `slack.notify` for new pings. GitHub Actions use `scripts/slack_notify.py`; failure steps read `SLACK_ALERTS_WEBHOOK_URL`, the collect-done and outreach steps read `SLACK_ACTIVITY_WEBHOOK_URL`, both falling back to `SLACK_WEBHOOK_URL`: weekly collect done (candidate count) or failed, social kit / newsletter / digest / ads report failures, tests failing on main, and `uptime.yml` (site check every 5 minutes: alerts once when down, hourly while down, once when back; also a phone push when the `NTFY_TOPIC` secret is set; daily stale-feed check). Auto-publish alerts when a run finds far fewer events than the last (nothing retired), when nothing upcoming is published, and when it can't run on boot.
 
 ## Conventions
 
@@ -367,6 +369,7 @@ Set in Settings → Secrets and variables → Actions. The collector secrets abo
 
 | Name | Kind | Used by |
 |---|---|---|
+| `SMTP_EMAIL`, `SMTP_PASSWORD` | secret | `weekly-digest.yml` (`send_digest.py`; Gmail app password). Missing: the digest prints instead of sending |
 | `META_PAGE_ID`, `META_PAGE_TOKEN` | secret | `social-kit.yml` posting to the Facebook Page (`scripts/social_post.py`); `META_PAGE_TOKEN` is also the `META_ADS_TOKEN` fallback |
 | `IG_USER_ID` | secret | `social-kit.yml` posting to Instagram |
 | `PREVIEWS_DEPLOY_KEY` | secret | `pr-preview.yml`, `staging-deploy.yml` (push to the previews repo) |
