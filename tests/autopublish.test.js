@@ -38,7 +38,7 @@ async function start({ candidates, published = null, extra = {}, storeKind = 'fi
 
 afterEach(async () => {
   if (server) await new Promise(r => server.close(r));
-  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   server = null; tmpDir = null;
 });
 
@@ -332,7 +332,7 @@ describe('admin setup checklist', () => {
       if (saved === undefined) delete process.env.NEWSLETTER_CRON_SECRET; else process.env.NEWSLETTER_CRON_SECRET = saved;
     }
     await new Promise(r => server.close(r));
-    await fs.rm(tmpDir, { recursive: true, force: true });
+    await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 
     await start({ candidates: CANDIDATES, extra: { newsletterCronSecret: 'n', eventCheckSecret: 'e', submissionReviewSecret: 's' } });
     expect((await checks()).separate_secrets).toBe(true);
@@ -361,7 +361,7 @@ describe('client IP behind Railway', () => {
     for (let i = 0; i < 12; i++) codes.push((await tryLogin(`10.0.0.${i}`)).status);
     expect(codes).toContain(429);
     await new Promise(r => srv.close(r));
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   });
 });
 

@@ -23,7 +23,7 @@ async function freshStore() {
 }
 
 afterEach(async () => {
-  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   tmpDir = null;
 });
 
