@@ -1296,7 +1296,11 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 .event-share {
   position: relative;
   flex-shrink: 0;
-  align-self: center;
+  /* Top corner, level with the time and title rather than centered on
+     the whole entry (which drifts down beside long descriptions). */
+  align-self: flex-start;
+  margin-top: -4px;
+  margin-right: -4px;
   display: inline-grid;
   place-items: center;
   width: 40px;
