@@ -176,3 +176,12 @@ def test_posts_have_at_most_three_slides():
     assert doc.count("+ 7 more") == 7                      # every day: 2 shown, the rest teased
     assert "See all 63 events" in doc and "Subscribe free →" in doc and "thevic361.com/subscribe" in doc
 
+
+
+def test_captions_with_one_event_use_the_singular():
+    d = date(2026, 10, 9)
+    caps = sk.captions({d: [{"name": "Live Music", "date": "2026-10-09", "time": "7 PM", "venue": "Bar"}]}, d, d, "today")
+    assert caps["facebook"].startswith("Today in Victoria, TX (Oct 9): 1 event\n")
+    assert "👉 Details: https://www.thevic361.com/today" in caps["facebook"]
+    assert "👉 Details: link in bio" in caps["instagram"]
+    assert "1 events" not in caps["facebook"] + caps["instagram"] and "See all 1" not in caps["facebook"]
