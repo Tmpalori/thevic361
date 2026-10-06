@@ -16,7 +16,8 @@
  */
 
 import crypto from 'node:crypto';
-import { localDateStr, addDays } from './seo.js';
+import { localDateStr, addDays, HUB_PAGES } from './seo.js';
+import { SEASONS } from './guides.js';
 
 // Known crawlers, checked in order. Anything else bot-like is "Other bot".
 // The third field sorts AI bots by what the visit means:
@@ -153,6 +154,13 @@ export function crawlerMiddleware(store, now = () => new Date()) {
   };
 }
 
+// An ad's id is the sponsor order id (data-ad on the sponsor block and on
+// paid Vic's Picks), the same charset LOGO_PATH in server/sponsors.js
+// allows. Anything else is dropped, so a forged beacon can't stuff junk
+// into a sponsor's report.
+export const AD_ID = /^[A-Za-z0-9-]{8,64}$/;
+const adId = v => (typeof v === 'string' && AD_ID.test(v) ? v : null);
+
 // Parse and validate a beacon body into a traffic row, or null to ignore.
 export function beaconRow(body, { ip, ua, secret, siteHost, now }) {
   if (!body || typeof body !== 'object') return null;
@@ -166,9 +174,40 @@ export function beaconRow(body, { ip, ua, secret, siteHost, now }) {
     return { ...base, kind: 'view', ref_source: source, ref_host: host };
   }
   if (body.kind === 'click' && CLICK_TYPES.has(body.type)) {
-    return { ...base, kind: 'click', click_type: body.type, click_url: String(body.url || '').slice(0, 300) };
+    // A click inside an ad (a Vic's Pick in a list, the sponsor block)
+    // carries its id, so the sponsor's report can count it.
+    const ad = adId(body.ad);
+    return { ...base, kind: 'click', click_type: body.type, click_url: String(body.url || '').slice(0, 300), ...(ad ? { ad } : {}) };
+  }
+  // An ad seen: at least half of it on screen for a second (docs/track.js),
+  // once per ad per page load.
+  if (body.kind === 'impression') {
+    const ad = adId(body.ad);
+    return ad ? { ...base, kind: 'impression', ad } : null;
   }
   return null;
+}
+
+// Where an ad was seen, in groups a sponsor recognizes. Day lists are the
+// date-bound hub pages (/today, /this-weekend, /next-week...); the
+// "upcoming" hub pages are topic guides, grouped with venue and seasonal
+// guides.
+const DAY_LISTS = new Set(HUB_PAGES.filter(p => p.range !== 'upcoming').map(p => p.path));
+const GUIDES = new Set([...HUB_PAGES.filter(p => p.range === 'upcoming').map(p => p.path), ...SEASONS.map(s => s.path), '/venues']);
+export const PAGE_TYPES = ['Homepage', 'Day lists', 'Event pages', 'Guides & venues', 'Other'];
+export function pageType(path) {
+  const p = cleanPath(path).replace(/\/+$/, '') || '/';
+  if (p === '/' || p === '/index.html') return 'Homepage';
+  if (DAY_LISTS.has(p)) return 'Day lists';
+  if (p.startsWith('/events/')) return 'Event pages';
+  if (GUIDES.has(p) || p.startsWith('/venues/')) return 'Guides & venues';
+  return 'Other';
+}
+
+// Rows may come pre-grouped (see `weight` below); exported for the sponsor
+// reports, which count the same way.
+export function rowCount(rows) {
+  return total(rows);
 }
 
 // Rows may come pre-grouped from the store (PgStore.listTraffic), with `n`

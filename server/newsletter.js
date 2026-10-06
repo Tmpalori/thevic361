@@ -25,7 +25,8 @@
  *   - Admin: counts, preview, test send, send now, CSV/paste import.
  *   - Automation: POST /api/newsletter/cron with X-Cron-Secret, called by
  *     .github/workflows/newsletter.yml on Monday mornings. The same run
- *     sends last week's sponsor click reports (onCron, server/sponsors.js).
+ *     sends last week's sponsor reports and any Vic's Pick reports due
+ *     (onCron, server/sponsors.js).
  */
 
 import crypto from 'node:crypto';
@@ -300,8 +301,12 @@ ${sponsorBlock}${days}
     `Full list: ${siteUrl}/`, '', `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
   ].join('\n');
 
+  // The paid Vic's Picks this issue actually stars (shown, not cut by
+  // PER_DAY), recorded with the send for their reports.
+  const picks = [...new Set(byDay.flatMap(({ list }) => list.slice(0, PER_DAY))
+    .filter(e => e.featured && !e.editor_pick && e.sponsor_order).map(e => e.sponsor_order))];
   return {
-    subject, total,
+    subject, total, picks,
     html: utmTag(emailShell({ title: 'This week in Victoria', preheader, bodyHtml, siteUrl, footerHtml: footer({ siteUrl, unsubscribeUrl, address }) }), siteUrl, campaign),
     text: utmTag(text, siteUrl, campaign, '&')
   };
@@ -495,7 +500,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     // failed: if the process dies mid-send, the week reads "partly sent"
     // and Retry (or the next cron) goes only to the people still waiting.
     const progress = () => store.recordNewsletterSend({
-      week_key: key, subject: probe.subject, recipients: base + sent,
+      week_key: key, subject: probe.subject, recipients: base + sent, picks: probe.picks,
       failed: failedEmails.length + waiting.length, failed_emails: [...failedEmails, ...waiting]
     });
     for (let i = 0; i < subs.length; i += BATCH_SIZE) {
@@ -531,7 +536,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       waiting = waiting.slice(chunk.length);
     }
     const record = {
-      week_key: key, subject: probe.subject,
+      week_key: key, subject: probe.subject, picks: probe.picks,
       recipients: base + sent,
       failed: failedEmails.length, failed_emails: failedEmails
     };

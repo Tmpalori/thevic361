@@ -1015,7 +1015,7 @@ describe('sponsor promises (review fixes)', () => {
     await store.recordTraffic({ day: '2026-09-28', kind: 'click', click_type: 'sponsor_click', click_url: 'https://acme.example', path: '/go/s/2026-09-28', visitor: 'v2' });
     const cron = async () => (await post('/api/newsletter/cron', {}, { 'Content-Type': 'application/json', 'X-Cron-Secret': 'cs' })).json();
     const first = await cron();
-    expect(first.sponsor_reports).toEqual({ sent: 1, skipped: 0, failed: 0 });
+    expect(first.sponsor_reports).toMatchObject({ sent: 1, skipped: 0, failed: 0 });
     const reports = mail.sent.filter(m => m.key && m.key.startsWith('vic361-sponsor-report-'));
     expect(reports).toHaveLength(1);
     expect(reports[0].to).toEqual(['acme@example.com']);
@@ -1028,7 +1028,7 @@ describe('sponsor promises (review fixes)', () => {
     expect(saved.report).toMatchObject({ site_people: 1, email_people: 1 });
     expect(pings.some(p => p.title.includes('Click report sent'))).toBe(true);
     // A second run (or a daily scheduler) sends nothing more.
-    expect((await cron()).sponsor_reports).toEqual({ sent: 0, skipped: 0, failed: 0 });
+    expect((await cron()).sponsor_reports).toMatchObject({ sent: 0, skipped: 0, failed: 0 });
     expect(mail.sent.filter(m => m.key && m.key.startsWith('vic361-sponsor-report-'))).toHaveLength(1);
   });
 

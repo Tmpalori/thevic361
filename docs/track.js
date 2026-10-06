@@ -5,6 +5,8 @@
  * pay for clicks, so we record the ones they care about: event detail
  * clicks, sponsor clicks, subscribe clicks. One delegated listener covers
  * both the server-rendered pages and the homepage list app.js re-renders.
+ * Paid placements ([data-ad]) also report when they're seen, for the
+ * sponsor reports (server/sponsors.js).
  */
 (function () {
   'use strict';
@@ -40,13 +42,19 @@
     } catch (e) { return false; }
   }
 
-  function track(type, params) {
+  // `el`: what was tapped. A tap inside a paid placement ([data-ad]: the
+  // sponsor block, a paid Vic's Pick) carries the ad's id, so the sponsor's
+  // report can count it. Only our beacon gets it, not Google Analytics.
+  function track(type, params, el) {
     if (typeof window.gtag === 'function') window.gtag('event', type, params || {});
     if (type === 'subscribe_click' && params && SIGNUP_DONE[params.link_url] && typeof window.fbq === 'function') {
       window.fbq('track', 'Lead');
     }
     sendView();  // a click is engagement; the view goes first
-    beacon({ kind: 'click', type: type, url: (params && params.link_url) || '' });
+    var data = { kind: 'click', type: type, url: (params && params.link_url) || '' };
+    var adEl = el && el.closest ? el.closest('[data-ad]') : null;
+    if (adEl) data.ad = adEl.getAttribute('data-ad');
+    beacon(data);
   }
   window.vic361Track = track;  // app.js filter chips report through this
 
@@ -98,20 +106,82 @@
     return ad ? base + ':ad' : base;
   };
 
+  // Ad views. A paid placement ([data-ad]) counts as seen once at least
+  // half of it has been on screen for a full second, with the tab in front:
+  // one impression per ad per page load, however often it scrolls by. Lists
+  // re-render (app.js), so new [data-ad] elements are picked up as they
+  // appear. Browsers without IntersectionObserver just don't count views.
+  var AD_MS = 1000;
+  function watchAds() {
+    if (skip || typeof window.IntersectionObserver !== 'function') return;
+    var seen = {};      // ad id -> impression sent
+    var showing = [];   // elements at least half on screen right now
+    var timers = new Map();  // element -> its one-second timer
+    function arm(el) {
+      clearTimeout(timers.get(el));
+      timers.set(el, setTimeout(function () {
+        var id = el.getAttribute('data-ad');
+        if (document.visibilityState === 'hidden' || el.isConnected === false || !id || seen[id]) return;
+        seen[id] = true;
+        beacon({ kind: 'impression', ad: id });
+      }, AD_MS));
+    }
+    function start(el) {
+      if (showing.indexOf(el) !== -1) return;
+      showing.push(el);
+      arm(el);
+    }
+    function stop(el) {
+      clearTimeout(timers.get(el));
+      timers.delete(el);
+      var i = showing.indexOf(el);
+      if (i !== -1) showing.splice(i, 1);
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting && en.intersectionRatio >= 0.5) start(en.target);
+        else stop(en.target);
+      });
+    }, { threshold: [0, 0.5] });
+    var watched = new WeakSet();  // Map/WeakSet: every browser with IntersectionObserver has them
+    function scan() {
+      var els = document.querySelectorAll('[data-ad]');
+      for (var i = 0; i < els.length; i++) {
+        if (watched.has(els[i])) continue;
+        watched.add(els[i]);
+        io.observe(els[i]);
+      }
+    }
+    // A background tab doesn't count: the second starts again when the
+    // page is back in front.
+    document.addEventListener('visibilitychange', function () {
+      showing.forEach(function (el) {
+        if (document.visibilityState === 'hidden') clearTimeout(timers.get(el));
+        else arm(el);
+      });
+    });
+    scan();
+    if (typeof window.MutationObserver === 'function' && document.body) {
+      new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchAds);
+  else watchAds();
+
   document.addEventListener('click', function (e) {
     var a = e.target && e.target.closest ? e.target.closest('a') : null;
     if (!a) return;
     var href = a.getAttribute('href') || '';
     if (a.classList.contains('sponsor-cta')) {
-      track('sponsor_click', { link_url: href });
+      track('sponsor_click', { link_url: href }, a);
     } else if (a.closest('.event-entry, .page-actions')) {
-      track('event_click', { link_url: href, link_text: a.textContent.trim().slice(0, 100) });
+      track('event_click', { link_url: href, link_text: a.textContent.trim().slice(0, 100) }, a);
     } else if (href.indexOf('#subscribe') !== -1 || isOurSubscribeLink(a)) {
       track('subscribe_click');
     } else if (href.indexOf('/advertise') === 0) {
       track('advertise_click', { link_url: href });
     } else if (a.getAttribute('data-track')) {
-      track(a.getAttribute('data-track'), { link_url: href });
+      track(a.getAttribute('data-track'), { link_url: href }, a);
     }
   });
 
@@ -126,7 +196,7 @@
     try { url = new URL(url, location.href).href; } catch (err) { /* old browser: keep as is */ }
     var text = btn.getAttribute('data-share-text') || '';
     var fromList = btn.classList.contains('event-share');
-    track(fromList ? 'share_from_list' : 'share_native', { link_url: url });
+    track(fromList ? 'share_from_list' : 'share_native', { link_url: url }, btn);
     if (navigator.share) {
       navigator.share({ title: text, text: text, url: url }).catch(function () {});  // user closed the sheet
       return;

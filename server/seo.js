@@ -609,9 +609,19 @@ function shareButton(ev) {
   return `<button type="button" class="event-share" data-share-url="${escHtml(ev.page)}" data-share-text="${escHtml(ev.name)}" aria-label="Share ${escHtml(ev.name)}" title="Share">${SHARE_ICON}</button>`;
 }
 
+// data-ad marks a paid placement (the weekly sponsor block, a paid Vic's
+// Pick) with its order id: docs/track.js counts it as seen and tags clicks
+// in it, for the sponsor's report. Editor's picks are unpaid, so untagged.
+// docs/app.js adAttr renders the same.
+const AD_ID = /^[A-Za-z0-9-]{8,64}$/;
+export function adAttr(id) {
+  return AD_ID.test(id || '') ? ` data-ad="${escHtml(id)}"` : '';
+}
+
 export function renderEventItem(ev) {
   const place = placeText(ev);
-  return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}" data-icons="${escHtml((ev.icons || []).join(' ') + (ev.free === true ? ' free' : ''))}">` +
+  const ad = ev.featured && !ev.editor_pick ? adAttr(ev.sponsor_order) : '';
+  return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}"${ad} data-icons="${escHtml((ev.icons || []).join(' ') + (ev.free === true ? ' free' : ''))}">` +
     `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
     '<div class="event-details">' +
       (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
@@ -823,7 +833,7 @@ export function sponsorHtml(sponsor) {
       : `<span class="btn btn--outline" style="cursor:default; opacity:0.6">${escHtml(sponsor.cta)}</span>`)
     : '';
   const logo = /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(sponsor.logo || '') ? sponsor.logo : '';
-  return '<section class="sponsor-section"><div class="sponsor-block">' +
+  return `<section class="sponsor-section"><div class="sponsor-block"${adAttr(sponsor.order)}>` +
     '<div class="sponsor-label">This week\'s sponsor</div>' +
     (logo ? `<img class="sponsor-logo" src="${escHtml(logo)}" alt="${escHtml(sponsor.name)} logo" loading="lazy">` : '') +
     `<div class="sponsor-name">${escHtml(sponsor.name)}</div>` +
@@ -1000,7 +1010,7 @@ export const AD_PACKAGES = [
     points: [
       'Your name, message and button on every page of the site, all week',
       'The sponsor spot at the top of the Monday newsletter',
-      'A click report emailed to you the Monday after your week'
+      'A report the Monday after: how often your block was seen, where, and how many clicked'
     ]
   },
   {
@@ -1014,6 +1024,7 @@ export const AD_PACKAGES = [
     points: [
       'Guaranteed listing, pinned at the top of its day on the site',
       'Featured first in our social posts, and starred in the Monday newsletter when booked before its week’s issue',
+      'A report the day after: times seen, page views, clicks, calendar adds and shares',
       'Best for concerts, fundraisers, openings, and festivals'
     ]
   }

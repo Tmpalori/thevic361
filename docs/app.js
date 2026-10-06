@@ -128,7 +128,8 @@
       : '';
 
     var iconAttr = (ev.icons || []).join(' ') + (ev.free === true ? ' free' : '');
-    return '<li class="event-entry' + (ev.featured ? ' event-entry--featured' : '') + '" data-icons="' + escHtml(iconAttr) + '">' +
+    var ad = ev.featured && !ev.editor_pick ? adAttr(ev.sponsor_order) : '';
+    return '<li class="event-entry' + (ev.featured ? ' event-entry--featured' : '') + '"' + ad + ' data-icons="' + escHtml(iconAttr) + '">' +
       '<span class="event-icons" aria-hidden="true">' + iconHtml + '</span>' +
       '<div class="event-details">' +
         (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
@@ -280,6 +281,12 @@
     }).join('');
   }
 
+  // A paid placement's order id (the sponsor block, a paid Vic's Pick), for
+  // docs/track.js to count views and clicks. Same as adAttr in server/seo.js.
+  function adAttr(id) {
+    return /^[A-Za-z0-9-]{8,64}$/.test(id || '') ? ' data-ad="' + escHtml(id) + '"' : '';
+  }
+
   // ─── RENDER SPONSOR ───
   function renderSponsor(sponsor) {
     if (!sponsor) return '';
@@ -292,7 +299,7 @@
         ctaHtml = '<span class="btn btn--outline" style="cursor:default; opacity:0.6">' + escHtml(sponsor.cta) + '</span>';
       }
     }
-    return '<div class="sponsor-block">' +
+    return '<div class="sponsor-block"' + adAttr(sponsor.order) + '>' +
       '<div class="sponsor-label">This week\'s sponsor</div>' +
       (/^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(sponsor.logo || '')
         ? '<img class="sponsor-logo" src="' + escHtml(sponsor.logo) + '" alt="' + escHtml(sponsor.name) + ' logo" loading="lazy">' : '') +

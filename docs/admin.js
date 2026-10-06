@@ -1681,7 +1681,9 @@
             const live = o.status === 'paid' || o.status === 'active';
             const hasLogo = Boolean(o.sponsor && o.sponsor.logo);
             const editable = o.kind === 'weekly' && SPONSOR_EDITABLE.has(o.status);
-            const btn = (editable ? '<button type="button" class="btn btn--ghost" data-sponsor-action="edit" data-id="' + escapeHtml(o.id) + '">Edit</button>' : '') +
+            const reportable = (o.kind === 'weekly' || o.kind === 'featured') && (live || Boolean(o.paid_at));
+            const btn = (reportable ? '<button type="button" class="btn btn--ghost" data-sponsor-action="report" data-id="' + escapeHtml(o.id) + '">Report</button>' : '') +
+              (editable ? '<button type="button" class="btn btn--ghost" data-sponsor-action="edit" data-id="' + escapeHtml(o.id) + '">Edit</button>' : '') +
               (live ?'<button type="button" class="btn btn--ghost" data-sponsor-action="hide" data-id="' + escapeHtml(o.id) + '">Hide</button>'
               : o.status === 'hidden' ? '<button type="button" class="btn btn--ghost" data-sponsor-action="restore" data-id="' + escapeHtml(o.id) + '">Restore</button>' : '') +
               (hasLogo ? '<button type="button" class="btn btn--ghost" data-sponsor-action="remove-logo" data-id="' + escapeHtml(o.id) + '">Remove logo</button>' : '');
@@ -1760,6 +1762,48 @@
     } catch (err) {
       console.error(err);
       if (errEl) { errEl.hidden = false; errEl.textContent = err.message || String(err); }
+    }
+  }
+
+  // Report: the numbers the sponsor's email has (or will have), live from
+  // GET /api/admin/sponsors/:id/report, in a row under the order. A second
+  // tap closes it.
+  function sponsorReportRows(r) {
+    const s = r.stats || {};
+    const n = v => String(Number(v) || 0);
+    const rows = r.kind === 'weekly'
+      ? [['Week', s.week_start + ' to ' + s.week_end], ['Block seen', n(s.views) + ' times (' + n(s.view_people) + ' people)'],
+        ['Clicked on the site', n(s.site_people) + ' people (' + n(s.site_clicks) + ' clicks)'],
+        ['Clicked in emails', n(s.email_people) + ' people (' + n(s.email_clicks) + ' clicks)'],
+        ['Newsletter sent to', n(s.newsletter_recipients) + ' subscribers'], ['Site visitors that week', n(s.site_visitors)]]
+      : [['Counting', s.start + ' to ' + s.end], ['Shown in lists as a Vic’s Pick', n(s.shown) + ' times (' + n(s.shown_people) + ' people)'],
+        ['Event page views', n(s.page_views) + ' (' + n(s.page_people) + ' people)'],
+        ['Clicked their link', n(s.link_people) + ' people (' + n(s.link_clicks) + ' clicks)'],
+        ['Added to calendar', n(s.calendar_adds)], ['Shares', n(s.shares)],
+        ['Newsletter', s.newsletter_starred ? 'Starred, sent to ' + n(s.newsletter_recipients) + ' subscribers' : 'Not starred'],
+        ...(r.on_site === false ? [['On the site', 'Never matched a listed event']] : [])];
+    (s.where || []).forEach(w => rows.push(['Seen on ' + w.type, n(w.views)]));
+    rows.push(['Report email', r.report_sent ? 'Sent ' + String(r.report_sent).slice(0, 10) : 'Not sent yet']);
+    return rows;
+  }
+
+  async function openSponsorReport(id, button) {
+    const row = button && button.closest('tr');
+    if (!row) return;
+    const existing = row.nextElementSibling;
+    if (existing && existing.classList.contains('sponsor-report-row')) { existing.remove(); return; }
+    const tr = document.createElement('tr');
+    tr.className = 'sponsor-report-row';
+    tr.innerHTML = '<td colspan="7">Loading report…</td>';
+    row.after(tr);
+    try {
+      const { res, json } = await adminFetch('/api/admin/sponsors/' + encodeURIComponent(id) + '/report');
+      if (!res.ok || !json || !json.ok) throw new Error((json && (json.message || json.error)) || ('HTTP ' + res.status));
+      tr.innerHTML = '<td colspan="7"><table class="sponsor-report">' +
+        sponsorReportRows(json).map(([k, v]) => '<tr><th scope="row">' + escapeHtml(k) + '</th><td>' + escapeHtml(v) + '</td></tr>').join('') +
+        '</table><small>Some browsers block our counter, so real numbers can be a bit higher. Newsletter opens aren’t tracked.</small></td>';
+    } catch (err) {
+      tr.innerHTML = '<td colspan="7">' + escapeHtml('Report unavailable: ' + (err.message || String(err))) + '</td>';
     }
   }
 
@@ -2306,6 +2350,7 @@
       if (!b) return;
       const action = b.getAttribute('data-sponsor-action');
       if (action === 'edit') { openSponsorEdit(b.getAttribute('data-id'), b); return; }
+      if (action === 'report') { openSponsorReport(b.getAttribute('data-id'), b); return; }
       if (action === 'hide' && !confirm('Hide this placement from the site? (Refund it in Stripe separately.)')) return;
       if (action === 'remove-logo' && !confirm('Remove this sponsor’s logo? Their block stays up without it. This can’t be undone.')) return;
       sponsorAction(b.getAttribute('data-id'), action);

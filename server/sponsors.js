@@ -22,12 +22,15 @@
  * Every checkout form shows a live preview of the placement (the same
  * markup the site uses) before anyone is sent to pay.
  *
- * Weekly sponsors get a click report the Monday after their week
- * (sendSponsorReports): site clicks from the track beacon, email clicks
- * from the /go/s/<week> redirect the newsletter's sponsor button uses. It
- * runs from the Monday newsletter cron; a daily scheduler can call it too
- * (it's idempotent). The admin can edit a weekly order's wording, link,
- * logo and week (Sponsors tab).
+ * Weekly sponsors get a report the Monday after their week
+ * (sendSponsorReports): how often their block was seen (data-ad
+ * impressions from docs/track.js) and where, site clicks from the track
+ * beacon, email clicks from the /go/s/<week> redirect the newsletter's
+ * sponsor button uses. Vic's Picks get one the morning after their event
+ * (sendPickReports). Both run from the Monday newsletter cron and the
+ * 15-minute submission review cron (they're idempotent); the Sponsors
+ * tab's Report button shows the same numbers live. The admin can edit a
+ * weekly order's wording, link, logo and week (Sponsors tab).
  *
  * Placements are applied when the public payload is read (see
  * applyPlacements), never written into the published events, so Save &
@@ -52,8 +55,8 @@ import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
 import { normalizeEmail } from './newsletter.js';
 import { venueFor } from './guides.js';
-import { renderSponsorConfirmed, renderSponsorReport, renderSponsorTooLate, newsletterCovers, pickWhere } from './notify.js';
-import { botName, visitorHash } from './analytics.js';
+import { renderSponsorConfirmed, renderSponsorReport, renderPickReport, renderSponsorTooLate, newsletterCovers, pickWhere } from './notify.js';
+import { botName, visitorHash, pageType, PAGE_TYPES, rowCount } from './analytics.js';
 
 export { newsletterCovers, pickWhere };
 
@@ -77,6 +80,8 @@ const PREFILL_CONTACT_MS = 7 * 24 * 3600 * 1000;
 // Weekly sponsor click reports go out from the Monday after the week, and
 // a run that was missed catches up for this long.
 const REPORT_CATCHUP_DAYS = 14;
+// Vic's Pick reports go out from 9 AM (Victoria time) the day after the event.
+const PICK_REPORT_HOUR = 9;
 
 export function stripeConfig(env = process.env, overrides = {}) {
   const c = {
@@ -319,17 +324,22 @@ export function applyPlacements(payload, orders, { now, venues = [], pins = new 
   const featured = live.filter(o => o.kind === 'featured' && o.event);
   const partners = new Set(live.filter(o => o.kind === 'partner').map(o => o.venue_slug));
   const events = (payload.events || []).map(ev => {
+    // `sponsor_order` tags a paid pick with its order (data-ad in the
+    // markup), so its views and clicks land in the buyer's report. Checked
+    // before `featured`: an event the admin already starred is still theirs.
+    const order = featured.find(o => pickMatches(o, ev, pins));
+    if (order) return { ...ev, featured: true, sponsor_order: order.id };
     if (ev.featured) return ev;
-    let hit = featured.some(o => pickMatches(o, ev, pins));
-    if (!hit && partners.size) {
+    if (partners.size) {
       const v = venueFor(ev, venues);
-      hit = Boolean(v && partners.has(v.slug));
+      if (v && partners.has(v.slug)) return { ...ev, featured: true };
     }
-    return hit ? { ...ev, featured: true } : ev;
+    return ev;
   });
   // `week` lets the newsletter route the sponsor's button through
-  // /go/s/<week>, which counts email clicks for the sponsor's report.
-  return { ...payload, events, sponsor: weekly ? { ...weekly.sponsor, week: weekly.week_start } : (payload.sponsor || null) };
+  // /go/s/<week>, which counts email clicks for the sponsor's report;
+  // `order` tags the block (data-ad) for its view count.
+  return { ...payload, events, sponsor: weekly ? { ...weekly.sponsor, week: weekly.week_start, order: weekly.id } : (payload.sponsor || null) };
 }
 
 // ─── Slow payments ───────────────────────────────────────────────────────
@@ -377,20 +387,70 @@ function sameLink(a, b) {
   return Boolean(a) && Boolean(b) && norm(a) === norm(b);
 }
 
+// People: one per visitor per day (rows without a hash count apart).
+function peopleIn(list) {
+  return new Set(list.map(r => `${r.day}|${r.visitor || Math.random()}`)).size;
+}
+
+// Ad views by page type (server/analytics.js pageType), biggest first,
+// leaving out types it never ran on.
+function whereItRan(impressions) {
+  return PAGE_TYPES.map(type => ({ type, views: rowCount(impressions.filter(r => pageType(r.path) === type)) }))
+    .filter(x => x.views > 0).sort((a, b) => b.views - a.views);
+}
+
+// Counts are weighted by `n` (PgStore.listTraffic groups rows; rowCount).
 export function sponsorStats(order, rows, { recipients = 0 } = {}) {
   const start = order.week_start;
   const end = addDays(start, 6);
   const inWeek = (rows || []).filter(r => r.day >= start && r.day <= end);
-  const people = list => new Set(list.map(r => `${r.day}|${r.visitor || Math.random()}`)).size;
   const clicks = inWeek.filter(r => r.kind === 'click' && r.click_type === 'sponsor_click');
   const email = clicks.filter(r => r.path === `/go/s/${start}`);
-  const site = clicks.filter(r => !String(r.path || '').startsWith('/go/') && sameLink(r.click_url, order.sponsor && order.sponsor.url));
+  const site = clicks.filter(r => !String(r.path || '').startsWith('/go/') &&
+    (r.ad === order.id || sameLink(r.click_url, order.sponsor && order.sponsor.url)));
+  // Seen: the block was at least half on screen for a second (docs/track.js).
+  const seen = inWeek.filter(r => r.kind === 'impression' && r.ad === order.id);
   return {
     week_start: start, week_end: end,
-    site_clicks: site.length, site_people: people(site),
-    email_clicks: email.length, email_people: people(email),
-    site_visitors: people(inWeek.filter(r => r.kind === 'view')),
+    views: rowCount(seen), view_people: peopleIn(seen), where: whereItRan(seen),
+    site_clicks: rowCount(site), site_people: peopleIn(site),
+    email_clicks: rowCount(email), email_people: peopleIn(email),
+    site_visitors: peopleIn(inWeek.filter(r => r.kind === 'view')),
     newsletter_recipients: Number(recipients) || 0
+  };
+}
+
+// ─── Vic's Pick report ───────────────────────────────────────────────────
+// What a paid pick got, from the day it was bought through its (last) day:
+//   shown      times it was seen in an event list as a Vic's Pick (its
+//              data-ad impressions; the event's own page doesn't count)
+//   page views views of its event page(s)
+//   link       taps on the buyer's own link, from a list (data-ad) or its
+//              page (the "event details" button); compared like sameLink
+//   calendar   "Add to calendar" / Google Calendar taps on its page
+//   shares     share taps on its page, or anywhere for its page's link
+// `pages`: its event page paths (one per day it's listed); `urls`: the
+// link(s) it carries; `starred`: whether the Monday issue starred it.
+function pathOf(u) {
+  try { return new URL(String(u || ''), 'https://x.invalid').pathname.replace(/\/+$/, ''); } catch { return ''; }
+}
+
+export function pickStats(order, rows, { start, end, pages = [], urls = [], recipients = 0, starred = false } = {}) {
+  const inRange = (rows || []).filter(r => r.day >= start && r.day <= end);
+  const onPage = r => pages.includes(r.path);
+  const clicks = type => inRange.filter(r => r.kind === 'click' && (typeof type === 'function' ? type(r.click_type) : r.click_type === type));
+  const seen = inRange.filter(r => r.kind === 'impression' && r.ad === order.id);
+  const views = inRange.filter(r => r.kind === 'view' && onPage(r));
+  const link = clicks('event_click').filter(r => (r.ad === order.id || onPage(r)) && urls.some(u => sameLink(r.click_url, u)));
+  const calendar = clicks('add_to_calendar').filter(onPage);
+  const shares = clicks(t => /^share_/.test(t || '')).filter(r => onPage(r) || pages.includes(pathOf(r.click_url)));
+  return {
+    start, end, pages,
+    shown: rowCount(seen), shown_people: peopleIn(seen), where: whereItRan(seen),
+    page_views: rowCount(views), page_people: peopleIn(views),
+    link_clicks: rowCount(link), link_people: peopleIn(link),
+    calendar_adds: rowCount(calendar), shares: rowCount(shares),
+    newsletter_starred: Boolean(starred), newsletter_recipients: starred ? Number(recipients) || 0 : 0
   };
 }
 
@@ -922,13 +982,8 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     const since = due.map(o => o.week_start).sort()[0];
     const rows = typeof store.listTraffic === 'function' ? await store.listTraffic(since) : [];
     for (const order of due) {
-      let recipients = 0;
-      try {
-        const nl = typeof store.getNewsletterSend === 'function' ? await store.getNewsletterSend(order.week_start) : null;
-        recipients = nl ? Number(nl.recipients) || 0 : 0;
-      } catch { /* the report still goes, without the newsletter line */ }
-      const stats = sponsorStats(order, rows, { recipients });
-      const summary = [['Sponsor', order.business], ['Week', order.week_start],
+      const stats = sponsorStats(order, rows, { recipients: await recipientsFor(order.week_start) });
+      const summary = [['Sponsor', order.business], ['Week', order.week_start], ['Views on the site', stats.views],
         ['Clicked on the site', stats.site_people], ['Clicked in emails', stats.email_people]];
       if (!mailer || !mailer.enabled) {
         // No email service: hand the numbers to the owner once instead.
@@ -943,9 +998,13 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       }
       const sent = await mailer.send(order.email, renderSponsorReport(order, stats, { siteUrl, address: mailAddress }), `vic361-sponsor-report-${order.id}`);
       if (!sent) {
-        // Tried again on the next run; the owner hears once per order.
+        // Tried again on the next run; the owner hears once per order
+        // (the 15-minute cron would repeat Slack's 15-minute dedupe).
         out.failed++;
-        if (slack) slack.alert(`sponsor-report-failed:${order.id}`, `Click report to ${order.business} didn't send`, 'It will be retried on the next run.', `${siteUrl}/admin.html`);
+        if (slack && !order.report_failed) {
+          slack.alert(`sponsor-report-failed:${order.id}`, `Click report to ${order.business} didn't send`, 'It will be retried on the next run.', `${siteUrl}/admin.html`);
+          await save({ ...order, report_failed: nowIso() });
+        }
         continue;
       }
       await save({ ...order, report: stats, report_sent: nowIso() });
@@ -953,6 +1012,139 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       if (slack) {
         slack.notify({ channel: 'sales', title: `📊 Click report sent: ${order.business}`, fields: [...summary, ['To', order.email]] });
       }
+    }
+    return out;
+  }
+
+  async function newsletterSend(week) {
+    try {
+      return typeof store.getNewsletterSend === 'function' ? await store.getNewsletterSend(week) : null;
+    } catch { return null; } // the report still goes, without the newsletter line
+  }
+
+  async function recipientsFor(week) {
+    const nl = await newsletterSend(week);
+    return nl ? Number(nl.recipients) || 0 : 0;
+  }
+
+  // Where a paid pick ran: the live and archived events it matches (by the
+  // same rule that pins it, pickMatches), for their page paths, links and
+  // last date. The admin may have fixed the date when approving, so the
+  // live copy's date wins over the one bought.
+  async function pickPlacement(order, list) {
+    const p = await pins(list);
+    let events = [];
+    try { events = ((getPayload && (await getPayload())) || {}).events || []; } catch { /* archive only */ }
+    let archived = [];
+    try { archived = typeof store.listArchivedEvents === 'function' ? await store.listArchivedEvents() : []; } catch { /* live only */ }
+    const hits = [...events, ...archived].filter(ev => ev && ev.page && pickMatches(order, ev, p));
+    const dates = [order.event.date, ...hits.map(ev => ev.date)].filter(Boolean).sort();
+    return {
+      found: hits.length > 0,
+      pages: [...new Set(hits.map(ev => ev.page))],
+      urls: [...new Set([order.event.url, ...hits.map(ev => ev.url)].filter(Boolean))],
+      lastDate: dates[dates.length - 1]
+    };
+  }
+
+  // The newsletter record notes which paid picks it starred (`picks`);
+  // a send from before that was recorded falls back to the promise made
+  // at purchase (newsletterCovers).
+  async function pickStatsFor(order, list, rows = null) {
+    const place = await pickPlacement(order, list);
+    const nl = await newsletterSend(currentWeek(place.lastDate)[0]);
+    const recipients = nl ? Number(nl.recipients) || 0 : 0;
+    const starred = Boolean(nl && recipients) && (Array.isArray(nl.picks)
+      ? nl.picks.includes(order.id)
+      : newsletterCovers(order.event.date, order.paid_at || order.created_at));
+    const start = localDateStr(new Date(order.paid_at || order.created_at || Date.now()));
+    if (!rows) rows = typeof store.listTraffic === 'function' ? await store.listTraffic(start) : [];
+    return { place, stats: pickStats(order, rows, { start, end: place.lastDate, pages: place.pages, urls: place.urls, recipients, starred }) };
+  }
+
+  // Live stats for the admin Sponsors tab's Report button: the same numbers
+  // the emails send, so far.
+  async function orderReport(order, list) {
+    if (order.kind === 'weekly' && order.week_start) {
+      const rows = typeof store.listTraffic === 'function' ? await store.listTraffic(order.week_start) : [];
+      return { kind: 'weekly', stats: sponsorStats(order, rows, { recipients: await recipientsFor(order.week_start) }) };
+    }
+    if (order.kind === 'featured' && order.event && order.event.date) {
+      const { place, stats } = await pickStatsFor(order, list);
+      return { kind: 'featured', on_site: place.found, stats };
+    }
+    return null;
+  }
+
+  // The Vic's Pick report: emailed to each paid pick's buyer the day after
+  // its (last) day, once, like sendSponsorReports (report_sent on the
+  // order, Resend key vic361-pick-report-<id>, catches up for
+  // REPORT_CATCHUP_DAYS). Refunded, hidden and late orders aren't LIVE, so
+  // they get none. A pick that never made it onto the site gets no email;
+  // the owner hears once (report_skipped). Runs from the submission review
+  // cron (every 15 minutes) and the Monday newsletter cron.
+  let pickRun = null;
+  function sendPickReports(now = nowFn()) {
+    if (!pickRun) pickRun = runPickReports(now).finally(() => { pickRun = null; });
+    return pickRun;
+  }
+
+  async function runPickReports(now) {
+    const out = { sent: 0, skipped: 0, failed: 0 };
+    if (!supported) return out;
+    // The 15-minute cron would otherwise send it just after midnight;
+    // counting the day from PICK_REPORT_HOUR sends it in the morning.
+    const today = localDateStr(new Date(now.getTime() - PICK_REPORT_HOUR * 3600 * 1000));
+    cache = null;
+    const list = await orders();
+    // Cheap first cut on the date bought; the live date is checked below.
+    const due = list.filter(o => o.kind === 'featured' && LIVE.has(o.status) && o.event && o.event.date &&
+      !o.report_sent && !o.report_skipped && addDays(o.event.date, 1) <= today &&
+      addDays(o.event.date, 1 + REPORT_CATCHUP_DAYS) >= today);
+    if (!due.length) return out;
+    const since = due.map(o => localDateStr(new Date(o.paid_at || o.created_at || now))).sort()[0];
+    const rows = typeof store.listTraffic === 'function' ? await store.listTraffic(since) : [];
+    for (const order of due) {
+      const { place, stats } = await pickStatsFor(order, list, rows);
+      if (addDays(place.lastDate, 1) > today) continue; // re-dated later: not over yet
+      if (addDays(place.lastDate, 1 + REPORT_CATCHUP_DAYS) < today) continue;
+      const name = order.event.name || 'their event';
+      if (!place.found) {
+        await save({ ...order, report_skipped: nowIso() });
+        out.skipped++;
+        if (slack) {
+          slack.alert(`pick-report-skipped:${order.id}`, `No Vic's Pick report for ${order.business}: it never went live`,
+            `${name} (${order.event.date}) was paid for but never matched a listed event, so there are no numbers to send. Check whether they need a refund.`,
+            `${siteUrl}/admin.html`);
+        }
+        continue;
+      }
+      const summary = [['Buyer', order.business], ['Event', `${name} (${place.lastDate})`],
+        ['Shown in lists', stats.shown], ['Event page views', stats.page_views], ['Clicked their link', stats.link_people],
+        ['Added to calendar', stats.calendar_adds], ['Shares', stats.shares],
+        ['Newsletter', stats.newsletter_starred ? `Starred, sent to ${stats.newsletter_recipients}` : 'Not in it']];
+      if (!mailer || !mailer.enabled) {
+        if (!order.report_slack_sent && slack) {
+          slack.alert(`pick-report:${order.id}`, `Send ${order.business} their Vic's Pick report (email is off)`,
+            `${summary.map(([k, v]) => `${k}: ${v}`).join('\n')}\nEmail it to ${order.email}. Set RESEND_API_KEY so these go out on their own.`,
+            `${siteUrl}/admin.html`);
+          await save({ ...order, report: stats, report_slack_sent: nowIso() });
+        }
+        out.skipped++;
+        continue;
+      }
+      const sent = await mailer.send(order.email, renderPickReport(order, stats, { siteUrl, address: mailAddress }), `vic361-pick-report-${order.id}`);
+      if (!sent) {
+        out.failed++;
+        if (slack && !order.report_failed) {
+          slack.alert(`pick-report-failed:${order.id}`, `Vic's Pick report to ${order.business} didn't send`, 'It will be retried on the next run.', `${siteUrl}/admin.html`);
+          await save({ ...order, report_failed: nowIso() });
+        }
+        continue;
+      }
+      await save({ ...order, report: stats, report_sent: nowIso() });
+      out.sent++;
+      if (slack) slack.notify({ channel: 'sales', title: `📊 Vic's Pick report sent: ${order.business}`, fields: [...summary, ['To', order.email]] });
     }
     return out;
   }
@@ -1477,6 +1669,20 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       } catch (err) { next(err); }
     });
 
+    // Live report numbers for a paid weekly or Vic's Pick order (the
+    // Sponsors tab's Report button): what its email says, so far.
+    app.get('/api/admin/sponsors/:id/report', requireAdmin, async (req, res, next) => {
+      try {
+        cache = null;
+        const list = supported ? await store.listSponsorOrders() : [];
+        const order = list.find(o => o.id === req.params.id);
+        if (!order) return res.status(404).json({ ok: false, error: 'not-found' });
+        const report = await orderReport(order, list);
+        if (!report) return res.status(400).json({ ok: false, error: 'no-report', message: 'Reports are for weekly sponsors and Vic’s Picks.' });
+        res.json({ ok: true, ...report, report_sent: order.report_sent || null });
+      } catch (err) { next(err); }
+    });
+
     // The uploaded logo, whatever the order's status, for the Sponsors tab.
     app.get('/api/admin/sponsors/:id/logo', requireAdmin, async (req, res, next) => {
       try {
@@ -1522,5 +1728,5 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     });
   }
 
-  return { apply, orders, registerWebhook, registerRoutes, processEvent, sendSponsorReports };
+  return { apply, orders, registerWebhook, registerRoutes, processEvent, sendSponsorReports, sendPickReports };
 }
