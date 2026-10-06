@@ -225,6 +225,27 @@ describe('the site with the daily limit', () => {
     expect(kids).toContain('Chess Club');
   });
 
+  it('?all=1 gives the event check and submission review every public event, dropped ones flagged', async () => {
+    await start(thursday);
+    const all = await (await fetch(baseUrl + '/events.json?all=1')).json();
+    expect(all.events).toHaveLength(16);
+    expect(all.events.find(e => e.name === 'Chess Club').overflow).toBe(true);
+    expect(all.events.some(e => 'score' in e || 'keep' in e)).toBe(false);
+  });
+
+  it('“Show anyway” follows the event when the admin edits its name', async () => {
+    await start(thursday);
+    const h = await auth();
+    const key = '2026-10-08|Chess Club|Victoria Public Library';
+    await fetch(baseUrl + '/api/admin/keep-event', { method: 'POST', headers: h, body: JSON.stringify({ key, keep: true }) });
+    const edit = { name: 'Saturday Chess Club', date: '2026-10-08', time: '7:00 PM', venue: 'Victoria Public Library', description: 'Weekly chess for all levels at the library.', icons: ['family'], free: true };
+    const r = await fetch(baseUrl + '/api/admin/event-edits', { method: 'POST', headers: h, body: JSON.stringify({ original_key: key, payload: edit }) });
+    expect(r.status).toBe(200);
+    expect((await store.getPublished()).kept).toEqual(['2026-10-08|Saturday Chess Club|Victoria Public Library']);
+    const feed = await (await fetch(baseUrl + '/events.json')).json();
+    expect(feed.events.map(e => e.name)).toContain('Saturday Chess Club');
+  });
+
   it('the admin sees it as dropped and can show it anyway, then undo', async () => {
     await start(thursday);
     const h = await auth();

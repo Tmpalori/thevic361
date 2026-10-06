@@ -61,6 +61,10 @@ export const AUTO_PUBLISH_RULES = 5;
 // (server/scoring.js).
 const REFRESH_FIELDS = ['time', 'venue', 'address', 'url', 'description', 'icons', 'free', 'big', 'town', 'curated',
   'appeal', 'recurring', 'favorite', 'sources'];
+// Tags the collector writes only when set: a fresh copy without one means
+// it was taken off (a wrong town removed from the YAML), so it goes.
+// appeal/sources are different: missing means unknown, so they're kept.
+const TAG_FIELDS = ['big', 'town', 'curated', 'favorite', 'recurring'];
 
 function normName(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -265,6 +269,7 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       const oldKey = eventKeyOf(old);
       const next = { ...old };
       for (const f of REFRESH_FIELDS) if (f in ev) next[f] = ev[f];
+      for (const f of TAG_FIELDS) if (!(f in ev)) delete next[f];
       if (!ev.description) next.description = old.description;
       if (cutOff(old.name, ev.name)) next.name = ev.name;
       const newKey = eventKeyOf(next);
@@ -286,6 +291,11 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       const key = eventKeyOf(ev);
       if (rejected.has(key)) { skippedRejected++; continue; }
       const i = events.findIndex(e => eventKeyOf(e) === key || sameEvent(e, ev));
+      if (i !== -1 && raw.submitted === true && !events[i].submitted) {
+        // Live already, but Save & Publish sent the admin's copy, which
+        // doesn't carry the flag; the score's submission bonus needs it.
+        events[i] = { ...events[i], submitted: true };
+      }
       if (i !== -1) {
         if (freshSet.has(raw) && canRefresh(events[i]) && refresh(i, ev)) updated++;
         continue;
@@ -307,6 +317,8 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
         : {}),
       last_updated: now,
       events,
+      // "Show anyway" keys follow an event this run renamed.
+      ...(Array.isArray(extras.kept) ? { kept: extras.kept.map(k => renamed.get(k) || k) } : {}),
       auto_publish: {
         from: from || null,
         at: now,

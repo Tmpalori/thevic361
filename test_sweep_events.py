@@ -255,3 +255,12 @@ def test_curated_events_are_not_auto_hidden_or_flagged_for_what_a_person_checked
     # Without the mark, the same church event is still caught.
     plain = [dict(events[0], curated=False)]
     assert any(k == "religious" for _, k, _ in sw.trusted(plain, sw.rule_findings(plain)))
+
+
+def test_an_editors_pick_does_not_shield_its_duplicate():
+    twin = {"date": "2026-10-10", "name": "Harvest Festival", "venue": "DeLeon Plaza", "time": "5:00 PM", "page": "/events/x"}
+    events = [dict(twin, featured=True, editor_pick=True, url="https://x"), dict(twin)]
+    picks, _ = sw.to_hide(events, sw.rule_findings(events))
+    assert [p[1] for p in picks] == ["duplicate"]
+    paid = [dict(twin, featured=True), dict(twin)]
+    assert sw.to_hide(paid, sw.rule_findings(paid))[0] == []

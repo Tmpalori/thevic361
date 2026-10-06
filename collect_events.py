@@ -1901,6 +1901,11 @@ def ai_review(events, batch_size=8):
     failed_batches = 0
 
     for i in range(0, len(events), batch_size):
+        if past_deadline():
+            # Unreviewed events keep their collected text; they're polished
+            # next run. Better than a run killed before it writes anything.
+            print(f"  [AI Review] {COLLECT_DEADLINE_MIN}-minute deadline: {len(events) - i} events left unreviewed")
+            break
         batch = events[i:i + batch_size]
         result = _ai_review_batch(api_key, batch)
         if result is None:
@@ -1954,7 +1959,8 @@ def ai_review(events, batch_size=8):
                 ev["appeal"] = int(round(appeal))
 
             # Not a real event (job post, booking ad, menu...): drop it.
-            if ai.get("keep") is False:
+            # Never a hand-written one (curated): a person already decided.
+            if ai.get("keep") is False and not ev.get("curated"):
                 ev["_ai_drop"] = True
 
             polished += 1
@@ -3813,10 +3819,23 @@ FLYER_IMAGES_PER_ACCOUNT = 4
 FLYER_IMAGE_MAX_BYTES = 4_000_000
 # No GIF: the API rejects animated ones, which would lose the whole call.
 _FLYER_TYPES = ("image/jpeg", "image/png", "image/webp")
-# Flyer calls are slower; past this many minutes into a collect, posts go
-# back to text only so the job stays inside its step timeout.
-FLYER_TIME_BUDGET_MIN = 30
+# The collect step times out at 50 minutes and writes candidates.json only
+# at the end (the Oct 4 2026 run took 33). Extra work fits around that:
+# flyers stop FLYER_TIME_BUDGET_MIN in (posts go back to text only, as
+# before flyers), and past COLLECT_DEADLINE_MIN the optional steps (gap
+# filling, the rest of the AI review) are skipped so the run still writes.
+FLYER_TIME_BUDGET_MIN = 20
+COLLECT_DEADLINE_MIN = 38
 _RUN_STARTED = None
+
+
+def _minutes_in():
+    """Minutes since this collect started, or 0 outside a run (tests)."""
+    return 0 if _RUN_STARTED is None else (datetime.now().timestamp() - _RUN_STARTED) / 60
+
+
+def past_deadline():
+    return _minutes_in() > COLLECT_DEADLINE_MIN
 
 
 def _post_image_urls(p):
@@ -3879,7 +3898,7 @@ def _flyers_for(posts, limit=FLYER_IMAGES_PER_ACCOUNT, fetch=None):
 
     if os.environ.get("FLYER_IMAGES", "").strip().lower() in ("0", "false", "no", "off"):
         return []
-    if _RUN_STARTED is not None and (datetime.now().timestamp() - _RUN_STARTED) > FLYER_TIME_BUDGET_MIN * 60:
+    if _minutes_in() > FLYER_TIME_BUDGET_MIN:
         return []
     fetch = fetch or _fetch_image_data_url
     picks = []
@@ -3958,6 +3977,7 @@ Rules:
 - Only include events held in Victoria, TX or elsewhere in Victoria County. Skip events in other towns (Cuero, Port Lavaca, Goliad, Edna, Yoakum, Corpus Christi, Houston, etc.).
 - Return [] if no events found. No prose, no markdown fences."""
 
+    text_prompt = prompt
     if flyers:
         prompt += """
 
@@ -3966,10 +3986,18 @@ Flyer images: posts marked [flyer image attached] have their image after this te
         for i, data_url in flyers:
             content_parts.append({"type": "text", "text": f"Flyer for post [{i}]:"})
             content_parts.append({"type": "image_url", "image_url": {"url": data_url, "detail": "auto"}})
-        message = {"role": "user", "content": content_parts}
-    else:
-        message = {"role": "user", "content": prompt}
+        raw = _posts_ai_call(api_key, venue_name, {"role": "user", "content": content_parts}, timeout=90)
+        if raw is not None:
+            return raw
+        # A flyer the API can't read, or a slow image call, mustn't cost the
+        # captions: ask again with the text alone, as before flyers.
+        _sentry_warn("FB posts AI flyer call failed; retrying text only", venue=venue_name)
+    raw = _posts_ai_call(api_key, venue_name, {"role": "user", "content": text_prompt}, timeout=60)
+    return raw if raw is not None else []
 
+
+def _posts_ai_call(api_key, venue_name, message, timeout):
+    """One post-extraction request; the parsed events, or None on failure."""
     try:
         content = _openai_chat(
             api_key,
@@ -3977,8 +4005,7 @@ Flyer images: posts marked [flyer image attached] have their image after this te
             # Reasoning tokens share this budget with up to ~50 posts' worth
             # of events, so leave plenty of headroom.
             max_tokens=12000,
-            # Reading flyers takes the model longer than text alone.
-            timeout=90 if flyers else 60,
+            timeout=timeout,
         )
         content = re.sub(r"^```\w*\s*", "", content)
         content = re.sub(r"\s*```\s*$", "", content)
@@ -3989,15 +4016,14 @@ Flyer images: posts marked [flyer image attached] have their image after this te
                 venue=venue_name,
                 sample=content[:200],
             )
-            return []
         return raw
     except requests.HTTPError as e:
         status = e.response.status_code if e.response else "?"
         _sentry_warn("FB posts AI HTTP error", venue=venue_name, status=str(status))
-        return []
+        return None
     except Exception as e:
         _sentry_warn("FB posts AI exception", venue=venue_name, error=str(e)[:200])
-        return []
+        return None
 
 
 def _post_event_venue(r, account_name, account_address):
@@ -4740,7 +4766,9 @@ def main():
     merged = drop_dead_links(merged)
     # Look up missing times, links and descriptions before templates fill
     # descriptions in (a template would make the event look complete).
-    if not args.skip_web:
+    if past_deadline():
+        print(f"\n🔎 Skipping gap filling: past the {COLLECT_DEADLINE_MIN}-minute deadline")
+    elif not args.skip_web:
         print("\n🔎 Filling in thin events…")
         try:
             merged = enrich_thin_events(merged, cache_path=os.path.join(args.local_dir, "enrichment_cache.json"))

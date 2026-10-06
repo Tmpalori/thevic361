@@ -241,9 +241,15 @@ def _exact_twins(a, b):
             and ce._start_minutes(a.get("time")) == ce._start_minutes(b.get("time")))
 
 
+def _paid(e):
+    """A paid/hand-featured listing. An editor's pick (server/scoring.js) is
+    featured only because it scored well; it gets no protection here."""
+    return bool(e.get("featured")) and not e.get("editor_pick")
+
+
 def _detail(e):
     """How much a listing tells people; the richer duplicate is kept."""
-    return (bool(e.get("featured")), bool(e.get("url")), len(e.get("description") or ""), bool(e.get("time")))
+    return (_paid(e), bool(e.get("url")), len(e.get("description") or ""), bool(e.get("time")))
 
 
 def to_hide(events, rules):
@@ -257,12 +263,12 @@ def to_hide(events, rules):
             continue
         if kind == "cut_off":
             whole = _whole_listing(events, i)
-            if whole is None or events[i].get("featured"):
+            if whole is None or _paid(events[i]):
                 continue
             why = f"{why}; “{events[whole]['name']}” is listed there that day"
         if kind == "duplicate":
             j = _dup_of(events, i)
-            if j is None or events[i].get("featured") or events[j].get("featured"):
+            if j is None or _paid(events[i]) or _paid(events[j]):
                 continue
             if _library_twin(events[i], events[j]):
                 # The city calendar's copy has the real meeting place.
@@ -345,7 +351,9 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true", help="print instead of posting to Slack")
     args = ap.parse_args(argv)
 
-    resp = requests.get(f"{SITE}/events.json", timeout=30, headers={"User-Agent": "vic361-event-check"})
+    # ?all=1: every public event, including ones past their day's limit
+    # (server/scoring.js), which still have pages and appear in the guides.
+    resp = requests.get(f"{SITE}/events.json?all=1", timeout=30, headers={"User-Agent": "vic361-event-check"})
     resp.raise_for_status()
     events = upcoming(resp.json().get("events") or [], ce.now_central().date(), args.days)
 
