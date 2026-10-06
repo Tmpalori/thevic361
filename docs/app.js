@@ -218,9 +218,12 @@
         msg.textContent = x.ok ? (x.j.message || 'Check your inbox to confirm.') : (x.j.message || 'Something went wrong. Try again.');
         if (x.ok) {
           form.email.value = '';
+          // Only a first signup from this browser counts as a Lead. The
+          // server answers the same for new and existing addresses (so the
+          // form can't reveal who's subscribed), so this device decides.
+          var was = alreadySubscribed();
           try { localStorage.setItem(SUB_KEY, '1'); } catch (e2) { /* private mode */ }
-          // Only a genuinely new signup counts (not "already on the list").
-          if (x.j.new && window.vic361Track) window.vic361Track('subscribe_click', { link_url: 'list-card' });
+          if (!was && window.vic361Track) window.vic361Track('subscribe_click', { link_url: 'list-card' });
         }
       }).catch(function () {
         msg.textContent = 'Something went wrong. Try again.';

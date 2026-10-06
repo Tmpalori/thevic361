@@ -77,6 +77,52 @@ describe('newsletter content', () => {
     expect(issue.text).toContain('Unsubscribe: https://www.thevic361.com/unsubscribe?token=t');
   });
 
+  it('puts the weekly sponsor at the top, in both the HTML and the text part', () => {
+    const sponsor = { name: 'Acme Tacos', text: 'Best tacos.', cta: 'Order', url: 'https://acme.example', week: '2026-10-05' };
+    const issue = renderWeekly(withPages(EVENTS), {
+      siteUrl: 'https://www.thevic361.com', now: NOW, sponsor, unsubscribeUrl: 'https://www.thevic361.com/unsubscribe?token=t', address: 'a'
+    });
+    const sponsorAt = issue.html.indexOf("THIS WEEK'S SPONSOR");
+    const firstDay = issue.html.indexOf('font-size:21px'); // the first day's heading
+    expect(sponsorAt).toBeGreaterThan(-1);
+    expect(sponsorAt).toBeLessThan(firstDay);
+    // A paid order's button is counted through /go/s/<week>, then sent on.
+    expect(issue.html).toContain('href="https://www.thevic361.com/go/s/2026-10-05?src=newsletter"');
+    expect(issue.html).not.toContain('href="https://acme.example"');
+    const lines = issue.text.split('\n');
+    expect(lines[2]).toBe("THIS WEEK'S SPONSOR: Acme Tacos - Best tacos. - https://www.thevic361.com/go/s/2026-10-05?src=newsletter");
+    // A hand-set sponsor (no order) links straight to its site.
+    const manual = renderWeekly(withPages(EVENTS), { siteUrl: 'https://www.thevic361.com', now: NOW, sponsor: { ...sponsor, week: undefined }, unsubscribeUrl: 'u', address: 'a' });
+    expect(manual.html).toContain('href="https://acme.example"');
+  });
+
+  it('tags links back to the site for the Traffic tab, but not unsubscribe or images', () => {
+    const issue = renderWeekly(withPages(EVENTS), {
+      siteUrl: 'https://www.thevic361.com', now: NOW, sponsor: null,
+      unsubscribeUrl: 'https://www.thevic361.com/unsubscribe?token=t', address: 'a'
+    });
+    const tag = 'utm_source=newsletter&amp;utm_medium=email&amp;utm_campaign=weekly-2026-10-05';
+    expect(issue.html).toContain(`https://www.thevic361.com/events/2026-10-09-friday-live-music?${tag}`);
+    expect(issue.html).toContain(`https://www.thevic361.com/this-weekend?${tag}`);
+    expect(issue.html).toContain('href="https://www.thevic361.com/unsubscribe?token=t"');
+    expect(issue.html).toContain('src="https://www.thevic361.com/email/skyline.png"');
+    expect(issue.text).toContain('https://www.thevic361.com/events/2026-10-09-friday-live-music?utm_source=newsletter&utm_medium=email&utm_campaign=weekly-2026-10-05');
+    expect(issue.text).toContain('Unsubscribe: https://www.thevic361.com/unsubscribe?token=t\n');
+    const welcome = renderWelcomeEmail(withPages(EVENTS), { siteUrl: 'https://www.thevic361.com', now: NOW, sponsor: null, unsubscribeUrl: 'https://www.thevic361.com/unsubscribe?token=t', address: 'a' });
+    expect(welcome.html).toContain('utm_campaign=welcome');
+    expect(welcome.html).toContain('href="https://www.thevic361.com/unsubscribe?token=t"');
+  });
+
+  it('says "1 thing" and a single date for a one-day, one-event week, and pads the preheader', () => {
+    const sunday = new Date('2026-10-11T15:00:00Z');
+    const issue = renderWeekly(withPages([{ date: '2026-10-11', name: 'Sunday Brunch', time: '11 AM' }]), {
+      siteUrl: 'https://www.thevic361.com', now: sunday, sponsor: null, unsubscribeUrl: 'u', address: 'a'
+    });
+    expect(issue.subject).toBe('This week in Victoria: 1 thing to do (Oct 11)');
+    expect(issue.html).toContain('<strong>1 event</strong>');
+    expect(issue.html).toMatch(/Sunday Brunch(&#847;&zwnj;&nbsp;){80}<\/span>/);
+  });
+
   it('normalizes emails', () => {
     expect(normalizeEmail('  Me@Example.COM ')).toBe('me@example.com');
     expect(normalizeEmail('nope')).toBeNull();
@@ -85,27 +131,58 @@ describe('newsletter content', () => {
 });
 
 describe('review fixes: signups and privacy', () => {
-  it('only a first signup (or a comeback) is reported as new', async () => {
+  it('answers the same for new, pending and already-subscribed addresses', async () => {
     await startApp({ resendApiKey: '' });
     const first = await (await post('/api/subscribe', { email: 'a@example.com', source: 'footer' })).json();
-    expect(first.new).toBe(true);
     const again = await (await post('/api/subscribe', { email: 'a@example.com' })).json();
-    expect(again).toMatchObject({ ok: true, already: true });
-    expect(again.new).toBeUndefined();
+    expect(again).toEqual(first);
+    expect(JSON.stringify(again)).not.toMatch(/already/i);
     const bot = await (await post('/api/subscribe', { email: 'b@example.com', company: 'spam' })).json();
     expect(bot).toEqual({ ok: true });
   });
 
-  it('a pending re-submit is not new; a comeback is, with its new source', async () => {
+  it('with Resend on, too: new, pending and active get one answer', async () => {
     await startApp();
-    expect((await (await post('/api/subscribe', { email: 'p@example.com', source: 'footer' })).json()).new).toBe(true);
-    expect((await (await post('/api/subscribe', { email: 'p@example.com', source: 'footer' })).json()).new).toBe(false);
+    const fresh = await (await post('/api/subscribe', { email: 'n@example.com' })).json();
+    const pending = await (await post('/api/subscribe', { email: 'n@example.com' })).json();
+    await store.importSubscribers(['on@example.com'], 'import');
+    const active = await (await post('/api/subscribe', { email: 'on@example.com' })).json();
+    expect(pending).toEqual(fresh);
+    expect(active).toEqual(fresh);
+  });
+
+  it('the forms count a Lead once per browser, not from the server\'s answer', async () => {
+    await startApp();
+    const html = await (await fetch(baseUrl + '/subscribe')).text();
+    expect(html).toContain("was=localStorage.getItem('vic361-subscribed')==='1'");
+    expect(html).not.toContain('x.j.new');
+    const app = await fs.readFile(path.join(process.cwd(), 'docs/app.js'), 'utf8');
+    expect(app).not.toContain('x.j.new');
+  });
+
+  it('a comeback keeps its new source', async () => {
+    await startApp();
+    await post('/api/subscribe', { email: 'p@example.com', source: 'footer' });
     const sub = (await store.listSubscribers({ status: 'pending' }))[0];
     await store.confirmSubscriber(sub.token);
     await store.unsubscribe(sub.token);
-    const back = await (await post('/api/subscribe', { email: 'p@example.com', source: 'subscribe-page:ad' })).json();
-    expect(back.new).toBe(true);
+    await post('/api/subscribe', { email: 'p@example.com', source: 'subscribe-page:ad' });
     expect((await store.listSubscribers({ status: 'pending' }))[0].source).toBe('subscribe-page:ad');
+  });
+
+  it('sends at most 3 confirmation emails per address a day', async () => {
+    await startApp();
+    for (let i = 0; i < 5; i++) expect((await post('/api/subscribe', { email: 'flood@example.com' })).status).toBe(200);
+    expect(sent.single.filter(m => m.to[0] === 'flood@example.com')).toHaveLength(3);
+  });
+
+  it('a confirmation email that fails alerts the owner in Slack', async () => {
+    const alerts = [];
+    const resend = { send: async () => { throw new Error('Resend HTTP 401: bad key'); }, batch: async () => ({}) };
+    await startApp({ resend, slack: { enabled: true, notify: async () => true, alert: async (key, title) => { alerts.push({ key, title }); } } });
+    const r = await post('/api/subscribe', { email: 'x@example.com' });
+    expect(r.status).toBe(500);
+    expect(alerts).toEqual([{ key: 'newsletter-subscribe-failed', title: 'Newsletter signups are failing' }]);
   });
 
   it('pages reached by token links never load the Meta Pixel', async () => {
@@ -190,10 +267,22 @@ describe('signup flow', () => {
     expect(link).toBeTruthy();
     expect((await store.countSubscribers()).pending).toBe(1);
 
-    const c = await fetch(`${baseUrl}/subscribe/confirm?token=${link[1]}`);
+    // Opening the link (or a mail scanner opening it) only shows a button.
+    const g = await fetch(`${baseUrl}/subscribe/confirm?token=${link[1]}`);
+    expect(g.status).toBe(200);
+    const page = await g.text();
+    expect(page).toContain(`<form method="post" action="/subscribe/confirm?token=${link[1]}">`);
+    expect(page).toContain('Confirm my subscription');
+    expect((await store.countSubscribers()).active).toBe(0);
+    expect(sent.single).toHaveLength(1);
+
+    const c = await fetch(`${baseUrl}/subscribe/confirm?token=${link[1]}`, { method: 'POST' });
     expect(c.status).toBe(200);
     expect(await c.text()).toContain('You&#39;re subscribed');
     expect((await store.countSubscribers()).active).toBe(1);
+    // Opening the link again after confirming just says so.
+    expect(await (await fetch(`${baseUrl}/subscribe/confirm?token=${link[1]}`)).text()).toContain('You&#39;re subscribed');
+    expect((await fetch(`${baseUrl}/subscribe/confirm?token=nope`)).status).toBe(404);
     await new Promise(r => setTimeout(r, 50)); // the welcome email goes out after the page
     expect(sent.single).toHaveLength(2);
 
@@ -207,8 +296,11 @@ describe('signup flow', () => {
     await startApp({ slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async () => {} } });
     await post('/api/subscribe', { email: 'new@example.com' });
     const token = sent.single[0].html.match(/confirm\?token=([^"&]+)/)[1];
-    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`);
-    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`); // second click, or a mail scanner
+    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`); // a mail scanner: nothing happens
+    await new Promise(r => setTimeout(r, 50));
+    expect(sent.single.filter(m => m.subject === 'Welcome to The Vic 361')).toHaveLength(0);
+    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`, { method: 'POST' });
+    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`, { method: 'POST' }); // second click
     await new Promise(r => setTimeout(r, 50));
     const welcomes = sent.single.filter(m => m.subject === 'Welcome to The Vic 361');
     expect(welcomes).toHaveLength(1);
@@ -224,7 +316,7 @@ describe('signup flow', () => {
     await startApp({ newsletterAddress: '' });
     await post('/api/subscribe', { email: 'new@example.com' });
     const token = sent.single[0].html.match(/confirm\?token=([^"&]+)/)[1];
-    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`);
+    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`, { method: 'POST' });
     await new Promise(r => setTimeout(r, 50));
     expect(sent.single.filter(m => m.subject === 'Welcome to The Vic 361')).toHaveLength(0);
   });
@@ -241,7 +333,12 @@ describe('signup flow', () => {
     await store.importSubscribers(['fan@example.com'], 'import');
     const [sub] = await store.listSubscribers({ status: 'active' });
     const g = await fetch(`${baseUrl}/unsubscribe?token=${sub.token}`);
-    expect(await g.text()).toContain('<form method="post"');
+    const html = await g.text();
+    expect(html).toContain('<form method="post"');
+    // Names whose subscription it is (masked), for readers of a forwarded copy.
+    expect(html).toContain('f•••@example.com');
+    expect(html).not.toContain('fan@example.com');
+    expect(html).toContain('This email was forwarded to you');
     expect((await store.countSubscribers()).active).toBe(1);
     const p = await fetch(`${baseUrl}/unsubscribe?token=${sub.token}`, { method: 'POST' });
     expect(p.status).toBe(200);
@@ -319,7 +416,7 @@ describe('signup page', () => {
     const issue = renderWeekly(withPages(EVENTS), {
       siteUrl: 'https://www.thevic361.com', now: NOW, sponsor: null, unsubscribeUrl: 'u', address: 'a'
     });
-    expect(issue.html).toContain('Forwarded this? <a href="https://www.thevic361.com/subscribe"');
+    expect(issue.html).toContain('Forwarded this? <a href="https://www.thevic361.com/subscribe?utm_source=newsletter');
   });
 });
 
@@ -399,6 +496,28 @@ describe('send failures', () => {
 
     const again = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
     expect(again.error).toBe('already-sent');
+  });
+
+  it('the admin shows a partly failed week honestly and can retry it', async () => {
+    let fail = true;
+    const resend = {
+      send: async () => ({ id: 'x' }),
+      batch: async (msgs) => { if (fail) throw new Error('Resend down'); return { data: msgs.map((_, i) => ({ id: `b${i}` })) }; }
+    };
+    await startApp({ resend });
+    const h = await auth();
+    await store.importSubscribers(['a@example.com', 'b@example.com'], 'import');
+    const first = await post('/api/admin/newsletter/send', {}, h);
+    expect(first.status).toBe(409);
+    expect((await first.json()).message).toMatch(/2 failed.*Retry/);
+    const st = await (await fetch(baseUrl + '/api/admin/newsletter', { headers: h })).json();
+    expect(st).toMatchObject({ this_week_sent: false, this_week_failed: 2 });
+
+    fail = false;
+    const retry = await post('/api/admin/newsletter/send', {}, h);
+    expect(retry.status).toBe(200);
+    const after = await (await fetch(baseUrl + '/api/admin/newsletter', { headers: h })).json();
+    expect(after).toMatchObject({ this_week_sent: true, this_week_failed: 0, this_week_recipients: 2 });
   });
 
   it('refuses to send without a mailing address', async () => {

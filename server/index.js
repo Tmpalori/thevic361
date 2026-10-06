@@ -187,7 +187,11 @@ export async function createApp(opts = {}) {
   });
   sponsors.registerWebhook(app);
 
-  app.use(express.json({ limit: '64kb' }));
+  // The admin's sponsor edit can carry a new logo (a data URL, shrunk in
+  // the browser), so it alone gets a bigger JSON limit.
+  const smallJson = express.json({ limit: '64kb' });
+  const sponsorEditJson = express.json({ limit: '600kb' });
+  app.use((req, res, next) => (/^\/api\/admin\/sponsors\/[^/]+$/.test(req.path) ? sponsorEditJson : smallJson)(req, res, next));
   // The sponsor checkout form can carry a logo (a data URL, shrunk in the
   // browser), so it alone gets a bigger limit.
   const smallForms = express.urlencoded({ extended: false, limit: '64kb' });
@@ -1096,6 +1100,10 @@ export async function createApp(opts = {}) {
   registerNewsletter(app, {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
     getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman,
+    // Monday's run also sends last week's sponsor click reports. A daily
+    // scheduler can call sponsors.sendSponsorReports(now) as well; it's
+    // idempotent (each order records report_sent).
+    onCron: now => sponsors.sendSponsorReports(now),
     withNav: async (html, path) => {
       const payload = await getPublicPayload();
       return fillSeasonalNav(html, activeSeasons(payload.events, await listArchived(), nowFn()), path);
@@ -1223,7 +1231,7 @@ export async function createApp(opts = {}) {
   // Contact form → Slack; replaces publishing an email address.
   registerContact(app, { siteUrl, slack, createRateLimiter, sendHtml, verifyHuman });
 
-  sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman });
+  sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman, analyticsSecret });
 
   app.get('/about', pageHandler(async (req, res, payload, ctx) => {
     sendHtml(res, renderAboutPage(ctx));
@@ -1323,7 +1331,9 @@ export async function createApp(opts = {}) {
       { key: 'newsletter', label: 'Email newsletter (Resend)', ok: newsletter.enabled && Boolean(newsletter.address), level: 'recommended',
         fix: newsletter.enabled ? 'Set NEWSLETTER_ADDRESS (a mailing address is required by law in every email).' : 'Set RESEND_API_KEY and NEWSLETTER_ADDRESS in Railway.' },
       { key: 'newsletter_auto', label: 'Newsletter sends itself Mondays', ok: Boolean(newsletter.cronSecret), level: 'recommended',
-        fix: 'Set NEWSLETTER_CRON_SECRET in Railway and GitHub, and the NEWSLETTER_AUTOSEND repo variable to 1.' },
+        fix: 'Set NEWSLETTER_CRON_SECRET in Railway and as a GitHub secret (the same long random string in both). The Monday send also emails last week\'s sponsor their click report.' },
+      { key: 'reply_to', label: 'Customer email replies reach you', ok: Boolean(newsletter.replyTo), level: 'recommended',
+        fix: 'Set NEWSLETTER_REPLY_TO in Railway to an inbox you read. Sponsor and submitter emails say "just reply", and without it replies go to the sending address.' },
       { key: 'stripe', label: 'Sponsor payments (Stripe)', ok: stripeCfg.enabled, level: 'recommended',
         fix: 'In Stripe: create a restricted key (Checkout Sessions, Products and Prices: write) and a webhook to ' + siteUrl +
           '/api/stripe/webhook on API version 2026-09-30.endive. Put them in Railway as STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.' },
