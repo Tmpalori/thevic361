@@ -100,8 +100,12 @@ def rule_decision(ev, live):
     """(decision, reason) the rules are sure of, ("flag", why) for doubts,
     or None to leave it to the AI."""
     reason = ce.non_event_reason(dict(ev))
-    if reason in RELIGIOUS_REASONS:
+    # Rejected only when the name or venue says so; a description that
+    # merely sounds religious gets a person's look instead.
+    if reason in RELIGIOUS_REASONS and ce.non_event_reason({**ev, "description": ""}) in RELIGIOUS_REASONS:
         return "reject", f"{reason} (the site doesn't list these)"
+    if reason in RELIGIOUS_REASONS:
+        return "flag", f"description sounds religious ({reason})"
     for other in live:
         if other.get("date") != ev.get("date"):
             continue

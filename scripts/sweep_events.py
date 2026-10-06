@@ -6,7 +6,8 @@ auto-publish has updated the site) and on Monday morning before the
 newsletter. Reads the live /events.json, so it checks what people actually
 see, hand edits included, and posts one Slack message: what to look at, or
 that everything looks fine. What a rule is sure about (church events,
-non-events, exact duplicates) it hides on its own through the site's
+non-events, exact duplicates, a cut-off name with the whole listing at the
+same place that day) it hides on its own through the site's
 /api/event-check/hide (server/eventcheck.js; never deletes, restore on admin
 Home); judgment calls, and everything the AI finds, only get reported.
 
@@ -15,7 +16,7 @@ Two passes:
     checks run again over the published list (it can hold hand-added
     events, or ones published before a rule existed), plus a weekday in the
     name that doesn't match the date ("Monday Bingo" on a Tuesday) and
-    start times in the middle of the night.
+    start times in the middle of the night, or a night event in the morning.
   - AI (one call, a few cents): the whole list at once, so it can see what
     per-event checks can't, like the same event at two venues. Skipped
     without OPENAI_API_KEY; the rules still run.
@@ -46,10 +47,14 @@ RELIGIOUS_REASONS = {"religious event", "church event", "worship service"}  # co
 # Rule findings certain enough to hide without asking. Wrong days and odd
 # times stay flags: the fix is an edit, not a removal. AI findings are never
 # acted on.
-AUTO_HIDE = {"religious", "not_an_event", "duplicate"}
+AUTO_HIDE = {"religious", "not_an_event", "duplicate", "cut_off"}
 # Duplicates are only hidden when they're exact (same name, venue and start
-# once normalized) and neither copy is a paid/featured listing; the copy
-# with less detail goes. Fuzzy matches are only reported.
+# once normalized), or the library's copy of a program the city calendar
+# lists at its real place, and neither copy is a paid/featured listing; the
+# copy with less detail goes. Fuzzy matches are only reported. A cut-off
+# name ("Scenic Root — Plant a") is hidden only when another listing is at
+# the same place that day (the whole event, from another source); alone it
+# is only reported, since hiding it could lose the event.
 
 
 def upcoming(events, today, days):
@@ -77,20 +82,47 @@ def rule_findings(events):
         start = ce._start_minutes(e.get("time"))
         if start is not None and start < 6 * 60:
             found.append((i, "odd_time", f"starts at {e.get('time')}"))
+        else:
+            # "Comedy Night" at 10:00 AM: probably an AM/PM slip.
+            reason = ce.morning_nightlife_reason(e) or ce.evening_venue_morning_reason(e)
+            if reason:
+                found.append((i, "odd_time", reason))
         reason = ce.cut_off_name_reason(e.get("name"))
         if reason:
-            found.append((i, "other", f"name looks cut off ({reason})"))
+            found.append((i, "cut_off", f"name looks cut off ({reason})"))
         reason = ce.out_of_area_reason(dict(e))
         if reason:
             found.append((i, "out_of_area", reason))
         reason = ce.non_event_reason(dict(e))
-        if reason:
+        if reason in RELIGIOUS_REASONS and ce.non_event_reason({**e, "description": ""}) not in RELIGIOUS_REASONS:
+            # Only the description sounds religious: a person decides.
+            found.append((i, "other", f"description sounds religious ({reason})"))
+        elif reason:
             found.append((i, "religious" if reason in RELIGIOUS_REASONS else "not_an_event", reason))
-        for j in range(i):
-            if ce.is_same_event(events[j], e):
-                found.append((i, "duplicate", f"same as “{events[j]['name']}” at {events[j].get('venue') or 'no venue'}"))
-                break
+        j = _dup_of(events, i)
+        if j is not None:
+            found.append((i, "duplicate", f"same as “{events[j]['name']}” at {events[j].get('venue') or 'no venue'}"))
     return found
+
+
+def _dup_of(events, i):
+    return next((j for j in range(i) if ce.is_same_event(events[j], events[i])
+                 or _library_twin(events[j], events[i])), None)
+
+
+def _library_twin(a, b):
+    """The library's copy of a program the city calendar lists at its real
+    place (2026-10-06 "Bookish Society Book Club" at the library and at Vida
+    Cafe, same hours). Published lists have lost the collector's "guessed
+    venue" flag, so the links tell the copies apart."""
+    lib, city = (a, b) if "librarycalendar.com" in (a.get("url") or "") else (b, a)
+    if "librarycalendar.com" not in (lib.get("url") or "") \
+            or "victoriatx.gov/calendar.aspx?eid=" not in (city.get("url") or "").lower():
+        return False
+    if (lib.get("venue") or "").strip().lower() != "victoria public library" or lib.get("date") != city.get("date"):
+        return False
+    ta, tb = ce._time_range(lib.get("time")), ce._time_range(city.get("time"))
+    return _norm(lib.get("name")) == _norm(city.get("name")) and ta[0] is not None and ta == tb
 
 
 def _line(i, e):
@@ -178,7 +210,7 @@ def combine(rule, ai):
 
 LABEL = {"duplicate": "possible duplicate", "wrong_date": "wrong day?", "not_an_event": "not an event?",
          "out_of_area": "outside Victoria?", "religious": "religious / church event", "odd_time": "odd time",
-         "other": "check"}
+         "cut_off": "name cut off", "other": "check"}
 
 
 def describe(e):
@@ -213,20 +245,44 @@ def to_hide(events, rules):
     for i, kind, why in rules:
         if kind not in AUTO_HIDE:
             continue
+        if kind == "cut_off":
+            whole = _whole_listing(events, i)
+            if whole is None or events[i].get("featured"):
+                continue
+            why = f"{why}; “{events[whole]['name']}” is listed there that day"
         if kind == "duplicate":
-            j = next((j for j in range(i) if ce.is_same_event(events[j], events[i])), None)
-            if j is None or not _exact_twins(events[i], events[j]):
+            j = _dup_of(events, i)
+            if j is None or events[i].get("featured") or events[j].get("featured"):
                 continue
-            if events[i].get("featured") or events[j].get("featured"):
+            if _library_twin(events[i], events[j]):
+                # The city calendar's copy has the real meeting place.
+                loser, keeper = (i, j) if "librarycalendar.com" in (events[i].get("url") or "") else (j, i)
+                why = (f"the library's copy of “{events[keeper]['name']}”, which the city lists at "
+                       f"{events[keeper].get('venue') or 'another place'}")
+            elif _exact_twins(events[i], events[j]):
+                loser, keeper = (i, j) if _detail(events[i]) <= _detail(events[j]) else (j, i)
+                why = f"same as “{events[keeper]['name']}” at {events[keeper].get('venue') or 'no venue'}, which has more detail"
+            else:
                 continue
-            loser, keeper = (i, j) if _detail(events[i]) <= _detail(events[j]) else (j, i)
-            why = f"same as “{events[keeper]['name']}” at {events[keeper].get('venue') or 'no venue'}, which has more detail"
             resolved[i] = loser
             i = loser
         if i not in seen and events[i].get("page"):
             seen.add(i)
             out.append((i, kind, why))
     return out, resolved
+
+
+def _whole_listing(events, i):
+    """Another listing, not itself cut off, at the same place on the same
+    day as the cut-off one, or None."""
+    e = events[i]
+    if not (e.get("venue") or "").strip():
+        return None
+    for j, o in enumerate(events):
+        if j != i and o.get("date") == e.get("date") and (o.get("venue") or "").strip() \
+                and ce._same_place(e, o) and not ce.cut_off_name_reason(o.get("name")):
+            return j
+    return None
 
 
 def hide(events, picks, secret):
