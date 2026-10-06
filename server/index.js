@@ -35,6 +35,8 @@ import { registerSubmissionReview, isPaidPick } from './submissionReview.js';
 import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage, sameEvent } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
+import { renderEventCard, eventCardVersion } from './ogImage.js';
+import { capDays, pickDays, shown } from './scoring.js';
 import { createAutoPublish, unpublishEvent, replacePublishedEvent, forgetRemoved } from './autopublish.js';
 import { createScheduler, schedulerEnabled } from './scheduler.js';
 import * as sponsorsModule from './sponsors.js';
@@ -304,15 +306,25 @@ export async function createApp(opts = {}) {
   });
 
   // ─── Health ───
-  // Touches the database: when Postgres is down the site still answers
-  // from the bundled fallback feed, so only this tells an uptime check.
+  // ?deep=1 also asks the database (for the uptime check), so "the page
+  // loads but nothing can be saved or published" counts as down. Plain
+  // /api/health stays process-only, so a database blip can't fail a deploy.
   app.get('/api/health', async (req, res) => {
-    try {
-      await store.getPublished();
-      res.set('Cache-Control', 'no-store').json({ ok: true, storage: storeBundle.kind });
-    } catch (err) {
-      res.status(503).set('Cache-Control', 'no-store').json({ ok: false, storage: storeBundle.kind, error: 'db-unreachable' });
+    if (req.query.deep && storeBundle.pool) {
+      let timer;
+      try {
+        await Promise.race([
+          storeBundle.pool.query('SELECT 1'),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('database timeout')), 5000); })
+        ]);
+      } catch (err) {
+        console.error('[health] database check failed:', err?.message || err);
+        return res.status(503).json({ ok: false, storage: storeBundle.kind, error: 'database' });
+      } finally {
+        clearTimeout(timer);
+      }
     }
+    res.json({ ok: true, storage: storeBundle.kind });
   });
 
   // Express 4 doesn't pass a rejected async handler to the error
@@ -620,6 +632,7 @@ export async function createApp(opts = {}) {
       for (const r of approved) {
         const ev = {
           ...withoutSubmitter(r.payload),
+          submitted: true, // the event score's community-submission bonus
           _source: r.source || 'submission',
           _source_id: r.id,
           _submitter_kind: r.submitter_kind || null
@@ -684,10 +697,26 @@ export async function createApp(opts = {}) {
     if (!v.ok) return res.status(400).json({ ok: false, errors: v.errors });
 
     try {
+      let previousKey = null;
+      try {
+        const prev = (await store.listEventEdits()).find(e => e.original_key === original_key);
+        if (prev) previousKey = eventKeyOf(prev.payload);
+      } catch (_) { /* no earlier edit to follow */ }
       const row = await store.upsertEventEdit({
         original_key,
         payload: v.data
       });
+      // A "Show anyway" (kept) key follows the event to its new name/date.
+      try {
+        const published = await store.getPublished();
+        const newKey = eventKeyOf(v.data);
+        const old = new Set([original_key, previousKey].filter(k => k && k !== newKey));
+        if (published && Array.isArray(published.kept) && published.kept.some(k => old.has(k))) {
+          await store.setPublished({ ...published, kept: [...new Set(published.kept.map(k => (old.has(k) ? newKey : k)))] });
+        }
+      } catch (err) {
+        console.warn('[admin] kept key not moved:', err.message);
+      }
       // The edit can rename a live event (new page URL); archive it now so
       // that URL keeps working after the week rotates out.
       store.getPublished().then(p => p && archiveEvents(p.events)).catch(() => {});
@@ -725,7 +754,19 @@ export async function createApp(opts = {}) {
   //      explicitly to update them.
   app.post('/api/admin/publish-events', requireAdmin, async (req, res) => {
     const body = req.body || {};
-    const events = Array.isArray(body.events) ? body.events : null;
+    // score/overflow/keep are worked out on read (server/scoring.js; keep
+    // comes from the `kept` list), never stored on an event: a stored copy
+    // would go stale or outlive the admin's Undo.
+    const events = Array.isArray(body.events)
+      ? body.events.map(ev => {
+        if (!ev || typeof ev !== 'object') return ev;
+        const { score: _s, overflow: _o, keep: _k, editor_pick: pick, ...rest } = ev;
+        // An editor's pick is `featured` only on read (pickDays); storing
+        // it would pin it for good.
+        if (pick) delete rest.featured;
+        return rest;
+      })
+      : null;
     if (!events) {
       return res.status(400).json({ ok: false, error: 'bad-payload', message: 'events[] required' });
     }
@@ -897,6 +938,18 @@ export async function createApp(opts = {}) {
       } catch (err) {
         console.warn('[admin] published-events overlay skipped:', err.message);
       }
+      // Score and whether each event made its day's list (server/scoring.js),
+      // as the public site sees it, for the admin's "Dropped" label.
+      let scored = new Map();
+      try {
+        scored = new Map((await getPublicPayload()).events.map(e => [eventKeyOf(e), e]));
+      } catch (err) {
+        console.warn('[admin] published-events scoring skipped:', err.message);
+      }
+      events = events.map(ev => {
+        const s = scored.get(eventKeyOf(ev));
+        return s ? { ...ev, score: s.score, overflow: Boolean(s.overflow), keep: Boolean(s.keep), editor_pick: Boolean(s.editor_pick) } : ev;
+      });
       res.json({
         ok: true,
         events,
@@ -910,6 +963,32 @@ export async function createApp(opts = {}) {
         error: 'published-lookup-failed',
         message: err.message
       });
+    }
+  });
+
+  // ─── Admin: show a dropped event anyway ──────────────────────────────
+  // Body: { key: "date|name|venue", keep: true|false }. A day shows its best
+  // 15 (Mon–Thu) or 20 (Fri–Sun) events by score; `keep` puts one back in
+  // whatever its score. Stored in the published payload (`kept`), like the
+  // event check's hidden list, so Save & Publish and auto-publish carry it
+  // forward; keys start with the date, so past ones age out.
+  app.post('/api/admin/keep-event', requireAdmin, async (req, res) => {
+    const key = String(req.body && req.body.key || '').slice(0, 600);
+    const keep = Boolean(req.body && req.body.keep);
+    if (key.split('|').length !== 3 || !/^\d{4}-\d{2}-\d{2}\|/.test(key)) {
+      return res.status(400).json({ ok: false, error: 'bad-key' });
+    }
+    try {
+      const published = await store.getPublished();
+      if (!published) return res.status(404).json({ ok: false, error: 'nothing-published' });
+      const today = localDateStr(nowFn());
+      const kept = new Set((Array.isArray(published.kept) ? published.kept : []).filter(k => String(k).slice(0, 10) >= today));
+      if (keep) kept.add(key); else kept.delete(key);
+      await store.setPublished({ ...published, kept: [...kept] });
+      res.json({ ok: true, key, keep });
+    } catch (err) {
+      console.error('[admin] keep-event failed:', err.message);
+      res.status(500).json({ ok: false, error: 'keep-failed', message: err.message });
     }
   });
 
@@ -1018,6 +1097,7 @@ export async function createApp(opts = {}) {
     const rows = await store.list({ status: 'approved' });
     let events = rows.map(r => ({
       ...withoutSubmitter(r.payload),
+      submitted: true, // the event score's community-submission bonus
       _source: r.source || 'submission',
       _source_id: r.id,
       _submitter_kind: r.submitter_kind || null
@@ -1086,8 +1166,24 @@ export async function createApp(opts = {}) {
   // they always agree.
   // Paid placements (sponsor of the week, featured events, venue partners)
   // are layered on at read time so every consumer sees the same thing.
+  let venues = [];
+
+  // Every public view reads this. capDays (server/scoring.js) scores each
+  // event and marks the ones past their day's limit `overflow`: the day
+  // lists below leave those out (shownPayload), while event pages, guides
+  // and the sitemap keep them.
   async function getPublicPayload() {
-    return sponsors.apply(await loadPublicPayload());
+    const payload = await sponsors.apply(await loadPublicPayload());
+    // `kept`: events the admin chose to show anyway (POST
+    // /api/admin/keep-event), by key; they skip the daily limit.
+    const kept = new Set(Array.isArray(payload.kept) ? payload.kept : []);
+    const events = (payload.events || []).map(ev => kept.has(eventKeyOf(ev)) ? { ...ev, keep: true } : ev);
+    return { ...payload, events: pickDays(capDays(events, { venues })) };
+  }
+
+  async function shownPayload() {
+    const payload = await getPublicPayload();
+    return { ...payload, events: shown(payload.events) };
   }
 
   // The public events of a published payload, with the edits overlay
@@ -1159,8 +1255,18 @@ export async function createApp(opts = {}) {
   async function serveEventsJson(req, res, next) {
     try {
       // auto_publish and the hidden lists are bookkeeping, not public.
-      const { source, auto_publish: auto, hidden: _h, hidden_restored: _r, ...payload } = await getPublicPayload();
+      // The homepage app and social kit read this: day lists. ?all=1 is
+      // every public event, with `overflow` on the ones past their day's
+      // limit (they're public anyway: own page, guides), for the event check
+      // and submission review, which must see everything that's live.
+      const all = req.query.all === '1';
+      const { source, auto_publish: auto, hidden: _h, hidden_restored: _r, kept: _k, ...payload } =
+        all ? await getPublicPayload() : await shownPayload();
       if (source === 'empty') return next();
+      // The score and the admin's keep flag are internal (server/scoring.js).
+      payload.events = payload.events.map(({ score: _s, keep: _kp, overflow, ...ev }) =>
+        (all && overflow ? { ...ev, overflow: true } : ev));
+      // editor_pick stays: it tells an editor's Vic's Pick from a paid one.
       // Store-backed payloads change on publish; the bundled file only on deploy.
       if (source === 'store') res.set('Cache-Control', 'no-store');
       // collected_at: the candidates.json (its last_updated) auto-publish
@@ -1209,7 +1315,8 @@ export async function createApp(opts = {}) {
 
   const newsletterApi = registerNewsletter(app, {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
-    getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman,
+    // The newsletter is a day-by-day list: only events that made their day.
+    getPublicPayload: shownPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman,
     // Monday's run also sends last week's sponsor click reports. A daily
     // scheduler can call sponsors.sendSponsorReports(now) as well; it's
     // idempotent (each order records report_sent).
@@ -1234,8 +1341,8 @@ export async function createApp(opts = {}) {
     res.type('html').send(html);
   }
 
-  // venues.json ships with the deploy; read once at boot.
-  let venues = [];
+  // venues.json ships with the deploy; read once at boot (declared above,
+  // with getPublicPayload, which scores events by venue).
   try {
     venues = buildVenues(await readJsonFile(opts.venuesFile || VENUES_FILE));
   } catch (err) {
@@ -1279,14 +1386,16 @@ export async function createApp(opts = {}) {
     if (!indexTemplate || opts.reloadTemplates) {
       indexTemplate = await fsp.readFile(path.join(DOCS_DIR, 'index.html'), 'utf8');
     }
-    sendHtml(res, renderHome(indexTemplate, payload.events, {
+    sendHtml(res, renderHome(indexTemplate, shown(payload.events), {
       ...ctx, signupHtml: signupFormHtml()
     }));
   }));
 
   for (const page of HUB_PAGES) {
     app.get(page.path, pageHandler(async (req, res, payload, ctx) => {
-      sendHtml(res, renderHubPage(page, payload.events, ctx));
+      // Day pages (today, this weekend, next week) are day lists; the
+      // category pages (free, kids, music...) are guides and keep everything.
+      sendHtml(res, renderHubPage(page, page.range === 'upcoming' ? payload.events : shown(payload.events), ctx));
     }));
   }
 
@@ -1309,12 +1418,31 @@ export async function createApp(opts = {}) {
     res.type('text/calendar; charset=utf-8').send(renderIcs(ev, ctx));
   }));
 
+  // Link-preview card (server/ogImage.js). The page links it with ?v=<hash
+  // of what's drawn>, so the long cache is safe: an edited event gets a new
+  // URL, and Facebook re-fetches it. Also registered before /events/:slug.
+  app.get('/events/:slug.png', pageHandler(async (req, res, payload) => {
+    const ev = await findEvent(payload, `/events/${req.params.slug}`);
+    if (!ev) return res.status(404).type('text/plain').send('Not found');
+    let png;
+    try {
+      png = renderEventCard({ ...ev, page: `/events/${req.params.slug}` });
+    } catch (err) {
+      // A broken card shouldn't break the share: show the site image instead.
+      console.error('[og] event card render failed:', err.message);
+      return res.redirect(302, '/og-image.png');
+    }
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.type('image/png').send(png);
+  }));
+
   app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
     const ev = await findEvent(payload, `/events/${req.params.slug}`);
     if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), 404);
     const venue = venueFor(ev, venues);
     sendHtml(res, renderEventPage(ev, payload.events, {
-      ...ctx, extras: eventActionsHtml(ev, siteUrl), venuePath: venue ? venue.path : null
+      ...ctx, extras: eventActionsHtml(ev, siteUrl), venuePath: venue ? venue.path : null,
+      image: `${ev.page}.png?v=${eventCardVersion(ev)}`
     }));
   }));
 
@@ -1372,7 +1500,7 @@ export async function createApp(opts = {}) {
       ['Event venues in Victoria, TX', '/venues', 'every venue we track, with its upcoming events'],
       ...activeSeasons(payload.events, ctx.archived, ctx.now).map(s => [s.title, s.path, s.description])
     ];
-    res.type('text/plain; charset=utf-8').send(renderLlmsTxt(payload.events, { ...ctx, extraLinks, sponsor: payload.sponsor || null }));
+    res.type('text/plain; charset=utf-8').send(renderLlmsTxt(shown(payload.events), { ...ctx, extraLinks, sponsor: payload.sponsor || null }));
   }));
 
   // The social kit lives at docs/social/latest/index.html; static serving

@@ -40,55 +40,25 @@ from typing import Any, Iterable
 import requests
 
 
-# ─── SENTRY (silent failure observability) ──────────────────────────────────
-# Mirrors collect_events.py: a missing SENTRY_DSN or missing sentry_sdk
-# leaves these hooks as no-ops, but if Sentry IS configured the workflow
-# logs are no longer the only way to see breakage. The audit specifically
-# called out that this script previously double-silenced everything (every
-# error path printed a one-liner and returned []), so each interesting
-# failure now also fires a Sentry event.
+# ─── WARNINGS (silent failure observability) ────────────────────────────────
+# Mirrors collect_events.py. Every error path here used to print a one-liner
+# and return [], so each interesting failure prints a GitHub Actions
+# ::warning:: line, which shows as an annotation on the run page.
 
-_SENTRY_ENABLED = False
-try:
-    import sentry_sdk  # type: ignore
-    _dsn = os.environ.get("SENTRY_DSN", "").strip()
-    if _dsn:
-        sentry_sdk.init(
-            dsn=_dsn,
-            traces_sample_rate=0.0,
-            environment=os.environ.get(
-                "SENTRY_ENVIRONMENT", "thevic361-discover-venues"
-            ),
-            release=os.environ.get("GITHUB_SHA", "local")[:12],
-        )
-        _SENTRY_ENABLED = True
-except Exception:
-    _SENTRY_ENABLED = False
+def _annotate(kind: str, message: str, tags: dict) -> None:
+    detail = " ".join(f"{k}={v}" for k, v in tags.items())
+    text = f"{message} ({detail})" if detail else str(message)
+    print(f"::{kind}::{text}".replace("\r", " ").replace("\n", " "), flush=True)
 
 
-def _sentry_warn(message: str, **tags: Any) -> None:
-    if not _SENTRY_ENABLED:
-        return
-    try:
-        with sentry_sdk.push_scope() as scope:
-            for k, v in tags.items():
-                scope.set_tag(k, v)
-            sentry_sdk.capture_message(message, level="warning")
-    except Exception:
-        pass
+def _warn(message: str, **tags: Any) -> None:
+    _annotate("warning", message, tags)
 
 
-def _sentry_exception(stage: str, **tags: Any) -> None:
-    if not _SENTRY_ENABLED:
-        return
-    try:
-        with sentry_sdk.push_scope() as scope:
-            scope.set_tag("stage", stage)
-            for k, v in tags.items():
-                scope.set_tag(k, v)
-            sentry_sdk.capture_exception()
-    except Exception:
-        pass
+def _report_exception(stage: str, **tags: Any) -> None:
+    import traceback
+    last = traceback.format_exc(limit=1).strip().splitlines()[-1][:200]
+    _annotate("warning", f"{stage} failed", {**tags, "error": last})
 
 
 # ─── Constants ──────────────────────────────────────────────────────────────
@@ -439,7 +409,7 @@ def _run_actor_with_retries(
     """Call the Apify actor, retrying transient failures (network, 5xx).
 
     HTTP 4xx (other than 408/429) is permanent — no retries. The label is
-    only used for logging/Sentry tags so per-category failures are
+    only used for logging tags so per-category failures are
     attributable.
     """
     attempts = max_retries + 1
@@ -457,13 +427,13 @@ def _run_actor_with_retries(
         )
         if kind == "exc":
             print(f"  [discover] {label}: request failed ({info})")
-            _sentry_exception(
+            _report_exception(
                 "apify_request", actor=APIFY_GMAPS_ACTOR, search=label,
             )
         elif kind == "http":
             status, body = info
             print(f"  [discover] {label}: HTTP {status}: {body}")
-            _sentry_warn(
+            _warn(
                 f"[discover] Apify HTTP {status}",
                 actor=APIFY_GMAPS_ACTOR,
                 search=label,
@@ -471,12 +441,12 @@ def _run_actor_with_retries(
             )
         elif kind == "parse":
             print(f"  [discover] {label}: response parse failed: {info}")
-            _sentry_exception(
+            _report_exception(
                 "apify_parse", actor=APIFY_GMAPS_ACTOR, search=label,
             )
         elif kind == "shape":
             print(f"  [discover] {label}: unexpected payload type: {info}")
-            _sentry_warn(
+            _warn(
                 "[discover] Unexpected Apify payload type",
                 actor=APIFY_GMAPS_ACTOR,
                 search=label,
@@ -493,7 +463,7 @@ def _run_actor_with_retries(
         sleep(delay)
 
     # Loop fell through: all attempts failed.
-    _sentry_warn(
+    _warn(
         "[discover] All Apify retries failed",
         actor=APIFY_GMAPS_ACTOR,
         search=label,
@@ -526,7 +496,7 @@ def run_apify_discovery(
     a list of skipped categories, instead of being SIGKILLed.
 
     Failures are intentionally non-fatal (discovery is best-effort), but
-    they are no longer silent — each failure path fires a Sentry event so
+    they are no longer silent — each failure path fires a warning so
     the operator can see breakage without grep-diving the Actions log.
     """
     post = http_post or requests.post
@@ -552,7 +522,7 @@ def run_apify_discovery(
                 f"skipping remaining {len(remaining)} categories: "
                 f"{', '.join(remaining)}"
             )
-            _sentry_warn(
+            _warn(
                 "[discover] Apify time budget exhausted; partial results",
                 actor=APIFY_GMAPS_ACTOR,
                 completed=str(idx),
@@ -586,7 +556,7 @@ def run_apify_discovery(
     if successes == 0 and len(CATEGORY_SEARCHES) > 0 and not skipped_terms:
         # Every attempted category failed — and we didn't bail on time.
         # Different signal from "ran but nothing new" or "ran out of clock".
-        _sentry_warn(
+        _warn(
             "[discover] All Apify categories failed",
             actor=APIFY_GMAPS_ACTOR,
             categories=str(len(CATEGORY_SEARCHES)),
@@ -799,10 +769,10 @@ def discover_and_update(
 
     if not token:
         # Visible-skipped-token: a zero-effort path that used to be logged
-        # only to stdout. Now also fires a Sentry warning so the operator
+        # only to stdout. Now also fires a warning so the operator
         # finds out before the next weekly digest comes in dry.
         print("  [discover] No APIFY_TOKEN — skipping Google Maps discovery")
-        _sentry_warn(
+        _warn(
             "[discover] APIFY_TOKEN not set; venue discovery skipped",
             stage="apify_token_missing",
         )
@@ -834,10 +804,10 @@ def discover_and_update(
         # NOTHING new came back across HIGH/MEDIUM. That can be legitimate
         # (everything in Victoria is already in the seed list) but is more
         # often a sign the actor schema changed, the token's quota lapsed,
-        # or the location query stopped resolving. We want a Sentry ping
+        # or the location query stopped resolving. We want a run warning
         # on that, not just a dry workflow log.
         if not discovered_high and not discovered_medium:
-            _sentry_warn(
+            _warn(
                 "[discover] Apify ran but produced 0 HIGH and 0 MEDIUM venues",
                 stage="apify_zero_results",
                 items=str(len(items)),
@@ -886,14 +856,14 @@ def main(argv: list[str] | None = None) -> int:
         discover_and_update(repo_root=args.repo_root)
         return 0
     except Exception as e:
-        # Non-destructive failure: capture to Sentry (so it's visible) and
+        # Non-destructive failure: print a warning (so it's visible) and
         # exit 0 so the workflow continues with the existing venue files.
         # The audit's complaint was that THIS path used to be the only
         # signal that anything went wrong — it was a stdout one-liner that
-        # the workflow then masked again with `|| echo "skipped"`. Sentry
-        # makes the failure surface even when nobody reads the Action log.
+        # the workflow then masked again with `|| echo "skipped"`. The
+        # annotation shows on the run page even when nobody reads the log.
         print(f"  [discover] Discovery failed (non-fatal): {e}")
-        _sentry_exception("discover_top_level")
+        _report_exception("discover_top_level")
         return 0
 
 

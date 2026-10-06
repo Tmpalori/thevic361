@@ -88,6 +88,8 @@
     }
   }
 
+  var SHARE_ICON = '<svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true" focusable="false"><path d="M17.5 4.5l10 8.6c.6.5.6 1.3 0 1.8l-10 8.6c-.7.6-1.7.1-1.7-.8v-4.4C10 18.4 6.6 21 4.3 26.2c-.3.7-1.3.5-1.3-.3C3.4 16.8 8.6 11 15.8 10.6V5.3c0-.9 1-1.4 1.7-.8z" fill="#FF8FC0" stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round"/></svg>';
+
   // ─── RENDER SINGLE EVENT ───
   function renderEvent(ev) {
     var iconHtml = renderIcons(ev.icons);
@@ -118,17 +120,27 @@
       ? '<div class="event-desc">' + escHtml(ev.description) + '</div>'
       : '';
 
+    // Share button, same markup as shareButton in server/seo.js. Admin
+    // preview data has no ev.page, so no button there.
+    var shareHtml = ev.page
+      ? '<button type="button" class="event-share" data-share-url="' + escHtml(ev.page) + '" data-share-text="' + escHtml(ev.name) +
+        '" aria-label="Share ' + escHtml(ev.name) + '" title="Share">' + SHARE_ICON + '</button>'
+      : '';
+
     var iconAttr = (ev.icons || []).join(' ') + (ev.free === true ? ' free' : '');
     return '<li class="event-entry' + (ev.featured ? ' event-entry--featured' : '') + '" data-icons="' + escHtml(iconAttr) + '">' +
       '<span class="event-icons" aria-hidden="true">' + iconHtml + '</span>' +
       '<div class="event-details">' +
         (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
+        // Nearby-town events (ev.town), same as nearbyBadge in server/seo.js.
+        (ev.town ? '<span class="badge badge--nearby">Nearby · ' + escHtml(ev.town) + '</span> ' : '') +
         (ev.time ? '<span class="event-time">' + escHtml(formatTime(ev.time)) + '</span> ' : '') +
         '<span class="event-name">' + nameHtml + '</span>' +
         (venuePart ? '<span class="event-venue">' + escHtml(venuePart) + '</span>' : '') +
         freeBadge +
         descHtml +
       '</div>' +
+      shareHtml +
     '</li>';
   }
 
@@ -157,8 +169,10 @@
         if (ampm === 'AM' && h === 12) h = 0;
         return h * 60 + min;
       }
-      // Featured (paid) events pin to the top of their day.
-      if (Boolean(a.featured) !== Boolean(b.featured)) return a.featured ? -1 : 1;
+      // Paid Vic's Picks pin to the top of their day, then editor's picks
+      // (pickRank in server/seo.js).
+      var ra = a.featured ? (a.editor_pick ? 1 : 0) : 2, rb = b.featured ? (b.editor_pick ? 1 : 0) : 2;
+      if (ra !== rb) return ra - rb;
       return toMins(ta) - toMins(tb);
     });
 

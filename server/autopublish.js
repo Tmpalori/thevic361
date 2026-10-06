@@ -26,7 +26,7 @@
  */
 
 import { eventKeyOf } from './db.js';
-import { localDateStr } from './seo.js';
+import { localDateStr, addDays } from './seo.js';
 import { sameEvent } from './sponsors.js';
 
 // Internal collector fields (_source, _also_from...) aren't public.
@@ -50,11 +50,24 @@ function sortKey(ev) {
 // the current candidates (otherwise an unchanged candidates.json is skipped).
 // 2: auto-added events the collector no longer finds are taken down.
 // 3: auto-added events take the collector's newer copy of themselves.
-export const AUTO_PUBLISH_RULES = 3;
+// 4: big/town/curated refresh; the health check counts scraped events only.
+// 5: scoring hints refresh; approved submissions are marked `submitted`.
+export const AUTO_PUBLISH_RULES = 5;
 
 // What a newer collector copy may change on an event this module added.
 // The name only when the published one was cut off (see cutOff).
-const REFRESH_FIELDS = ['time', 'venue', 'address', 'url', 'description', 'icons', 'free'];
+// big/town/curated: tags set in local_events.yaml after an event went live.
+// appeal/recurring/favorite/sources: the collector's scoring hints
+// (server/scoring.js).
+const REFRESH_FIELDS = ['time', 'venue', 'address', 'url', 'description', 'icons', 'free', 'big', 'town', 'curated',
+  'appeal', 'recurring', 'favorite', 'sources'];
+// Tags the collector writes only when set: a fresh copy without one means
+// it was taken off (a wrong town removed from the YAML), so it goes.
+// appeal/sources are different: missing means unknown, so they're kept.
+// So is `recurring`: a bar's "every Tuesday" post and a dated "this
+// Tuesday" post can alternate runs, and a weekly staple shouldn't flicker
+// in and out of the weekly-repeat score (and editor's picks).
+const TAG_FIELDS = ['big', 'town', 'curated', 'favorite'];
 
 function normName(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -92,6 +105,11 @@ export function mergeNotable(fresh, prior, today) {
 // The new run must have at least this share of the events this module has
 // up before it may take any of them down.
 const REPLACE_MIN_RATIO = 0.6;
+// ...counted over the collector's own window. Hand-added events now run 90
+// days ahead (local_events.yaml); counted too, they alone could pass the
+// ratio on a run where every scraper failed and take the scraped events
+// down.
+const HEALTH_WINDOW_DAYS = 14;
 
 // Take one event off the published list (an approved submission the admin
 // rejected) and remember it as removed so auto-publish doesn't put it back.
@@ -197,7 +215,10 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     }
     const freshUpcoming = fresh.filter(upcoming);
     const ours = priorUpcoming.filter(ev => autoKeys.has(eventKeyOf(ev)));
-    const healthy = !submissionsOnly && freshUpcoming.length >= ours.length * REPLACE_MIN_RATIO;
+    const healthEnd = addDays(today, HEALTH_WINDOW_DAYS);
+    const scraped = ev => ev.date <= healthEnd && !ev.curated && ev._source !== 'local_events';
+    const healthy = !submissionsOnly &&
+      freshUpcoming.filter(scraped).length >= ours.filter(scraped).length * REPLACE_MIN_RATIO;
     const stillFound = ev => freshUpcoming.some(f => eventKeyOf(f) === eventKeyOf(ev) || sameEvent(f, ev));
     const retired = edited && healthy
       ? ours.filter(ev => !edited.has(eventKeyOf(ev)) && !stillFound(ev))
@@ -226,7 +247,8 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
 
     let approved = [];
     try {
-      approved = (await store.list({ status: 'approved' })).map(r => r.payload).filter(upcoming);
+      // `submitted` earns the community-submission bonus in the event score.
+      approved = (await store.list({ status: 'approved' })).map(r => ({ ...r.payload, submitted: true })).filter(upcoming);
     } catch (err) {
       console.warn('[auto-publish] approved submissions skipped:', err.message);
     }
@@ -257,6 +279,7 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       const oldKey = eventKeyOf(old);
       const next = { ...old };
       for (const f of REFRESH_FIELDS) if (f in ev) next[f] = ev[f];
+      for (const f of TAG_FIELDS) if (!(f in ev)) delete next[f];
       if (!ev.description) next.description = old.description;
       if (cutOff(old.name, ev.name)) next.name = ev.name;
       const newKey = eventKeyOf(next);
@@ -278,6 +301,11 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       const key = eventKeyOf(ev);
       if (rejected.has(key)) { skippedRejected++; continue; }
       const i = events.findIndex(e => eventKeyOf(e) === key || sameEvent(e, ev));
+      if (i !== -1 && raw.submitted === true && !events[i].submitted) {
+        // Live already, but Save & Publish sent the admin's copy, which
+        // doesn't carry the flag; the score's submission bonus needs it.
+        events[i] = { ...events[i], submitted: true };
+      }
       if (i !== -1) {
         if (freshSet.has(raw) && canRefresh(events[i]) && refresh(i, ev)) updated++;
         continue;
@@ -299,6 +327,8 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
         : {}),
       last_updated: now,
       events,
+      // "Show anyway" keys follow an event this run renamed.
+      ...(Array.isArray(extras.kept) ? { kept: extras.kept.map(k => renamed.get(k) || k) } : {}),
       auto_publish: {
         from: from || null,
         at: now,

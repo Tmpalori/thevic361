@@ -310,7 +310,9 @@ def main(argv=None):
     if not submissions:
         print("Nothing waiting.")
         return 0
-    live = requests.get(f"{SITE}/events.json", headers=UA, timeout=30).json().get("events") or []
+    # ?all=1 includes events past their day's limit: still live (own page,
+    # guides), so a submission of one is "already listed", not new.
+    live = requests.get(f"{SITE}/events.json?all=1", headers=UA, timeout=30).json().get("events") or []
     reviews, log = decide(submissions, live, os.environ.get("OPENAI_API_KEY", "").strip())
     for line in log:
         print(line)

@@ -246,7 +246,7 @@ describe('venue partner (retired)', () => {
     expect(await (await fetch(baseUrl + '/advertise')).text()).not.toContain('Venue partner');
 
     // One bought before it was retired is still honored.
-    const featuredNames = async () => (await publicEvents()).events.filter(e => e.featured).map(e => e.name);
+    const featuredNames = async () => (await publicEvents()).events.filter(e => e.featured && !e.editor_pick).map(e => e.name);
     expect(await featuredNames()).toEqual(['Friday Live Music']);
     await webhook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_123', status: 'canceled' } } });
     expect(await featuredNames()).toEqual([]);

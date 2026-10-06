@@ -119,8 +119,6 @@ jobs:
           # Gemini + Google Search event discovery (optional; off without it).
           GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL:       ${{ vars.GEMINI_MODEL }}
-          SENTRY_DSN:         ${{ secrets.SENTRY_DSN }}
-          SENTRY_ENVIRONMENT: production
           # Toggle the FB-posts → OpenAI pipeline. Off until the Apify monthly
           # cap resets and we've verified post-volume cost. Set repository
           # variable FB_POSTS_ENABLED=1 (Settings → Variables → Actions) to
@@ -155,7 +153,9 @@ jobs:
           # venues.json / pending_venues.json / facebook_venues.backup.json
           # are no longer touched here — Google Maps discovery was removed
           # (see header comment) and the collector only reads venue files.
-          if git diff --quiet candidates.json collection_metadata.json 2>/dev/null; then
+          # enrichment_cache.json: gap-filling lookups (collect_events.py
+          # enrich_thin_events), kept so each event is searched once.
+          if git diff --quiet candidates.json collection_metadata.json enrichment_cache.json 2>/dev/null; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -173,6 +173,7 @@ jobs:
           # collection_metadata.json is the admin Sources-tab feed (per-source
           # counts + timestamps). Add it only if the collector wrote one.
           [ -f collection_metadata.json ] && git add collection_metadata.json
+          git add enrichment_cache.json
           git commit -m "🏙️ Update candidates $(date +'%Y-%m-%d')"
           # main can move during the ~25 min collect (a merge, the social
           # kit's commit). Rebase and retry instead of losing this run.
@@ -187,8 +188,9 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |
-          n=$(python3 -c "import json;d=json.load(open('candidates.json'));print(len(d.get('events',d) if isinstance(d,dict) else d))" 2>/dev/null || echo "?")
-          python3 scripts/slack_notify.py "🗓️ Collect done: $n events found. They'll publish automatically in a minute; edit or remove any in admin." --link "${{ vars.SITE_URL || 'https://www.thevic361.com' }}/admin.html"
+          # Next 14 days only: hand-added events run 90 days ahead.
+          n=$(python3 -c "import json,datetime as d;e=json.load(open('candidates.json'));e=e.get('events',e) if isinstance(e,dict) else e;end=(d.date.today()+d.timedelta(days=14)).isoformat();print(sum(1 for x in e if x.get('date','')<=end))" 2>/dev/null || echo "?")
+          python3 scripts/slack_notify.py "🗓️ Collect done: $n events in the next two weeks. They'll publish automatically in a minute; edit or remove any in admin." --link "${{ vars.SITE_URL || 'https://www.thevic361.com' }}/admin.html"
 
       - name: Tell Slack it failed
         if: failure()

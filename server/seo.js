@@ -416,6 +416,19 @@ export function decodeEntities(str) {
   });
 }
 
+// Where an event is. Most are in Victoria; a few big nearby-town events
+// (Cuero Turkeyfest, Port Lavaca's Boo-Fest) carry `town` from
+// local_events.yaml so pages, calendar files and schema say the right town.
+export function townOf(ev) {
+  return String((ev && ev.town) || '').trim() || 'Victoria';
+}
+
+// "Nearby · Cuero" tag on list items for events outside Victoria. docs/app.js
+// renders the same.
+function nearbyBadge(ev) {
+  return ev.town ? `<span class="badge badge--nearby">Nearby · ${escHtml(townOf(ev))}</span> ` : '';
+}
+
 // Venue line under an event name: "Venue · street address", without
 // repeating the address when the venue field already is one.
 export function placeText(ev) {
@@ -515,10 +528,16 @@ export function withPages(events) {
 }
 
 // By date, then featured (paid) events first within a day, then by time.
+// Within a day: paid Vic's Picks first (sold as "pinned to the top"), then
+// editor's picks (server/scoring.js pickDays), then the rest by time.
+export function pickRank(ev) {
+  return ev && ev.featured ? (ev.editor_pick ? 1 : 0) : 2;
+}
+
 export function sortEvents(list) {
   return list.slice().sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-    if (Boolean(a.featured) !== Boolean(b.featured)) return a.featured ? -1 : 1;
+    if (pickRank(a) !== pickRank(b)) return pickRank(a) - pickRank(b);
     return timeKey(a) - timeKey(b);
   });
 }
@@ -544,11 +563,11 @@ export function eventJsonLd(ev, siteUrl) {
     eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
     location: {
       '@type': 'Place',
-      name: ev.venue || 'Victoria, TX',
+      name: ev.venue || `${townOf(ev)}, TX`,
       address: {
         '@type': 'PostalAddress',
         ...(ev.address ? { streetAddress: ev.address } : {}),
-        addressLocality: 'Victoria',
+        addressLocality: townOf(ev),
         addressRegion: 'TX',
         addressCountry: 'US'
       }
@@ -578,17 +597,29 @@ function icons(ev) {
 // Mirrors renderEvent() in docs/app.js so the server markup and the
 // client re-render look identical. The name links to our event page (the
 // crawlable, internal link); the venue keeps the external source link.
+// Share button on each list item (a pink curvy forward arrow, sticker style
+// like docs/icons.svg), so an event can go out from the list
+// without opening its page first. docs/track.js handles the tap (share
+// sheet, or copy the link); docs/app.js renders the same button.
+const SHARE_ICON = '<svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true" focusable="false"><path d="M17.5 4.5l10 8.6c.6.5.6 1.3 0 1.8l-10 8.6c-.7.6-1.7.1-1.7-.8v-4.4C10 18.4 6.6 21 4.3 26.2c-.3.7-1.3.5-1.3-.3C3.4 16.8 8.6 11 15.8 10.6V5.3c0-.9 1-1.4 1.7-.8z" fill="#FF8FC0" stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round"/></svg>';
+function shareButton(ev) {
+  if (!ev.page) return '';
+  return `<button type="button" class="event-share" data-share-url="${escHtml(ev.page)}" data-share-text="${escHtml(ev.name)}" aria-label="Share ${escHtml(ev.name)}" title="Share">${SHARE_ICON}</button>`;
+}
+
 export function renderEventItem(ev) {
   const place = placeText(ev);
   return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}" data-icons="${escHtml((ev.icons || []).join(' ') + (ev.free === true ? ' free' : ''))}">` +
     `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
     '<div class="event-details">' +
       (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
+      nearbyBadge(ev) +
       (ev.time ? `<span class="event-time">${escHtml(formatTime(ev.time))}</span> ` : '') +
       `<span class="event-name"><a href="${escHtml(ev.page)}">${escHtml(ev.name)}</a></span>` +
       (place ? `<span class="event-venue">${escHtml(place)}</span>` : '') +
       (ev.description ? `<div class="event-desc">${escHtml(ev.description)}</div>` : '') +
     '</div>' +
+    shareButton(ev) +
   '</li>';
 }
 
@@ -715,7 +746,7 @@ export function breadcrumbLd(siteUrl, trail) {
 // carrying a subscriber's token (confirm, unsubscribe) use it: both tools
 // report the page URL to a third party, and no third party should see the
 // token. GA_SNIPPET strips query strings anyway; this is belt and braces.
-export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = OG_IMAGE, pixel = true, analytics = pixel }) {
+export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = OG_IMAGE, imageSize = image === OG_IMAGE ? [1200, 630] : null, pixel = true, analytics = pixel }) {
   const url = siteUrl + path;
   return `<!DOCTYPE html>
 <html lang="en">
@@ -731,7 +762,7 @@ ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <meta property="og:url" content="${escHtml(url)}">
 <meta property="og:site_name" content="${SITE_NAME}">
 <meta property="og:image" content="${siteUrl}${image}">
-${image === OG_IMAGE ? '<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n' : ''}<meta name="twitter:card" content="summary_large_image">
+${imageSize ? `<meta property="og:image:width" content="${imageSize[0]}">\n<meta property="og:image:height" content="${imageSize[1]}">\n` : ''}<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="${siteUrl}${image}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -834,7 +865,9 @@ export function renderHubPage(page, events, { siteUrl, now, sponsor }) {
   return layout({ siteUrl, path: page.path, title: `${page.title} | ${SITE_NAME}`, description: page.description, body, ld });
 }
 
-export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = '', venuePath = null }) {
+// image: the event's own link-preview card (server/ogImage.js), passed in
+// by the route; falls back to the site-wide image.
+export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = '', venuePath = null, image = null }) {
   const today = localDateStr(now);
   const src = safeUrl(ev.url);
   const when = formatDay(ev.date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -843,7 +876,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   // "from 10:00 AM to 3:00 PM at The PumpHouse", not "at 10:00 AM – 3:00 PM at …".
   const timePart = !time ? '' : / – /.test(time) ? ` from ${time.replace(' – ', ' to ')}` : `, ${time},`;
   const lead = `${ev.name} ${ev.date < today ? 'was' : 'is'} on ${when}${timePart}` +
-    `${where ? ` at ${where}` : ''} in Victoria, TX.` + (ev.free === true ? ' Free to attend.' : '');
+    `${where ? ` at ${where}` : ''} in ${townOf(ev)}, TX.` + (ev.free === true ? ' Free to attend.' : '');
   // With no source link there are no "event details" to point at.
   const cost = ev.free === true ? 'Free'
     : src ? 'See event details'
@@ -857,7 +890,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   const heading = withVenue && withVenue.length <= 60 ? withVenue : `${ev.name} · ${shortDate}`;
   const sameDay = sortEvents(events.filter(o => o.date === ev.date && o.page !== ev.page)).slice(0, 6);
   const description = (ev.description ? ev.description + ' ' : '') +
-    `${when}${where ? ` at ${where}` : ''}, Victoria, TX.`;
+    `${when}${where ? ` at ${where}` : ''}, ${townOf(ev)}, TX.`;
   const body = `
     <p class="breadcrumbs"><a href="/">This week</a> › ${escHtml(ev.name)}</p>
     <h1 class="page-title">${escHtml(ev.name)}</h1>
@@ -884,7 +917,8 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   return layout({
     siteUrl, path: ev.page, nav: null,
     title: `${heading} | ${SITE_NAME}`,
-    description: description.slice(0, 300), body, ld
+    description: description.slice(0, 300), body, ld,
+    ...(image ? { image, imageSize: [1200, 630] } : {})
   });
 }
 
@@ -1048,6 +1082,57 @@ export function renderNotFoundPage({ siteUrl, kind = 'page' }) {
 // the first byte already has the content. docs/app.js re-renders the same
 // list on load (and still powers the admin preview), so nothing changes
 // for visitors with JS.
+// "Coming up": big events after this week, so people can plan (and
+// subscribe) weeks ahead. An event counts when local_events.yaml marks it
+// `big` or it's a Vic's Pick. Server-rendered only; app.js re-renders the
+// week grid, not this.
+const COMING_UP_DAYS = 90;
+const COMING_UP_MAX = 20;
+// The rest fold behind "Show more" so a busy season doesn't bury the page.
+const COMING_UP_SHOWN = 4;
+
+export function comingUpEvents(events, today) {
+  const week = currentWeek(today);
+  const last = addDays(today, COMING_UP_DAYS);
+  // A festival already running this week (Fri–Sun into next week) is in the
+  // week's list; don't announce its later days as "coming up".
+  const thisWeek = new Set((events || []).filter(ev => ev.date >= week[0] && ev.date <= week[6])
+    .map(ev => `${ev.name}|${ev.town || ''}`));
+  return sortEvents((events || []).filter(ev => ev.date > week[6] && ev.date <= last && (ev.big === true || (ev.featured && !ev.editor_pick)) &&
+    !thisWeek.has(`${ev.name}|${ev.town || ''}`)))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    // One line per event: a multi-day festival shows its first day.
+    .filter((ev, i, arr) => arr.findIndex(o => o.name === ev.name && (o.town || '') === (ev.town || '')) === i)
+    .slice(0, COMING_UP_MAX);
+}
+
+export function renderComingUp(events, today) {
+  const list = comingUpEvents(events, today);
+  if (!list.length) return '';
+  const card = ev => {
+    const venue = placeText(ev).split(' · ')[0];
+    // "Downtown Cuero · Nearby", not "Downtown Cuero · Nearby · Cuero".
+    const nearby = !ev.town ? '' : venue.toLowerCase().includes(townOf(ev).toLowerCase()) ? 'Nearby' : `Nearby · ${townOf(ev)}`;
+    const where = [venue, nearby].filter(Boolean).join(' · ');
+    return `<li class="coming-item"><a href="${escHtml(ev.page)}">` +
+      `<span class="coming-date">${escHtml(formatDay(ev.date, { weekday: 'short', month: 'short', day: 'numeric' }))}</span>` +
+      `<span class="coming-name">${escHtml(ev.name)}</span>` +
+      (where ? `<span class="coming-where">${escHtml(where)}</span>` : '') +
+      '</a></li>';
+  };
+  const first = list.slice(0, COMING_UP_SHOWN), rest = list.slice(COMING_UP_SHOWN);
+  const more = rest.length ? `
+        <details class="coming-more">
+          <summary class="btn btn--outline"><span class="when-closed">Show ${rest.length} more</span><span class="when-open">Show less</span></summary>
+          <ul class="coming-list" role="list">${rest.map(card).join('')}</ul>
+        </details>` : '';
+  return `<section class="coming-up" id="coming-up" aria-labelledby="coming-up-heading">
+        <h2 class="section-heading" id="coming-up-heading">Coming up</h2>
+        <p class="coming-sub">Big events worth planning for.</p>
+        <ul class="coming-list" role="list">${first.map(card).join('')}</ul>${more}
+      </section>`;
+}
+
 export function renderHome(template, events, { siteUrl, now, signupHtml = null }) {
   const today = localDateStr(now);
   const week = currentWeek(today);
@@ -1069,6 +1154,10 @@ export function renderHome(template, events, { siteUrl, now, signupHtml = null }
     // Function replacements: event text can contain "$'" or "$&", which a
     // string replacement would expand into chunks of the page.
     .replace('<p class="loading-message">Loading events...</p>', () => renderDays(week, events, today))
+    .replace('<!--COMING_UP-->', () => renderComingUp(events, today))
+    // A long week pushes "Coming up" far down; this jumps there.
+    .replace('<!--COMING_UP_LINK-->', () => comingUpEvents(events, today).length
+      ? '<a class="btn btn--outline" href="#coming-up">Coming up ↓</a>' : '')
     .replace('<!--NAV-->', () => navHtml('/'))
     .replace('</head>', () => ld.map(jsonLd).join('\n') + '\n</head>');
 }
@@ -1134,7 +1223,7 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
   }
   if (picks.length) {
     lines.push("## Vic's Picks", '',
-      "Featured events, pinned to the top of their day on The Vic 361. Some are paid placements by the venue or organizer.", '',
+      "Featured events, pinned to the top of their day on The Vic 361. Some are our editors' can't-miss picks; some are paid placements by the venue or organizer.", '',
       ...picks.map(line), '');
   }
   lines.push(`## Upcoming events (as of ${formatDay(today, { month: 'long', day: 'numeric', year: 'numeric' })})`, '');

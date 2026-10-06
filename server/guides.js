@@ -15,7 +15,7 @@
 import {
   SITE_NAME, escHtml, safeUrl, slugify, layout, renderEventItem, renderGrouped,
   eventJsonLd, breadcrumbLd, sponsorHtml, ctaHtml, localDateStr, formatDay,
-  sortEvents, parseTimes, addDays, chicagoOffset
+  sortEvents, parseTimes, addDays, chicagoOffset, townOf
 } from './seo.js';
 
 // ─── Venues ──────────────────────────────────────────────────────────────
@@ -505,7 +505,7 @@ export function renderIcs(ev, { siteUrl, now }) {
   }
   lines.push(
     `SUMMARY:${icsEscape(ev.name)}`,
-    `LOCATION:${icsEscape([ev.venue, ev.address, 'Victoria, TX'].filter(Boolean).join(', '))}`,
+    `LOCATION:${icsEscape([ev.venue, ev.address, `${townOf(ev)}, TX`].filter(Boolean).join(', '))}`,
     `DESCRIPTION:${icsEscape([ev.description, `${siteUrl}${ev.page}`].filter(Boolean).join('\n\n'))}`,
     `URL:${siteUrl}${ev.page}`,
     'END:VEVENT', 'END:VCALENDAR'
@@ -523,7 +523,7 @@ export function googleCalendarUrl(ev, siteUrl) {
   }
   const params = new URLSearchParams({
     action: 'TEMPLATE', text: ev.name, dates, ctz: 'America/Chicago',
-    location: [ev.venue, ev.address, 'Victoria, TX'].filter(Boolean).join(', '),
+    location: [ev.venue, ev.address, `${townOf(ev)}, TX`].filter(Boolean).join(', '),
     details: `${ev.description ? ev.description + '\n\n' : ''}${siteUrl}${ev.page}`
   });
   return `https://calendar.google.com/calendar/render?${params}`;
