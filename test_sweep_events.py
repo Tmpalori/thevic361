@@ -320,3 +320,34 @@ def test_wait_with_nothing_new_only_needs_the_newer_list(tmp_path):
     assert sw.wait_for_publish(path, lambda: live, sleep=lambda s: None, tries=1, today="2026-10-06") is True
     older = dict(live, last_updated="2026-10-04T00:00:00Z")
     assert sw.wait_for_publish(path, lambda: older, sleep=lambda s: None, tries=1, today="2026-10-06") is False
+
+
+def test_wait_timeout_alerts_slack(tmp_path):
+    # Candidates that never go live (Railway didn't deploy) must reach
+    # Slack, not only a ::warning:: in a green run.
+    path = _cands(tmp_path, [("2026-10-10", "Rodeo")])
+    with patch.object(sw, "wait_for_publish", return_value=False), \
+            patch.object(sw.slack_notify, "main") as notify:
+        assert sw.main(["--wait-for", path]) == 0
+    assert notify.call_count == 1
+    assert "didn't go live" in notify.call_args[0][0][0]
+
+
+def test_wait_success_sends_no_alert(tmp_path):
+    path = _cands(tmp_path, [("2026-10-10", "Rodeo")])
+    with patch.object(sw, "wait_for_publish", return_value=True), \
+            patch.object(sw.slack_notify, "main") as notify:
+        assert sw.main(["--wait-for", path]) == 0
+    notify.assert_not_called()
+
+
+def test_slack_text_escapes_names_venues_and_reasons():
+    events = [ev("Fall Fest <Kids> & | Teens", venue="Bar <!channel>", page="/events/2026-10-06-fall-fest")]
+    head, lines = sw.report(events, [(0, "other", "AI says <!here> & more")], ai_ran=True, days=14)
+    line = lines[1]
+    assert "<!channel>" not in line and "<!here>" not in line and "<Kids>" not in line
+    # A "|" would end the link's URL part early, so the link text swaps it.
+    assert "|Fall Fest &lt;Kids&gt; &amp; ¦ Teens>" in line
+    assert "(Bar &lt;!channel&gt;)" in line and "AI says &lt;!here&gt; &amp; more" in line
+    # The link markup itself stays intact.
+    assert line.count("<https://www.thevic361.com/events/2026-10-06-fall-fest|") == 1

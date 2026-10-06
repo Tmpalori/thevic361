@@ -87,6 +87,16 @@ def test_social_kit_posting_runs_have_their_own_concurrency_group():
     # One pending run per group: a push rebuild must not replace a queued post.
     group = load("social-kit.yml")["concurrency"]["group"]
     assert "github.event_name == 'schedule'" in group and "inputs.post" in group
+    # The site scheduler dispatches the daily post with scheduled=true (and
+    # post=false); it must queue with the posts, not the push rebuilds.
+    assert "inputs.scheduled" in group
+
+
+def test_event_check_wait_step_can_alert_slack():
+    # A collect whose candidates never go live alerts from the wait step.
+    job = load("event-check.yml")["jobs"]["check"]
+    env = step(job, "Wait for the new events to go live")["env"]
+    assert "SLACK_ALERTS_WEBHOOK_URL" in env["SLACK_WEBHOOK_URL"]
 
 
 def test_uptime_stale_feed_check_is_not_in_the_five_minute_group():

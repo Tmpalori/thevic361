@@ -233,11 +233,15 @@ LABEL = {"duplicate": "possible duplicate", "wrong_date": "wrong day?", "not_an_
          "cut_off": "name cut off", "other": "check"}
 
 
+esc = slack_notify.escape  # names, venues and AI text are outside input in Slack mrkdwn
+
+
 def describe(e):
     when = datetime.strptime(e["date"], "%Y-%m-%d").strftime("%a %b %-d")
-    where = f" ({e['venue']})" if e.get("venue") else ""
+    where = f" ({esc(e['venue'])})" if e.get("venue") else ""
     link = f"{SITE}{e['page']}" if e.get("page") else ""
-    name = f"<{link}|{e['name']}>" if link else e["name"]
+    # Inside <url|text> a "|" would split the link, so it's swapped for "¦".
+    name = f"<{link}|{esc(e['name']).replace('|', '¦')}>" if link else esc(e["name"])
     return f"{when} · {name}{where}"
 
 
@@ -339,7 +343,7 @@ def report(events, findings, ai_ran, days, hidden=(), problem=None):
     scope = f"{len(events)} events in the next {days} days"
     gone = [f for f in findings if f[0] in hidden]
     look = [f for f in findings if f[0] not in hidden]
-    note = ("" if ai_ran else " (Rules only; the AI check didn't run.)") + (f" ⚠️ {problem}." if problem else "")
+    note = ("" if ai_ran else " (Rules only; the AI check didn't run.)") + (f" ⚠️ {esc(problem)}." if problem else "")
     if not findings:
         return f"🔎 Event check: {scope}, nothing looks off.{note}", []
     nh, nl = len({f[0] for f in gone}), len({f[0] for f in look})
@@ -348,10 +352,10 @@ def report(events, findings, ai_ran, days, hidden=(), problem=None):
     lines = []
     if gone:
         lines.append("*Hidden automatically* (nothing deleted; Restore on the admin Home tab):")
-        lines += [f"• {describe(events[i])}: *{LABEL.get(kind, kind)}*, {why}" for i, kind, why in gone]
+        lines += [f"• {describe(events[i])}: *{LABEL.get(kind, kind)}*, {esc(why)}" for i, kind, why in gone]
     if look:
         lines.append("*To look at:*")
-        lines += [f"• {describe(events[i])}: *{LABEL.get(kind, kind)}*, {why}" for i, kind, why in look]
+        lines += [f"• {describe(events[i])}: *{LABEL.get(kind, kind)}*, {esc(why)}" for i, kind, why in look]
     return head, lines
 
 
@@ -423,7 +427,18 @@ def main(argv=None):
                     help="only wait (up to 15 min) for these candidates to go live, then exit")
     args = ap.parse_args(argv)
     if args.wait_for:
-        wait_for_publish(args.wait_for)
+        if not wait_for_publish(args.wait_for):
+            # Usually Railway didn't deploy the collect commit (integration
+            # off, or a failed build), so the site still shows the old list.
+            # The check step still runs on what's there; this alert is what
+            # gets someone to look before Monday's newsletter and posts use
+            # the old list. The workflow points SLACK_WEBHOOK_URL at the
+            # alerts channel for this step.
+            run = os.environ.get("GITHUB_RUN_ID")
+            link = (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
+                    f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{run}") if run else f"{SITE}/admin.html"
+            slack_notify.main(["🚨 The new events didn't go live after the collect (no Railway deploy?); "
+                               "the site still shows the old list", "--link", link])
         return 0
 
     # ?all=1: every public event, including ones past their day's limit
