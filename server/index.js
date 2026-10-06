@@ -210,10 +210,10 @@ export async function createApp(opts = {}) {
   const authFailLimiter = opts.authFailLimiter || createRateLimiter({
     windowMs: 15 * 60 * 1000, max: 20
   });
-  // Failed logins and wrong admin tokens from everyone together, so an
-  // attacker rotating addresses still runs out. Past it, sign-in and the
-  // legacy token pause for the rest of the window (signed-in sessions keep
-  // working) and Slack hears about it once.
+  // Failed logins and wrong admin tokens from everyone together. Past it,
+  // Slack hears about it once. It only alerts: blocking every address would
+  // also lock the owner out for as long as an attack lasts, and each address
+  // already has its own budget above.
   const authFailGlobal = opts.authFailGlobal || createRateLimiter({
     windowMs: 15 * 60 * 1000, max: 100
   });
@@ -223,7 +223,7 @@ export async function createApp(opts = {}) {
     if (!authFailGlobal.peek('all').ok) {
       slack.alert('admin-auth-flood', 'Many failed admin sign-ins',
         'Too many failed admin sign-ins or wrong admin tokens in 15 minutes, from many addresses. ' +
-        'Sign-in is paused until it slows down; signed-in sessions keep working.');
+        'Each address is still limited on its own; consider changing ADMIN_PASSWORD if it keeps up.');
     }
   }
 
@@ -317,9 +317,8 @@ export async function createApp(opts = {}) {
   // Body: { username, password }. Returns { ok, token, expires_at } on success.
   app.post('/api/admin/login', async (req, res) => {
     const burst = loginLimiter.check(clientKey(req));
-    const flood = authFailGlobal.peek('all');
-    if (!burst.ok || !flood.ok) {
-      res.set('Retry-After', String((burst.ok ? flood : burst).retryAfter || 60));
+    if (!burst.ok) {
+      res.set('Retry-After', String(burst.retryAfter || 60));
       return res.status(429).json({ ok: false, error: 'rate-limited' });
     }
     if (!auth.configured) {
@@ -485,9 +484,9 @@ export async function createApp(opts = {}) {
     }
     if (adminToken) {
       // Session tokens are signed, so only the legacy token can be guessed:
-      // throttle wrong ones per client and overall, checked before comparing.
+      // throttle wrong ones per client, checked before comparing.
       const key = clientKey(req);
-      if (!authFailLimiter.peek(key).ok || !authFailGlobal.peek('all').ok) return { ok: false, reason: 'rate-limited' };
+      if (!authFailLimiter.peek(key).ok) return { ok: false, reason: 'rate-limited' };
       if (safeTokenEqual(provided, adminToken)) return { ok: true, kind: 'legacy-token' };
       authFailLimiter.check(key);
       recordAuthFailure();

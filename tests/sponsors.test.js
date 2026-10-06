@@ -959,8 +959,12 @@ describe('sponsor promises (review fixes)', () => {
     expect(r.headers.get('location')).toBe('https://acme.example/?utm_source=thevic361&utm_medium=email&utm_campaign=newsletter');
     await go('?src=newsletter', { 'User-Agent': 'Googlebot/2.1' });                 // bots aren't counted
     await fetch(`${baseUrl}/go/s/2026-10-05`, { method: 'HEAD', redirect: 'manual' }); // link checkers aren't either
-    await new Promise(res => setTimeout(res, 20));
-    const rows = (await store.listTraffic('2026-01-01')).filter(x => x.path === '/go/s/2026-10-05');
+    // The click is recorded without holding up the redirect, so wait for it
+    // (a fixed short sleep was flaky on a busy machine).
+    const clicks = async () => (await store.listTraffic('2026-01-01')).filter(x => x.path === '/go/s/2026-10-05');
+    for (let i = 0; i < 100 && !(await clicks()).length; i++) await new Promise(res => setTimeout(res, 20));
+    await new Promise(res => setTimeout(res, 50)); // room for a wrongly counted bot/HEAD row to land
+    const rows = await clicks();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ kind: 'click', click_type: 'sponsor_click', click_url: 'https://acme.example' });
     // No live sponsor that week: home, nothing counted.

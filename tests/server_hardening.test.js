@@ -347,10 +347,10 @@ describe('admin sign-in throttling', () => {
     expect((await login('2001:db8:1:2::ff')).status).toBe(429);
   });
 
-  it('caps failed logins across all addresses and alerts Slack once', async () => {
+  it('alerts Slack on failed logins from many addresses, without locking the owner out', async () => {
     const b = await startApp(loginOpts());
     for (let i = 0; i < 100; i++) await login(`10.0.${Math.floor(i / 200)}.${i % 200}`);
-    expect((await login('10.9.9.9', 'correct horse battery staple')).status).toBe(429);
+    expect((await login('10.9.9.9', 'correct horse battery staple')).status).toBe(200);
     const floods = b.slack.alert.mock.calls.filter(c => c[0] === 'admin-auth-flood');
     expect(floods.length).toBeGreaterThan(0);
   });
