@@ -2439,6 +2439,11 @@ _PLACEHOLDER_PLACE_RE = re.compile(
 _PLACEHOLDER_IN_RE = re.compile(r"restaurant of the week|\b(?:tba|tbd)\b|\bvarious\b", re.IGNORECASE)
 
 
+def _strip_zip(text):
+    """'Victoria, TX 77901' → 'Victoria, TX' (a trailing US ZIP, with any +4)."""
+    return re.sub(r"[\s,]*\b\d{5}(?:-\d{4})?\s*$", "", text or "")
+
+
 def clean_venue(ev, venues=None):
     """Fix venue/address mix-ups in place.
 
@@ -2450,14 +2455,19 @@ def clean_venue(ev, venues=None):
     Week") are blanked, and so is an address that's only the city.
     """
     venue = (ev.get("venue") or "").strip()
-    if _PLACEHOLDER_PLACE_RE.match(ev.get("address") or ""):
+    if _PLACEHOLDER_PLACE_RE.match(_strip_zip(ev.get("address"))):
         ev["address"] = ""
-    if venue and (_PLACEHOLDER_PLACE_RE.match(venue) or _PLACEHOLDER_IN_RE.search(venue)):
+    # The ZIP comes off first: "Victoria, TX 77901" is still just the city.
+    if venue and (_PLACEHOLDER_PLACE_RE.match(_strip_zip(venue)) or _PLACEHOLDER_IN_RE.search(venue)):
         ev["venue"] = ""
         return ev
     if not venue or not _ADDRESSY.search(venue):
         return ev
     street = venue.split(",")[0].strip()
+    # "Victoria, TX, United States, Texas 77901" leaves "Victoria" here.
+    if _PLACEHOLDER_PLACE_RE.match(street) or _PLACEHOLDER_IN_RE.search(street):
+        ev["venue"] = ""
+        return ev
     if not re.match(r"\d", street):
         # "Moonshine Drinkery, Victoria, TX": the name part is the venue.
         ev["venue"] = street
@@ -2637,10 +2647,20 @@ def is_same_event(a, b):
     # start minute. The site's own sameEvent misses names under six letters,
     # and post events are never retired, so both would stay up. Same start
     # required: a bar can run an early and a late bingo the same day.
-    na, nb = ra - _NIGHT_TOKENS, rb - _NIGHT_TOKENS
+    # Plurals folded ("Birria Tacos" vs "Birria Taco Night").
+    na, nb = _stem_tokens(ra - _NIGHT_TOKENS), _stem_tokens(rb - _NIGHT_TOKENS)
     if na and na == nb and _same_spot(a, b):
         sa_min, sb_min = _start_minutes(a.get("time")), _start_minutes(b.get("time"))
         if sa_min is not None and sa_min == sb_min:
+            return True
+        # One weekly special posted on FB and IG ("Taco Tuesday - Birria
+        # Tacos" vs "$2 Birria Taco Night"): both names AI-written from
+        # posts, neither gives a time, and the shared core has a distinctive
+        # word, not just "Bingo" or "Trivia" (a bar can run two of those).
+        # Post events are never retired, so both copies would stay up.
+        if (sa_min is None and sb_min is None
+                and _name_source(a) in _POST_SOURCES and _name_source(b) in _POST_SOURCES
+                and any(len(w) >= 4 and w not in _GENERIC_CORE_TOKENS for w in na)):
             return True
     # ...or one is the other plus an organiser or brand prefix ("MOWSTX
     # Mahjong for Meals" vs "Mahjong for Meals- Victoria, TX", "The Nave
@@ -2729,6 +2749,13 @@ def _same_spot(a, b):
 
 
 _NIGHT_TOKENS = {"night", "nite", "nights"}
+_POST_SOURCES = {"apify_facebook_posts", "apify_instagram_posts"}
+
+
+def _stem_tokens(tokens):
+    """Drop a plural "s" from words over three letters ("tacos" → "taco"),
+    leaving "-ss" words ("class") alone."""
+    return {w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w for w in tokens}
 _WEEKDAY_TOKENS = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
                    "mondays", "tuesdays", "wednesdays", "thursdays", "fridays", "saturdays", "sundays"}
 
@@ -3537,6 +3564,12 @@ def _tv_title_from_text(lines, i):
 
 def parse_theatre_victoria(html_text, start, end):
     """Events from theatrevictoria.org's home page between start and end."""
+    return parse_theatre_victoria_dated(html_text, start, end)[0]
+
+
+def parse_theatre_victoria_dated(html_text, start, end):
+    """(events in [start, end], dated shows on the page in any window). The
+    count lets the fetch tell a page between shows from a changed layout."""
     soup = BeautifulSoup(html_text, "html.parser")
     events, seen = [], set()
 
@@ -3560,7 +3593,7 @@ def parse_theatre_victoria(html_text, start, end):
                 "url": show_url or "https://theatrevictoria.org",
             })
 
-    found_cards = False
+    dated = 0
     for node in soup.find_all(string=_TV_DATE_RE):
         dates = _tv_dates(str(node).strip())
         card = node.find_parent("div")
@@ -3568,29 +3601,45 @@ def parse_theatre_victoria(html_text, start, end):
             continue
         title, show_url = _tv_title_from_card(card)
         if title:
-            found_cards = True
+            dated += 1
             add(title, show_url, dates)
 
-    if not found_cards:
+    if not dated:
         lines = [b.strip() for b in soup.get_text("\n").split("\n") if b.strip()]
         for i, line in enumerate(lines):
             if _TV_DATE_RE.search(line):
                 title = _tv_title_from_text(lines, i)
-                if title:
-                    add(title, "", _tv_dates(line))
-    return events
+                dates = _tv_dates(line)
+                if title and dates:
+                    dated += 1
+                    add(title, "", dates)
+    return events, dated
 
 
 def fetch_theatre_victoria_events(days_ahead=7):
-    """Scrape show listings from Theatre Victoria's season cards."""
+    """Scrape show listings from Theatre Victoria's season cards.
+
+    Runs with expect_events=False: shows run a few weekends a season, so
+    about two collects in three have none in the window (55 of 85 from
+    October 2026 to August 2027), and a "returned 0" warning each time
+    buried real breakage. It warns itself only when the fetch fails or the
+    page has no dated shows at all, which means the layout changed."""
     events = []
     try:
         resp = requests.get("https://theatrevictoria.org", headers=HEADERS, timeout=TIMEOUT)
         resp.raise_for_status()
-        events = parse_theatre_victoria(resp.text, _WINDOW_START, _WINDOW_END)
-        print(f"  [Theatre Victoria] {len(events)} events")
+        events, dated = parse_theatre_victoria_dated(resp.text, _WINDOW_START, _WINDOW_END)
     except Exception as e:
         print(f"  [Theatre Victoria] Error: {e}")
+        _warn("[Theatre Victoria] fetch failed", error=str(e)[:200])
+        _mark_partial("theatre_victoria", "fetch failed")
+        return []
+    if not dated:
+        _warn("[Theatre Victoria] no dated shows on the page (layout change?)")
+        _mark_partial("theatre_victoria", "no dated shows on the page")
+    elif not events:
+        _note_source("theatre_victoria", "no show in the window")
+    print(f"  [Theatre Victoria] {len(events)} events")
     return events
 
 
@@ -4044,6 +4093,30 @@ def _run_apify_search(actor, payload, token):
     return items
 
 
+_US_COUNTRIES = {"us", "usa", "united states", "united states of america"}
+
+
+def _fb_location_is_victoria_tx(loc, venue, address, city):
+    """An FB event's location names Victoria and Texas.
+
+    Search returns Victorias from anywhere, so the location text must say
+    "victoria" plus a whole-word TX/Texas or a 77xxx ZIP. Plain substrings
+    let Victoria, BC's "1770 Fort St" through on its "77". A state or
+    country field, when the actor sends one, has to be Texas / the US."""
+    haystack = " ".join([venue, address, city]).lower()
+    if "victoria" not in haystack:
+        return False
+    if not (re.search(r"\b(?:tx|texas)\b", haystack) or re.search(r"\b77\d{3}\b", haystack)):
+        return False
+    state = str(loc.get("state") or loc.get("region") or "").strip().lower()
+    if state and state not in ("tx", "texas"):
+        return False
+    country = str(loc.get("countryCode") or loc.get("country") or "").strip().lower()
+    if country and country not in _US_COUNTRIES:
+        return False
+    return True
+
+
 def fetch_apify_facebook_events(days_ahead=14):
     """Run the Apify Facebook Events Scraper actor against our high-value venue
     list (facebook_venues.json) and parse the dataset.
@@ -4169,12 +4242,7 @@ def fetch_apify_facebook_events(days_ahead=14):
         # Locality filter — only keep events that are clearly in Victoria, TX.
         # Search returns events from anywhere matching the keyword, so we have
         # to gate on city / address / venue text.
-        haystack = " ".join([venue, address, city]).lower()
-        if "victoria" not in haystack:
-            skipped_off_locality += 1
-            continue
-        # Reject "Victoria, BC" and other non-TX Victorias
-        if "victoria" in haystack and "tx" not in haystack and "texas" not in haystack and "77" not in haystack:
+        if not _fb_location_is_victoria_tx(loc, venue, address, city):
             skipped_off_locality += 1
             continue
 
@@ -4568,16 +4636,28 @@ def _posts_ai_call(api_key, venue_name, message, timeout):
         return None
 
 
-def _post_event_venue(r, account_name, account_address):
+def _post_event_venue(r, account_name, account_address, organizer=False):
     """Venue + address for an event extracted from an account's post.
 
     Uses the venue the model named when the event isn't at the account's own
-    place; otherwise the account itself (with its known address).
+    place; otherwise the account itself (with its known address). An
+    organizer account (`organizer`: its venues.json category is a promoter,
+    aggregator, festival or media one) isn't a place, so with no named venue
+    the event gets none: "at Discover Victoria Texas" with no address would
+    go live, and enrichment would treat the organizer as the known venue.
     """
     named = (r.get("venue") or "").strip() if isinstance(r, dict) else ""
     if named and named.lower() not in account_name.lower() and account_name.lower() not in named.lower():
         return named, ""
+    if organizer:
+        return "", ""
     return account_name, account_address
+
+
+def _is_organizer_account(venue):
+    """A venues.json entry that names who posts, not where (see
+    _NON_PLACE_CATEGORY)."""
+    return bool(_NON_PLACE_CATEGORY.search((venue or {}).get("category") or ""))
 
 
 _WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
@@ -4795,7 +4875,8 @@ def fetch_apify_facebook_posts(days_ahead=14):
             time_str = (r.get("time") or "").strip()
             # Accounts like "Discover Victoria Texas" post about events held
             # elsewhere; the model names the real venue when it isn't theirs.
-            ev_venue, address = _post_event_venue(r, venue_name, (venue.get("address") or "").strip())
+            ev_venue, address = _post_event_venue(r, venue_name, (venue.get("address") or "").strip(),
+                                                  organizer=_is_organizer_account(venue))
 
             for d_obj in dates:
                 key = (d_obj, name.lower())
@@ -5156,7 +5237,8 @@ def fetch_apify_instagram_posts(days_ahead=14):
             time_str = (r.get("time") or "").strip()
             # Accounts like "Discover Victoria Texas" post about events held
             # elsewhere; the model names the real venue when it isn't theirs.
-            ev_venue, address = _post_event_venue(r, venue_name, (venue.get("address") or "").strip())
+            ev_venue, address = _post_event_venue(r, venue_name, (venue.get("address") or "").strip(),
+                                                  organizer=_is_organizer_account(venue))
 
             for d_obj in dates:
                 key = (d_obj, name.lower())
@@ -5288,9 +5370,10 @@ def main():
         all_events.extend(safe_fetch("city_calendar", fetch_city_calendar, args=(args.days,)))
         all_events.extend(safe_fetch("chamber", fetch_chamber_events, args=(args.days,)))
         all_events.extend(safe_fetch("library", fetch_library_events, args=(args.days,)))
-        # Moonshine, VTX Art Walk and Generals can legitimately have 0 (nothing
-        # posted ahead / between walks / off-season); each warns on its own
-        # when its page no longer looks like it did.
+        # Moonshine, VTX Art Walk, J Welch, Theatre Victoria and Generals can
+        # legitimately have 0 (nothing posted ahead / between walks / between
+        # shows / off-season); each warns on its own when its page no longer
+        # looks like it did.
         all_events.extend(safe_fetch("moonshine", fetch_moonshine_events,
                                      args=(args.days,), expect_events=False))
         all_events.extend(safe_fetch("vtx_artwalk", fetch_vtx_artwalk,
@@ -5298,7 +5381,7 @@ def main():
         all_events.extend(safe_fetch("jwelch", fetch_jwelch_events,
                                      args=(args.days,), expect_events=False))
         all_events.extend(safe_fetch("theatre_victoria", fetch_theatre_victoria_events,
-                                     args=(args.days,)))
+                                     args=(args.days,), expect_events=False))
         all_events.extend(safe_fetch("generals", fetch_generals_events,
                                      args=(args.days,), expect_events=False))
         all_events.extend(safe_fetch("allevents", fetch_allevents_events,
