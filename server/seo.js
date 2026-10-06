@@ -372,6 +372,8 @@ export function parseTimes(time) {
   const re = /(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?/gi;
   let m;
   while ((m = re.exec(time)) && out.length < 2) {
+    // "7:75 PM" or "13pm" isn't a time; building a Date from it throws.
+    if (Number(m[1]) > 12 || Number(m[2] || 0) > 59) continue;
     let h = Number(m[1]) % 12;
     if (m[3].toLowerCase() === 'p') h += 12;
     out.push(String(h).padStart(2, '0') + ':' + (m[2] || '00'));

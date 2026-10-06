@@ -206,7 +206,12 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
         return { ok: false, error: 'no-candidates', message: err.message };
       }
     }
-    const prior = (await store.getPublished()) || {};
+    const published = await store.getPublished();
+    // Nothing published yet means the site shows the bundled docs/events.json;
+    // a submissions-only publish would replace that whole list with just
+    // the approved submissions. Wait for a candidates publish instead.
+    if (submissionsOnly && !published) return { ok: false, error: 'nothing-published' };
+    const prior = published || {};
     const state = prior.auto_publish || {};
     const from = submissionsOnly ? (state.from || null) : candidates && candidates.last_updated;
     const fresh = !submissionsOnly && Array.isArray(candidates && candidates.events) ? candidates.events : [];
