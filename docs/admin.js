@@ -552,7 +552,7 @@
           escapeHtml(sourceLabel(src)) + '</span>';
         // A live event past its day's limit (15 Mon–Thu, 20 Fri–Sun) is off
         // the day lists but keeps its page and its place in the guides.
-        const info = state.publishedKeys.has(k) ? state.scoreInfo.get(k) : null;
+        const info = state.publishedKeys.has(k) && state.canKeep ? state.scoreInfo.get(k) : null;
         const scorePill = !info ? ''
           : info.pick
           ? '<span class="src-pill src-pill--kept" title="Score ' + info.score + ': one of this day’s top events, so the site shows it as a Vic’s Pick. A paid Vic’s Pick takes its place.">Vic’s Pick (auto)</span>'
@@ -759,6 +759,9 @@
       const events = Array.isArray(json.events) ? json.events : [];
       const keys = new Set(events.map(eventKey));
       state.publishedKeys = keys;
+      // "Show anyway" saves to the published store; with nothing published
+      // there yet (the bundled file is showing), there's nothing to save to.
+      state.canKeep = json.source === 'store';
       state.scoreInfo = new Map(events.filter(ev => typeof ev.score === 'number')
         .map(ev => [eventKey(ev), { score: ev.score, overflow: Boolean(ev.overflow), keep: Boolean(ev.keep), pick: Boolean(ev.editor_pick) }]));
       // Sent back with Save & Publish so the server can refuse if the live

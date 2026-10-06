@@ -235,7 +235,7 @@ describe('auto-publish', () => {
     // Admin-edited, hand-added and submitted events are untouched.
     expect(byDate['2026-10-07']).toEqual(edited);
     expect(byDate['2026-10-10']).toEqual(handAdded);
-    expect(byDate['2026-10-11']).toEqual(submitted);
+    expect(byDate['2026-10-11']).toEqual({ ...submitted, submitted: true }); // the flag the score's bonus reads
     // The hidden one gets the link but keeps its key, so it stays hidden.
     expect(byDate['2026-10-08']).toMatchObject({ venue: '402 E North St', url: 'https://x.example/karaoke' });
     expect((await live()).events.map(e => e.name)).not.toContain('Karaoke');
@@ -375,6 +375,20 @@ describe('auto-publish with far-ahead hand-added events', () => {
     await fs.writeFile(path.join(tmpDir, 'candidates.json'), JSON.stringify({ last_updated: '2026-10-05T23:00:00-05:00', events: local(40) }));
     expect((await runNow()).ok).toBe(true);
     expect((await live()).events.map(e => e.name).sort()).toEqual(before);
+  });
+
+  it('a tag taken off in the YAML comes off the live event; appeal and sources stay', async () => {
+    const ev = { date: '2026-10-15', name: 'Cuero Turkeyfest', time: '10:00 AM', venue: 'Downtown Cuero', _source: 'local_events' };
+    await start({ candidates: { last_updated: '2026-10-04T23:00:00-05:00', events: [{ ...ev, big: true, town: 'Cuero', curated: true, appeal: 5, sources: 2 }] } });
+    await runNow();
+    await fs.writeFile(path.join(tmpDir, 'candidates.json'), JSON.stringify({
+      last_updated: '2026-10-05T23:00:00-05:00', events: [{ ...ev, curated: true }]
+    }));
+    await runNow();
+    const [now] = (await live()).events;
+    expect(now.big).toBeUndefined();
+    expect(now.town).toBeUndefined();
+    expect(now).toMatchObject({ curated: true, appeal: 5, sources: 2 });
   });
 
   it('tags added to the YAML later reach the live event', async () => {

@@ -604,6 +604,7 @@ export async function createApp(opts = {}) {
       for (const r of approved) {
         const ev = {
           ...withoutSubmitter(r.payload),
+          submitted: true, // the event score's community-submission bonus
           _source: r.source || 'submission',
           _source_id: r.id,
           _submitter_kind: r.submitter_kind || null
@@ -668,10 +669,26 @@ export async function createApp(opts = {}) {
     if (!v.ok) return res.status(400).json({ ok: false, errors: v.errors });
 
     try {
+      let previousKey = null;
+      try {
+        const prev = (await store.listEventEdits()).find(e => e.original_key === original_key);
+        if (prev) previousKey = eventKeyOf(prev.payload);
+      } catch (_) { /* no earlier edit to follow */ }
       const row = await store.upsertEventEdit({
         original_key,
         payload: v.data
       });
+      // A "Show anyway" (kept) key follows the event to its new name/date.
+      try {
+        const published = await store.getPublished();
+        const newKey = eventKeyOf(v.data);
+        const old = new Set([original_key, previousKey].filter(k => k && k !== newKey));
+        if (published && Array.isArray(published.kept) && published.kept.some(k => old.has(k))) {
+          await store.setPublished({ ...published, kept: [...new Set(published.kept.map(k => (old.has(k) ? newKey : k)))] });
+        }
+      } catch (err) {
+        console.warn('[admin] kept key not moved:', err.message);
+      }
       // The edit can rename a live event (new page URL); archive it now so
       // that URL keeps working after the week rotates out.
       store.getPublished().then(p => p && archiveEvents(p.events)).catch(() => {});
@@ -1052,6 +1069,7 @@ export async function createApp(opts = {}) {
     const rows = await store.list({ status: 'approved' });
     let events = rows.map(r => ({
       ...withoutSubmitter(r.payload),
+      submitted: true, // the event score's community-submission bonus
       _source: r.source || 'submission',
       _source_id: r.id,
       _submitter_kind: r.submitter_kind || null
@@ -1206,11 +1224,17 @@ export async function createApp(opts = {}) {
   async function serveEventsJson(req, res, next) {
     try {
       // auto_publish and the hidden lists are bookkeeping, not public.
-      // The homepage app, social kit and event check read this: day lists.
-      const { source, auto_publish: _auto, hidden: _h, hidden_restored: _r, kept: _k, ...payload } = await shownPayload();
+      // The homepage app and social kit read this: day lists. ?all=1 is
+      // every public event, with `overflow` on the ones past their day's
+      // limit (they're public anyway: own page, guides), for the event check
+      // and submission review, which must see everything that's live.
+      const all = req.query.all === '1';
+      const { source, auto_publish: _auto, hidden: _h, hidden_restored: _r, kept: _k, ...payload } =
+        all ? await getPublicPayload() : await shownPayload();
       if (source === 'empty') return next();
       // The score and the admin's keep flag are internal (server/scoring.js).
-      payload.events = payload.events.map(({ score: _s, keep: _kp, overflow: _o, ...ev }) => ev);
+      payload.events = payload.events.map(({ score: _s, keep: _kp, overflow, ...ev }) =>
+        (all && overflow ? { ...ev, overflow: true } : ev));
       // editor_pick stays: it tells an editor's Vic's Pick from a paid one.
       // Store-backed payloads change on publish; the bundled file only on deploy.
       if (source === 'store') res.set('Cache-Control', 'no-store');

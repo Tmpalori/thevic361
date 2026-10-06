@@ -1081,7 +1081,7 @@
   },
   {
     "name": "Victoria TNR",
-    "category": "Animal Rescue",
+    "category": "Event Promoter (animal rescue; adoption events at PetSmart)",
     "facebook_page": "https://www.facebook.com/victoriatxtnr/",
     "event_potential": "Adoption events (Caturdays at PetSmart)",
     "confidence": "high",
@@ -1092,7 +1092,7 @@
   },
   {
     "name": "Scenic Root",
-    "category": "Plant Workshops",
+    "category": "Event Promoter (plant workshops at other venues)",
     "facebook_page": "https://www.facebook.com/p/Scenic-Root-100087131182326/",
     "event_potential": "Plant workshops at Moonshine, Aero Crafters and others",
     "confidence": "high",
@@ -1102,7 +1102,7 @@
   },
   {
     "name": "Victoria Film Society",
-    "category": "Film Screenings",
+    "category": "Event Promoter (film screenings at other venues)",
     "facebook_page": "https://www.facebook.com/VictoriaFilmSociety/",
     "event_potential": "Movie nights (Mondays at Moonshine in October), screenings at the Welder Center",
     "confidence": "high",
@@ -1129,7 +1129,7 @@
   },
   {
     "name": "Tabree Nashay Entertainment",
-    "category": "Event Organizer",
+    "category": "Event Promoter",
     "event_potential": "Crossroads Pickle Festival (Dec 5 2026) and other events",
     "confidence": "medium",
     "notes": "Added Oct 2026: events here were missing from the site (see local_events.yaml fall list). Organizer, not a place. Facebook is a personal profile the posts scraper can't read, so Instagram only.",
