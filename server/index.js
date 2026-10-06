@@ -36,6 +36,8 @@ import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoT
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
 import { createAutoPublish, unpublishEvent } from './autopublish.js';
+import { createScheduler, schedulerEnabled } from './scheduler.js';
+import * as sponsorsModule from './sponsors.js';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import {
@@ -56,6 +58,10 @@ const COLLECTION_METADATA_FILE = path.join(REPO_ROOT, 'collection_metadata.json'
 const EVENTS_FILE = path.join(DOCS_DIR, 'events.json');
 const VENUES_FILE = path.join(REPO_ROOT, 'venues.json');
 const WEEKLY_COLLECT_WORKFLOW = 'weekly-collect.yml';
+// Hourly site check (healthCheck): fewer upcoming events than this, or no
+// new collect in this many days (it runs Sunday and Wednesday), alerts.
+const MIN_UPCOMING = 10;
+const STALE_COLLECT_DAYS = 8;
 
 async function readJsonFile(file) {
   const raw = await fsp.readFile(file, 'utf8');
@@ -265,9 +271,21 @@ export async function createApp(opts = {}) {
   });
 
   // ─── Health ───
-  app.get('/api/health', (req, res) => {
-    res.json({ ok: true, storage: storeBundle.kind });
+  // Touches the database: when Postgres is down the site still answers
+  // from the bundled fallback feed, so only this tells an uptime check.
+  app.get('/api/health', async (req, res) => {
+    try {
+      await store.getPublished();
+      res.set('Cache-Control', 'no-store').json({ ok: true, storage: storeBundle.kind });
+    } catch (err) {
+      res.status(503).set('Cache-Control', 'no-store').json({ ok: false, storage: storeBundle.kind, error: 'db-unreachable' });
+    }
   });
+
+  // Express 4 doesn't pass a rejected async handler to the error
+  // middleware: the request would hang. This does, so it gets the JSON 500
+  // (and the Slack alert with the path).
+  const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
   // Vic's Pick checkout prefilled with a submission's event and contact
   // (by its id; server/sponsors.js fills them in, so none of it is in the URL).
@@ -276,7 +294,7 @@ export async function createApp(opts = {}) {
   }
 
   // ─── Public: submit ───
-  app.post('/api/submissions', async (req, res) => {
+  app.post('/api/submissions', wrap(async (req, res) => {
     const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     const burst = submitLimiter.check(ip);
@@ -356,7 +374,7 @@ export async function createApp(opts = {}) {
       mailer.send(row.submitter_email, mail, `vic361-submission-${row.id}`);
     }
     return res.status(201).json({ ok: true, queued: true, id: row.id });
-  });
+  }));
 
   // ─── Admin auth middleware ─────────────────────────────────────────────
   // Two acceptable credentials, in priority order:
@@ -399,18 +417,18 @@ export async function createApp(opts = {}) {
   }
 
   // ─── Admin: list ───
-  app.get('/api/admin/submissions', requireAdmin, async (req, res) => {
+  app.get('/api/admin/submissions', requireAdmin, wrap(async (req, res) => {
     const status = typeof req.query.status === 'string' ? req.query.status : null;
     const rows = await store.list({ status: status || undefined });
     res.json({ ok: true, submissions: rows });
-  });
+  }));
 
   // ─── Admin: detail ───
-  app.get('/api/admin/submissions/:id', requireAdmin, async (req, res) => {
+  app.get('/api/admin/submissions/:id', requireAdmin, wrap(async (req, res) => {
     const row = await store.get(req.params.id);
     if (!row) return res.status(404).json({ ok: false, error: 'not-found' });
     res.json({ ok: true, submission: row });
-  });
+  }));
 
   // ─── Admin: status transition ───
   // Body: { status, payload?, admin_notes?, note? }
@@ -418,7 +436,7 @@ export async function createApp(opts = {}) {
   // to payload while pending. "approved" rows show up as candidates the editor
   // can include in the next publish (the existing GitHub-API publish flow on
   // docs/admin.html still owns the actual events.json write).
-  app.post('/api/admin/submissions/:id', requireAdmin, async (req, res) => {
+  app.post('/api/admin/submissions/:id', requireAdmin, wrap(async (req, res) => {
     const row = await store.get(req.params.id);
     if (!row) return res.status(404).json({ ok: false, error: 'not-found' });
 
@@ -466,7 +484,7 @@ export async function createApp(opts = {}) {
       }
     }
     res.json({ ok: true, submission: updated, unpublished });
-  });
+  }));
 
   // ─── Admin: candidates fetch ──────────────────────────────────────────
   // Tries GitHub first (so the editor sees the latest candidates.json), then
@@ -919,7 +937,7 @@ export async function createApp(opts = {}) {
   // Returns approved submissions in the same shape as candidates.json events
   // so the existing admin picker/publish flow can ingest them by simply
   // appending them to the candidate list before publishing.
-  app.get('/api/admin/approved-events', requireAdmin, async (req, res) => {
+  app.get('/api/admin/approved-events', requireAdmin, wrap(async (req, res) => {
     const rows = await store.list({ status: 'approved' });
     let events = rows.map(r => ({
       ...withoutSubmitter(r.payload),
@@ -934,7 +952,7 @@ export async function createApp(opts = {}) {
       console.warn('[admin] approved-events overlay skipped:', err.message);
     }
     res.json({ ok: true, events });
-  });
+  }));
 
   // ─── Traffic (admin Traffic tab, see server/analytics.js) ───
   // Daily visitor hashes are salted with a server secret so they can't be
@@ -1020,6 +1038,9 @@ export async function createApp(opts = {}) {
       }
     } catch (err) {
       console.warn('[events] published lookup failed:', err.message);
+      // The bundled copy is months old; visitors see past events until the
+      // database is back, so this must not be quiet.
+      slack.alert('db-read', 'Database unreachable: the site is serving the old bundled event list', err.message);
     }
     try {
       const bundled = await readJsonFile(eventsFile);
@@ -1061,10 +1082,15 @@ export async function createApp(opts = {}) {
   async function serveEventsJson(req, res, next) {
     try {
       // auto_publish and the hidden lists are bookkeeping, not public.
-      const { source, auto_publish: _auto, hidden: _h, hidden_restored: _r, ...payload } = await getPublicPayload();
+      const { source, auto_publish: auto, hidden: _h, hidden_restored: _r, ...payload } = await getPublicPayload();
       if (source === 'empty') return next();
       // Store-backed payloads change on publish; the bundled file only on deploy.
       if (source === 'store') res.set('Cache-Control', 'no-store');
+      // collected_at: the candidates.json (its last_updated) auto-publish
+      // last put live. Unlike last_updated, an approved submission or an
+      // admin edit doesn't move it, so the event check can wait for the
+      // new collect and the uptime check can tell a stalled collector.
+      if (auto && auto.from) payload.collected_at = auto.from;
       return res.json(payload);
     } catch (err) {
       next(err);
@@ -1093,7 +1119,7 @@ export async function createApp(opts = {}) {
     loadVisibleKeyed: async () => visibleFrom((await store.getPublished()) || {})
   });
 
-  registerNewsletter(app, {
+  const newsletterApi = registerNewsletter(app, {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
     getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman,
     withNav: async (html, path) => {
@@ -1221,7 +1247,7 @@ export async function createApp(opts = {}) {
   }));
 
   // Contact form → Slack; replaces publishing an email address.
-  registerContact(app, { siteUrl, slack, createRateLimiter, sendHtml, verifyHuman });
+  registerContact(app, { siteUrl, slack, store, requireAdmin, createRateLimiter, sendHtml, verifyHuman });
 
   sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman });
 
@@ -1297,12 +1323,85 @@ export async function createApp(opts = {}) {
     (process.env.AUTO_PUBLISH !== '0' && process.env.RAILWAY_ENVIRONMENT_NAME === 'production');
   if (autoOnBoot) {
     const t = setTimeout(() => {
-      autoPublish.run().catch(err => {
+      autoPublish.run().then(r => {
+        // e.g. candidates.json unreadable: run() reports it rather than throwing.
+        if (r && !r.ok) slack.alert('auto-publish', 'Auto-publish could not run', r.message || r.error, `${siteUrl}/admin.html`);
+      }).catch(err => {
         console.error('[auto-publish] failed:', err.message);
         slack.alert('auto-publish', 'Auto-publish failed', err.message, `${siteUrl}/admin.html`);
       });
     }, opts.autoPublishDelayMs ?? 3000);
     if (t.unref) t.unref();
+  }
+
+  // ─── Scheduler (server/scheduler.js) ───
+  // The server is the clock for the Monday newsletter and the daily
+  // GitHub workflows, because GitHub's own cron runs hours late.
+  const scheduler = opts.scheduler || createScheduler({
+    store, github, slack, siteUrl, nowFn: () => nowFn(),
+    handlers: {
+      newsletter: () => newsletterApi.scheduledSend(),
+      newsletterReady: () => newsletter.enabled && newsletter.autosend,
+      // Weekly sponsor reports (server/sponsors.js), once that exists.
+      sponsorReports: typeof sponsors.sendSponsorReports === 'function'
+        ? now => sponsors.sendSponsorReports(now)
+        : typeof sponsorsModule.sendSponsorReports === 'function'
+          ? now => sponsorsModule.sendSponsorReports(now)
+          : undefined,
+      health: now => healthCheck(now)
+    }
+  });
+  if (opts.startScheduler ?? schedulerEnabled()) scheduler.start();
+
+  // The fallback GitHub crons ask this before repeating a job; public, as
+  // it only says whether a named job ran in its latest slot.
+  app.get('/api/scheduler/ran', wrap(async (req, res) => {
+    const out = await scheduler.ran(String(req.query.job || ''));
+    if (!out) return res.status(404).json({ ok: false, error: 'unknown-job' });
+    res.set('Cache-Control', 'no-store').json({ ok: true, ...out });
+  }));
+
+  // Hourly in-process check (the uptime workflow only runs every few
+  // hours): database reachable, events coming up, collector not stalled.
+  // Alerts when a problem appears, again daily while it lasts, and says
+  // when it clears.
+  const healthState = new Map(); // problem key → last alerted (ms)
+  async function healthCheck(now) {
+    const problems = {};
+    let pub = null;
+    try {
+      pub = (await store.getPublished()) || {};
+    } catch (err) {
+      problems.db = `The database is unreachable (${err.message}); the site is serving the old bundled event list.`;
+    }
+    if (pub) {
+      const today = localDateStr(now);
+      const upcoming = visibleKeyed(pub, []).filter(e => e && e.date >= today).length;
+      if (upcoming < MIN_UPCOMING) {
+        problems.upcoming = `Only ${upcoming} upcoming events are on the site. Check the Weekly Collect run and the Sources tab.`;
+      }
+      const from = Date.parse((pub.auto_publish && pub.auto_publish.from) || '');
+      const age = Number.isFinite(from) ? Math.floor((now.getTime() - from) / 86400000) : null;
+      // Collect runs Sunday and Wednesday, so 4 days is the normal maximum.
+      if (age != null && age >= STALE_COLLECT_DAYS) {
+        problems.stale = `No new events collected in ${age} days. The collector or auto-publish may be broken: check the Weekly Collect workflow.`;
+      }
+    }
+    const t = now.getTime();
+    for (const [key, text] of Object.entries(problems)) {
+      const last = healthState.get(key);
+      if (last == null || t - last >= 86400000) {
+        healthState.set(key, t);
+        slack.alert(`health-${key}-${t}`, 'Site check', text, `${siteUrl}/admin.html`);
+      }
+    }
+    for (const key of [...healthState.keys()]) {
+      if (!problems[key]) {
+        healthState.delete(key);
+        slack.notify({ title: '✅ Site check: back to normal', text: `Cleared: ${key}`, channel: 'alerts' });
+      }
+    }
+    return { ok: true, problems: Object.keys(problems) };
   }
 
   // ─── Admin home: setup checklist + at-a-glance numbers ───
@@ -1322,20 +1421,35 @@ export async function createApp(opts = {}) {
         fix: 'Set SLACK_WEBHOOK_URL in Railway (and as a GitHub secret) to get pings for breakage, sponsors and submissions. Optional: SLACK_SALES_WEBHOOK_URL, SLACK_ACTIVITY_WEBHOOK_URL and SLACK_ALERTS_WEBHOOK_URL send each kind to its own channel.' },
       { key: 'newsletter', label: 'Email newsletter (Resend)', ok: newsletter.enabled && Boolean(newsletter.address), level: 'recommended',
         fix: newsletter.enabled ? 'Set NEWSLETTER_ADDRESS (a mailing address is required by law in every email).' : 'Set RESEND_API_KEY and NEWSLETTER_ADDRESS in Railway.' },
-      { key: 'newsletter_auto', label: 'Newsletter sends itself Mondays', ok: Boolean(newsletter.cronSecret), level: 'recommended',
-        fix: 'Set NEWSLETTER_CRON_SECRET in Railway and GitHub, and the NEWSLETTER_AUTOSEND repo variable to 1.' },
+      { key: 'newsletter_auto', label: 'Newsletter sends itself Mondays at 7:43 AM', ok: newsletter.enabled && newsletter.autosend, level: 'recommended',
+        fix: !newsletter.enabled ? 'Set RESEND_API_KEY in Railway first.'
+          : 'NEWSLETTER_AUTOSEND=0 is set in Railway; remove it to send automatically. (Optional backup: NEWSLETTER_CRON_SECRET in Railway and GitHub lets GitHub retry later in the day.)' },
+      { key: 'reply_to', label: 'Customer email replies reach you', ok: Boolean(newsletter.replyTo), level: 'recommended',
+        fix: 'Set NEWSLETTER_REPLY_TO in Railway to an inbox you read; sponsors, submitters and readers who reply to an email land there.' },
+      { key: 'scheduler', label: 'Social posts, event check, ads report and AI review start on time',
+        ok: github.isConfigured() && !scheduler.state.dispatchBlocked, level: 'recommended',
+        fix: scheduler.state.dispatchBlocked
+          ? `GitHub refused the token (HTTP ${scheduler.state.dispatchBlocked.status}). Give GITHUB_TOKEN in Railway Actions: write (and Contents: write) on this repo.`
+          : 'Set GITHUB_TOKEN in Railway: a fine-grained token on this repo with Actions: write and Contents: write. Without it these wait for GitHub\'s own schedule, which runs hours late (the newsletter is sent on time either way).' },
+      { key: 'ai_review', label: 'AI review of free submissions',
+        ok: Boolean(opts.submissionReviewSecret ?? (env.SUBMISSION_REVIEW_SECRET || env.EVENT_CHECK_SECRET || env.NEWSLETTER_CRON_SECRET)), level: 'recommended', link: ghSecrets,
+        fix: 'Set SUBMISSION_REVIEW_SECRET in Railway and as a GitHub secret (the same long random string), plus OPENAI_API_KEY in GitHub. Until then new submissions wait for you in the Submissions tab.' },
+      { key: 'meta_pixel', label: 'Meta Pixel (ad tracking)', ok: Boolean(pixelId(opts.metaPixelId ?? env.META_PIXEL_ID)), level: 'recommended',
+        fix: 'Set META_PIXEL_ID in Railway (the digits from Meta Events Manager) so ad visits and signups are counted.' },
+      { key: 'meta_ads', label: 'Daily Meta ads report', ok: null, level: 'recommended', link: ghSecrets,
+        fix: 'In GitHub secrets: META_ADS_TOKEN (a system-user token with ads_read and ads_management, the ad account assigned). The Page token can\'t see the ad account.' },
+      { key: 'instagram', label: 'Instagram posting', ok: null, level: 'recommended', link: ghSecrets,
+        fix: 'In GitHub secrets: IG_USER_ID (the Instagram business account linked to the Facebook Page). Without it only Facebook gets the daily post.' },
       { key: 'stripe', label: 'Sponsor payments (Stripe)', ok: stripeCfg.enabled, level: 'recommended',
         fix: 'In Stripe: create a restricted key (Checkout Sessions, Products and Prices: write) and a webhook to ' + siteUrl +
           '/api/stripe/webhook on API version 2026-09-30.endive. Put them in Railway as STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.' },
       { key: 'event_check', label: 'Event check hides church events, non-events and duplicates',
         ok: Boolean(opts.eventCheckSecret ?? (env.EVENT_CHECK_SECRET || env.NEWSLETTER_CRON_SECRET)), level: 'recommended', link: ghSecrets,
         fix: 'Set EVENT_CHECK_SECRET in Railway and as a GitHub secret (any long random string, the same in both). Until then the check only reports to Slack.' },
-      { key: 'pull_now', label: '"Pull now" button (GitHub token)', ok: github.isConfigured(), level: 'optional',
-        fix: 'Set GITHUB_TOKEN in Railway (fine-grained, Actions: write on this repo).' },
       { key: 'spam', label: 'Spam protection on forms (Turnstile)', ok: Boolean(turnstileSecret && turnstileSiteKey), level: 'optional',
         fix: 'In Cloudflare Turnstile, add a widget (or add www.thevic361.com to an existing one) in Managed mode, then set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY in Railway. Protects Submit, Contact, newsletter signup and sponsor checkout.' },
       { key: 'social', label: 'Auto-post to Facebook + Instagram', ok: null, level: 'recommended', link: ghSecrets,
-        fix: 'In GitHub: secrets META_PAGE_ID, META_PAGE_TOKEN, IG_USER_ID and the repo variable SOCIAL_AUTOPOST = 1.' },
+        fix: 'In GitHub: secrets META_PAGE_ID, META_PAGE_TOKEN and the repo variable SOCIAL_AUTOPOST = 1.' },
       { key: 'collector_keys', label: 'Event collector keys (OpenAI, Apify, Gemini)', ok: null, level: 'recommended', link: ghSecrets,
         fix: 'In GitHub secrets: OPENAI_API_KEY (cleanup + junk filter), APIFY_TOKEN (Facebook, Instagram, Eventbrite) and GEMINI_API_KEY (Google Search discovery; free key at aistudio.google.com).' }
     ];
@@ -1394,7 +1508,7 @@ export async function createApp(opts = {}) {
   });
 
   await archiveReady;
-  return { app, store, storeBundle, slack };
+  return { app, store, storeBundle, slack, scheduler };
 }
 
 // Start the server when invoked directly. Importing this module (e.g. from

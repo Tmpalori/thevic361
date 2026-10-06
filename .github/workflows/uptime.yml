@@ -1,14 +1,21 @@
 # ─── Uptime check ───────────────────────────────────────────────────────────
-# Hourly: the homepage and /events.json must answer, and the events feed must
-# have events. Pings Slack (SLACK_ALERTS_WEBHOOK_URL, else SLACK_WEBHOOK_URL) when they don't, so a
-# dead site doesn't go unnoticed until someone texts about it. Once a day it
-# also flags a stale feed: nothing published for 8+ days.
+# The outside view of the site (the server's own hourly check in
+# server/scheduler.js can't see it being down): the homepage, /events.json
+# and /api/health (which touches the database) must answer, and the feed must
+# have upcoming events, not just the old bundled list. Pings Slack
+# (SLACK_ALERTS_WEBHOOK_URL, else SLACK_WEBHOOK_URL) when they don't.
+#
+# GitHub runs the hourly cron every few hours in practice, so the daily
+# stale-feed check has its own cron entry (15:17 UTC) and keys off which
+# schedule fired, not the hour the run happened to start in. Stale means the
+# collector hasn't produced new events (collected_at) for 8+ days.
 # ─────────────────────────────────────────────────────────────────────────────
 name: Uptime
 
 on:
   schedule:
     - cron: '17 * * * *'
+    - cron: '17 15 * * *'   # daily stale-feed check (~10 AM Central)
   workflow_dispatch:
 
 permissions:
@@ -24,26 +31,27 @@ jobs:
         env:
           SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
+          DAILY: ${{ github.event.schedule == '17 15 * * *' || github.event_name == 'workflow_dispatch' }}
         run: |
           fail() { echo "::error::$1"; python3 scripts/slack_notify.py "🚨 thevic361.com: $1" --link "$SITE"; exit 1; }
           # Two tries a minute apart, so one slow deploy restart isn't an alert.
           for i in 1 2; do
-            home=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/" || echo 000)
+            home=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/") || home=000
             [ "$home" = "200" ] && break; sleep 60
           done
           [ "$home" = "200" ] || fail "homepage returned HTTP $home"
-          code=$(curl -sS -o events.json -w '%{http_code}' --max-time 20 "$SITE/events.json" || echo 000)
+          code=$(curl -sS -o events.json -w '%{http_code}' --max-time 20 "$SITE/events.json") || code=000
           [ "$code" = "200" ] || fail "/events.json returned HTTP $code"
-          python3 - <<'PY' || fail "events feed is empty or unreadable"
-          import json, sys
-          d = json.load(open("events.json"))
-          sys.exit(0 if d.get("events") else 1)
-          PY
-          # Once a day (15:17 UTC, ~10 AM Central): is the feed going stale?
-          if [ "$(date -u +%H)" = "15" ]; then
-            age=$(python3 scripts/feed_age.py events.json 2>/dev/null || echo 99)
+          # 503 here means the database is down and the site is serving the
+          # old bundled list (which still answers 200 above).
+          health=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/api/health") || health=000
+          [ "$health" = "200" ] || fail "/api/health returned HTTP $health (database unreachable?)"
+          upcoming=$(python3 scripts/feed_age.py --upcoming events.json)
+          [ "$upcoming" -gt 0 ] || fail "the events feed has no upcoming events"
+          if [ "$DAILY" = "true" ]; then
+            age=$(python3 scripts/feed_age.py events.json)
             if [ "$age" -ge 8 ]; then
-              python3 scripts/slack_notify.py "⏰ No events published in $age days. Pick this week's events in admin." --link "$SITE/admin.html"
+              python3 scripts/slack_notify.py "⏰ No new events collected in $age days ($upcoming upcoming on the site). The Weekly Collect run or auto-publish may be broken." --link "https://github.com/${{ github.repository }}/actions/workflows/weekly-collect.yml"
             fi
           fi
-          echo "OK"
+          echo "OK: $upcoming upcoming events"

@@ -10,8 +10,11 @@
 #   - after each successful Weekly Collect, once auto-publish has put the
 #     new events on the site (the collect commit redeploys Railway, which
 #     publishes on boot, so we wait for /events.json to change)
-#   - Monday 11:43 UTC (6:43 AM CDT), an hour before the newsletter, to
-#     catch anything from Sunday-night edits
+#   - Monday 6:43 AM Central, an hour before the newsletter, to catch
+#     anything from Sunday-night edits. The site's scheduler
+#     (server/scheduler.js) dispatches it on time, because GitHub's own
+#     cron runs hours late; the 11:43 UTC cron below is a fallback that
+#     skips itself when the site already ran it
 #   - by hand (workflow_dispatch)
 
 name: Event Check
@@ -28,8 +31,27 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  gate:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      run: ${{ steps.g.outputs.run }}
+    steps:
+      - id: g
+        env:
+          EVENT: ${{ github.event_name }}
+          SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+        run: |
+          run=true
+          if [ "$EVENT" = "schedule" ] && curl -fsS --max-time 20 "$SITE/api/scheduler/ran?job=event-check" | grep -q '"ran":true'; then
+            echo "The site's scheduler already ran Monday's check; skipping this late cron run."; run=false
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -45,24 +67,27 @@ jobs:
 
       # The collect run commits candidates.json; Railway redeploys and
       # auto-publish runs on boot. Wait (up to 15 min) until the live list
-      # was published after these candidates were made (candidates.json's
-      # own last_updated, from the commit this job checked out), then
-      # check it. Timestamps are compared as times: the collector writes
-      # Central time, the site UTC.
+      # says it was built from these candidates: /events.json's
+      # collected_at is the candidates.json last_updated auto-publish last
+      # published, and only auto-publish moves it (an approved submission
+      # or an admin edit in the meantime changes last_updated, not this).
+      # candidates.json is the one in the commit this job checked out (main,
+      # after the collect pushed).
       - name: Wait for the new events to go live
         if: github.event_name == 'workflow_run'
+        env:
+          SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
         run: |
           python3 - <<'PY'
-          import json, time, urllib.request
-          from datetime import datetime
-          made = datetime.fromisoformat(json.load(open("candidates.json"))["last_updated"].replace("Z", "+00:00"))
+          import json, os, time, urllib.request
+          made = json.load(open("candidates.json"))["last_updated"]
           for _ in range(30):
               try:
-                  live = json.load(urllib.request.urlopen("${{ vars.SITE_URL || 'https://www.thevic361.com' }}/events.json", timeout=30))
-                  updated = datetime.fromisoformat((live.get("last_updated") or "").replace("Z", "+00:00"))
-                  if updated >= made:
-                      print(f"Live list updated at {updated}, candidates made {made}")
+                  live = json.load(urllib.request.urlopen(os.environ["SITE"] + "/events.json", timeout=30))
+                  if live.get("collected_at") == made:
+                      print(f"Live list is built from the candidates made {made}")
                       raise SystemExit(0)
+                  print(f"waiting: live list is from {live.get('collected_at')}, candidates made {made}")
               except (ValueError, OSError) as e:
                   print(f"waiting: {e}")
               time.sleep(30)

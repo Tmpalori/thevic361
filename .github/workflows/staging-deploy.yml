@@ -41,6 +41,8 @@ jobs:
           rm -rf "$DEST"
           mkdir -p "$DEST"
           cp -R source/docs/. "$DEST/"
+          # Static copy only (see pr-preview.yml): say so on every page.
+          python3 source/scripts/preview_banner.py "$DEST" "Staging preview"
 
       - name: Commit and push staging
         env:

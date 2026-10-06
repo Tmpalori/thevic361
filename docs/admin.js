@@ -1436,6 +1436,26 @@
     }));
   }
 
+  // Contact-form messages (also sent to Slack); kept here so none is lost.
+  async function renderMessagesOnHome() {
+    const box = document.getElementById('home-messages');
+    const list = document.getElementById('home-messages-list');
+    if (!box || !list) return;
+    let messages = [];
+    try {
+      const { res, json } = await adminFetch('/api/admin/messages');
+      if (res.ok && json && json.ok && Array.isArray(json.messages)) messages = json.messages;
+    } catch (e) { /* best effort */ }
+    box.hidden = !messages.length;
+    list.innerHTML = messages.slice(0, 20).map(m =>
+      '<li class="home-check"><span class="home-check__mark" aria-hidden="true">✉️</span><div>' +
+      '<strong>' + escapeHtml(m.name || '') + '</strong> <span class="home-check__state">' +
+      escapeHtml([m.topic, m.business, ago(m.created_at)].filter(Boolean).join(' · ')) + '</span>' +
+      '<p class="home-check__fix">' + escapeHtml(m.message || '') + '</p>' +
+      '<p class="home-check__fix"><a href="mailto:' + escapeHtml(encodeURIComponent(m.email || '')).replace(/%40/g, '@') + '">' +
+      escapeHtml(m.email || '') + '</a></p></div></li>').join('');
+  }
+
   async function loadHome() {
     const el = document.getElementById('home-body');
     const err = document.getElementById('home-error');
@@ -1445,15 +1465,21 @@
       if (!res.ok || !json || !json.ok) throw new Error((json && json.message) || 'Could not load status.');
       err.hidden = true;
       const st = json.status || {};
+      // Collect runs Sunday and Wednesday: more than 4 days means a run was
+      // missed or failed.
+      const collectedMs = Date.parse(st.collected_at || '');
+      const staleCollect = !Number.isFinite(collectedMs) || Date.now() - collectedMs > 4 * 86400000;
       const tiles = [
         ['Upcoming events on the site', st.upcoming_events ?? '—', 'picker'],
         ['Submissions waiting', st.pending_submissions ?? '—', 'submissions'],
         ['Newsletter subscribers', st.subscribers ?? '—', 'newsletter'],
-        ['Events last collected', ago(st.collected_at), 'sources']
+        ['Events last collected', ago(st.collected_at), 'sources', staleCollect],
+        ['Site last updated', ago(st.published_at), 'picker']
       ];
-      document.getElementById('home-tiles').innerHTML = tiles.map(([label, val, tab]) =>
-        '<button type="button" class="home-tile" data-goto="' + tab + '"><span class="home-tile__val">' +
-        escapeHtml(String(val)) + '</span><span class="home-tile__label">' + escapeHtml(label) + '</span></button>').join('');
+      document.getElementById('home-tiles').innerHTML = tiles.map(([label, val, tab, warn]) =>
+        '<button type="button" class="home-tile' + (warn ? ' home-tile--warn' : '') + '" data-goto="' + tab + '"><span class="home-tile__val">' +
+        escapeHtml(String(val)) + '</span><span class="home-tile__label">' + escapeHtml(label) +
+        (warn ? ' (check the collector)' : '') + '</span></button>').join('');
       const order = { required: 0, recommended: 1, optional: 2 };
       const checks = (json.checks || []).slice().sort((a, b) =>
         (a.ok === true) - (b.ok === true) || order[a.level] - order[b.level]);
@@ -1473,6 +1499,7 @@
       el.hidden = false;
       el.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => activateTab(b.dataset.goto)));
       renderHiddenOnHome();
+      renderMessagesOnHome();
     } catch (e) {
       err.hidden = false;
       err.textContent = e.message || String(e);
@@ -1643,8 +1670,11 @@
     const stat = (label, v) => '<div class="sources-summary__item"><span class="sources-summary__label">' +
       escapeHtml(label) + '</span><span class="sources-summary__value">' + v.visitors +
       ' visitors · ' + v.views + ' views</span></div>';
-    if (totals) totals.innerHTML = stat('Today', t.totals.today) + stat('Last 7 days', t.totals.week) +
-      stat('Last ' + Math.min(30, t.days) + ' days', t.totals.month);
+    // The period picked, plus the last 7 days when that's a different box.
+    const range = t.totals.range || t.totals.month;
+    if (totals) totals.innerHTML = stat('Today', t.totals.today) +
+      (t.days === 7 ? '' : stat('Last 7 days', t.totals.week)) +
+      stat('Last ' + t.days + ' days', range);
 
     const chart = document.getElementById('traffic-chart');
     if (chart) {

@@ -1246,6 +1246,8 @@ code {
   box-shadow: var(--admin-shadow);
 }
 .home-tile:hover { border-color: var(--admin-primary); }
+.home-tile--warn { border-color: var(--admin-warn); }
+.home-tile--warn .home-tile__val { color: var(--admin-warn); }
 .home-tile__val { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
 .home-tile__label { font-size: 0.9rem; color: var(--admin-muted); }
 .home-setup-count { font-weight: 500; color: var(--admin-muted); font-size: 0.9rem; margin-left: 6px; }

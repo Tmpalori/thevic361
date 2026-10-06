@@ -446,6 +446,67 @@ class FileStore {
       return row;
     });
   }
+
+  // ─── Scheduler runs (server/scheduler.js) ───
+  async claimJobRun(job, slot, now = new Date()) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      if (!Array.isArray(data.scheduler_runs)) data.scheduler_runs = [];
+      const row = data.scheduler_runs.find(r => r.job === job && r.slot === slot);
+      const at = now.toISOString();
+      if (!row) {
+        data.scheduler_runs.push({ job, slot, status: 'running', attempts: 1, started_at: at, retry_at: null });
+      } else if (jobReclaimable(row, now)) {
+        Object.assign(row, { status: 'running', attempts: (row.attempts || 0) + 1, started_at: at, retry_at: null });
+      } else {
+        return { claimed: false, attempts: row.attempts || 0 };
+      }
+      // A year of daily jobs is a few hundred rows; keep the file small.
+      data.scheduler_runs = data.scheduler_runs.slice(-500);
+      await this._write(data);
+      return { claimed: true, attempts: row ? row.attempts : 1 };
+    });
+  }
+
+  async finishJobRun(job, slot, { status, retry_at = null, detail = '' }) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const row = (data.scheduler_runs || []).find(r => r.job === job && r.slot === slot);
+      if (!row) return;
+      Object.assign(row, { status, retry_at, detail, finished_at: nowIso() });
+      await this._write(data);
+    });
+  }
+
+  async getJobRun(job, slot) {
+    const data = await this._read();
+    return (data.scheduler_runs || []).find(r => r.job === job && r.slot === slot) || null;
+  }
+
+  // ─── Contact form messages (server/contact.js) ───
+  async saveContactMessage(msg) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      if (!Array.isArray(data.contact_messages)) data.contact_messages = [];
+      data.contact_messages.push(msg);
+      await this._write(data);
+    });
+  }
+
+  async listContactMessages(limit = 100) {
+    const data = await this._read();
+    return (data.contact_messages || []).slice().sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).slice(0, limit);
+  }
+}
+
+// A claimed slot can be taken again when its run asked for a retry and the
+// time has come, or when it has said "running" for 30 minutes (the process
+// died mid-run).
+const STALE_RUN_MS = 30 * 60 * 1000;
+function jobReclaimable(row, now) {
+  if (row.status === 'retry') return !row.retry_at || Date.parse(row.retry_at) <= now.getTime();
+  if (row.status === 'running') return Date.parse(row.started_at) < now.getTime() - STALE_RUN_MS;
+  return false;
 }
 
 // ─── POSTGRES BACKEND ───
@@ -576,6 +637,30 @@ class PgStore {
             event_date DATE,
             payload JSONB NOT NULL,
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `);
+        // One row per scheduled job per slot (server/scheduler.js): the
+        // primary key is what stops two containers firing the same job.
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS scheduler_runs (
+            job TEXT NOT NULL,
+            slot TEXT NOT NULL,
+            status TEXT NOT NULL,
+            attempts INT NOT NULL DEFAULT 1,
+            started_at TIMESTAMPTZ NOT NULL,
+            finished_at TIMESTAMPTZ,
+            retry_at TIMESTAMPTZ,
+            detail TEXT,
+            PRIMARY KEY (job, slot)
+          );
+        `);
+        // Contact form messages, so a lead survives a Slack outage and is
+        // listed in admin.
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS contact_messages (
+            id TEXT PRIMARY KEY,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            payload JSONB NOT NULL
           );
         `);
       })().catch(err => {
@@ -918,6 +1003,58 @@ class PgStore {
       updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
     };
   }
+
+  // ─── Scheduler runs (server/scheduler.js) ───
+  // One statement, so two containers can't both claim a slot: the insert
+  // wins for the first, and the update only fires for a slot whose retry
+  // is due or whose run died (still "running" after 30 minutes).
+  async claimJobRun(job, slot, now = new Date()) {
+    await this.ready();
+    const r = await this.pool.query(`
+      INSERT INTO scheduler_runs (job, slot, status, attempts, started_at) VALUES ($1, $2, 'running', 1, $3)
+      ON CONFLICT (job, slot) DO UPDATE
+        SET status = 'running', attempts = scheduler_runs.attempts + 1, started_at = EXCLUDED.started_at, retry_at = NULL
+        WHERE (scheduler_runs.status = 'retry' AND (scheduler_runs.retry_at IS NULL OR scheduler_runs.retry_at <= EXCLUDED.started_at))
+           OR (scheduler_runs.status = 'running' AND scheduler_runs.started_at < EXCLUDED.started_at - interval '30 minutes')
+      RETURNING attempts
+    `, [job, slot, now.toISOString()]);
+    return r.rows[0] ? { claimed: true, attempts: r.rows[0].attempts } : { claimed: false, attempts: 0 };
+  }
+
+  async finishJobRun(job, slot, { status, retry_at = null, detail = '' }) {
+    await this.ready();
+    await this.pool.query(
+      'UPDATE scheduler_runs SET status = $3, retry_at = $4, detail = $5, finished_at = NOW() WHERE job = $1 AND slot = $2',
+      [job, slot, status, retry_at, detail]);
+  }
+
+  async getJobRun(job, slot) {
+    await this.ready();
+    const r = await this.pool.query('SELECT job, slot, status, attempts, started_at, finished_at, retry_at, detail FROM scheduler_runs WHERE job = $1 AND slot = $2', [job, slot]);
+    return r.rows[0] || null;
+  }
+
+  // ─── Contact form messages (server/contact.js) ───
+  async saveContactMessage(msg) {
+    await this.ready();
+    await this.pool.query('INSERT INTO contact_messages (id, created_at, payload) VALUES ($1, $2, $3::jsonb) ON CONFLICT (id) DO NOTHING',
+      [msg.id, msg.created_at, JSON.stringify(msg)]);
+  }
+
+  async listContactMessages(limit = 100) {
+    await this.ready();
+    const r = await this.pool.query('SELECT payload FROM contact_messages ORDER BY created_at DESC LIMIT $1', [limit]);
+    return r.rows.map(row => row.payload);
+  }
+}
+
+// An idle connection dropping (Postgres restart, maintenance) makes the
+// pool emit 'error'; with no listener Node treats that as an uncaught
+// exception and the whole site restarts. The pool replaces the client on
+// the next query, so a log line is enough.
+export function watchPool(pool) {
+  pool.on('error', err => console.warn('[db] idle client error:', err && err.message));
+  return pool;
 }
 
 // ─── FACTORY ───
@@ -930,6 +1067,7 @@ export async function createStore(opts = {}) {
       // Railway Postgres ships SSL by default; allow self-signed certs.
       ssl: databaseUrl.includes('sslmode=disable') ? false : { rejectUnauthorized: false }
     });
+    watchPool(pool);
     const store = new PgStore(pool);
     await store.ready();
     return { kind: 'postgres', store, pool };

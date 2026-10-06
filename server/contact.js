@@ -2,14 +2,16 @@
  *
  * Replaces the public email address: /contact posts here, and each message
  * arrives in Slack (server/slack.js) with the sender's email so the owner
- * can reply from wherever they like. Nothing personal is published.
+ * can reply from wherever they like (advertising questions in the sales
+ * channel). Nothing personal is published.
  *
- * If Slack isn't configured or is down, the message is written to the
- * server log (Railway keeps it) so nothing is silently lost.
+ * Every message is also saved in the database and listed on admin Home, so
+ * a Slack outage doesn't lose it; if both fail it goes to the server log.
  */
 
 import { SITE_NAME, escHtml, layout } from './seo.js';
 import { normalizeEmail } from './newsletter.js';
+import { newId, nowIso } from './db.js';
 
 export const CONTACT_TOPICS = [
   ['advertising', 'Advertising or sponsorship'],
@@ -49,7 +51,17 @@ export function renderContactPage({ siteUrl, values = {}, errors = {}, sent = fa
   });
 }
 
-export function registerContact(app, { siteUrl, slack, createRateLimiter, sendHtml, verifyHuman = async () => true }) {
+export function registerContact(app, { siteUrl, slack, store = null, requireAdmin = null, createRateLimiter, sendHtml, verifyHuman = async () => true }) {
+  // Admin Home lists recent messages, so a lead never lives only in Slack.
+  if (requireAdmin) {
+    app.get('/api/admin/messages', requireAdmin, async (req, res, next) => {
+      try {
+        const messages = store && typeof store.listContactMessages === 'function' ? await store.listContactMessages(50) : [];
+        res.set('Cache-Control', 'no-store').json({ ok: true, messages });
+      } catch (err) { next(err); }
+    });
+  }
+
   const limiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5 });
 
   app.get('/contact', (req, res) => {
@@ -77,15 +89,30 @@ export function registerContact(app, { siteUrl, slack, createRateLimiter, sendHt
       if (Object.keys(errors).length) return fail(errors);
 
       const topic = CONTACT_TOPICS.find(([k]) => k === values.topic)[1];
+      // Advertising questions are sales leads: they go where the owner
+      // watches for money, not the busy activity channel.
       const delivered = await slack.notify({
         title: `✉️ Website message: ${topic}`,
         fields: [['From', values.name], ['Email', email], ['Business', values.business]],
         text: values.message,
-        footer: 'Reply by email to the sender'
+        link: `${siteUrl}/admin.html`,
+        footer: 'Reply by email to the sender',
+        channel: values.topic === 'advertising' ? 'sales' : 'activity'
       });
-      if (!delivered) {
+      // Every message is kept in the database too (listed on admin Home),
+      // so a Slack outage or rotated webhook can't lose a lead.
+      let saved = false;
+      if (store && typeof store.saveContactMessage === 'function') {
+        try {
+          await store.saveContactMessage({ id: newId(), created_at: nowIso(), ...values, email, delivered: Boolean(delivered) });
+          saved = true;
+        } catch (err) {
+          console.warn('[contact] save failed:', err.message);
+        }
+      }
+      if (!delivered && !saved) {
         // Railway keeps logs; better there than lost.
-        console.log('[contact] message (Slack unavailable):', JSON.stringify({ ...values, email }));
+        console.log('[contact] message (Slack and database unavailable):', JSON.stringify({ ...values, email }));
       }
       sendHtml(res, renderContactPage({ siteUrl, sent: true }), 200, 'no-store');
     } catch (err) { next(err); }

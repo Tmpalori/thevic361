@@ -21,11 +21,12 @@ class Resp:
 class FakeMeta:
     """Answers the few Graph calls the script makes; records every call."""
 
-    def __init__(self, accounts=None, scopes=("ads_read", "ads_management"), spend="12.34"):
+    def __init__(self, accounts=None, scopes=("ads_read", "ads_management"), spend="12.34", ad_status="PENDING_REVIEW"):
         self.calls = []
         self.accounts = [{"id": "act_1", "name": "The Vic 361", "currency": "USD"}] if accounts is None else accounts
         self.scopes = scopes
         self.spend = spend
+        self.ad_status = ad_status
         self.objects = {"999": {"name": "Visitors ad set", "effective_status": "ACTIVE", "daily_budget": "1000"}}
 
     def request(self, method, url, headers=None, timeout=None, params=None, data=None):
@@ -44,7 +45,7 @@ class FakeMeta:
             return Resp({"data": [{"id": "999", "name": "Victoria 25mi", "campaign_id": "1", "effective_status": "ACTIVE",
                                    "daily_budget": "1000", "optimization_goal": "LANDING_PAGE_VIEWS"}]})
         if path.endswith("/ads"):
-            return Resp({"data": [{"id": "5", "name": "Video", "adset_id": "999", "effective_status": "PENDING_REVIEW"}]})
+            return Resp({"data": [{"id": "5", "name": "Video", "adset_id": "999", "effective_status": self.ad_status}]})
         if path in self.objects:
             if method == "POST":
                 self.objects[path].update(data)
@@ -87,9 +88,18 @@ def test_missing_permissions_and_no_ad_account_are_explained(capsys):
     assert "missing ads_read, ads_management" in capsys.readouterr().out
 
 
-def test_scheduled_run_with_a_setup_problem_warns_but_does_not_fail(capsys):
+def test_scheduled_run_with_a_setup_problem_alerts_but_does_not_fail(monkeypatch, capsys):
+    monkeypatch.setenv("SLACK_ALERTS_WEBHOOK_URL", "https://hooks.slack.com/alerts")
     assert ma.main(["report", "--scheduled"], session=FakeMeta(accounts=[])) == 0
     assert "::warning::" in capsys.readouterr().out
+    assert len(sent) == 1 and "couldn't run" in sent[0][0] and "no ad accounts" in sent[0][0]
+
+
+def test_scheduled_run_stays_quiet_while_only_the_page_token_is_set(monkeypatch):
+    # No META_ADS_TOKEN yet: the Page token seeing no ad account just means
+    # ads aren't set up, not that something broke.
+    monkeypatch.setenv("META_ADS_TOKEN_SOURCE", "page")
+    assert ma.main(["report", "--scheduled"], session=FakeMeta(accounts=[])) == 0
     assert sent == []
 
 
@@ -99,6 +109,24 @@ def test_report_goes_to_slack_only_when_something_spent():
     sent.clear()
     assert ma.main(["report"], session=FakeMeta(spend="0")) == 0
     assert sent == []
+
+
+def test_zero_spend_with_a_disapproved_ad_or_a_billing_problem_alerts():
+    assert ma.main(["report"], session=FakeMeta(spend="0", ad_status="DISAPPROVED")) == 0
+    assert len(sent) == 1 and "🚨 Meta ads need a look" in sent[0][0] and "*Video* is disapproved" in sent[0][0]
+    sent.clear()
+    unpaid = [{"id": "act_1", "name": "The Vic 361", "currency": "USD", "account_status": 3}]
+    assert ma.main(["report"], session=FakeMeta(accounts=unpaid, spend="0")) == 0
+    assert len(sent) == 1 and "unsettled" in sent[0][0]
+
+
+def test_a_live_campaign_that_spent_nothing_alerts():
+    assert ma.main(["report"], session=FakeMeta(spend="0", ad_status="ACTIVE")) == 0
+    assert len(sent) == 1 and "spent $0 yesterday" in sent[0][0]
+    sent.clear()
+    # Spending normally: just the report.
+    assert ma.main(["report"], session=FakeMeta(ad_status="ACTIVE")) == 0
+    assert len(sent) == 1 and sent[0][0].startswith("📈")
 
 
 def test_pause_resume_and_budget_with_a_safety_limit(capsys):
