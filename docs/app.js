@@ -72,6 +72,19 @@
       .replace(/([\dM])\s*(?:[–—-]+|\bto\b)\s*(?=\d)/g, '$1 – ');
   }
 
+  // The time shown for an event: with a separate end (end_time, from the
+  // submit form or the admin edit modal) joined on when ev.time is a single
+  // time, as withPages() in server/seo.js does for the server's lists.
+  var TIME_RE = /(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b/gi;
+  function timeText(ev) {
+    var t = typeof ev.time === 'string' ? ev.time.trim() : '';
+    var end = typeof ev.end_time === 'string' ? ev.end_time.trim() : '';
+    if (t && end && (t.match(TIME_RE) || []).length === 1 && (end.match(TIME_RE) || []).length === 1) {
+      t = t + ' – ' + end;
+    }
+    return t;
+  }
+
   // Start of an event in minutes after midnight (9999 without a time, so
   // those sort last): the same reading as parseTimes in server/seo.js, so
   // the browser re-render keeps the server's order. Minutes are optional
@@ -164,7 +177,7 @@
         (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
         // Nearby-town events (ev.town), same as nearbyBadge in server/seo.js.
         (ev.town ? '<span class="badge badge--nearby">Nearby · ' + escHtml(ev.town) + '</span> ' : '') +
-        (ev.time ? '<span class="event-time">' + escHtml(formatTime(ev.time)) + '</span> ' : '') +
+        (ev.time ? '<span class="event-time">' + escHtml(formatTime(timeText(ev))) + '</span> ' : '') +
         '<span class="event-name">' + nameHtml + '</span>' +
         (venuePart ? '<span class="event-venue">' + escHtml(venuePart) + '</span>' : '') +
         freeBadge +

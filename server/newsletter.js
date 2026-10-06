@@ -104,6 +104,9 @@ export function createResend(apiKey, fetchImpl = globalThis.fetch, { timeoutMs =
     if (!res.ok) {
       const err = new Error(`Resend ${path} HTTP ${res.status}: ${JSON.stringify(json).slice(0, 300)}`);
       err.status = res.status;
+      // Resend's error name ("invalid_idempotent_request"...), for callers
+      // that branch on more than the status.
+      if (json && typeof json.name === 'string') err.code = json.name;
       throw err;
     }
     return json;
