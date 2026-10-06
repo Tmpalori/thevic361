@@ -471,6 +471,30 @@ class LocalEventsError(Exception):
     """local_events.yaml can't be read as a whole (syntax error, not a mapping)."""
 
 
+_WEEKDAY_NAMES = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+def recurring_days(value):
+    """Weekday numbers (Monday 0) for a local_events.yaml recurring `day`,
+    or an empty set when any part isn't a day. The owner hand-edits this
+    file, so "friday", "Fridays", "Fri.", "thur", "Tues", "friday, saturday",
+    "Fri & Sat" and a YAML list all work."""
+    parts = value if isinstance(value, (list, tuple)) else [value]
+    days = set()
+    for part in parts:
+        words = re.split(r"[\s,/&+;]+|\band\b", str(part or "").strip().lower())
+        words = [w.strip(".") for w in words if w and w.strip(".")]
+        if not words:
+            return set()
+        for w in words:
+            stem = w[:-1] if w.endswith("s") and len(w) > 4 else w
+            match = [i for i, name in enumerate(_WEEKDAY_NAMES) if len(stem) >= 3 and name.startswith(stem)]
+            if len(match) != 1:
+                return set()
+            days.add(match[0])
+    return days
+
+
 def load_local_events(yaml_path, days_ahead=7, strict=False):
     """Load recurring + one-time events from the YAML file.
 
@@ -518,25 +542,29 @@ def load_local_events(yaml_path, days_ahead=7, strict=False):
             raise LocalEventsError(f"{yaml_path}: root is not a mapping")
         return events
 
-    DAY_MAP = {
-        "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
-        "friday": 4, "saturday": 5, "sunday": 6,
-    }
-
     # Recurring events — per-entry try/except so one bad row doesn't take down the whole list.
     for ev in data.get("recurring", []) or []:
         try:
             if not isinstance(ev, dict):
                 continue
-            dow = DAY_MAP.get(str(ev.get("day") or "").strip().lower())
-            if dow is None:
+            dows = recurring_days(ev.get("day"))
+            if not dows:
+                # Without this the staple just vanished, and auto-publish
+                # took its live dates down two runs later with nothing in
+                # the collect message to say why.
+                print(f"  [Local] Recurring entry has an unknown day: {ev.get('day')!r} ({ev.get('name')})")
+                _warn(
+                    "[local_events] recurring entry has an unknown day",
+                    day=str(ev.get("day"))[:40], name=str(ev.get("name"))[:60],
+                    scraper="local_events",
+                )
                 continue
             start = datetime.strptime(ev["start_date"], "%Y-%m-%d").date() if ev.get("start_date") else today - timedelta(days=1)
             end = datetime.strptime(ev["end_date"], "%Y-%m-%d").date() if ev.get("end_date") else end_date + timedelta(days=365)
 
             d = today
             while d <= end_date:
-                if d.weekday() == dow and start <= d <= end:
+                if d.weekday() in dows and start <= d <= end:
                     events.append({
                         "date": d.strftime("%Y-%m-%d"),
                         "name": ev["name"],
@@ -598,6 +626,27 @@ def load_local_events(yaml_path, days_ahead=7, strict=False):
 CITY_CALENDAR_MAX_PAGES = 80
 
 
+def _city_calendar_eids(soup):
+    eids = set()
+    for link in soup.select("a[href*='EID=']"):
+        match = re.search(r'EID=(\d+)', link.get("href", ""))
+        if match:
+            eids.add(match.group(1))
+    return eids
+
+
+def _city_calendar_extra_ranges(start, end):
+    """(first, last) date ranges for each month after start's that the window
+    reaches, clipped to end. Empty when the window stays in one month."""
+    ranges = []
+    cur = (start.replace(day=1) + timedelta(days=32)).replace(day=1)
+    while cur <= end:
+        nxt = (cur + timedelta(days=32)).replace(day=1)
+        ranges.append((cur, min(end, nxt - timedelta(days=1))))
+        cur = nxt
+    return ranges
+
+
 def fetch_city_calendar(days_ahead=7):
     """Scrape event detail pages from victoriatx.gov CivicPlus calendar."""
     events = []
@@ -612,12 +661,25 @@ def fetch_city_calendar(days_ahead=7):
         soup = BeautifulSoup(resp.text, "html.parser")
 
         # Collect unique event IDs from links like Calendar.aspx?EID=XXXX
-        eids = set()
-        for link in soup.select("a[href*='EID=']"):
-            href = link.get("href", "")
-            match = re.search(r'EID=(\d+)', href)
-            if match:
-                eids.add(match.group(1))
+        eids = _city_calendar_eids(soup)
+
+        # The default view lists today through the end of this month only,
+        # so a window that runs into next month (a run in the last two weeks
+        # of a month) would miss the city's early-month events. Fetch the
+        # rest of the window as a date-range search; checked against the
+        # live site, startDate/enddate with CID=0 returns every calendar's
+        # events in that range (?month=N alone returns just one day).
+        for range_start, range_end in _city_calendar_extra_ranges(_WINDOW_START, _WINDOW_END):
+            range_url = (f"{url}?Keywords=&startDate={range_start:%m/%d/%Y}"
+                         f"&enddate={range_end:%m/%d/%Y}&CID=0")
+            try:
+                range_resp = requests.get(range_url, headers=HEADERS, timeout=TIMEOUT)
+                range_resp.raise_for_status()
+                eids |= _city_calendar_eids(BeautifulSoup(range_resp.text, "html.parser"))
+            except Exception as e:
+                # Partial, not ok: next month's events aren't gone, we
+                # just didn't see them this run.
+                _mark_partial("city_calendar", f"{range_start:%b %Y} listing failed ({type(e).__name__})")
 
         print(f"  [City Calendar] Found {len(eids)} event IDs, fetching details...")
 
@@ -797,6 +859,30 @@ def _chamber_description(desc_el):
     return cut.rstrip(" ,;:-") + "…"
 
 
+CHAMBER_MAX_PAGES = 40
+
+_CHAMBER_DATE_RE = re.compile(
+    r"Date and Time\s*(?:[A-Za-z]+day,?\s*)?([A-Z][a-z]{2,8})\.?\s+(\d{1,2}),?\s+(\d{4})"
+)
+
+
+def _chamber_block_date(page_text):
+    """The date in a GrowthZone detail page's "Date and Time" block, or None.
+    Accepts short ("Oct") and full ("October") month names, and "Sept"."""
+    m = _CHAMBER_DATE_RE.search(page_text or "")
+    if not m:
+        return None
+    month = m.group(1)
+    if month.lower() == "sept":
+        month = "Sep"
+    for fmt in ("%b %d %Y", "%B %d %Y"):
+        try:
+            return datetime.strptime(f"{month} {m.group(2)} {m.group(3)}", fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 def fetch_chamber_events(days_ahead=7):
     """Scrape events from Victoria Chamber of Commerce."""
     events = []
@@ -819,7 +905,15 @@ def fetch_chamber_events(days_ahead=7):
 
         print(f"  [Chamber] Found {len(detail_links)} detail links, fetching...")
 
-        for detail_url in sorted(detail_links)[:20]:
+        # The listing shows ~10 events; the cap only guards against a
+        # runaway page. A cut is partial, not ok, so auto-publish doesn't
+        # retire events on the pages that weren't fetched.
+        ordered = sorted(detail_links)
+        if len(ordered) > CHAMBER_MAX_PAGES:
+            skipped = len(ordered) - CHAMBER_MAX_PAGES
+            _note_source("chamber", f"fetched {CHAMBER_MAX_PAGES} of {len(ordered)} listings; {skipped} skipped")
+            _mark_partial("chamber", f"hit the {CHAMBER_MAX_PAGES}-page cap ({skipped} skipped)")
+        for detail_url in ordered[:CHAMBER_MAX_PAGES]:
             try:
                 detail_resp = requests.get(detail_url, headers=HEADERS, timeout=TIMEOUT)
                 if detail_resp.status_code != 200:
@@ -836,32 +930,25 @@ def fetch_chamber_events(days_ahead=7):
 
                 # Parse date from page content
                 page_text = ds.get_text()
+
+                # GrowthZone's "Date and Time" block is the event's own date
+                # and uses short month names ("Wednesday Oct 14, 2026"). Read
+                # it first; the URL slug is the only fallback. Never take the
+                # first date anywhere on the page: a description that mentions
+                # an early-bird or RSVP date would give the wrong day.
                 event_date = None
-
-                # Look for date in URL slug (e.g., "03-18-2026")
-                slug_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', detail_url)
-                if slug_match:
-                    try:
-                        dt = datetime.strptime(
-                            f"{slug_match.group(1)}/{slug_match.group(2)}/{slug_match.group(3)}",
-                            "%m/%d/%Y"
-                        )
-                        if today.date() <= dt.date() <= end_date.date():
-                            event_date = dt.strftime("%Y-%m-%d")
-                    except ValueError:
-                        pass
-
-                # Fallback: look for date in page text
-                if not event_date:
-                    date_match = re.search(
-                        r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})',
-                        page_text
-                    )
-                    if date_match:
+                block_date = _chamber_block_date(page_text)
+                if block_date:
+                    if today.date() <= block_date <= end_date.date():
+                        event_date = block_date.strftime("%Y-%m-%d")
+                else:
+                    # Look for date in URL slug (e.g., "03-18-2026")
+                    slug_match = re.search(r'(\d{2})-(\d{2})-(\d{4})', detail_url)
+                    if slug_match:
                         try:
                             dt = datetime.strptime(
-                                f"{date_match.group(1)} {date_match.group(2)} {date_match.group(3)}",
-                                "%B %d %Y"
+                                f"{slug_match.group(1)}/{slug_match.group(2)}/{slug_match.group(3)}",
+                                "%m/%d/%Y"
                             )
                             if today.date() <= dt.date() <= end_date.date():
                                 event_date = dt.strftime("%Y-%m-%d")
@@ -2496,7 +2583,8 @@ def is_same_event(a, b):
         return False
     sa, sb = " ".join(ta), " ".join(tb)
     if sa == sb or SequenceMatcher(None, sa, sb).ratio() >= 0.85:
-        return _near_place(a, b) or _guessed_place_same_start(a, b)
+        # A vague festival venue ("Downtown Victoria") still matches below.
+        return _near_place(a, b) or _guessed_place_same_start(a, b) or _same_festival(a, b)
     # One name contains the other ("6th Realm Night Market" vs "6th Realm
     # Night Market Street spots"): only a match at the same place, so
     # "Tejas Fest" doesn't swallow "Chihuahua Races at Tejas Fest".
@@ -2518,7 +2606,70 @@ def is_same_event(a, b):
     small, big = (ra, rb) if len(ra) <= len(rb) else (rb, ra)
     if len(small) >= 2 and small <= big and _same_spot(a, b):
         return True
+    # A festival weekend posted as "Tejas Fest 2026 (Day 1)", "Tejas Fest
+    # (Night 1)", "Tejas Fest 2026 - Main Stage" and "Tejasfest (VIP shift)":
+    # names an AI wrote from posts, each with its own qualifier and a vague
+    # venue. Post events are never retired, so the copies would all stay up.
+    if _same_festival(a, b):
+        return True
     return False
+
+
+# Words an AI adds to a post's event name to say which part of the event
+# the post is about. Dropped (with any "(...)" and " - ..." tail) before
+# comparing AI-written names.
+_QUALIFIER_TOKENS = {"day", "days", "night", "nights", "vip", "main", "stage", "shift", "service",
+                     "weekend", "pass", "ticket", "tickets", "one", "two", "three", "first", "second",
+                     "third", "final", "opening", "closing", "downtown"}
+# Words too common to tie two posts to one event on their own ("Live Music
+# (Night 1)" at the Main Stage isn't the bar's "Live Music" that night).
+_GENERIC_CORE_TOKENS = {"live", "music", "band", "trivia", "karaoke", "market", "party", "show",
+                        "concert", "festival", "fest", "dance", "brunch", "bingo", "comedy", "open", "event"}
+
+
+def _qualifier_token(w):
+    return w in _QUALIFIER_TOKENS or bool(re.fullmatch(r"\d+(?:st|nd|rd|th)?", w))
+
+
+def _festival_core(name):
+    """An AI-written name without its part-of-the-event qualifiers:
+    "Tejas Fest 2026 (Day 1)" and "Tejas Fest 2026 - Main Stage" give
+    ["tejas", "fest"]."""
+    n = re.sub(r"\([^)]*\)", " ", name or "")
+    n = re.split(r"\s+[-\u2013\u2014|]\s+", n, maxsplit=1)[0]
+    return [w for w in _name_tokens(n) if not _qualifier_token(w)]
+
+
+def _generic_venue(venue, core):
+    """A venue that names no place: blank, "Downtown Victoria", "Main
+    Stage", or the event itself ("Tejas Fest (VIP)", "Tejasfest VIP")."""
+    compact = "".join(core)
+    left = [w for w in _name_tokens(venue)
+            if not _qualifier_token(w) and w not in _CITY_TOKENS and w not in core and w != compact]
+    return not left
+
+
+def _same_festival(a, b):
+    """Two listings of one event on one date where at least one name came
+    from an AI reading a post: same core name once the qualifiers are gone
+    (spacing aside, so "Tejasfest" is "Tejas Fest"), a distinctive word in
+    it, and venues that don't disagree (a vague venue counts as unknown)."""
+    if not ({_name_source(a), _name_source(b)} & AI_NAMED_SOURCES):
+        return False
+    ca = _festival_core(a.get("name")) if _name_source(a) in AI_NAMED_SOURCES else _name_tokens(a.get("name"))
+    cb = _festival_core(b.get("name")) if _name_source(b) in AI_NAMED_SOURCES else _name_tokens(b.get("name"))
+    if not ca or not cb or "".join(ca) != "".join(cb):
+        return False
+    compact = "".join(ca)
+    if len(compact) < 6 or not any(len(w) >= 4 and w not in _GENERIC_CORE_TOKENS for w in ca + cb):
+        return False
+    # Two starts that disagree are two sessions, not one listing.
+    sa, sb = _start_minutes(a.get("time")), _start_minutes(b.get("time"))
+    if sa is not None and sb is not None and sa != sb:
+        return False
+    if _generic_venue(a.get("venue"), ca) or _generic_venue(b.get("venue"), cb):
+        return True
+    return _near_place(a, b)
 
 
 _CITY_TOKENS = {"victoria", "tx", "texas", "vtx"}
@@ -2604,6 +2755,38 @@ def _pick_name(a, b):
     return b if len(nb) < len(na) else a
 
 
+def _strip_qualifiers(name):
+    """"Tejas Fest 2026 (Day 1)" → "Tejas Fest 2026"."""
+    n = re.sub(r"\s*\([^)]*\)", "", name or "")
+    n = re.split(r"\s+[-\u2013\u2014|]\s+", n, maxsplit=1)[0]
+    return re.sub(r"\s+", " ", n).strip()
+
+
+def _tidy_festival(merged, other):
+    """After merging AI-named copies of one festival day: one listing per
+    day, so the name loses its "(Night 1)" or " - Main Stage" tail, and a
+    venue that names a place beats "Main Stage" or the festival's own name."""
+    if _name_source(merged) in AI_NAMED_SOURCES and _strip_qualifiers(merged["name"]):
+        merged["name"] = _strip_qualifiers(merged["name"])
+
+    def venue_score(e):
+        core = _festival_core(e.get("name"))
+        v = e.get("venue") or ""
+        if not v.strip():
+            return 0
+        if not _generic_venue(v, core):
+            return 4
+        words = set(_name_tokens(v))
+        if words & set(core + ["".join(core)]):
+            return 1  # the festival's own name ("Tejas Fest (VIP)")
+        if words <= _QUALIFIER_TOKENS - {"downtown"}:
+            return 2  # a part of the grounds ("Main Stage")
+        return 3      # the area ("Downtown Victoria")
+    if venue_score(other) > venue_score(merged):
+        merged["venue"] = other["venue"]
+        merged["address"] = other.get("address") or merged.get("address") or ""
+
+
 def _merge_pair(old, new):
     """Combine two records of the same event into the best single record."""
     def completeness(e):
@@ -2637,6 +2820,8 @@ def _merge_pair(old, new):
                                       or (other.get("_venue_guess") and _same_place(merged, other)))
     name_from = _pick_name(merged, other)
     merged["name"], merged["_name_from"] = name_from.get("name"), _name_source(name_from)
+    if _same_festival(old, new):
+        _tidy_festival(merged, other)
     merged["icons"] = list(dict.fromkeys((base.get("icons") or []) + (other.get("icons") or [])))[:4]
     merged["free"] = bool(base.get("free") or other.get("free"))
     # Hand-set tags (local_events.yaml) survive a better-ranked scraped copy.
