@@ -25,6 +25,7 @@ Two passes:
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import date, datetime, timedelta
 
@@ -111,7 +112,17 @@ Flag only clear problems a careful editor would fix before the list goes out:
 - other: anything else clearly wrong (garbled name, wrong venue for the event, etc.).
 
 Do not flag the same recurring event on different days (weekly karaoke, story time). Do not flag generic names at different venues ("Live Music" at two bars is two events). When unsure, leave it out.
+Refer to other events by their name, never by their index number (the reader never sees the numbers).
 Answer with only a JSON array, at most 20 items: [{"i": <index>, "kind": "<kind>", "why": "<under 15 words>", "dup_of": <index or null>}]. Answer [] if nothing is off."""
+
+
+def _named(why, events):
+    """Swap "index 12" (the model's line numbers, meaningless in Slack) for
+    the event's name; drop the reference if the number isn't valid."""
+    def name(m):
+        n = int(m.group(1))
+        return f"“{events[n]['name']}”" if 0 <= n < len(events) else "another listing"
+    return re.sub(r"\b(?:index|item|line|#)\s*(\d+)\b", name, why, flags=re.IGNORECASE)
 
 
 def ai_findings(events, api_key):
@@ -138,7 +149,7 @@ def ai_findings(events, api_key):
         kind = str(item.get("kind") or "other")
         if not 0 <= i < len(events) or kind not in AI_KINDS:
             continue
-        why = str(item.get("why") or "").strip()[:160]
+        why = _named(str(item.get("why") or "").strip()[:160], events)
         dup = item.get("dup_of")
         if kind == "duplicate" and isinstance(dup, int) and 0 <= dup < len(events) and dup != i:
             other = events[dup]

@@ -3,7 +3,8 @@
 
 Runs on a schedule (.github/workflows/social-kit.yml) and writes
 docs/social/latest/:
-  - week-N.png / weekend-N.png / today-N.png   Instagram/Facebook slides (1080x1350)
+  - week-N.png / weekend-N.png / today-N.png   Instagram/Facebook slides (1080x1350): at most
+                                 three, a teaser (cover, day-by-day peek, see-all)
   - weekend.mp4                  the weekend slides as a vertical Reel (needs ffmpeg)
   - outreach.txt                 venues on this week's list, to send their link
   - outreach-slack.txt           the short Monday Slack version (taggable venues only)
@@ -35,8 +36,9 @@ except ImportError:  # pragma: no cover
 
 SITE = os.environ.get("SITE_URL", "https://www.thevic361.com").rstrip("/")
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "docs", "social", "latest")
-PER_SLIDE = 6
-PER_DAY_CAPTION = 4
+# A sneak peek, not the whole list: two per day (Vic's Picks / sponsored
+# first; select_events sorts them to the top), then "+ N more" and the link.
+PER_DAY_CAPTION = 2
 
 HASHTAGS = "#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361"
 VENUES_FILE = os.path.join(os.path.dirname(__file__), "..", "venues.json")
@@ -112,7 +114,8 @@ def _line(ev):
     t = _short_time(ev.get("time"))
     venue = f" @ {ev['venue']}" if ev.get("venue") else ""
     free = " (free)" if ev.get("free") else ""
-    return f"• {t + ' ' if t else ''}{ev['name']}{venue}{free}"
+    mark = "⭐ " if ev.get("featured") else "• "  # Vic's Picks / sponsored stand out
+    return f"{mark}{t + ' ' if t else ''}{ev['name']}{venue}{free}"
 
 
 def _range_label(start, end):
@@ -159,10 +162,9 @@ def captions(groups, start, end, kind, handles=None):
     total = sum(len(v) for v in groups.values())
     for d, evs in groups.items():
         body.append(d.strftime("%A").upper())
-        per_day = PER_DAY_CAPTION * 2 if kind == "today" else PER_DAY_CAPTION
-        body.extend(_line(e) for e in evs[:per_day])
-        if len(evs) > per_day:
-            body.append(f"…plus {len(evs) - per_day} more")
+        body.extend(_line(e) for e in evs[:PER_DAY_CAPTION])
+        if len(evs) > PER_DAY_CAPTION:
+            body.append(f"+ {len(evs) - PER_DAY_CAPTION} more")
         body.append("")
     if not groups:
         body = ["Nothing listed yet. Know something happening? Submit it at thevic361.com/submit", ""]
@@ -171,9 +173,10 @@ def captions(groups, start, end, kind, handles=None):
     head = f"{title} ({_range_label(start, end)}): {total} events" if total else f"{title} ({_range_label(start, end)})"
     tags = venue_tags(groups, handles or {})
     # Same call to action as the ad, the slides and the site: the newsletter.
-    fb = "\n".join([head, ""] + body + [f"Full list and details: {SITE}{path}",
+    see_all = f"👉 See all {total}: " if total else "👉 Full list: "
+    fb = "\n".join([head, ""] + body + [f"{see_all}{SITE}{path}",
                                           f"📬 Get the list free every Monday: {SITE}/subscribe", "", HASHTAGS])
-    ig = "\n".join([head, ""] + body + ["Full list: link in bio (thevic361.com)",
+    ig = "\n".join([head, ""] + body + [f"{see_all}link in bio (thevic361.com)",
                                           "📬 Get the list free every Monday: link in bio", ""]
                     + ([" ".join(tags), ""] if tags else []) + [HASHTAGS])
     return {"facebook": fb.strip() + "\n", "instagram": ig.strip() + "\n"}
@@ -281,30 +284,7 @@ def render_plain_slides(groups, start, end, kind, out_dir):
     _footer(d)
     files.append(img)
 
-    # One slide per day (split when a day has more than PER_SLIDE events)
-    for day, evs in groups.items():
-        for i in range(0, len(evs), PER_SLIDE):
-            img, d = new()
-            chunk = evs[i:i + PER_SLIDE]
-            _header(d, day.strftime("%B ") + str(day.day), day.strftime("%A"))
-            y = 350
-            for e in chunk:
-                t = _short_time(e.get("time"))
-                if t:
-                    d.text((72, y), t, font=_font(True, 34), fill=ACCENT)
-                name_lines = _wrap(d, e["name"], _font(True, 40), W - 144 - 200)[:2]
-                ny = y
-                for line in name_lines:
-                    d.text((272, ny), line, font=_font(True, 40), fill=INK)
-                    ny += 50
-                if e.get("venue"):
-                    d.text((272, ny), _wrap(d, e["venue"], _font(False, 32), W - 344)[0], font=_font(False, 32), fill=MUTED)
-                    ny += 42
-                y = max(ny, y + 60) + 34
-                if y > H - 180:
-                    break
-            _footer(d)
-            files.append(img)
+    # No per-day slides: a post is a teaser (max 3 images); the site has the list.
 
     # CTA
     img, d = new()
@@ -323,7 +303,7 @@ def render_plain_slides(groups, start, end, kind, out_dir):
     return names
 
 
-def make_reel(out_dir, slides, name="weekend.mp4", seconds=3):
+def make_reel(out_dir, slides, name="weekend.mp4", seconds=4):
     """Stitch slides into a vertical 1080x1920 video for Instagram Reels.
 
     Returns the file name, or None without ffmpeg (the carousel still posts).
