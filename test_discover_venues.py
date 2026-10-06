@@ -351,31 +351,31 @@ def test_collector_returns_empty_when_no_files(tmp_path, monkeypatch):
     assert path is None
 
 
-# ─── Observability (Sentry hooks) ───────────────────────────────────────────
+# ─── Observability (warning hooks) ───────────────────────────────────────────
 
 
-def test_missing_apify_token_fires_sentry_warn(tmp_path, monkeypatch):
+def test_missing_apify_token_fires_warn(tmp_path, monkeypatch):
     """When APIFY_TOKEN is empty, the script must:
        - skip discovery (no exception)
-       - emit a Sentry warning (not silently)
+       - emit a warning (not silently)
     """
     monkeypatch.setenv("APIFY_TOKEN", "")
     monkeypatch.delenv("APIFY_TOKEN", raising=False)
 
     warns = []
-    monkeypatch.setattr(dv, "_sentry_warn",
+    monkeypatch.setattr(dv, "_warn",
                         lambda msg, **tags: warns.append((msg, tags)))
 
     summary = dv.discover_and_update(repo_root=str(tmp_path))
     assert summary["ran_apify"] is False
-    # A Sentry warning was fired with a meaningful tag.
+    # A warning was fired with a meaningful tag.
     assert any("APIFY_TOKEN" in m for m, _t in warns), warns
 
 
-def test_apify_http_error_fires_sentry_warn(monkeypatch):
-    """Apify HTTP 4xx/5xx must surface to Sentry, not just stdout."""
+def test_apify_http_error_fires_warn(monkeypatch):
+    """Apify HTTP 4xx/5xx must warn, not just stdout."""
     warns = []
-    monkeypatch.setattr(dv, "_sentry_warn",
+    monkeypatch.setattr(dv, "_warn",
                         lambda msg, **tags: warns.append((msg, tags)))
 
     class FakeResp:
@@ -388,9 +388,9 @@ def test_apify_http_error_fires_sentry_warn(monkeypatch):
     assert any("Apify HTTP" in m for m, _t in warns), warns
 
 
-def test_apify_request_exception_fires_sentry_exception(monkeypatch):
+def test_apify_request_exception_fires_exception_warning(monkeypatch):
     excs = []
-    monkeypatch.setattr(dv, "_sentry_exception",
+    monkeypatch.setattr(dv, "_report_exception",
                         lambda stage, **tags: excs.append((stage, tags)))
 
     def boom(*a, **kw):
@@ -546,9 +546,9 @@ def test_run_apify_discovery_per_category_failure_is_isolated(monkeypatch):
     assert len(items) == len(dv.CATEGORY_SEARCHES) - 1
 
 
-def test_all_categories_failing_fires_sentry_warn(monkeypatch):
+def test_all_categories_failing_fires_warn(monkeypatch):
     warns = []
-    monkeypatch.setattr(dv, "_sentry_warn",
+    monkeypatch.setattr(dv, "_warn",
                         lambda msg, **tags: warns.append((msg, tags)))
 
     def fake_post(url, **kwargs):
@@ -565,7 +565,7 @@ def test_run_apify_discovery_honors_total_budget(monkeypatch):
     Apr-29 production failure (run 25123919466) where 5/8 categories
     completed before the GitHub step timeout killed the process — under
     the new contract, those 5 categories' results survive and the script
-    exits cleanly with a Sentry warning instead of being SIGKILLed."""
+    exits cleanly with a warning instead of being SIGKILLed."""
     n_terms = len(dv.CATEGORY_SEARCHES)
     # Each call "takes" 70s (the Apr-29 average). Budget is 220s, so the
     # 4th iteration's pre-call check (elapsed=210s) still fits, but the
@@ -587,7 +587,7 @@ def test_run_apify_discovery_honors_total_budget(monkeypatch):
         return resp
 
     warns = []
-    monkeypatch.setattr(dv, "_sentry_warn",
+    monkeypatch.setattr(dv, "_warn",
                         lambda msg, **tags: warns.append((msg, tags)))
 
     items = dv.run_apify_discovery(
@@ -605,7 +605,7 @@ def test_run_apify_discovery_honors_total_budget(monkeypatch):
         f"Expected 4 categories under a 220s budget at 70s/call, "
         f"got {len(items)}"
     )
-    # And a Sentry warning fired about the budget.
+    # And a warning fired about the budget.
     assert any("time budget exhausted" in m.lower() for m, _t in warns), warns
 
 
@@ -626,7 +626,7 @@ def test_run_apify_discovery_no_budget_breach_no_warning(monkeypatch):
         return resp
 
     warns = []
-    monkeypatch.setattr(dv, "_sentry_warn",
+    monkeypatch.setattr(dv, "_warn",
                         lambda msg, **tags: warns.append((msg, tags)))
 
     dv.run_apify_discovery(
@@ -686,16 +686,16 @@ def test_apify_per_call_timeout_fits_in_step_budget():
     assert dv.APIFY_TOTAL_BUDGET_SECONDS + dv.APIFY_PER_CALL_TIMEOUT < 360
 
 
-def test_apify_zero_results_fires_sentry_warn(tmp_path, monkeypatch):
+def test_apify_zero_results_fires_warn(tmp_path, monkeypatch):
     """Token set + actor ran but no HIGH/MEDIUM venues → warn (silent breakage)."""
     monkeypatch.setenv("APIFY_TOKEN", "fake-token")
 
     warns = []
-    monkeypatch.setattr(dv, "_sentry_warn",
+    monkeypatch.setattr(dv, "_warn",
                         lambda msg, **tags: warns.append((msg, tags)))
 
     # Apify returns one place that classifies as SKIP (no social) so the
-    # zero-HIGH-zero-MEDIUM Sentry warning is what we want to assert.
+    # zero-HIGH-zero-MEDIUM warning is what we want to assert.
     monkeypatch.setattr(dv, "run_apify_discovery",
                         lambda token, http_post=None, sleep=None,
                         monotonic=None, **kw: [

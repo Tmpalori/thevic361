@@ -54,49 +54,26 @@ from bs4 import BeautifulSoup
 import yaml
 
 
-# ─── SENTRY (silent failure observability) ──────────────────────────────────
-# We instrument scrapers for two failure modes:
-#   1. Hard exceptions (network errors, parse crashes) → capture_exception
-#   2. Silent zero-event returns when we'd normally expect events →
-#      capture_message at warning level
-# Sentry stays disabled gracefully if SENTRY_DSN is not set or the SDK
-# isn't installed.
+# ─── WARNINGS (silent failure observability) ────────────────────────────────
+# Two failure modes worth seeing: hard exceptions (network errors, parse
+# crashes) and silent zero-event returns when a source normally has events.
+# Both print a GitHub Actions ::warning:: line, which shows as an annotation
+# on the Weekly Collect run page, not just buried in the log.
 
-_SENTRY_ENABLED = False
-try:
-    import sentry_sdk  # type: ignore
-    _dsn = os.environ.get("SENTRY_DSN", "").strip()
-    if _dsn:
-        sentry_sdk.init(
-            dsn=_dsn,
-            traces_sample_rate=0.0,
-            environment=os.environ.get("SENTRY_ENVIRONMENT", "thevic361-collector"),
-            release=os.environ.get("GITHUB_SHA", "local")[:12],
-        )
-        _SENTRY_ENABLED = True
-except Exception:
-    _SENTRY_ENABLED = False
+def _annotate(kind, message, tags):
+    detail = " ".join(f"{k}={v}" for k, v in tags.items())
+    text = f"{message} ({detail})" if detail else str(message)
+    # Annotations end at a newline; keep it on one line.
+    print(f"::{kind}::{text}".replace("\r", " ").replace("\n", " "), flush=True)
 
 
-def _sentry_warn(message, **tags):
-    if _SENTRY_ENABLED:
-        try:
-            with sentry_sdk.push_scope() as scope:
-                for k, v in tags.items():
-                    scope.set_tag(k, v)
-                sentry_sdk.capture_message(message, level="warning")
-        except Exception:
-            pass
+def _warn(message, **tags):
+    _annotate("warning", message, tags)
 
 
-def _sentry_exception(scraper):
-    if _SENTRY_ENABLED:
-        try:
-            with sentry_sdk.push_scope() as scope:
-                scope.set_tag("scraper", scraper)
-                sentry_sdk.capture_exception()
-        except Exception:
-            pass
+def _report_exception(scraper):
+    import traceback
+    _annotate("warning", f"{scraper} failed", {"error": traceback.format_exc(limit=1).strip().splitlines()[-1][:200]})
 
 
 # ─── PER-SOURCE COLLECTION STATS ────────────────────────────────────────────
@@ -146,7 +123,7 @@ def safe_fetch(name, fn, args=(), expect_events=True):
 
     `name` is a short scraper id (e.g. 'library', 'chamber').
     `fn` is the fetch function. `args` is a tuple of positional args.
-    If `expect_events` and the scraper returns 0 results, we send a Sentry
+    If `expect_events` and the scraper returns 0 results, we print a
     warning so we know about silent breakage without crashing the run.
     Always returns a list (empty on failure).
 
@@ -166,7 +143,7 @@ def safe_fetch(name, fn, args=(), expect_events=True):
         finished = datetime.now().isoformat(timespec="seconds")
         if len(result) == 0:
             if expect_events:
-                _sentry_warn(
+                _warn(
                     f"[scraper] {name} returned 0 events",
                     scraper=name,
                 )
@@ -177,7 +154,7 @@ def safe_fetch(name, fn, args=(), expect_events=True):
                                 message=_SOURCE_NOTES.pop(name, None))
         return result
     except Exception as e:
-        _sentry_exception(name)
+        _report_exception(name)
         import traceback
         print(f"  [{name}] CRASHED: ", end="")
         traceback.print_exc()
@@ -425,7 +402,7 @@ def load_local_events(yaml_path, days_ahead=7):
 
     Wrapped in defensive error handling: a malformed local_events.yaml
     (bad indentation, an editor mid-save, etc.) must NOT crash the whole
-    collector run. We log a Sentry warning so the breakage is visible,
+    collector run. We log a warning so the breakage is visible,
     print a console message for the GitHub Actions log, and return an
     empty list so the rest of the pipeline (web scrapers, AI review,
     candidates.json) still gets to run.
@@ -436,7 +413,7 @@ def load_local_events(yaml_path, days_ahead=7):
 
     if not os.path.exists(yaml_path):
         print(f"  [Local] File not found: {yaml_path}")
-        _sentry_warn(
+        _warn(
             f"[local_events] YAML file not found: {yaml_path}",
             scraper="local_events",
         )
@@ -446,13 +423,13 @@ def load_local_events(yaml_path, days_ahead=7):
         with open(yaml_path, "r") as f:
             data = yaml.safe_load(f) or {}
     except (yaml.YAMLError, OSError, UnicodeDecodeError) as e:
-        # YAML parse error or I/O error — surface to Sentry but keep the run alive.
+        # YAML parse error or I/O error — warn but keep the run alive.
         print(f"  [Local] Failed to read/parse {yaml_path}: {e}")
-        _sentry_exception("local_events")
+        _report_exception("local_events")
         return events
     except Exception as e:  # pragma: no cover - last-resort safety net
         print(f"  [Local] Unexpected error reading {yaml_path}: {e}")
-        _sentry_exception("local_events")
+        _report_exception("local_events")
         return events
 
     if isinstance(data, dict):
@@ -462,7 +439,7 @@ def load_local_events(yaml_path, days_ahead=7):
         # YAML loaded but isn't a mapping (e.g. someone replaced the file
         # with a stray list). Treat as empty rather than crashing later.
         print(f"  [Local] {yaml_path} did not contain a mapping; skipping.")
-        _sentry_warn(
+        _warn(
             f"[local_events] YAML root is not a mapping in {yaml_path}",
             scraper="local_events",
         )
@@ -503,7 +480,7 @@ def load_local_events(yaml_path, days_ahead=7):
                 d += timedelta(days=1)
         except (ValueError, KeyError, TypeError) as e:
             print(f"  [Local] Skipping malformed recurring entry: {e}")
-            _sentry_warn(
+            _warn(
                 "[local_events] malformed recurring entry skipped",
                 scraper="local_events",
             )
@@ -1849,7 +1826,7 @@ def _ai_review_batch(api_key, batch):
         )
     except Exception as e:
         print(f"  [AI Review] Batch request failed: {e}")
-        _sentry_warn("ai_review_request_failed", error=str(e)[:200])
+        _warn("ai_review_request_failed", error=str(e)[:200])
         return None
 
     # Strip markdown fences if the model added them.
@@ -1866,7 +1843,7 @@ def _ai_review_batch(api_key, batch):
         parsed = json.loads(content)
     except Exception as e:
         print(f"  [AI Review] JSON parse failed: {e}")
-        _sentry_warn("ai_review_parse_failed", error=str(e)[:200])
+        _warn("ai_review_parse_failed", error=str(e)[:200])
         return None
 
     if not isinstance(parsed, list) or len(parsed) != len(batch):
@@ -1975,7 +1952,7 @@ def ai_review(events, batch_size=8):
     print(f"  [AI Review] Polished {polished}/{len(events)} events "
           f"({failed_batches} batches fell back to originals)")
     if failed_batches:
-        _sentry_warn("ai_review_partial_failure",
+        _warn("ai_review_partial_failure",
                      failed_batches=failed_batches, total_events=len(events))
     return events
 
@@ -3477,7 +3454,7 @@ def fetch_apify_eventbrite_events(days_ahead=14):
             print(f"  [Eventbrite] HTTP {resp.status_code}: {resp.text[:300]}")
             if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
                 _APIFY_LIMIT_TRIPPED = True
-                _sentry_warn("Apify monthly hard limit tripped", actor=APIFY_EVENTBRITE_ACTOR, status=403)
+                _warn("Apify monthly hard limit tripped", actor=APIFY_EVENTBRITE_ACTOR, status=403)
             return events
         items = resp.json()
     except Exception as e:
@@ -3551,7 +3528,7 @@ def _run_apify_search(actor, payload, token):
             print(f"  [Apify FB] {actor} HTTP {resp.status_code}: {resp.text[:300]}")
             if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
                 _APIFY_LIMIT_TRIPPED = True
-                _sentry_warn("Apify monthly hard limit tripped", actor=actor, status=403)
+                _warn("Apify monthly hard limit tripped", actor=actor, status=403)
             return None
         items = resp.json()
     except Exception as e:
@@ -3938,7 +3915,7 @@ def _extract_events_from_posts_via_ai(venue_name, posts):
     try:
         flyers = _flyers_for(posts)
     except Exception as e:  # a flyer problem must not cost the post text
-        _sentry_warn("flyer images failed", venue=venue_name, error=str(e)[:200])
+        _warn("flyer images failed", venue=venue_name, error=str(e)[:200])
         flyers = []
     with_flyer = {i for i, _ in flyers}
     lines = []
@@ -3991,7 +3968,7 @@ Flyer images: posts marked [flyer image attached] have their image after this te
             return raw
         # A flyer the API can't read, or a slow image call, mustn't cost the
         # captions: ask again with the text alone, as before flyers.
-        _sentry_warn("FB posts AI flyer call failed; retrying text only", venue=venue_name)
+        _warn("FB posts AI flyer call failed; retrying text only", venue=venue_name)
     raw = _posts_ai_call(api_key, venue_name, {"role": "user", "content": text_prompt}, timeout=60)
     return raw if raw is not None else []
 
@@ -4011,7 +3988,7 @@ def _posts_ai_call(api_key, venue_name, message, timeout):
         content = re.sub(r"\s*```\s*$", "", content)
         raw = _parse_ai_json_array(content)
         if raw is None:
-            _sentry_warn(
+            _warn(
                 "FB posts AI parse failed",
                 venue=venue_name,
                 sample=content[:200],
@@ -4019,10 +3996,10 @@ def _posts_ai_call(api_key, venue_name, message, timeout):
         return raw
     except requests.HTTPError as e:
         status = e.response.status_code if e.response else "?"
-        _sentry_warn("FB posts AI HTTP error", venue=venue_name, status=str(status))
+        _warn("FB posts AI HTTP error", venue=venue_name, status=str(status))
         return None
     except Exception as e:
-        _sentry_warn("FB posts AI exception", venue=venue_name, error=str(e)[:200])
+        _warn("FB posts AI exception", venue=venue_name, error=str(e)[:200])
         return None
 
 
@@ -4163,20 +4140,20 @@ def fetch_apify_facebook_posts(days_ahead=14):
             )
         except Exception as e:
             venue_stats.append(f"{venue_name}: ERROR ({type(e).__name__})")
-            _sentry_warn("FB posts actor exception", venue=venue_name, error=str(e)[:200])
+            _warn("FB posts actor exception", venue=venue_name, error=str(e)[:200])
             continue
 
         if resp.status_code >= 400:
             venue_stats.append(f"{venue_name}: HTTP {resp.status_code}")
             if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
                 _APIFY_LIMIT_TRIPPED = True
-                _sentry_warn(
+                _warn(
                     "Apify monthly hard limit tripped",
                     actor=APIFY_FB_POSTS_ACTOR,
                     status=403,
                 )
             else:
-                _sentry_warn(
+                _warn(
                     "FB posts actor HTTP error",
                     venue=venue_name,
                     status=resp.status_code,
@@ -4521,7 +4498,7 @@ def fetch_apify_instagram_posts(days_ahead=14):
         except Exception as e:
             n_request_errors += 1
             venue_stats.append(f"{venue_name}: ERROR ({type(e).__name__})")
-            _sentry_warn("IG posts actor exception", venue=venue_name, error=str(e)[:200])
+            _warn("IG posts actor exception", venue=venue_name, error=str(e)[:200])
             continue
 
         if resp.status_code >= 400:
@@ -4529,13 +4506,13 @@ def fetch_apify_instagram_posts(days_ahead=14):
             venue_stats.append(f"{venue_name}: HTTP {resp.status_code}")
             if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
                 _APIFY_LIMIT_TRIPPED = True
-                _sentry_warn(
+                _warn(
                     "Apify monthly hard limit tripped",
                     actor=APIFY_IG_POSTS_ACTOR,
                     status=403,
                 )
             else:
-                _sentry_warn(
+                _warn(
                     "IG posts actor HTTP error",
                     venue=venue_name,
                     status=resp.status_code,
@@ -4625,10 +4602,10 @@ def fetch_apify_instagram_posts(days_ahead=14):
     # If we burned Apify credits for posts and OpenAI reads but ended up with
     # zero events, that's almost always a regression — a prompt drift,
     # an actor schema bump, or every venue handle going stale at once. Easier
-    # to spot a Sentry ping than to diff weekly digests for missing events.
+    # to spot a run warning than to diff weekly digests for missing events.
     actor_succeeded = n_http_errors + n_request_errors < len(targets)
     if actor_succeeded and total_posts_pulled > 0 and not events:
-        _sentry_warn(
+        _warn(
             "[Apify IG Posts] Actor returned posts but produced 0 events",
             actor=APIFY_IG_POSTS_ACTOR,
             venues=str(len(targets)),
@@ -4774,7 +4751,7 @@ def main():
             merged = enrich_thin_events(merged, cache_path=os.path.join(args.local_dir, "enrichment_cache.json"))
         except Exception as e:  # never fail the collect over gap filling
             print(f"  [Enrich] crashed: {e}")
-            _sentry_exception("enrich_thin_events")
+            _report_exception("enrich_thin_events")
     merged = fill_gaps(merged)
 
     # 7. AI review — polish descriptions + assign icons via OpenAI

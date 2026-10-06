@@ -1,18 +1,26 @@
 # ─── Uptime check ───────────────────────────────────────────────────────────
-# Hourly: the homepage and /events.json must answer, and the events feed must
-# have events. Pings Slack (SLACK_ALERTS_WEBHOOK_URL, else SLACK_WEBHOOK_URL) when they don't, so a
-# dead site doesn't go unnoticed until someone texts about it. Once a day it
-# also flags a stale feed: nothing published for 8+ days.
+# Every 5 minutes (GitHub's shortest schedule; runs can start a few minutes
+# late): the homepage, /api/health?deep=1 (server + database) and
+# /events.json must answer fast, and the feed must have events. See
+# scripts/uptime_check.py. Alerts Slack (SLACK_ALERTS_WEBHOOK_URL, else
+# SLACK_WEBHOOK_URL) and, with the NTFY_TOPIC secret, a phone push via the
+# ntfy app: once when it goes down, hourly while down, once when it's back.
+# Once a day it also flags a stale feed: nothing published for 8+ days.
 # ─────────────────────────────────────────────────────────────────────────────
 name: Uptime
 
 on:
   schedule:
-    - cron: '17 * * * *'
+    - cron: '*/5 * * * *'
+    - cron: '17 15 * * *'   # stale-feed check, ~10 AM Central
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
 
 jobs:
   check:
@@ -20,30 +28,37 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
+        with:
+          sparse-checkout: scripts
+      # Down/up state from the last run, so an outage alerts once (plus
+      # hourly reminders), not every 5 minutes.
+      - name: Restore state
+        uses: actions/cache/restore@v4
+        with:
+          path: .uptime
+          key: uptime-state-${{ github.run_id }}
+          restore-keys: uptime-state-
       - name: Check the live site
         env:
           SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
-          fail() { echo "::error::$1"; python3 scripts/slack_notify.py "🚨 thevic361.com: $1" --link "$SITE"; exit 1; }
-          # Two tries a minute apart, so one slow deploy restart isn't an alert.
-          for i in 1 2; do
-            home=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/" || echo 000)
-            [ "$home" = "200" ] && break; sleep 60
-          done
-          [ "$home" = "200" ] || fail "homepage returned HTTP $home"
-          code=$(curl -sS -o events.json -w '%{http_code}' --max-time 20 "$SITE/events.json" || echo 000)
-          [ "$code" = "200" ] || fail "/events.json returned HTTP $code"
-          python3 - <<'PY' || fail "events feed is empty or unreadable"
-          import json, sys
-          d = json.load(open("events.json"))
-          sys.exit(0 if d.get("events") else 1)
-          PY
-          # Once a day (15:17 UTC, ~10 AM Central): is the feed going stale?
-          if [ "$(date -u +%H)" = "15" ]; then
-            age=$(python3 scripts/feed_age.py events.json 2>/dev/null || echo 99)
-            if [ "$age" -ge 8 ]; then
-              python3 scripts/slack_notify.py "⏰ No events published in $age days. Pick this week's events in admin." --link "$SITE/admin.html"
-            fi
+          mkdir -p .uptime
+          python3 scripts/uptime_check.py "$SITE" .uptime/state.json
+      - name: Save state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .uptime
+          key: uptime-state-${{ github.run_id }}
+      - name: Stale feed
+        if: github.event.schedule == '17 15 * * *'
+        env:
+          SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          age=$(python3 scripts/feed_age.py .uptime/events.json 2>/dev/null || echo 99)
+          if [ "$age" -ge 8 ]; then
+            python3 scripts/slack_notify.py "⏰ No events published in $age days. Pick this week's events in admin." --link "$SITE/admin.html"
           fi
-          echo "OK"

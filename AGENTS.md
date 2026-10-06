@@ -120,6 +120,7 @@ thevic361/
 │   ├── social_kit.py, social_slides.py, social_post.py   # social-kit.yml
 │   ├── meta_ads.py               # meta-ads.yml
 │   ├── feed_age.py               # uptime.yml stale-feed check
+│   ├── uptime_check.py           # uptime.yml site check + down/up alerts
 │   ├── slack_notify.py           # Slack pings from every workflow
 │   └── apify_probe.py, gemini_probe.py   # probe workflows
 │
@@ -147,7 +148,7 @@ thevic361/
 │   ├── social-kit.yml            # daily 13:47 + on generator changes — build kit, commit to main, autopost
 │   ├── meta-ads.yml              # daily 13:37 + manual — Meta ads report / control
 │   ├── weekly-digest.yml         # Mon 02:00 — digest email to Tristen
-│   ├── uptime.yml                # hourly :17 — site check; daily stale-feed check
+│   ├── uptime.yml                # every 5 min — site check (Slack + ntfy push); daily stale-feed check
 │   ├── tests.yml                 # every PR + push to main — npm test + pytest
 │   ├── apify-probe.yml, gemini-probe.yml   # claude/** pushes touching the probes
 │   ├── pr-preview.yml            # static PR previews via sibling repo
@@ -267,11 +268,11 @@ Crawlers like GPTBot and ClaudeBot don't run JavaScript, so `server/seo.js` rend
 The public site publishes no email address: `/contact` (`server/contact.js`) sends messages to Slack, falling back to the server log if Slack is unavailable.
 
 
-`server/slack.js` posts to a Slack incoming webhook (`SLACK_WEBHOOK_URL`, same setup as austincommercialsites.com). No-op when unset. Server pings: new event submission, sponsor paid, venue partner cancelled or payment failing, newsletter sent (or partly failed / skipped because nothing was published), and alerts for 500s, Stripe checkout or webhook failures, crashes and boot failures. Alerts are de-duplicated per key for 15 minutes. Three channels, each optional and falling back to `SLACK_WEBHOOK_URL`: `SLACK_SALES_WEBHOOK_URL` (sponsor orders, refunds, disputes, failed payments), `SLACK_ACTIVITY_WEBHOOK_URL` (submissions, contact messages, subscribers, auto-publish, newsletter sent) and `SLACK_ALERTS_WEBHOOK_URL` (every `alert()`). Pass `channel` to `slack.notify` for new pings. GitHub Actions use `scripts/slack_notify.py`; failure steps read `SLACK_ALERTS_WEBHOOK_URL`, the collect-done and outreach steps read `SLACK_ACTIVITY_WEBHOOK_URL`, both falling back to `SLACK_WEBHOOK_URL`: weekly collect done (candidate count) or failed, social kit / newsletter / digest failures, tests failing on main, and `uptime.yml` (hourly site check, daily stale-feed check).
+`server/slack.js` posts to a Slack incoming webhook (`SLACK_WEBHOOK_URL`, same setup as austincommercialsites.com). No-op when unset. Server pings: new event submission, sponsor paid, venue partner cancelled or payment failing, newsletter sent (or partly failed / skipped because nothing was published), and alerts for 500s, Stripe checkout or webhook failures, crashes and boot failures. Alerts are de-duplicated per key for 15 minutes. Three channels, each optional and falling back to `SLACK_WEBHOOK_URL`: `SLACK_SALES_WEBHOOK_URL` (sponsor orders, refunds, disputes, failed payments), `SLACK_ACTIVITY_WEBHOOK_URL` (submissions, contact messages, subscribers, auto-publish, newsletter sent) and `SLACK_ALERTS_WEBHOOK_URL` (every `alert()`). Pass `channel` to `slack.notify` for new pings. GitHub Actions use `scripts/slack_notify.py`; failure steps read `SLACK_ALERTS_WEBHOOK_URL`, the collect-done and outreach steps read `SLACK_ACTIVITY_WEBHOOK_URL`, both falling back to `SLACK_WEBHOOK_URL`: weekly collect done (candidate count) or failed, social kit / newsletter / digest failures, tests failing on main, and `uptime.yml` (site check every 5 minutes: alerts once when down, hourly while down, once when back; also a phone push when the `NTFY_TOPIC` secret is set; daily stale-feed check).
 
 ## Conventions
 
-- **Python:** stdlib + `requests` + `beautifulsoup4` + `pyyaml` + `sentry-sdk`. No Django, no FastAPI, no async — keep `collect_events.py` blocking and simple.
+- **Python:** stdlib + `requests` + `beautifulsoup4` + `pyyaml`. No Django, no FastAPI, no async — keep `collect_events.py` blocking and simple.
 - **JavaScript:** ES modules (`"type": "module"` in `package.json`). No TypeScript. No bundler — `docs/*.js` is loaded as-is by the browser.
 - **No new dependencies without strong justification.** This is a twice-weekly cron job + a small Express app. Every dependency is a collect-day failure mode.
 - **Comments explain *why*, not *what*.** The existing code does this consistently — match it. Documenting the rationale is half the value of every PR.
@@ -317,7 +318,6 @@ These tables are the full reference (`RAILWAY.md` covers Railway setup and smoke
 | `OPENAI_API_KEY` | `collect_events.py` AI review + FB/IG post extraction |
 | `APIFY_TOKEN` | `collect_events.py` Facebook events + posts, Instagram posts |
 | `GEMINI_API_KEY` | `collect_events.py` Gemini + Google Search event discovery (`fetch_gemini_events`; optional `GEMINI_MODEL`, `GEMINI_ENABLED=0` to turn off). Events are kept only with their own link on a site Gemini cited, inside the window; that link must still load as the same page and name the event, or it's removed (the event stays). |
-| `SENTRY_DSN`, `SENTRY_ENVIRONMENT` | Collector only (the server doesn't use Sentry) |
 | `EVENTBRITE_ENABLED`, `FB_EVENTS_ALT_ENABLED` | Collector toggles, on by default; `0` turns off the Eventbrite / alternate Facebook-events Apify scrape |
 
 ### Optional
@@ -357,7 +357,7 @@ These tables are the full reference (`RAILWAY.md` covers Railway setup and smoke
 
 ### GitHub Actions secrets and variables
 
-Set in Settings → Secrets and variables → Actions. The collector secrets above (`OPENAI_API_KEY`, `APIFY_TOKEN`, `GEMINI_API_KEY`, `SENTRY_DSN`), the Slack webhooks, `NEWSLETTER_CRON_SECRET`, `EVENT_CHECK_SECRET`, `SUBMISSION_REVIEW_SECRET` and `META_ADS_TOKEN` are GitHub secrets too.
+Set in Settings → Secrets and variables → Actions. The collector secrets above (`OPENAI_API_KEY`, `APIFY_TOKEN`, `GEMINI_API_KEY`), the Slack webhooks, `NEWSLETTER_CRON_SECRET`, `EVENT_CHECK_SECRET`, `SUBMISSION_REVIEW_SECRET`, `META_ADS_TOKEN` and `NTFY_TOPIC` (optional: the ntfy.sh topic `uptime.yml` pushes down/up alerts to; pick a long random name, since anyone who knows it can read the alerts) are GitHub secrets too.
 
 | Name | Kind | Used by |
 |---|---|---|
