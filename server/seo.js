@@ -23,6 +23,45 @@ export const SITE_NAME = 'The Vic 361';
 const GA_ID = 'G-52YHD3X3C2';
 const TZ = 'America/Chicago';
 const UPCOMING_DAYS = 60;
+// Link-preview image: 1200x630 (the shape Facebook, X and iMessage use for
+// large cards), outside robots.txt's /social/ block, and fixed content so a
+// cached preview never shows an old week. The social-kit slides are
+// 1080x1350 portraits that change weekly under one URL, so they don't fit.
+const OG_IMAGE = '/og-image.png';
+
+// Google tag. By default gtag sends the full URL (query string included) as
+// page_location, and some links carry secrets (a subscriber's token on
+// /subscribe/confirm and /unsubscribe). Send only origin + path, plus the
+// campaign tags GA needs to attribute ads. docs/index.html and
+// docs/submit.html carry this same snippet (tests/seo.test.js checks it).
+export const GA_SNIPPET = `<script async src="https://www.googletagmanager.com/gtag/js?id=${GA_ID}"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());(function(){var k=new URLSearchParams();new URLSearchParams(location.search).forEach(function(v,n){if(/^(utm_[a-z]+|gclid)$/.test(n))k.append(n,v);});var q=k.toString();gtag('config','${GA_ID}',{page_location:location.origin+location.pathname+(q?'?'+q:'')});})();</script>`;
+
+// Light/dark choice, saved per device and applied before first paint so
+// every page (not just the homepage) keeps it. With nothing saved there's
+// no data-theme and the CSS follows the system setting. Any
+// [data-theme-toggle] button flips it. Also inlined in docs/index.html.
+export const THEME_SCRIPT = `<script>(function(){var d=document.documentElement,K='vic361-theme';try{var t=localStorage.getItem(K);if(t==='dark'||t==='light')d.setAttribute('data-theme',t);}catch(e){}function cur(){return d.getAttribute('data-theme')||(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}function label(){var l='Switch to '+(cur()==='dark'?'light':'dark')+' mode';document.querySelectorAll('[data-theme-toggle]').forEach(function(b){b.setAttribute('aria-label',l);});}document.addEventListener('click',function(e){var b=e.target&&e.target.closest&&e.target.closest('[data-theme-toggle]');if(!b)return;var n=cur()==='dark'?'light':'dark';d.setAttribute('data-theme',n);try{localStorage.setItem(K,n);}catch(e2){}label();});document.addEventListener('DOMContentLoaded',label);})();</script>`;
+
+// In the header (hidden on phones, where it doesn't fit beside Submit and
+// Subscribe) and the footer.
+const THEME_TOGGLE = `<button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch color theme" title="Toggle dark mode">
+          <svg class="theme-icon theme-icon--moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="theme-icon theme-icon--sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>`;
+
+// Times arrive the way each source wrote them ("04:00 PM", "5:30PM-7PM",
+// "10am - 3pm"). Display them one way: no leading zero, a space before an
+// upper-case AM/PM, and " – " between start and end. Display only: the
+// stored ev.time feeds slugs and dedupe keys, so it never changes.
+// docs/app.js has the same function.
+export function formatTime(time) {
+  if (typeof time !== 'string') return '';
+  return time.trim()
+    .replace(/(^|[^\d:])0(\d)(?=(?::\d{2})?\s*[ap]\.?\s*m\b)/gi, '$1$2')
+    .replace(/(\d)\s*([ap])\.?\s*m\b\.?/gi, (m, d, ap) => `${d} ${ap.toUpperCase()}M`)
+    .replace(/([\dM])\s*(?:[–—-]+|\bto\b)\s*(?=\d)/g, '$1 – ');
+}
 
 // Cartoon category icons: one <symbol> per key in docs/icons.svg.
 const ICON_KEYS = new Set(['food', 'music', 'family', 'drinks', 'arts', 'shopping', 'outdoors', 'community', 'free']);
@@ -40,7 +79,6 @@ const isEvening = ev => { const h = startHour(ev); return h !== null && h >= 16;
 // picks the date window. Order here is the nav order. `hidden` pages answer
 // specific searches ("things to do tonight", "date night") and stay out of
 // the top nav to keep it short; they're still in the footer and sitemap.
-// `image` is the link-preview image (the matching social-kit slide).
 export const HUB_PAGES = [
   {
     path: '/today',
@@ -60,7 +98,6 @@ export const HUB_PAGES = [
     h1: 'Things to do in Victoria, TX this weekend',
     description: 'Events in Victoria, Texas this weekend: concerts, festivals, family events, markets, and free things to do Friday through Sunday.',
     range: 'weekend',
-    image: '/social/latest/weekend-1.png',
     lead: (n, label) => n
       ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} in Victoria, TX this weekend (${label})`
       : `Nothing is listed in Victoria, TX for this weekend (${label}) yet`
@@ -491,6 +528,9 @@ export function eventJsonLd(ev, siteUrl) {
   const times = parseTimes(ev.time);
   const offset = chicagoOffset(ev.date);
   const startDate = times[0] ? `${ev.date}T${times[0]}:00${offset}` : ev.date;
+  // "9:30 PM – 2:00 AM" ends the next day; same-day would put endDate
+  // before startDate, which Google rejects (guides.js eventInstants agrees).
+  const endDay = times[1] && times[1] <= times[0] ? addDays(ev.date, 1) : ev.date;
   const obj = {
     '@context': 'https://schema.org',
     '@type': 'Event',
@@ -512,7 +552,7 @@ export function eventJsonLd(ev, siteUrl) {
     image: [`${siteUrl}/og-image.png`],
     url: `${siteUrl}${ev.page}`
   };
-  if (times[1]) obj.endDate = `${ev.date}T${times[1]}:00${offset}`;
+  if (times[1]) obj.endDate = `${endDay}T${times[1]}:00${chicagoOffset(endDay)}`;
   if (ev.description) obj.description = ev.description;
   if (ev.free === true) {
     obj.isAccessibleForFree = true;
@@ -540,7 +580,7 @@ export function renderEventItem(ev) {
     `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
     '<div class="event-details">' +
       (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
-      (ev.time ? `<span class="event-time">${escHtml(ev.time)}</span> ` : '') +
+      (ev.time ? `<span class="event-time">${escHtml(formatTime(ev.time))}</span> ` : '') +
       `<span class="event-name"><a href="${escHtml(ev.page)}">${escHtml(ev.name)}</a></span>` +
       (place ? `<span class="event-venue">${escHtml(place)}</span>` : '') +
       (ev.description ? `<div class="event-desc">${escHtml(ev.description)}</div>` : '') +
@@ -548,22 +588,31 @@ export function renderEventItem(ev) {
   '</li>';
 }
 
-function renderDay(dateStr, list, idx, today) {
+// collapsed: a day that's already over, folded to its header (a <details>)
+// so the homepage opens on today. Still in the markup for crawlers, and
+// still one .day-section per day so the weekend filter's Mon=0…Sun=6
+// indexing and the day colors hold. docs/app.js renders the same.
+function renderDay(dateStr, list, idx, today, collapsed = false) {
   const badge = dateStr === today ? ' <span class="today-badge">Today</span>' : '';
   const body = list.length
     ? `<ul class="event-list" role="list">${list.map(renderEventItem).join('')}</ul>`
     : '<div class="empty-state">Nothing listed yet — know something happening? <a href="/submit">Submit an event.</a></div>';
+  const head = `<h2 class="day-name">${formatDay(dateStr, { weekday: 'long' })}${badge}</h2>` +
+    `<span class="day-date">${formatDay(dateStr, { month: 'long', day: 'numeric' })}</span>`;
+  if (collapsed) {
+    return `<section class="day-section day-section--past" id="day-${idx}"><details>` +
+      `<summary class="day-header">${head}<span class="past-count">${list.length === 1 ? '1 event' : `${list.length} events`}</span></summary>` +
+      body + '</details></section>';
+  }
   return `<section class="day-section" id="day-${idx}">` +
-    '<div class="day-header">' +
-      `<h2 class="day-name">${formatDay(dateStr, { weekday: 'long' })}${badge}</h2>` +
-      `<span class="day-date">${formatDay(dateStr, { month: 'long', day: 'numeric' })}</span>` +
-    '</div>' + body +
+    '<div class="day-header">' + head + '</div>' + body +
   '</section>';
 }
 
-// Day sections for an arbitrary list of dates (homepage = Mon–Sun).
+// Day sections for an arbitrary list of dates (homepage = Mon–Sun). Days
+// before today are collapsed (see renderDay).
 export function renderDays(dates, events, today) {
-  return dates.map((d, i) => renderDay(d, sortEvents(events.filter(ev => ev.date === d)), i, today)).join('');
+  return dates.map((d, i) => renderDay(d, sortEvents(events.filter(ev => ev.date === d)), i, today, d < today)).join('');
 }
 
 // Day sections only for dates that have events (intent pages).
@@ -605,6 +654,8 @@ function headerHtml() {
       </a>
       <div class="header-actions">
         <a href="/submit" class="btn btn--outline desktop-submit">Submit an Event</a>
+        <a href="/submit" class="btn btn--outline mobile-submit" aria-label="Submit an event">+ Event</a>
+        ${THEME_TOGGLE}
         <a href="/subscribe" class="btn btn--primary">Subscribe</a>
       </div>
     </div>
@@ -640,7 +691,7 @@ function footerHtml() {
           </ul>
         </div>
       </div>
-      <div class="footer-bottom"><span>&copy; ${year} The Vic 361 · Victoria, TX</span></div>
+      <div class="footer-bottom"><span>&copy; ${year} The Vic 361 · Victoria, TX</span>${THEME_TOGGLE}</div>
     </div>
   </footer>`;
 }
@@ -655,18 +706,17 @@ export function breadcrumbLd(siteUrl, trail) {
   };
 }
 
-// pixel: false leaves the Meta Pixel off a page. Pages reached from links
-// carrying a subscriber's token (confirm, unsubscribe) use it: the pixel
-// reports the full URL to Meta, token included.
-export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = '/og-image.png', pixel = true }) {
+// pixel: false leaves the Meta Pixel off a page, and analytics (which
+// follows it) leaves Google Analytics off too. Pages reached from links
+// carrying a subscriber's token (confirm, unsubscribe) use it: both tools
+// report the page URL to a third party, and no third party should see the
+// token. GA_SNIPPET strips query strings anyway; this is belt and braces.
+export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = OG_IMAGE, pixel = true, analytics = pixel }) {
   const url = siteUrl + path;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- Google tag (gtag.js); same property as docs/index.html -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=${GA_ID}"></script>
-<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}');</script>
-<meta charset="UTF-8">
+${analytics ? `<!-- Google tag (gtag.js); same property as docs/index.html -->\n${GA_SNIPPET}\n` : ''}<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escHtml(title)}</title>
 <meta name="description" content="${escHtml(description)}">
@@ -677,7 +727,8 @@ ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <meta property="og:url" content="${escHtml(url)}">
 <meta property="og:site_name" content="${SITE_NAME}">
 <meta property="og:image" content="${siteUrl}${image}">
-<meta name="twitter:card" content="summary_large_image">
+${image === OG_IMAGE ? '<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n' : ''}<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${siteUrl}${image}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -687,12 +738,14 @@ ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400..700&family=Nunito:ital,wght@0,400..900;1,400..900&display=swap"></noscript>
 <link rel="stylesheet" href="/base.css">
 <link rel="stylesheet" href="/style.css">
+${THEME_SCRIPT}
 ${ld.map(jsonLd).join('\n')}
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 ${headerHtml()}
 ${navHtml(nav)}
-<main class="main-content">
+<main class="main-content" id="main">
   <div class="container container--narrow">
 ${body}
   </div>
@@ -704,14 +757,32 @@ ${pixel ? '<script src="/pixel.js" defer></script>\n' : ''}<script src="/track.j
 </html>`;
 }
 
+// The sponsor paid for these clicks, so tag them (utm_*) for their own
+// analytics, unless their URL already carries campaign tags. Paired with
+// rel="sponsored" (Google's marker for paid links) and no "noreferrer",
+// so the visit isn't counted as Direct. docs/app.js does the same.
+export function sponsorLinkUrl(url, medium = 'sponsor') {
+  const href = safeUrl(url);
+  if (!href || /[?&]utm_/i.test(href)) return href;
+  try {
+    const u = new URL(href);
+    u.searchParams.set('utm_source', 'thevic361');
+    u.searchParams.set('utm_medium', medium);
+    u.searchParams.set('utm_campaign', 'weekly-sponsor');
+    return safeUrl(u.toString()) || href;
+  } catch {
+    return href;
+  }
+}
+
 // Mirrors renderSponsor() in docs/app.js so the paid sponsor slot shows on
 // every page, not just the homepage.
 export function sponsorHtml(sponsor) {
   if (!sponsor || !sponsor.name) return '';
-  const href = safeUrl(sponsor.url);
+  const href = sponsorLinkUrl(sponsor.url);
   const cta = sponsor.cta
     ? (href
-      ? `<a href="${escHtml(href)}" class="btn btn--outline sponsor-cta" target="_blank" rel="noopener noreferrer">${escHtml(sponsor.cta)}</a>`
+      ? `<a href="${escHtml(href)}" class="btn btn--outline sponsor-cta" target="_blank" rel="sponsored noopener">${escHtml(sponsor.cta)}</a>`
       : `<span class="btn btn--outline" style="cursor:default; opacity:0.6">${escHtml(sponsor.cta)}</span>`)
     : '';
   const logo = /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(sponsor.logo || '') ? sponsor.logo : '';
@@ -756,7 +827,7 @@ export function renderHubPage(page, events, { siteUrl, now, sponsor }) {
     breadcrumbLd(siteUrl, [{ name: SITE_NAME, path: '/' }, { name: page.nav, path: page.path }]),
     ...list.map(ev => eventJsonLd(ev, siteUrl))
   ];
-  return layout({ siteUrl, path: page.path, title: `${page.title} | ${SITE_NAME}`, description: page.description, body, ld, image: page.image });
+  return layout({ siteUrl, path: page.path, title: `${page.title} | ${SITE_NAME}`, description: page.description, body, ld });
 }
 
 export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = '', venuePath = null }) {
@@ -764,8 +835,22 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   const src = safeUrl(ev.url);
   const when = formatDay(ev.date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const where = [ev.venue, ev.address].filter(Boolean).join(', ');
-  const lead = `${ev.name} ${ev.date < today ? 'was' : 'is'} on ${when}${ev.time ? ` at ${ev.time}` : ''}` +
+  const time = formatTime(ev.time);
+  // "from 10:00 AM to 3:00 PM at The PumpHouse", not "at 10:00 AM – 3:00 PM at …".
+  const timePart = !time ? '' : / – /.test(time) ? ` from ${time.replace(' – ', ' to ')}` : `, ${time},`;
+  const lead = `${ev.name} ${ev.date < today ? 'was' : 'is'} on ${when}${timePart}` +
     `${where ? ` at ${where}` : ''} in Victoria, TX.` + (ev.free === true ? ' Free to attend.' : '');
+  // With no source link there are no "event details" to point at.
+  const cost = ev.free === true ? 'Free'
+    : src ? 'See event details'
+    : venuePath ? `<a href="${escHtml(venuePath)}">Check with the venue</a>` : 'Check with the venue';
+  // Recurring names ("Live Music", "Brunch") are only told apart in search
+  // results by where they are; fall back to the bare name if that runs long.
+  const shortDate = formatDay(ev.date, { month: 'short', day: 'numeric' });
+  const venue = (ev.venue || '').trim();
+  const withVenue = venue && !/^\d/.test(venue) && !ev.name.toLowerCase().includes(venue.toLowerCase())
+    ? `${ev.name} at ${venue} · ${shortDate}` : '';
+  const heading = withVenue && withVenue.length <= 60 ? withVenue : `${ev.name} · ${shortDate}`;
   const sameDay = sortEvents(events.filter(o => o.date === ev.date && o.page !== ev.page)).slice(0, 6);
   const description = (ev.description ? ev.description + ' ' : '') +
     `${when}${where ? ` at ${where}` : ''}, Victoria, TX.`;
@@ -776,9 +861,9 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
     <p class="page-lead">${escHtml(lead)}</p>
     ${ev.date < today ? `<p class="past-notice">This event has passed. <a href="/">See what's happening this week</a>.</p>` : ''}
     <dl class="event-facts">
-      <dt>When</dt><dd>${escHtml(when)}${ev.time ? `, ${escHtml(ev.time)}` : ''}</dd>
+      <dt>When</dt><dd>${escHtml(when)}${time ? `, ${escHtml(time)}` : ''}</dd>
       ${where ? `<dt>Where</dt><dd>${escHtml(where)}</dd>` : ''}
-      <dt>Cost</dt><dd>${ev.free === true ? 'Free' : 'See event details'}</dd>
+      <dt>Cost</dt><dd>${cost}</dd>
     </dl>
     ${ev.description ? `<p class="event-about">${escHtml(ev.description)}</p>` : ''}
     ${src ? `<p class="page-actions"><a class="btn btn--primary" href="${escHtml(src)}" target="_blank" rel="noopener noreferrer">${linkLabel(src)}</a></p>` : ''}
@@ -794,7 +879,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   ];
   return layout({
     siteUrl, path: ev.page, nav: null,
-    title: `${ev.name} · ${formatDay(ev.date, { month: 'short', day: 'numeric' })} | ${SITE_NAME}`,
+    title: `${heading} | ${SITE_NAME}`,
     description: description.slice(0, 300), body, ld
   });
 }
@@ -839,7 +924,7 @@ export function renderAboutPage({ siteUrl }) {
     <h1 class="page-title">About The Vic 361</h1>
     <p class="page-lead">The Vic 361 is a free weekly guide to events and things to do in Victoria, Texas. Every week we collect concerts, festivals, family activities, markets, and community events from across Victoria and publish them in one list, on this site and in our email newsletter.</p>
     <h2 class="section-heading">How we build the list</h2>
-    <p>We gather events from the City of Victoria, the Victoria Public Library, the Chamber of Commerce, local venues, and community submissions. A local editor reviews every event before it's published.</p>
+    <p>We gather events automatically from the City of Victoria, the Victoria Public Library, the Chamber of Commerce, local venues' calendars and social pages, and community submissions. Every event is checked by automated rules and AI for duplicates, wrong dates, and things that aren't really events, and a local editor reviews anything they flag. Spot a mistake? <a href="/contact">Let us know</a> and we'll fix it.</p>
     <h2 class="section-heading">Get it every week</h2>
     <p><a href="/subscribe">Subscribe to the newsletter</a> for the week's best events, every Monday.</p>
     <h2 class="section-heading">List your event or business</h2>
@@ -925,11 +1010,33 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {} }
   });
 }
 
-export function renderNotFoundPage({ siteUrl }) {
+// kind: 'event' (an /events/ link), 'venue' (a /venues/ link) or 'page'
+// (any other unknown URL), so the wording fits what the visitor followed.
+const NOT_FOUND = {
+  event: {
+    h1: "That event isn't listed anymore",
+    lead: "It may have already happened. Here's what's on now:",
+    links: [['/', "See this week's events"], ['/this-weekend', 'This weekend']]
+  },
+  venue: {
+    h1: "We don't have a page for that venue",
+    lead: 'The link may be out of date. Browse every venue, or see what’s on this week:',
+    links: [['/venues', 'All venues'], ['/', "This week's events"]]
+  },
+  page: {
+    h1: "We couldn't find that page",
+    lead: 'The link may be mistyped or out of date. Try one of these:',
+    links: [['/', "This week's events"], ['/this-weekend', 'This weekend'], ['/submit', 'Submit an event']]
+  }
+};
+
+export function renderNotFoundPage({ siteUrl, kind = 'page' }) {
+  const copy = NOT_FOUND[kind] || NOT_FOUND.page;
   const body = `
-    <h1 class="page-title">That event isn't listed anymore</h1>
-    <p class="page-lead">It may have already happened. Here's what's on now:</p>
-    <p><a class="btn btn--primary" href="/">See this week's events</a></p>`;
+    <h1 class="page-title">${escHtml(copy.h1)}</h1>
+    <p class="page-lead">${escHtml(copy.lead)}</p>
+    <p class="page-actions">${copy.links.map(([href, label], i) =>
+      `<a class="btn ${i ? 'btn--outline' : 'btn--primary'}" href="${href}">${escHtml(label)}</a>`).join(' ')}</p>`;
   return layout({ siteUrl, path: '/404', nav: null, noindex: true, title: `Not found | ${SITE_NAME}`, description: 'Page not found.', body });
 }
 
@@ -955,9 +1062,6 @@ export function renderHome(template, events, { siteUrl, now, signupHtml = null }
   // The newsletter signup form (server/newsletter.js) fills the footer slot.
   if (signupHtml) page = page.replace(/<!--SIGNUP_START-->[\s\S]*?<!--SIGNUP_END-->/, () => signupHtml);
   return page
-    // Link previews show this week's list (the social-kit cover slide).
-    .replace(/(<meta (?:property="og:image"|name="twitter:image") content=")[^"]*"/g, `$1${siteUrl}/social/latest/week-1.png"`)
-    .replace(/<meta property="og:image:(?:width|height)"[^>]*>\n?/g, '')
     // Function replacements: event text can contain "$'" or "$&", which a
     // string replacement would expand into chunks of the page.
     .replace('<p class="loading-message">Loading events...</p>', () => renderDays(week, events, today))
@@ -998,7 +1102,7 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
   const lines = [
     '# The Vic 361',
     '',
-    '> Free weekly guide to events and things to do in Victoria, Texas (the 361 area code). Concerts, festivals, family activities, farmers markets, art shows, and community events, reviewed by a local editor and updated every week.',
+    '> Free weekly guide to events and things to do in Victoria, Texas (the 361 area code). Concerts, festivals, family activities, farmers markets, art shows, and community events. Collected automatically, checked by automated rules and AI, with a local editor reviewing anything flagged; updated every week.',
     '',
     '## Pages',
     '',
@@ -1012,7 +1116,7 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
     ''
   ];
   const line = (ev) => {
-    const when = formatDay(ev.date, { weekday: 'short', month: 'short', day: 'numeric' }) + (ev.time ? `, ${ev.time}` : '');
+    const when = formatDay(ev.date, { weekday: 'short', month: 'short', day: 'numeric' }) + (ev.time ? `, ${formatTime(ev.time)}` : '');
     const where = ev.venue ? ` at ${ev.venue}` : '';
     const free = ev.free === true ? ' (free)' : '';
     return `- ${when}: [${ev.name}](${siteUrl}${ev.page})${where}${free}`;

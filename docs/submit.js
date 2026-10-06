@@ -68,6 +68,7 @@
   function checkForm(body) {
     const errors = {};
     REQUIRED.forEach(([k, msg]) => { if (!String(body[k] || '').trim()) errors[k] = msg; });
+    if (typeof body.free !== 'boolean') errors.free = 'Choose free or paid.';
     if (!errors.submitter_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.submitter_email.trim())) {
       errors.submitter_email = 'Email looks invalid.';
     }
@@ -181,7 +182,10 @@
       const el = document.querySelector(`[name="${name}"]`);
       return el ? el.value : '';
     };
-    const free = (document.querySelector('input[name="free"]:checked') || {}).value === 'true';
+    // No default: a paid show sent with an untouched "Free" would be listed
+    // as free (and marked free in Google's event data). null = not chosen.
+    const cost = (document.querySelector('input[name="free"]:checked') || {}).value;
+    const free = cost === 'true' ? true : cost === 'false' ? false : null;
     const submitter_kind = (document.querySelector('input[name="submitter_kind"]:checked') || {}).value || 'other';
     const first = get('submitter_first_name');
     const last = get('submitter_last_name');

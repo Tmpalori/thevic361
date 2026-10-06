@@ -113,9 +113,15 @@ export async function createApp(opts = {}) {
   const canonicalHost = new URL(siteUrl).host;
   const apexHost = canonicalHost.replace(/^www\./, '');
   app.use((req, res, next) => {
+    // Squarespace's domain forwarding (which answers the bare domain)
+    // sends thevic361.com/about to www.thevic361.com//about, which no route
+    // matches. Collapse the leading slashes. The result always starts with
+    // a single "/", so it stays on this site (never "//evil.example").
+    const url = req.originalUrl.replace(/^\/{2,}/, '/');
     if (apexHost !== canonicalHost && req.hostname === apexHost) {
-      return res.redirect(301, siteUrl + req.originalUrl);
+      return res.redirect(301, siteUrl + url);
     }
+    if (url !== req.originalUrl) return res.redirect(301, url);
     next();
   });
 
@@ -1264,14 +1270,14 @@ export async function createApp(opts = {}) {
   // otherwise treat "<slug>.ics" as a slug.
   app.get('/events/:slug.ics', pageHandler(async (req, res, payload, ctx) => {
     const ev = await findEvent(payload, `/events/${req.params.slug}`);
-    if (!ev) return res.status(404).type('text/plain').send('Not found');
+    if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), 404);
     res.set('Content-Disposition', `attachment; filename="${String(req.params.slug).replace(/[^a-z0-9-]/gi, '') || 'event'}.ics"`);
     res.type('text/calendar; charset=utf-8').send(renderIcs(ev, ctx));
   }));
 
   app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
     const ev = await findEvent(payload, `/events/${req.params.slug}`);
-    if (!ev) return sendHtml(res, renderNotFoundPage(ctx), 404);
+    if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), 404);
     const venue = venueFor(ev, venues);
     sendHtml(res, renderEventPage(ev, payload.events, {
       ...ctx, extras: eventActionsHtml(ev, siteUrl), venuePath: venue ? venue.path : null
@@ -1284,7 +1290,7 @@ export async function createApp(opts = {}) {
 
   app.get('/venues/:slug', pageHandler(async (req, res, payload, ctx) => {
     const venue = venues.find(v => v.slug === req.params.slug);
-    if (!venue) return sendHtml(res, renderNotFoundPage(ctx), 404);
+    if (!venue) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'venue' }), 404);
     sendHtml(res, renderVenuePage(venue, payload.events, ctx.archived, ctx));
   }));
 
@@ -1292,6 +1298,11 @@ export async function createApp(opts = {}) {
     app.get(season.path, pageHandler(async (req, res, payload, ctx) => {
       sendHtml(res, renderSeasonPage(season, payload.events, ctx.archived, ctx));
     }));
+    // People guess the short form (/halloween for /halloween-events).
+    const short = season.path.replace(/-events$/, '');
+    if (short !== season.path) {
+      app.get(short, (req, res) => res.redirect(301, season.path + (req.originalUrl.match(/\?.*$/) || [''])[0]));
+    }
   }
 
   app.get('/advertise', pageHandler(async (req, res, payload, ctx) => {
@@ -1471,12 +1482,34 @@ export async function createApp(opts = {}) {
   });
 
   // ─── Static site ───
-  app.use(express.static(DOCS_DIR, { extensions: ['html'], index: false }));
+  // Images and icons rarely change: a day's cache saves a mobile visitor
+  // ~10 revalidations per page. CSS/JS have no cache-busting ?v=, so keep
+  // theirs short enough that a deploy shows up quickly. Social-kit files
+  // are rebuilt daily under the same names. HTML and JSON stay revalidated.
+  app.use(express.static(DOCS_DIR, {
+    extensions: ['html'],
+    index: false,
+    setHeaders(res, file) {
+      const rel = path.relative(DOCS_DIR, file).split(path.sep).join('/');
+      let cc = 'public, max-age=0';
+      if (rel.startsWith('social/')) cc = 'public, max-age=300';
+      else if (/\.(png|jpe?g|webp|gif|svg|ico|woff2?)$/i.test(rel)) cc = 'public, max-age=86400';
+      else if (/\.(css|js)$/i.test(rel)) cc = 'public, max-age=600';
+      res.setHeader('Cache-Control', cc);
+    }
+  }));
 
   // ─── 404 + error handlers ───
   app.use((req, res) => {
     if (req.path.startsWith('/api/')) {
       return res.status(404).json({ ok: false, error: 'not-found' });
+    }
+    // A person following a mistyped or old link gets the site, not a dead
+    // end; images, scripts and other files keep the short text answer.
+    const wantsPage = /text\/html/.test(req.get('accept') || '') ||
+      (!/\.[a-z0-9]+$/i.test(req.path) && req.accepts(['html', 'text']) === 'html');
+    if ((req.method === 'GET' || req.method === 'HEAD') && wantsPage) {
+      return sendHtml(res, renderNotFoundPage({ siteUrl, kind: req.path.startsWith('/venues/') ? 'venue' : req.path.startsWith('/events/') ? 'event' : 'page' }), 404);
     }
     res.status(404).type('text/plain').send('Not found');
   });
