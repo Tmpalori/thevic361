@@ -6,6 +6,12 @@
 #
 # Keep recurring events to genuinely interesting "things to do" —
 # not daily restaurant specials or repeated toddler sessions.
+#
+# Optional tags (they feed the event score; see server/scoring.js):
+#   big: true       a big draw; shows in "Coming up" and scores high
+#   favorite: true  a well-known weekly staple; keeps its spot on busy days
+#   town: "Cuero"   a nearby-town event (only big ones belong here)
+# Each day shows its best 15 events Mon–Thu and 20 Fri–Sun.
 # ─────────────────────────────────────────────────────────────────────────────
 
 recurring:
@@ -65,6 +71,7 @@ recurring:
     icons: [food, shopping, free]
     free: true
     url: ""
+    favorite: true
 
   - name: "Karaoke + Cantina Night"
     day: wednesday
@@ -155,6 +162,7 @@ recurring:
     icons: [music, drinks]
     free: false
     url: "https://aerocrafters.pub"
+    favorite: true
     # ⚠️ UNVERIFIED — assumes every Friday. Confirm weekly via Facebook relay.
 
 
@@ -170,6 +178,7 @@ recurring:
     icons: [food, shopping, free]
     free: true
     url: ""
+    favorite: true
 
   - name: "Chess Club"
     day: saturday
@@ -202,6 +211,7 @@ recurring:
     icons: [music, drinks]
     free: false
     url: "https://aerocrafters.pub"
+    favorite: true
     # ⚠️ UNVERIFIED — assumes every Saturday. Confirm weekly via Facebook relay.
 
   # ── J WELCH FARMS (weekly schedule) ─────────────────────────────────────
@@ -256,6 +266,7 @@ recurring:
     icons: [family, outdoors]
     free: false
     url: "https://www.instagram.com/jwelchfarms/"
+    favorite: true
     start_date: "2026-10-02"
     end_date: "2026-11-01"
 
@@ -267,6 +278,7 @@ recurring:
     icons: [family, outdoors]
     free: false
     url: "https://www.instagram.com/jwelchfarms/"
+    favorite: true
     start_date: "2026-10-02"
     end_date: "2026-11-01"
 
@@ -278,6 +290,7 @@ recurring:
     icons: [family, outdoors]
     free: false
     url: "https://www.instagram.com/jwelchfarms/"
+    favorite: true
     start_date: "2026-10-02"
     end_date: "2026-11-01"
 
@@ -290,6 +303,7 @@ recurring:
     icons: [family, outdoors]
     free: false
     url: "https://terrorontate.com/"
+    favorite: true
     start_date: "2026-10-02"
     end_date: "2026-10-31"
 
@@ -302,6 +316,7 @@ recurring:
     icons: [family, outdoors]
     free: false
     url: "https://terrorontate.com/"
+    favorite: true
     start_date: "2026-10-02"
     end_date: "2026-10-31"
 
@@ -314,6 +329,7 @@ recurring:
     icons: [family, outdoors]
     free: false
     url: "https://terrorontate.com/"
+    favorite: true
     start_date: "2026-10-02"
     end_date: "2026-10-31"
 

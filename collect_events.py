@@ -255,6 +255,10 @@ def _local_extras(ev):
     town = str(ev.get("town") or "").strip()
     if town:
         out["town"] = town
+    # favorite: a well-known weekly staple (Farmers' Market, live music at
+    # Aero Crafters) that shouldn't lose its spot on a busy day.
+    if ev.get("favorite") is True:
+        out["favorite"] = True
     return out
 
 
@@ -493,6 +497,7 @@ def load_local_events(yaml_path, days_ahead=7):
                         "icons": ev.get("icons", []),
                         "free": ev.get("free", False),
                         "url": ev.get("url", ""),
+                        "recurring": True,
                         **_local_extras(ev),
                     })
                 d += timedelta(days=1)
@@ -1764,6 +1769,7 @@ For each event you receive, return:
   - description: ≤160 characters, max 2 short sentences. Neutral, friendly local-newsletter tone. NO emojis. Do NOT repeat the event name, venue name, address, date, or time (the site already shows those). If the input description has no useful info beyond what's already in the name/venue, write a brief 1-line description of what attendees can expect based on the event type.
   - icons: 1–3 strings from this exact set: food, music, family, drinks, arts, shopping, outdoors, community, free. Order by relevance (most representative first). Use "free" only when the event is genuinely free to attend.
   - free: boolean, true if the event is free to attend.
+  - appeal: integer 1–5. How many people in Victoria would want to hear about this, and how special it is. 5: a big one-time draw for the whole town (festival, parade, big concert, fair, holiday lighting, rodeo). 4: a notable one-time event with broad appeal (touring act, community celebration, big fundraiser, family carnival). 3: an ordinary good outing (live music at a bar, trivia, a market, a kids' event). 2: routine or narrow (weekly bingo, a club or group meeting, a class or workshop for a few people, a store's kids craft). 1: very niche or barely an event (a support group, an orientation, a promo or deal).
   - keep: boolean. false when this is NOT a real event someone can attend at a set time and place, for example a job or internship posting, "now booking" field trips or parties, a menu or daily special with nothing happening, a "National ___ Day" post, a giveaway, a closure or holiday-hours notice, or registration for something that isn't on this date. When unsure, keep: true.
 
 Icon guidance:
@@ -1777,7 +1783,7 @@ Icon guidance:
   - community: meetings, fundraisers, civic, volunteer, library programs
   - free: zero cost to attend (also set free=true)
 
-Return ONLY a JSON array, one object per input event in the same order, each: {"description": "...", "icons": [...], "free": true|false, "keep": true|false}. No prose, no markdown fences."""
+Return ONLY a JSON array, one object per input event in the same order, each: {"description": "...", "icons": [...], "free": true|false, "appeal": 1-5, "keep": true|false}. No prose, no markdown fences."""
 
 
 _EMOJI_RE = re.compile(
@@ -1941,6 +1947,11 @@ def ai_review(events, batch_size=8):
                         ev["icons"] = ev.get("icons", []) + ["free"]
                 elif not new_free and "free" in ev.get("icons", []):
                     ev["icons"] = [ic for ic in ev["icons"] if ic != "free"]
+
+            # Appeal 1-5 feeds the site's event score (server/scoring.js).
+            appeal = ai.get("appeal")
+            if isinstance(appeal, (int, float)) and not isinstance(appeal, bool) and 1 <= appeal <= 5:
+                ev["appeal"] = int(round(appeal))
 
             # Not a real event (job post, booking ad, menu...): drop it.
             if ai.get("keep") is False:
@@ -2437,6 +2448,9 @@ def _merge_pair(old, new):
         merged["big"] = True
     if not merged.get("town") and other.get("town"):
         merged["town"] = other["town"]
+    for flag in ("curated", "favorite", "recurring"):
+        if base.get(flag) or other.get(flag):
+            merged[flag] = True
     merged["_sources"] = sorted(set((old.get("_sources") or [old.get("_source")]) +
                                     (new.get("_sources") or [new.get("_source")])) - {None})
     return merged
@@ -2641,6 +2655,8 @@ def merge_events(all_events, days_ahead=7, venues=None):
             new_entry["_venue_guess"] = True
         if ev.get("_source") == "local_events":
             new_entry.update(_local_extras(ev))
+        if ev.get("recurring") is True:
+            new_entry["recurring"] = True
         if not new_entry["name"]:
             continue
         clean_venue(new_entry, venues)
@@ -2695,6 +2711,8 @@ def merge_events(all_events, days_ahead=7, venues=None):
         srcs = e.pop("_sources", None)
         if srcs and len(srcs) > 1:
             e["_also_from"] = [s for s in srcs if s != e.get("_source")]
+        # How many sources listed it: a popularity signal for the score.
+        e["sources"] = 1 + len(e.get("_also_from") or [])
     final.sort(key=lambda e: (e["date"], e.get("time") or "ZZ"))
     print(f"   [Quality] merged {merged_count} duplicates, dropped {len(dropped_area)} outside Victoria County, "
           f"{len(dropped_junk)} non-events")
@@ -4208,6 +4226,7 @@ def fetch_apify_facebook_posts(days_ahead=14):
                     "icons": classify_icons(name, description, venue_name),
                     "free": bool(r.get("free", False)) or guess_free(name, description, venue_name),
                     "url": source_url,
+                    **({"recurring": True} if r.get("recurring") is True else {}),
                 })
                 kept += 1
         venue_stats.append(f"{venue_name}: {len(posts)} posts → {kept} events")
@@ -4563,6 +4582,7 @@ def fetch_apify_instagram_posts(days_ahead=14):
                     "icons": classify_icons(name, description, venue_name),
                     "free": bool(r.get("free", False)) or guess_free(name, description, venue_name),
                     "url": source_url,
+                    **({"recurring": True} if r.get("recurring") is True else {}),
                 })
                 kept += 1
         venue_stats.append(f"{venue_name} [{tier}]: {len(normalized)} posts → {kept} events")

@@ -51,12 +51,16 @@ function sortKey(ev) {
 // 2: auto-added events the collector no longer finds are taken down.
 // 3: auto-added events take the collector's newer copy of themselves.
 // 4: big/town/curated refresh; the health check counts scraped events only.
-export const AUTO_PUBLISH_RULES = 4;
+// 5: scoring hints refresh; approved submissions are marked `submitted`.
+export const AUTO_PUBLISH_RULES = 5;
 
 // What a newer collector copy may change on an event this module added.
 // The name only when the published one was cut off (see cutOff).
 // big/town/curated: tags set in local_events.yaml after an event went live.
-const REFRESH_FIELDS = ['time', 'venue', 'address', 'url', 'description', 'icons', 'free', 'big', 'town', 'curated'];
+// appeal/recurring/favorite/sources: the collector's scoring hints
+// (server/scoring.js).
+const REFRESH_FIELDS = ['time', 'venue', 'address', 'url', 'description', 'icons', 'free', 'big', 'town', 'curated',
+  'appeal', 'recurring', 'favorite', 'sources'];
 
 function normName(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -229,7 +233,8 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
 
     let approved = [];
     try {
-      approved = (await store.list({ status: 'approved' })).map(r => r.payload).filter(upcoming);
+      // `submitted` earns the community-submission bonus in the event score.
+      approved = (await store.list({ status: 'approved' })).map(r => ({ ...r.payload, submitted: true })).filter(upcoming);
     } catch (err) {
       console.warn('[auto-publish] approved submissions skipped:', err.message);
     }
