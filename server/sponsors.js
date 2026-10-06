@@ -22,6 +22,13 @@
  * Every checkout form shows a live preview of the placement (the same
  * markup the site uses) before anyone is sent to pay.
  *
+ * Weekly sponsors get a click report the Monday after their week
+ * (sendSponsorReports): site clicks from the track beacon, email clicks
+ * from the /go/s/<week> redirect the newsletter's sponsor button uses. It
+ * runs from the Monday newsletter cron; a daily scheduler can call it too
+ * (it's idempotent). The admin can edit a weekly order's wording, link,
+ * logo and week (Sponsors tab).
+ *
  * Placements are applied when the public payload is read (see
  * applyPlacements), never written into the published events, so Save &
  * Publish can't wipe them and a hidden or cancelled order disappears on
@@ -45,7 +52,10 @@ import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
 import { normalizeEmail } from './newsletter.js';
 import { venueFor } from './guides.js';
-import { renderSponsorConfirmed } from './notify.js';
+import { renderSponsorConfirmed, renderSponsorReport, newsletterCovers, pickWhere } from './notify.js';
+import { botName, visitorHash } from './analytics.js';
+
+export { newsletterCovers, pickWhere };
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 // Stripe's shortest Checkout expiry is 30 minutes; hold a week a little
@@ -59,6 +69,14 @@ const SIG_TOLERANCE_S = 300;
 // every write below clears it anyway.
 const CACHE_MS = 60 * 1000;
 const LIVE = new Set(['paid', 'active']);
+// Weekly orders the admin can edit (wording, link, logo, week).
+const EDITABLE = new Set(['paid', 'hidden', 'processing', 'conflict']);
+// /advertise/checkout?from=<submission> fills in the submitter's contact
+// details only this long after they submitted (and only while it's pending).
+const PREFILL_CONTACT_MS = 7 * 24 * 3600 * 1000;
+// Weekly sponsor click reports go out from the Monday after the week, and
+// a run that was missed catches up for this long.
+const REPORT_CATCHUP_DAYS = 14;
 
 export function stripeConfig(env = process.env, overrides = {}) {
   const c = {
@@ -309,7 +327,55 @@ export function applyPlacements(payload, orders, { now, venues = [], pins = new 
     }
     return hit ? { ...ev, featured: true } : ev;
   });
-  return { ...payload, events, sponsor: weekly ? weekly.sponsor : (payload.sponsor || null) };
+  // `week` lets the newsletter route the sponsor's button through
+  // /go/s/<week>, which counts email clicks for the sponsor's report.
+  return { ...payload, events, sponsor: weekly ? { ...weekly.sponsor, week: weekly.week_start } : (payload.sponsor || null) };
+}
+
+// ─── Sponsor click report ────────────────────────────────────────────────
+// Weekly sponsors are promised how many people clicked. Site clicks come
+// from the track beacon (docs/track.js sponsor_click with the button's
+// link); email clicks from the /go/s/<week> redirect. People are counted
+// once per day (the same visitor hash the Traffic tab uses), so a mail
+// scanner or a double tap doesn't inflate the number.
+function sameLink(a, b) {
+  const norm = u => String(u || '').trim().toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/\/+$/, '');
+  return Boolean(a) && norm(a) === norm(b);
+}
+
+export function sponsorStats(order, rows, { recipients = 0 } = {}) {
+  const start = order.week_start;
+  const end = addDays(start, 6);
+  const inWeek = (rows || []).filter(r => r.day >= start && r.day <= end);
+  const people = list => new Set(list.map(r => `${r.day}|${r.visitor || Math.random()}`)).size;
+  const clicks = inWeek.filter(r => r.kind === 'click' && r.click_type === 'sponsor_click');
+  const email = clicks.filter(r => r.path === `/go/s/${start}`);
+  const site = clicks.filter(r => !String(r.path || '').startsWith('/go/') && sameLink(r.click_url, order.sponsor && order.sponsor.url));
+  return {
+    week_start: start, week_end: end,
+    site_clicks: site.length, site_people: people(site),
+    email_clicks: email.length, email_people: people(email),
+    site_visitors: people(inWeek.filter(r => r.kind === 'view')),
+    newsletter_recipients: Number(recipients) || 0
+  };
+}
+
+// The sponsor's link with our UTM tags (unless it already has its own), so
+// the visit shows up as from The Vic 361 in the sponsor's own analytics.
+export function sponsorLandingUrl(url, { medium = 'email', campaign = 'newsletter' } = {}) {
+  const safe = safeUrl(url);
+  if (!safe) return '';
+  try {
+    const u = new URL(safe);
+    if (!u.searchParams.has('utm_source')) {
+      u.searchParams.set('utm_source', 'thevic361');
+      u.searchParams.set('utm_medium', medium);
+      u.searchParams.set('utm_campaign', campaign);
+    }
+    return u.href;
+  } catch {
+    return safe;
+  }
 }
 
 export function bookableWeeks(now, orders, email = '') {
@@ -480,7 +546,7 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
       : `<strong class="co-error">${escHtml(day)} is sold out</strong> (${a.cap} Vic’s Picks a day). Pick another day.`;
   }
   return `<p class="co-preview-price">${price}</p>` +
-    `<p class="co-preview-where">Pinned at the top of its day on the site and its event page, starred in that week’s newsletter and our social posts:</p>` +
+    `<p class="co-preview-where">Pinned at the top of its day on the site and its event page, ${escHtml(pickWhere(date, now))}:</p>` +
     dayCard(date, [previewItem(ev), ...others]);
 }
 
@@ -538,6 +604,15 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
       <p class="co-hint">Secure payment by Stripe. ${pkg.interval ? 'Cancel any time from your receipt email.' : ''}</p>
     </form>
     <script>
+    (function () {
+      // The submission or order id that filled the form isn't left in the
+      // address bar (where it'd be bookmarked, shared or copied).
+      try {
+        if (/[?&](from|cancelled)=/.test(location.search) && history.replaceState) {
+          history.replaceState(null, '', location.pathname + '?package=' + encodeURIComponent(${JSON.stringify(pkg.key)}));
+        }
+      } catch (e) { /* old browser: the URL just stays */ }
+    })();
     (function () {
       var f = document.querySelector('.co-form'), box = document.getElementById('co-preview'), t;
       if (!f || !box || !window.fetch) return;
@@ -613,10 +688,24 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
 
 // Only claims the confirmation email went out once it has (Resend can be
 // down or not set up); otherwise it's on its way.
-export function renderThanksPage(order, { siteUrl }) {
+// Stripe usually sends the buyer back before its webhook arrives, so a
+// pending order reloads itself for a couple of minutes until it's confirmed.
+const THANKS_REFRESH_MS = 2 * 60 * 1000;
+
+export function renderThanksPage(order, { siteUrl, now = new Date() }) {
   const emailed = Boolean(order && order.confirmation_sent);
   let msg = 'We\'re confirming your payment. Stripe will email your receipt in a minute or two.';
   let next = [];
+  let refresh = false;
+  if (order && order.status === 'pending') {
+    const age = now.getTime() - Date.parse(order.created_at);
+    if (age < THANKS_REFRESH_MS) {
+      refresh = true;
+      msg = 'We\'re confirming your payment with Stripe. This page updates on its own in a few seconds.';
+    } else {
+      msg = 'We haven\'t heard back from Stripe yet. If your payment went through, you\'ll get a confirmation email from us shortly (Stripe sends the receipt). If you didn\'t finish paying, nothing was charged.';
+    }
+  }
   if (order && LIVE.has(order.status)) {
     if (order.kind === 'weekly') {
       const week = formatDay(order.week_start, { weekday: 'long', month: 'long', day: 'numeric' });
@@ -630,16 +719,23 @@ export function renderThanksPage(order, { siteUrl }) {
       const day = order.event ? formatDay(order.event.date, { weekday: 'long', month: 'long', day: 'numeric' }) : 'its day';
       msg = `Thanks! ${escHtml(order.event ? order.event.name : 'Your event')} is a Vic’s Pick.`;
       next = ['We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
-        `Then it’s pinned to the top of ${escHtml(day)} with the Vic’s Pick badge, starred in that week’s newsletter and featured first in our social posts.`,
+        `Then it’s pinned to the top of ${escHtml(day)} with the Vic’s Pick badge, and ${escHtml(pickWhere(order.event && order.event.date, order.paid_at || order.created_at))}.`,
         `${emailed ? 'We’ve emailed you' : 'We’ll email you'} a confirmation. Stripe sends your receipt separately.`];
     }
   } else if (order && order.status === 'processing') {
     msg = 'Your payment is processing (bank payments can take a few days). Your spot is held, and we’ll email you as soon as it clears.';
+  } else if (order && order.status === 'conflict') {
+    // Two buyers paid for the same week (the first hold lapsed while the
+    // other paid). The owner gets a Slack alert to refund or move them.
+    msg = 'Your payment went through, but someone else booked that week moments before you. Sorry about that.';
+    next = ['We’ll get in touch within 1 business day to move you to another open week or refund you in full, whichever you prefer.',
+      'Nothing else is needed from you. If you already know which you’d like, contact us below.'];
   }
   const steps = next.length ? `<h2 class="section-heading">What happens next</h2><ol class="thanks-steps">${next.map(x => `<li>${x}</li>`).join('')}</ol>` : '';
   const body = `<h1 class="page-title">Thank you</h1><p class="page-lead">${msg}</p>${steps}
     <p>Questions or something not right? <a href="/contact?topic=advertising">Contact us</a> and we’ll sort it out.</p>
-    <p><a class="btn btn--primary" href="/">See this week's events</a></p>`;
+    <p><a class="btn btn--primary" href="/">See this week's events</a></p>` +
+    (refresh ? `<script>setTimeout(function () { location.reload(); }, 5000);</script>` : '');
   return layout({ siteUrl, path: '/advertise/thanks', nav: '/advertise', noindex: true, title: `Thank you | ${SITE_NAME}`, description: 'Thank you.', body });
 }
 
@@ -763,6 +859,65 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     }
   }
 
+  // The end-of-week click report every weekly sponsor is promised. Goes to
+  // each paid weekly order whose week ended (from the Monday after), once:
+  // the order records report_sent, and Resend's idempotency key covers a
+  // retried request. Runs from the Monday newsletter cron (server/index.js
+  // onCron) and is safe to call from any daily scheduler too: overlapping
+  // or repeated calls send nothing twice. A run that's missed catches up
+  // for REPORT_CATCHUP_DAYS.
+  let reportRun = null;
+  function sendSponsorReports(now = nowFn()) {
+    if (!reportRun) reportRun = runSponsorReports(now).finally(() => { reportRun = null; });
+    return reportRun;
+  }
+
+  async function runSponsorReports(now) {
+    const out = { sent: 0, skipped: 0, failed: 0 };
+    if (!supported) return out;
+    const today = localDateStr(now);
+    cache = null;
+    const due = (await orders()).filter(o => o.kind === 'weekly' && LIVE.has(o.status) && o.week_start && !o.report_sent &&
+      addDays(o.week_start, 7) <= today && addDays(o.week_start, 7 + REPORT_CATCHUP_DAYS) >= today);
+    if (!due.length) return out;
+    const since = due.map(o => o.week_start).sort()[0];
+    const rows = typeof store.listTraffic === 'function' ? await store.listTraffic(since) : [];
+    for (const order of due) {
+      let recipients = 0;
+      try {
+        const nl = typeof store.getNewsletterSend === 'function' ? await store.getNewsletterSend(order.week_start) : null;
+        recipients = nl ? Number(nl.recipients) || 0 : 0;
+      } catch { /* the report still goes, without the newsletter line */ }
+      const stats = sponsorStats(order, rows, { recipients });
+      const summary = [['Sponsor', order.business], ['Week', order.week_start],
+        ['Clicked on the site', stats.site_people], ['Clicked in emails', stats.email_people]];
+      if (!mailer || !mailer.enabled) {
+        // No email service: hand the numbers to the owner once instead.
+        if (!order.report_slack_sent && slack) {
+          slack.alert(`sponsor-report:${order.id}`, `Send ${order.business} their click report (email is off)`,
+            `${summary.map(([k, v]) => `${k}: ${v}`).join('\n')}\nEmail it to ${order.email}. Set RESEND_API_KEY so these go out on their own.`,
+            `${siteUrl}/admin.html`);
+          await save({ ...order, report: stats, report_slack_sent: nowIso() });
+        }
+        out.skipped++;
+        continue;
+      }
+      const sent = await mailer.send(order.email, renderSponsorReport(order, stats, { siteUrl, address: mailAddress }), `vic361-sponsor-report-${order.id}`);
+      if (!sent) {
+        // Tried again on the next run; the owner hears once per order.
+        out.failed++;
+        if (slack) slack.alert(`sponsor-report-failed:${order.id}`, `Click report to ${order.business} didn't send`, 'It will be retried on the next run.', `${siteUrl}/admin.html`);
+        continue;
+      }
+      await save({ ...order, report: stats, report_sent: nowIso() });
+      out.sent++;
+      if (slack) {
+        slack.notify({ channel: 'sales', title: `📊 Click report sent: ${order.business}`, fields: [...summary, ['To', order.email]] });
+      }
+    }
+    return out;
+  }
+
   // A checkout that never got paid doesn't keep its uploaded logo.
   async function dropLogo(order) {
     if (!order || !order.sponsor || !order.sponsor.logo || typeof store.deleteSponsorLogo !== 'function') return;
@@ -788,9 +943,52 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       const nowMs = now.getTime();
       const taken = others.some(o => o.kind === 'weekly' && o.week_start === order.week_start &&
         (o.status === 'paid' || o.status === 'processing' || isHold(o, nowMs)));
-      if (taken) return `The week of ${order.week_start} was sold to someone else while this was hidden. Refund this one in Stripe, or move it to another week.`;
+      if (taken) return `The week of ${order.week_start} was sold to someone else while this was hidden. Refund this one in Stripe, or move it to another week (Edit).`;
     }
     return '';
+  }
+
+  // Admin edit of a weekly sponsor: the same checks as the checkout form
+  // (validateOrder), for the fields sent. Moving to another week must land
+  // on an open one; a double-booked ('conflict') order moved to an open
+  // week goes live like any paid order. Run under the booking lock.
+  async function editWeekly(order, input) {
+    cache = null;
+    const list = await store.listSponsorOrders();
+    const current = list.find(o => o.id === order.id) || order;
+    const s = current.sponsor || {};
+    const has = k => typeof input[k] === 'string';
+    const errors = {};
+    const business = has('business') ? clean(input.business, 80) : current.business;
+    if (!business) errors.business = 'Business name is required.';
+    const text = has('text') ? clean(input.text, 160) : s.text;
+    if (!text) errors.text = 'Add one or two sentences about the business.';
+    const cta = has('cta') ? (clean(input.cta, 24) || 'Learn more') : (s.cta || 'Learn more');
+    const url = has('url') ? safeUrl(normalizeUrl(clean(input.url, 300))) : s.url;
+    if (!url) errors.url = 'Enter a website or page (e.g. example.com).';
+    const address = has('address') ? clean(input.address, 120) : (s.address || '');
+    let week = current.week_start;
+    if (has('week') && input.week && input.week !== current.week_start) {
+      const w = bookableWeeks(nowFn(), list.filter(o => o.id !== current.id)).find(x => x.start === input.week);
+      if (!w) errors.week = 'Pick one of the next 8 weeks.';
+      else if (!w.available) errors.week = `The week of ${w.label} is already booked.`;
+      else week = w.start;
+    }
+    let logo = null;
+    if (has('logo_data') && input.logo_data) {
+      logo = parseLogo(input.logo_data);
+      if (logo.error) errors.logo = logo.error;
+    }
+    if (Object.keys(errors).length) return { errors };
+    const sponsor = { ...s, name: business, text, cta, url, address };
+    if (logo && typeof store.saveSponsorLogo === 'function') {
+      await store.saveSponsorLogo(current.id, logo);
+      sponsor.logo = `/sponsor-logo/${current.id}`;
+    }
+    const moved = current.status === 'conflict' && week !== current.week_start;
+    const next = { ...current, business, sponsor, week_start: week, ...(moved ? { status: 'paid' } : {}) };
+    await save(next);
+    return { order: next, moved };
   }
 
   // Best effort: close a released hold's Stripe session so it can't be paid
@@ -861,7 +1059,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           await save(order);
           if (slack) {
             slack.alert(`sponsor-conflict:${order.id}`, `Week of ${order.week_start} was paid for twice`,
-              `${order.business} (${order.email}) paid for a week that's already sold. Refund them in Stripe or move them to another week.`,
+              `${order.business} (${order.email}) paid for a week that's already sold. They've been told you'll be in touch within 1 business day: move them to an open week (Sponsors tab, Edit) or refund them in Stripe.`,
               `${siteUrl}/admin.html`);
           }
           return;
@@ -982,8 +1180,35 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     });
   }
 
-  function registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman = async () => true }) {
+  function registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman = async () => true, analyticsSecret = '' }) {
     const limiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20 });
+
+    // The weekly sponsor's button in our emails (server/newsletter.js
+    // sponsorHref): count the click for the sponsor's report, then send the
+    // reader to the sponsor with UTM tags. Recorded as a Traffic sponsor_click
+    // (path /go/s/<week>) with the same daily visitor hash as the beacon.
+    // Known bots and HEAD requests (link checkers) aren't counted.
+    const goLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 30 });
+    app.get('/go/s/:week', async (req, res, next) => {
+      try {
+        const week = /^\d{4}-\d{2}-\d{2}$/.test(req.params.week) ? req.params.week : '';
+        const order = week ? (await orders()).find(o => o.kind === 'weekly' && o.week_start === week && LIVE.has(o.status)) : null;
+        const src = req.query.src === 'welcome' ? 'welcome' : 'newsletter';
+        const target = order ? sponsorLandingUrl(order.sponsor && order.sponsor.url, { medium: 'email', campaign: src }) : '';
+        res.set('Cache-Control', 'no-store');
+        if (!target) return res.redirect(302, siteUrl);
+        const ip = req.ip || req.socket.remoteAddress || '';
+        const ua = req.get('user-agent') || '';
+        if (req.method === 'GET' && !botName(ua) && typeof store.recordTraffic === 'function' && goLimiter.check(ip).ok) {
+          const day = localDateStr(nowFn());
+          store.recordTraffic({
+            day, kind: 'click', path: `/go/s/${week}`, visitor: visitorHash(ip, ua, day, analyticsSecret),
+            click_type: 'sponsor_click', click_url: String(order.sponsor.url || '').slice(0, 300)
+          }).catch(err => console.warn('[sponsors] click record failed:', err.message));
+        }
+        res.redirect(302, target);
+      } catch (err) { next(err); }
+    });
 
     app.get('/advertise/checkout', async (req, res, next) => {
       try {
@@ -993,14 +1218,21 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         // Contact details never ride in the URL (analytics and the Pixel see
         // page URLs): the submit form and its emails link with `from=<the
         // submission's id>` (a random UUID) and the server fills them in.
+        // That id lives in forwardable emails, so the submitter's name and
+        // email are only filled in while the submission is still waiting
+        // for review and under a week old; the event fields (already public
+        // once it's listed) always are. The page then drops the id from the
+        // address bar (history.replaceState in renderCheckoutPage), and the
+        // Pixel and Google tag leave it out of the URLs they report.
         const PREFILL = ['event_name', 'date', 'time', 'venue', 'address', 'description', 'url'];
         let values = Object.fromEntries(PREFILL.filter(k => typeof req.query[k] === 'string').map(k => [k, req.query[k].slice(0, 2000)]));
         const from = typeof req.query.from === 'string' && /^[0-9a-f-]{36}$/i.test(req.query.from) ? req.query.from : '';
         const sub = from && typeof store.get === 'function' ? await store.get(from).catch(() => null) : null;
         if (sub && (sub.source || 'submission') === 'submission') {
           const p = sub.payload || {};
+          const fresh = sub.status === 'pending' && nowFn().getTime() - Date.parse(sub.created_at) < PREFILL_CONTACT_MS;
           for (const [k, v] of [['event_name', p.name], ['date', p.date], ['time', p.time], ['venue', p.venue], ['address', p.address],
-            ['description', p.description], ['url', p.url], ['business', sub.submitter_name], ['email', sub.submitter_email]]) {
+            ['description', p.description], ['url', p.url], ...(fresh ? [['business', sub.submitter_name], ['email', sub.submitter_email]] : [])]) {
             if (v) values[k] = String(v).slice(0, 2000);
           }
         }
@@ -1150,35 +1382,40 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       try {
         cache = null;
         const order = (await orders()).find(o => o.id === req.query.order) || null;
-        sendHtml(res, renderThanksPage(order, { siteUrl }), 200, 'no-store');
+        sendHtml(res, renderThanksPage(order, { siteUrl, now: nowFn() }), 200, 'no-store');
       } catch (err) { next(err); }
     });
 
-    app.get('/api/admin/sponsors', requireAdmin, async (req, res) => {
-      cache = null;
-      const list = await orders();
-      // Live Vic's Picks for today or later: is the pin finding its event?
-      // (on_site false: not approved yet, rejected, or edited past matching.)
-      let onSite = () => undefined;
-      if (getPayload) {
-        try {
-          const events = ((await getPayload()) || {}).events || [];
-          const p = await pins(list);
-          const today = localDateStr(nowFn());
-          onSite = o => (o.kind === 'featured' && o.event && LIVE.has(o.status) && o.event.date >= today
-            ? events.some(ev => pickMatches(o, ev, p)) : undefined);
-        } catch (err) { console.warn('[sponsors] on-site check failed:', err.message); }
-      }
-      res.json({
-        ok: true,
-        configured: config.enabled,
-        supported,
-        orders: list.filter(o => o.status !== 'expired' && o.status !== 'failed' && !(o.status === 'cancelled' && !o.paid_at) &&
-          !(o.status === 'pending' && nowFn().getTime() - Date.parse(o.created_at) > 24 * 3600 * 1000))
-          .map(o => { const s = onSite(o); return s === undefined ? o : { ...o, on_site: s }; }),
-        weeks: bookableWeeks(nowFn(), list),
-        calendar: sponsorCalendar(nowFn(), list)
-      });
+    app.get('/api/admin/sponsors', requireAdmin, async (req, res, next) => {
+      try {
+        cache = null;
+        // Read the store directly: orders() falls back to an empty list on a
+        // database error, which would look like "no orders".
+        const list = supported ? await store.listSponsorOrders() : [];
+        cache = { at: Date.now(), list };
+        // Live Vic's Picks for today or later: is the pin finding its event?
+        // (on_site false: not approved yet, rejected, or edited past matching.)
+        let onSite = () => undefined;
+        if (getPayload) {
+          try {
+            const events = ((await getPayload()) || {}).events || [];
+            const p = await pins(list);
+            const today = localDateStr(nowFn());
+            onSite = o => (o.kind === 'featured' && o.event && LIVE.has(o.status) && o.event.date >= today
+              ? events.some(ev => pickMatches(o, ev, p)) : undefined);
+          } catch (err) { console.warn('[sponsors] on-site check failed:', err.message); }
+        }
+        res.json({
+          ok: true,
+          configured: config.enabled,
+          supported,
+          orders: list.filter(o => o.status !== 'expired' && o.status !== 'failed' && !(o.status === 'cancelled' && !o.paid_at) &&
+            !(o.status === 'pending' && nowFn().getTime() - Date.parse(o.created_at) > 24 * 3600 * 1000))
+            .map(o => { const s = onSite(o); return s === undefined ? o : { ...o, on_site: s }; }),
+          weeks: bookableWeeks(nowFn(), list),
+          calendar: sponsorCalendar(nowFn(), list)
+        });
+      } catch (err) { next(err); }
     });
 
     // The uploaded logo, whatever the order's status, for the Sponsors tab.
@@ -1193,30 +1430,38 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
 
     // Hide pulls a placement (refund, bad copy); restore puts it back, unless
     // its day or week was sold meanwhile. Remove-logo deletes the uploaded
-    // logo and keeps the rest of the placement.
-    app.post('/api/admin/sponsors/:id', requireAdmin, async (req, res) => {
-      const action = req.body && req.body.action;
-      cache = null;
-      const list = await orders();
-      const order = list.find(o => o.id === req.params.id);
-      if (!order) return res.status(404).json({ ok: false, error: 'not-found' });
-      if (action === 'hide' && LIVE.has(order.status)) {
-        await save({ ...order, status: 'hidden', hidden_from: order.status });
-      } else if (action === 'restore' && order.status === 'hidden') {
-        const status = order.hidden_from || 'paid';
-        const conflict = LIVE.has(status) ? restoreConflict(order, list, nowFn()) : '';
-        if (conflict) return res.status(409).json({ ok: false, error: 'slot-taken', message: conflict });
-        await save({ ...order, status, hidden_from: null });
-      } else if (action === 'remove-logo' && order.sponsor && order.sponsor.logo) {
-        if (typeof store.deleteSponsorLogo === 'function') await store.deleteSponsorLogo(order.id);
-        const { logo: _gone, ...sponsor } = order.sponsor;
-        await save({ ...order, sponsor });
-      } else {
-        return res.status(400).json({ ok: false, error: 'bad-action' });
-      }
-      res.json({ ok: true });
+    // logo and keeps the rest of the placement. Edit changes a weekly
+    // sponsor's wording, link, logo or week (sponsors are told to reply
+    // with changes; a double-booked one can be moved to an open week).
+    app.post('/api/admin/sponsors/:id', requireAdmin, async (req, res, next) => {
+      try {
+        const action = req.body && req.body.action;
+        cache = null;
+        const list = supported ? await store.listSponsorOrders() : [];
+        const order = list.find(o => o.id === req.params.id);
+        if (!order) return res.status(404).json({ ok: false, error: 'not-found' });
+        if (action === 'hide' && LIVE.has(order.status)) {
+          await save({ ...order, status: 'hidden', hidden_from: order.status });
+        } else if (action === 'restore' && order.status === 'hidden') {
+          const status = order.hidden_from || 'paid';
+          const conflict = LIVE.has(status) ? restoreConflict(order, list, nowFn()) : '';
+          if (conflict) return res.status(409).json({ ok: false, error: 'slot-taken', message: conflict });
+          await save({ ...order, status, hidden_from: null });
+        } else if (action === 'remove-logo' && order.sponsor && order.sponsor.logo) {
+          if (typeof store.deleteSponsorLogo === 'function') await store.deleteSponsorLogo(order.id);
+          const { logo: _gone, ...sponsor } = order.sponsor;
+          await save({ ...order, sponsor });
+        } else if (action === 'edit' && order.kind === 'weekly' && EDITABLE.has(order.status)) {
+          const out = await withBookingLock(() => editWeekly(order, req.body || {}));
+          if (out.errors) return res.status(400).json({ ok: false, error: 'invalid', errors: out.errors, message: Object.values(out.errors).join(' ') });
+          if (out.moved) await sendConfirmation(out.order); // a double-booked sponsor's first confirmation
+        } else {
+          return res.status(400).json({ ok: false, error: 'bad-action' });
+        }
+        res.json({ ok: true });
+      } catch (err) { next(err); }
     });
   }
 
-  return { apply, orders, registerWebhook, registerRoutes, processEvent };
+  return { apply, orders, registerWebhook, registerRoutes, processEvent, sendSponsorReports };
 }

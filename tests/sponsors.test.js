@@ -7,7 +7,8 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import crypto from 'node:crypto';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
-import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks, pickAvailability, isWeekendDate, renderPreview, sponsorCalendar, parseLogo } from '../server/sponsors.js';
+import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks, pickAvailability, isWeekendDate, renderPreview, sponsorCalendar, parseLogo,
+  newsletterCovers, sponsorStats, sponsorLandingUrl, renderThanksPage } from '../server/sponsors.js';
 import { promises as fs } from 'node:fs';
 import { renderSubmissionReceived, renderSponsorConfirmed } from '../server/notify.js';
 import os from 'node:os';
@@ -837,5 +838,170 @@ describe('restoring a hidden sponsorship', () => {
     const r = await act('w1', 'restore');
     expect(r.status).toBe(409);
     expect((await r.json()).message).toContain('week of 2026-10-19');
+  });
+});
+
+describe('sponsor promises (review fixes)', () => {
+  const PNG = 'data:image/png;base64,' + Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(40)]).toString('base64');
+  const mailer = () => {
+    const sent = [];
+    return { sent, resend: { send: async (msg, key) => { sent.push({ ...msg, key }); return { id: 'e' + sent.length }; }, batch: async (msgs) => ({ data: msgs.map(() => ({})) }) } };
+  };
+  const weeklyOrder = (extra = {}) => ({
+    id: 'wk1', kind: 'weekly', status: 'paid', amount: 30000, week_start: '2026-09-28', created_at: '2026-09-20T00:00:00Z',
+    business: 'Acme Tacos', email: 'acme@example.com',
+    sponsor: { name: 'Acme Tacos', text: 'Best tacos.', cta: 'Order', url: 'https://acme.example', address: '' }, ...extra
+  });
+  const post = (p, body, headers) => fetch(baseUrl + p, { method: 'POST', headers, body: JSON.stringify(body) });
+
+  it('a Vic’s Pick is promised the newsletter only when its week’s issue is still ahead', () => {
+    expect(newsletterCovers('2026-10-10', NOW)).toBe(false);          // this week's issue went out Monday
+    expect(newsletterCovers('2026-10-14', NOW)).toBe(true);           // next Monday's issue
+    expect(newsletterCovers('2026-10-14', new Date('2026-10-11T18:00:00Z'))).toBe(false); // Sunday: no time to review
+    expect(renderPreview('featured', { date: '2026-10-10' }, { now: NOW })).toContain('that week’s newsletter goes out before we could add it');
+    expect(renderPreview('featured', { date: '2026-10-14' }, { now: NOW })).toContain('starred in the Monday newsletter for the week of October 12');
+    const late = renderSponsorConfirmed({ kind: 'featured', business: 'T', created_at: NOW.toISOString(), event: { name: 'Show', date: '2026-10-10' } }, { siteUrl: 'https://x' });
+    expect(late.text).not.toContain('starred in');
+    const early = renderSponsorConfirmed({ kind: 'featured', business: 'T', created_at: NOW.toISOString(), event: { name: 'Show', date: '2026-10-14' } }, { siteUrl: 'https://x' });
+    expect(early.text).toContain('starred in the Monday newsletter for the week of October 12');
+  });
+
+  it('the thank-you page reloads while the webhook is late and explains a double booking', () => {
+    const page = (o) => renderThanksPage(o, { siteUrl: 'https://x', now: NOW });
+    const fresh = page({ id: 'a', kind: 'weekly', status: 'pending', created_at: new Date(NOW.getTime() - 10000).toISOString() });
+    expect(fresh).toContain('location.reload()');
+    const stale = page({ id: 'a', kind: 'weekly', status: 'pending', created_at: new Date(NOW.getTime() - 10 * 60000).toISOString() });
+    expect(stale).not.toContain('location.reload()');
+    expect(stale).toContain('heard back from Stripe');
+    const conflict = page({ id: 'a', kind: 'weekly', status: 'conflict', week_start: '2026-10-12', created_at: NOW.toISOString() });
+    expect(conflict).toContain('someone else booked that week');
+    expect(conflict).toContain('within 1 business day');
+  });
+
+  it('?from= fills in contact details only for a pending submission under a week old, and drops the id from the URL', async () => {
+    await startApp();
+    const row = (id, status, created_at) => store.insert({ id, status, created_at, updated_at: created_at, source: 'submission',
+      submitter_name: 'Pat Lee', submitter_email: 'pat@example.com', payload: { name: 'Fall Fest', date: '2026-10-17' } });
+    const fresh = '11111111-1111-4111-8111-111111111111';
+    const old = '22222222-2222-4222-8222-222222222222';
+    const approved = '33333333-3333-4333-8333-333333333333';
+    await row(fresh, 'pending', '2026-10-06T00:00:00Z');
+    await row(old, 'pending', '2026-09-20T00:00:00Z');
+    await row(approved, 'approved', '2026-10-06T00:00:00Z');
+    const get = async id => (await fetch(`${baseUrl}/advertise/checkout?package=featured&from=${id}`)).text();
+    const f = await get(fresh);
+    expect(f).toContain('value="pat@example.com"');
+    expect(f).toContain('history.replaceState');
+    for (const id of [old, approved]) {
+      const p = await get(id);
+      expect(p).toContain('value="Fall Fest"');
+      expect(p).not.toContain('pat@example.com');
+      expect(p).not.toContain('Pat Lee');
+    }
+  });
+
+  it('the newsletter button counts the click and sends the reader on with UTM tags', async () => {
+    await startApp();
+    await store.saveSponsorOrder(weeklyOrder({ week_start: '2026-10-05' }));
+    const go = (q = '', headers = {}) => fetch(`${baseUrl}/go/s/2026-10-05${q}`, { redirect: 'manual', headers });
+    const r = await go('?src=newsletter', { 'User-Agent': 'Mozilla/5.0 (iPhone)' });
+    expect(r.status).toBe(302);
+    expect(r.headers.get('location')).toBe('https://acme.example/?utm_source=thevic361&utm_medium=email&utm_campaign=newsletter');
+    await go('?src=newsletter', { 'User-Agent': 'Googlebot/2.1' });                 // bots aren't counted
+    await fetch(`${baseUrl}/go/s/2026-10-05`, { method: 'HEAD', redirect: 'manual' }); // link checkers aren't either
+    await new Promise(res => setTimeout(res, 20));
+    const rows = (await store.listTraffic('2026-01-01')).filter(x => x.path === '/go/s/2026-10-05');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: 'click', click_type: 'sponsor_click', click_url: 'https://acme.example' });
+    // No live sponsor that week: home, nothing counted.
+    const none = await fetch(`${baseUrl}/go/s/2026-11-30`, { redirect: 'manual' });
+    expect(none.headers.get('location')).toBe('https://www.thevic361.com');
+    expect(sponsorLandingUrl('https://a.example/?utm_source=own', {})).toBe('https://a.example/?utm_source=own');
+  });
+
+  it('counts each person once a day, site and email apart', () => {
+    const order = weeklyOrder();
+    const rows = [
+      { day: '2026-09-29', kind: 'click', click_type: 'sponsor_click', click_url: 'https://acme.example/', path: '/', visitor: 'v1' },
+      { day: '2026-09-29', kind: 'click', click_type: 'sponsor_click', click_url: 'https://acme.example', path: '/events/x', visitor: 'v1' },
+      { day: '2026-09-30', kind: 'click', click_type: 'sponsor_click', click_url: 'https://acme.example', path: '/', visitor: 'v1' },
+      { day: '2026-09-29', kind: 'click', click_type: 'sponsor_click', click_url: 'https://acme.example', path: '/go/s/2026-09-28', visitor: 'v2' },
+      { day: '2026-09-29', kind: 'click', click_type: 'sponsor_click', click_url: 'https://other.example', path: '/', visitor: 'v3' },
+      { day: '2026-10-05', kind: 'click', click_type: 'sponsor_click', click_url: 'https://acme.example', path: '/', visitor: 'v4' },
+      { day: '2026-09-29', kind: 'view', path: '/', visitor: 'v5' }
+    ];
+    expect(sponsorStats(order, rows, { recipients: 40 })).toMatchObject({
+      site_clicks: 3, site_people: 2, email_clicks: 1, email_people: 1, site_visitors: 1, newsletter_recipients: 40
+    });
+  });
+
+  it('the Monday cron emails last week’s sponsor their click report, once', async () => {
+    const mail = mailer();
+    const pings = [];
+    await startApp({ resendApiKey: 're_test', resend: mail.resend, newsletterCronSecret: 'cs', newsletterAddress: '1 Main St',
+      slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async () => {} } });
+    await store.saveSponsorOrder(weeklyOrder());
+    await store.saveSponsorOrder(weeklyOrder({ id: 'wk2', week_start: '2026-10-05', business: 'Not Yet', email: 'later@example.com' }));
+    await store.recordTraffic({ day: '2026-09-30', kind: 'click', click_type: 'sponsor_click', click_url: 'https://acme.example', path: '/', visitor: 'v1' });
+    await store.recordTraffic({ day: '2026-09-28', kind: 'click', click_type: 'sponsor_click', click_url: 'https://acme.example', path: '/go/s/2026-09-28', visitor: 'v2' });
+    const cron = async () => (await post('/api/newsletter/cron', {}, { 'Content-Type': 'application/json', 'X-Cron-Secret': 'cs' })).json();
+    const first = await cron();
+    expect(first.sponsor_reports).toEqual({ sent: 1, skipped: 0, failed: 0 });
+    const reports = mail.sent.filter(m => m.key && m.key.startsWith('vic361-sponsor-report-'));
+    expect(reports).toHaveLength(1);
+    expect(reports[0].to).toEqual(['acme@example.com']);
+    expect(reports[0].key).toBe('vic361-sponsor-report-wk1');
+    expect(reports[0].subject).toBe('Your Vic 361 sponsor week: 2 people clicked');
+    expect(reports[0].text).toContain('Clicked your button on thevic361.com: 1 person');
+    expect(reports[0].text).toContain('Clicked your button in our emails: 1 person');
+    const saved = (await store.listSponsorOrders()).find(o => o.id === 'wk1');
+    expect(saved.report_sent).toBeTruthy();
+    expect(saved.report).toMatchObject({ site_people: 1, email_people: 1 });
+    expect(pings.some(p => p.title.includes('Click report sent'))).toBe(true);
+    // A second run (or a daily scheduler) sends nothing more.
+    expect((await cron()).sponsor_reports).toEqual({ sent: 0, skipped: 0, failed: 0 });
+    expect(mail.sent.filter(m => m.key && m.key.startsWith('vic361-sponsor-report-'))).toHaveLength(1);
+  });
+
+  it('the admin can edit a weekly sponsor’s wording, link, logo and week, with checkout’s checks', async () => {
+    await startApp();
+    const h = await auth();
+    await store.saveSponsorOrder(weeklyOrder({ id: 'e1', week_start: '2026-10-19' }));
+    await store.saveSponsorOrder(weeklyOrder({ id: 'e2', week_start: '2026-10-26', business: 'Other' }));
+    const edit = (id, body) => post(`/api/admin/sponsors/${id}`, { action: 'edit', ...body }, h);
+    expect((await edit('e1', { url: 'not a url at all' })).status).toBe(400);
+    const taken = await edit('e1', { week: '2026-10-26' });
+    expect(taken.status).toBe(400);
+    expect((await taken.json()).message).toContain('already booked');
+    const ok = await edit('e1', { text: '  Now with   queso. ', url: 'acme.example/menu', cta: 'See menu', week: '2026-11-02', logo_data: PNG });
+    expect(ok.status).toBe(200);
+    const o = (await store.listSponsorOrders()).find(x => x.id === 'e1');
+    expect(o.sponsor).toMatchObject({ text: 'Now with queso.', url: 'https://acme.example/menu', cta: 'See menu', logo: '/sponsor-logo/e1' });
+    expect(o.week_start).toBe('2026-11-02');
+    expect(await store.getSponsorLogo('e1')).toBeTruthy();
+    // Vic's Picks are edited in Submissions, not here.
+    await store.saveSponsorOrder({ id: 'f1', kind: 'featured', status: 'paid', created_at: NOW.toISOString(), event: { name: 'x', date: '2026-10-10' } });
+    expect((await edit('f1', { text: 'x' })).status).toBe(400);
+  });
+
+  it('a double-booked sponsor moved to an open week goes live and gets its confirmation', async () => {
+    const mail = mailer();
+    await startApp({ resendApiKey: 're_test', resend: mail.resend });
+    const h = await auth();
+    await store.saveSponsorOrder(weeklyOrder({ id: 'c1', status: 'conflict', week_start: '2026-10-19' }));
+    const r = await post('/api/admin/sponsors/c1', { action: 'edit', week: '2026-11-09' }, h);
+    expect(r.status).toBe(200);
+    const o = (await store.listSponsorOrders()).find(x => x.id === 'c1');
+    expect(o).toMatchObject({ status: 'paid', week_start: '2026-11-09' });
+    expect(o.confirmation_sent).toBeTruthy();
+    expect(mail.sent.map(m => m.subject)).toEqual([expect.stringMatching(/week of Nov 9/)]);
+  });
+
+  it('admin sponsor routes answer with an error when the database fails, instead of hanging', async () => {
+    await startApp();
+    const h = await auth();
+    store.listSponsorOrders = async () => { throw new Error('db down'); };
+    expect((await fetch(baseUrl + '/api/admin/sponsors', { headers: h })).status).toBe(500);
+    expect((await post('/api/admin/sponsors/x', { action: 'hide' }, h)).status).toBe(500);
   });
 });

@@ -11,16 +11,21 @@
  *   - GET /subscribe is the signup page every Subscribe button points at
  *     (and where ads should land): the pitch, the form, and a taste of
  *     this week's events.
- *   - GET /subscribe/confirm?token=… activates; /unsubscribe?token=… shows a
- *     one-button page and POST /unsubscribe (also the RFC 8058 one-click
- *     target mail clients use) removes them.
- *   - The weekly email is built from the published events (this week,
- *     featured first, sponsor block) and sent with Resend's batch API,
+ *     The answer is the same whether the address is new, waiting or already
+ *     subscribed, and confirmation emails are capped per address.
+ *   - GET /subscribe/confirm?token=… and /unsubscribe?token=… only show a
+ *     one-button page (mail link scanners open every link); the POST
+ *     confirms or removes. POST /unsubscribe is also the RFC 8058 one-click
+ *     target mail clients use.
+ *   - The weekly email is built from the published events (sponsor block
+ *     first, then this week, featured first; links back to the site carry
+ *     utm_source=newsletter) and sent with Resend's batch API,
  *     each copy with its own unsubscribe link. One send per week: a second
  *     attempt for the same week is refused unless forced.
  *   - Admin: counts, preview, test send, send now, CSV/paste import.
  *   - Automation: POST /api/newsletter/cron with X-Cron-Secret, called by
- *     .github/workflows/newsletter.yml on Monday mornings.
+ *     .github/workflows/newsletter.yml on Monday mornings. The same run
+ *     sends last week's sponsor click reports (onCron, server/sponsors.js).
  */
 
 import crypto from 'node:crypto';
@@ -50,6 +55,13 @@ export function newsletterConfig(env = process.env, overrides = {}) {
 export function normalizeEmail(raw) {
   const e = String(raw || '').trim().toLowerCase();
   return e.length <= 254 && EMAIL_RE.test(e) ? e : null;
+}
+
+// "j•••@gmail.com": enough for someone to recognize their own address.
+export function maskEmail(email) {
+  const [user, domain] = String(email || '').split('@');
+  if (!user || !domain) return '';
+  return `${user[0]}•••@${domain}`;
 }
 
 export function newToken() {
@@ -146,12 +158,16 @@ export function darkSafe(html) {
   return body.replace('</head>', () => `${head}</head>`);
 }
 
+// Invisible spacers after the preheader, so inbox previews (Gmail, iOS)
+// stop at the preheader instead of running on into the header text.
+const PREHEADER_FILLER = '&#847;&zwnj;&nbsp;'.repeat(80);
+
 export function emailShell({ title, preheader, bodyHtml, footerHtml, siteUrl }) {
   return darkSafe(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only"><title>${escHtml(title)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@400;700;800&display=swap" rel="stylesheet"></head>
 <body style="margin:0;padding:0;background:${C.bg};">
-<span style="display:none;max-height:0;overflow:hidden;opacity:0;">${escHtml(preheader || '')}</span>
+<span style="display:none;max-height:0;overflow:hidden;opacity:0;">${escHtml(preheader || '')}${PREHEADER_FILLER}</span>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.bg};"><tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:${C.card};border:3px solid ${C.ink};border-radius:20px;box-shadow:6px 6px 0 ${C.ink};overflow:hidden;">
 <tr><td align="center" style="background:${C.sky};padding:22px 24px 0;font-family:${DISPLAY};color:${C.ink};">
@@ -191,16 +207,43 @@ ${ev.description ? `<div style="color:${C.muted};font-size:13px;margin-top:2px;"
 </td></tr>`;
 }
 
-function sponsorHtml(sponsor, siteUrl = '') {
+// Email apps send no referrer, so links back to the site carry UTM tags
+// (server/analytics.js maps utm_source=newsletter to "Newsletter" in the
+// Traffic tab). Only our own pages: not unsubscribe or confirm links
+// (private tokens), images, or the /go/ sponsor redirect (it tags the
+// sponsor's link itself). `amp` is '&amp;' in HTML and '&' in plain text.
+export function utmTag(content, siteUrl, campaign, amp = '&amp;') {
+  if (!siteUrl) return content;
+  const base = siteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`${base}(/[^\\s"'<>]*)?`, 'g');
+  const tags = `utm_source=newsletter${amp}utm_medium=email${amp}utm_campaign=${encodeURIComponent(campaign)}`;
+  return content.replace(re, (url, rest = '') => {
+    if (/^\/(unsubscribe|subscribe\/confirm|go\/|email\/|sponsor-logo\/)/.test(rest)) return url;
+    const hash = url.indexOf('#');
+    const [head, frag] = hash === -1 ? [url, ''] : [url.slice(0, hash), url.slice(hash)];
+    return `${head}${head.includes('?') ? amp : '?'}${tags}${frag}`;
+  });
+}
+
+// A paid weekly sponsor's button goes through /go/s/<week> (server/
+// sponsors.js), which counts the click for the sponsor's end-of-week report
+// and then sends the reader on with UTM tags. A hand-set sponsor (no order)
+// links straight to its site.
+export function sponsorHref(sponsor, siteUrl, src = 'newsletter') {
+  if (siteUrl && /^\d{4}-\d{2}-\d{2}$/.test(sponsor.week || '')) return `${siteUrl}/go/s/${sponsor.week}?src=${src}`;
+  return safeUrl(sponsor.url);
+}
+
+function sponsorHtml(sponsor, siteUrl = '', src = 'newsletter') {
   // Logo: absolute URL (email clients can't resolve a path), only our own.
   const logo = sponsor && /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(sponsor.logo || '') ? `${siteUrl}${sponsor.logo}` : '';
   return sponsor && sponsor.name ? `
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;background:${C.sunLight};border:3px dashed ${C.ink};border-radius:16px;"><tr><td style="padding:14px 16px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;background:${C.sunLight};border:3px dashed ${C.ink};border-radius:16px;"><tr><td style="padding:14px 16px;">
 <span style="display:inline-block;font-family:${DISPLAY};font-size:11px;font-weight:bold;letter-spacing:.5px;background:${C.sunset};color:${C.ink};border:2px solid ${C.ink};border-radius:999px;padding:1px 10px;">THIS WEEK'S SPONSOR</span>
 ${logo ? `<div style="margin:8px 0 2px;"><img src="${escHtml(logo)}" alt="${escHtml(sponsor.name)}" style="display:block;max-height:60px;max-width:200px;height:auto;border:0;"></div>` : ''}
 <div style="font-family:${DISPLAY};font-size:20px;font-weight:bold;margin:6px 0 2px;">${escHtml(sponsor.name)}</div>
 ${sponsor.text ? `<div style="font-size:14px;">${escHtml(sponsor.text)}</div>` : ''}
-${safeUrl(sponsor.url) && sponsor.cta ? `<a href="${escHtml(sponsorLinkUrl(sponsor.url, 'newsletter'))}" style="display:inline-block;margin-top:10px;background:#fff;color:${C.ink};font-family:${DISPLAY};font-weight:bold;padding:6px 14px;border:2px solid ${C.ink};border-radius:999px;text-decoration:none;">${escHtml(sponsor.cta)} →</a>` : ''}
+${safeUrl(sponsor.url) && sponsor.cta ? `<a href="${escHtml(sponsorHref(sponsor, siteUrl, src))}" style="display:inline-block;margin-top:10px;background:#fff;color:${C.ink};font-family:${DISPLAY};font-weight:bold;padding:6px 14px;border:2px solid ${C.ink};border-radius:999px;text-decoration:none;">${escHtml(sponsor.cta)} →</a>` : ''}
 </td></tr></table>` : '';
 }
 
@@ -210,8 +253,9 @@ export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, ad
   const week = currentWeek(today).filter(d => d >= today);
   const byDay = week.map(d => ({ d, list: sortEvents(events.filter(e => e.date === d)) })).filter(x => x.list.length);
   const total = byDay.reduce((n, x) => n + x.list.length, 0);
-  const range = week.length ? `${formatDay(week[0], { month: 'short', day: 'numeric' })}–${formatDay(week[week.length - 1], { month: 'short', day: 'numeric' })}` : '';
-  const subject = `This week in Victoria: ${total} things to do (${range})`;
+  const short = d => formatDay(d, { month: 'short', day: 'numeric' });
+  const range = week.length ? (week.length === 1 ? short(week[0]) : `${short(week[0])}–${short(week[week.length - 1])}`) : '';
+  const subject = `This week in Victoria: ${total} ${total === 1 ? 'thing' : 'things'} to do (${range})`;
   const highlights = byDay.flatMap(x => x.list).filter(e => e.featured).concat(byDay.flatMap(x => x.list)).map(e => e.name);
   const preheader = [...new Set(highlights)].slice(0, 3).join(' · ');
 
@@ -230,19 +274,28 @@ ${list.length > PER_DAY ? `<p style="margin:8px 0 0;font-size:13px;font-weight:b
 
   const pill = (href, label) => `<a href="${siteUrl}${href}" style="display:inline-block;margin:6px 4px 0 0;font-family:${DISPLAY};font-weight:bold;font-size:13px;color:${C.ink};background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:2px 10px;text-decoration:none;">${label}</a>`;
   const bodyHtml = `
-<p style="margin:16px 0 4px;font-size:16px;">${total ? `Here's what's happening in Victoria, TX this week: <strong>${total} events</strong>.` : 'Nothing is listed yet for the rest of this week.'}</p>
+<p style="margin:16px 0 4px;font-size:16px;">${total ? `Here's what's happening in Victoria, TX this week: <strong>${total} ${total === 1 ? 'event' : 'events'}</strong>.` : 'Nothing is listed yet for the rest of this week.'}</p>
 <div>${pill('/this-weekend', 'This weekend')}${pill('/free-things-to-do', 'Free')}${pill('/kids-and-family', 'Kids')}${pill('/live-music', 'Live music')}</div>
-${days}${sponsorBlock}
+${sponsorBlock}${days}
 <p style="margin:28px 0 0;text-align:center;">${btn(`${siteUrl}/`, 'See the full list')}</p>`;
 
+  // Sponsors are sold "the top of the Monday newsletter": first in both parts.
+  const sponsorLine = sponsor && sponsor.name
+    ? [`THIS WEEK'S SPONSOR: ${[sponsor.name, sponsor.text, safeUrl(sponsor.url) ? sponsorHref(sponsor, siteUrl) : ''].filter(Boolean).join(' - ')}`, '']
+    : [];
+  const campaign = `weekly-${currentWeek(today)[0]}`;
   const text = [
-    `${subject}`, '',
+    `${subject}`, '', ...sponsorLine,
     ...byDay.flatMap(({ d, list }) => [formatDay(d, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase(),
       ...list.slice(0, PER_DAY).map(e => `- ${e.time ? e.time + ' ' : ''}${e.name}${e.venue ? ' @ ' + e.venue : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), '']),
     `Full list: ${siteUrl}/`, '', `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
   ].join('\n');
 
-  return { subject, html: emailShell({ title: 'This week in Victoria', preheader, bodyHtml, siteUrl, footerHtml: footer({ siteUrl, unsubscribeUrl, address }) }), text, total };
+  return {
+    subject, total,
+    html: utmTag(emailShell({ title: 'This week in Victoria', preheader, bodyHtml, siteUrl, footerHtml: footer({ siteUrl, unsubscribeUrl, address }) }), siteUrl, campaign),
+    text: utmTag(text, siteUrl, campaign, '&')
+  };
 }
 
 export function renderConfirmEmail({ siteUrl, confirmUrl, address }) {
@@ -273,7 +326,7 @@ export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeU
 ${soon.length > picks.length ? `<p style="margin:10px 0 0;font-size:13px;font-weight:bold;"><a href="${siteUrl}/" style="color:${C.accent};">+${soon.length - picks.length} more this week →</a></p>` : ''}` : '';
   const bodyHtml = `
 <p style="margin:18px 0 4px;font-size:16px;"><strong>You're in!</strong> Every Monday morning you'll get the week's events in Victoria, TX: concerts, markets, festivals, family stuff and more, all in one email.</p>
-${coming}${sponsorHtml(sponsor, siteUrl)}
+${coming}${sponsorHtml(sponsor, siteUrl, 'welcome')}
 <p style="margin:26px 0 0;text-align:center;">${btn(`${siteUrl}/`, "See this week's events")}</p>
 <p style="margin:22px 0 0;font-size:14px;color:${C.muted};">Know someone who's always asking what there is to do in Victoria? Forward them this email or send them to <a href="${siteUrl}/" style="color:${C.accent};font-weight:bold;">thevic361.com</a>.</p>`;
   const text = [
@@ -284,9 +337,9 @@ ${coming}${sponsorHtml(sponsor, siteUrl)}
   ].join('\n');
   return {
     subject: 'Welcome to The Vic 361',
-    html: emailShell({ title: 'Welcome to The Vic 361', preheader: picks.length ? `Coming up: ${picks.slice(0, 3).map(e => e.name).join(' · ')}` : "Victoria's events, every Monday",
-      bodyHtml, siteUrl, footerHtml: footer({ siteUrl, unsubscribeUrl, address }) }),
-    text
+    html: utmTag(emailShell({ title: 'Welcome to The Vic 361', preheader: picks.length ? `Coming up: ${picks.slice(0, 3).map(e => e.name).join(' · ')}` : "Victoria's events, every Monday",
+      bodyHtml, siteUrl, footerHtml: footer({ siteUrl, unsubscribeUrl, address }) }), siteUrl, 'welcome'),
+    text: utmTag(text, siteUrl, 'welcome', '&')
   };
 }
 
@@ -313,7 +366,7 @@ export function signupFormHtml({ source = 'footer', button = 'Subscribe' } = {})
 f.addEventListener('submit',function(e){e.preventDefault();var b=f.querySelector('button');b.disabled=true;m.textContent='';
 (window.vicTurnstile?window.vicTurnstile.token(f):Promise.resolve('')).then(function(t){return fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value,turnstile_token:t,source:window.vic361Source?window.vic361Source(f.getAttribute('data-source')):f.getAttribute('data-source')})});})
 .then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});})
-.then(function(x){m.textContent=x.ok?(x.j.message||'Check your inbox to confirm.'):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';try{localStorage.setItem('vic361-subscribed','1')}catch(e){}if(x.j.new&&window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
+.then(function(x){m.textContent=x.ok?(x.j.message||'Check your inbox to confirm.'):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';var was=false;try{was=localStorage.getItem('vic361-subscribed')==='1';localStorage.setItem('vic361-subscribed','1')}catch(e){}if(!was&&window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
 .catch(function(){m.textContent='Something went wrong. Try again.';}).then(function(){b.disabled=false;if(window.vicTurnstile)window.vicTurnstile.reset(f);});});})();
 </script>`;
 }
@@ -367,8 +420,9 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0 
 
 // ─── Routes ──────────────────────────────────────────────────────────────
 
-export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true, withNav = async html => html }) {
+export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true, withNav = async html => html, onCron = null }) {
   const subscribeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10 });
+  const confirmLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 3 });
   const supported = typeof store.addSubscriber === 'function';
 
   const page = (title, message) => layout({
@@ -455,23 +509,34 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     const email = normalizeEmail(body.email);
     if (!email) return res.status(400).json({ ok: false, message: 'Enter a valid email address.' });
     if (!(await verifyHuman(req))) return res.status(400).json({ ok: false, error: 'turnstile-failed', message: "We couldn't confirm you're not a bot. Please try again." });
+    // Every outcome (new, waiting to confirm, already subscribed) gets the
+    // same answer, so the form can't be used to find out who's on the list.
+    // Whether it was a first signup is the browser's to know (docs/track.js
+    // Lead), not the server's to say.
+    const done = config.enabled ? { ok: true } : { ok: true, message: "You're on the list! See you Monday." };
     try {
       const source = signupSource(body.source);
       const sub = await store.addSubscriber({ email, source });
-      if (sub.status === 'active') return res.json({ ok: true, already: true, message: "You're already on the list!" });
+      if (sub.status === 'active') return res.json(done);
       // No email service yet: keep the signup (they asked for it on our own
       // form) and skip the confirmation email we can't send.
       if (!config.enabled) {
         await store.confirmSubscriber(sub.token);
         if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', email], ['From', source]] });
-        return res.json({ ok: true, new: Boolean(sub.new_signup), message: "You're on the list! See you Monday." });
+        return res.json(done);
       }
+      // A few confirmation emails per address a day, whoever asks, so the
+      // form can't be used to flood someone's inbox.
+      if (!confirmLimiter.check(email).ok) return res.json(done);
       const confirmUrl = `${siteUrl}/subscribe/confirm?token=${encodeURIComponent(sub.token)}`;
       const mail = renderConfirmEmail({ siteUrl, confirmUrl, address: config.address });
       await resend.send({ from: config.from, to: [email], subject: mail.subject, html: mail.html, text: mail.text });
-      res.json({ ok: true, new: Boolean(sub.new_signup) });
+      res.json(done);
     } catch (err) {
       console.error('[newsletter] subscribe failed:', err.message);
+      // Usually Resend (key rotated, domain unverified, outage): every signup
+      // fails until someone looks, so tell the owner (de-duplicated by key).
+      if (slack) slack.alert('newsletter-subscribe-failed', 'Newsletter signups are failing', err.message, `${siteUrl}/admin.html`);
       res.status(500).json({ ok: false, message: 'Something went wrong. Try again.' });
     }
   });
@@ -506,7 +571,33 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     }
   });
 
+  const findByToken = async (token) => {
+    if (!supported || !token || typeof store.getSubscriberByToken !== 'function') return null;
+    try { return await store.getSubscriberByToken(token); } catch { return null; }
+  };
+  const buttonPage = (path, title, lead, token, label) => layout({
+    siteUrl, path, nav: null, noindex: true, pixel: false, title: `${title} | ${SITE_NAME}`, description: title,
+    body: `<h1 class="page-title">${escHtml(title)}</h1><p class="page-lead">${lead}</p>
+<form method="post" action="${path}?token=${encodeURIComponent(token)}"><button class="btn btn--primary" type="submit">${escHtml(label)}</button></form>`
+  });
+
+  // GET only shows a button: mail link scanners (Safe Links, Mimecast) open
+  // every link, and a GET that confirmed would sign up people who never
+  // clicked. The person's tap on the button is the opt-in.
   app.get('/subscribe/confirm', async (req, res) => {
+    const token = String(req.query.token || '');
+    const sub = await findByToken(token);
+    if (supported && typeof store.getSubscriberByToken === 'function' && (!sub || sub.status === 'unsubscribed')) {
+      return res.status(404).type('html').send(page('Link expired', 'That confirmation link isn\'t valid anymore. <a href="/subscribe">Sign up again</a>.'));
+    }
+    if (sub && sub.status === 'active') {
+      return res.type('html').send(page("You're subscribed", 'The week\'s events will land in your inbox every Monday morning.'));
+    }
+    res.type('html').send(buttonPage('/subscribe/confirm', 'Confirm your subscription',
+      'One tap and the week\'s events land in your inbox every Monday morning.', token, 'Confirm my subscription'));
+  });
+
+  app.post('/subscribe/confirm', async (req, res) => {
     const sub = supported ? await store.confirmSubscriber(String(req.query.token || '')) : null;
     // Only the first confirm: a second click on the same link sends nothing.
     if (sub && sub.newly_confirmed) welcome(sub);
@@ -518,11 +609,12 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   app.get('/unsubscribe', async (req, res) => {
     const token = String(req.query.token || '');
     // GET only shows a button: link scanners in mail systems follow GETs.
-    res.type('html').send(layout({
-      siteUrl, path: '/unsubscribe', nav: null, noindex: true, pixel: false, title: `Unsubscribe | ${SITE_NAME}`, description: 'Unsubscribe',
-      body: `<h1 class="page-title">Unsubscribe</h1><p class="page-lead">Stop getting The Vic 361 newsletter?</p>
-<form method="post" action="/unsubscribe?token=${encodeURIComponent(token)}"><button class="btn btn--primary" type="submit">Unsubscribe</button></form>`
-    }));
+    // It names the (masked) address, so someone reading a forwarded copy can
+    // see the link belongs to whoever forwarded it.
+    const sub = await findByToken(token);
+    const who = sub && sub.email ? ` for <strong>${escHtml(maskEmail(sub.email))}</strong>` : '';
+    const forwarded = sub && sub.email ? ' <small>Not your address? This email was forwarded to you; <a href="/subscribe">sign up for your own</a> instead.</small>' : '';
+    res.type('html').send(buttonPage('/unsubscribe', 'Unsubscribe', `Stop The Vic 361 newsletter${who}?${forwarded}`, token, 'Unsubscribe'));
   });
 
   // Also the RFC 8058 one-click endpoint mail clients POST to.
@@ -539,10 +631,18 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     const sends = await store.listNewsletterSends(8);
     const payload = await getPublicPayload();
     const issue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: '#', address: config.address });
+    // A week whose send partly failed isn't "sent": the button stays on to
+    // retry just the people who missed it (sendWeekly resumes).
+    const record = await store.getNewsletterSend(weekKey(nowFn()));
+    const failed = record ? (Array.isArray(record.failed_emails) ? record.failed_emails.length : Number(record.failed) || 0) : 0;
     res.json({
       ok: true, configured: config.enabled, from: config.from, address_set: Boolean(config.address),
+      // The Monday workflow (.github/workflows/newsletter.yml) runs whenever
+      // the secret is set in GitHub; the server can only see its own copy.
       autosend: Boolean(config.cronSecret), counts, sends, next: { subject: issue.subject, events: issue.total },
-      this_week_sent: Boolean(await store.getNewsletterSend(weekKey(nowFn())))
+      this_week_sent: Boolean(record) && !failed,
+      this_week_failed: failed,
+      this_week_recipients: record ? Number(record.recipients) || 0 : 0
     });
   });
 
@@ -569,6 +669,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   app.post('/api/admin/newsletter/send', requireAdmin, async (req, res) => {
     try {
       const out = await sendWeekly({ force: Boolean((req.body || {}).force) });
+      if (!out.ok && out.failed) out.message = `Sent to ${out.recipients}, but ${out.failed} failed (${(out.errors || [])[0] || 'email service error'}). Press Retry to send to the rest.`;
       res.status(out.ok ? 200 : (out.error === 'not-configured' ? 503 : 409)).json(out);
     } catch (err) {
       res.status(500).json({ ok: false, error: 'send-failed', message: err.message });
@@ -594,6 +695,14 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     if (!ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
     try {
       const out = await sendWeekly();
+      // Same Monday run: last week's sponsors get their click reports
+      // (server/sponsors.js sendSponsorReports; safe to call more than once).
+      if (onCron) {
+        try { out.sponsor_reports = await onCron(nowFn()); } catch (err) {
+          console.error('[newsletter] sponsor reports failed:', err.message);
+          if (slack) slack.alert('sponsor-reports', 'Sponsor click reports failed', err.message, `${siteUrl}/admin.html`);
+        }
+      }
       // Monday's automatic send found nothing published for this week.
       if (slack && out.error === 'no-events') {
         slack.alert('newsletter-no-events', 'Newsletter skipped: nothing published for this week',
