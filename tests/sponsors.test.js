@@ -9,6 +9,7 @@ import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
 import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks, pickAvailability, isWeekendDate, renderPreview, sponsorCalendar } from '../server/sponsors.js';
 import { promises as fs } from 'node:fs';
+import { renderSubmissionReceived, renderSponsorConfirmed } from '../server/notify.js';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
@@ -496,6 +497,68 @@ describe('admin sponsorship calendar', () => {
     const d = await (await fetch(baseUrl + '/api/admin/sponsors', { headers: { Authorization: `Bearer ${token}` } })).json();
     expect(d.calendar).toHaveLength(8);
     expect(d.calendar[0].days).toHaveLength(7);
+  });
+});
+
+describe('confirmation emails', () => {
+  const fakeMail = () => {
+    const sent = [];
+    return { sent, resend: { send: async (msg, key) => { sent.push({ ...msg, key }); return { id: 'e' + sent.length }; }, batch: async () => ({ data: [] }) } };
+  };
+
+  it('a Vic’s Pick purchase emails what happens next, once', async () => {
+    const mail = fakeMail();
+    await startApp({ resendApiKey: 're_test', resend: mail.resend, newsletterAddress: '123 Main St', newsletterReplyTo: 'hello@thevic361.com' });
+    await form({
+      package: 'featured', event_name: 'Pumpkin Patch', date: '2026-10-10', time: '10 AM', venue: 'Titan',
+      address: 'X', description: 'Pumpkins.', business: 'Titan', email: 'titan@example.com'
+    });
+    await completed(sessions[0]);
+    await completed(sessions[0]);                       // Stripe retries the webhook
+    const mine = mail.sent.filter(m => m.to[0] === 'titan@example.com');
+    expect(mine).toHaveLength(1);
+    expect(mine[0].subject).toBe("Your Vic's Pick is confirmed: Pumpkin Patch");
+    expect(mine[0].reply_to).toBe('hello@thevic361.com');
+    expect(mine[0].key).toMatch(/^vic361-sponsor-/);
+    expect(mine[0].text).toContain('pinned to the top of Saturday, October 10');
+    expect(mine[0].html).toContain('thevic361.com/contact');
+    expect((await store.listSponsorOrders())[0].confirmation_sent).toBeTruthy();
+  });
+
+  it('a weekly sponsor gets a "you’re booked" email; no Resend means no email and no error', async () => {
+    const mail = fakeMail();
+    await startApp({ resendApiKey: 're_test', resend: mail.resend });
+    const week = bookableWeeks(NOW, []).find(w => w.available).start;
+    await form({ package: 'weekly', week, business: 'Acme Tacos', text: 'Best tacos.', url: 'acme.example', email: 'acme@example.com' });
+    await completed(sessions[0]);
+    expect(mail.sent.map(m => m.subject)).toEqual([expect.stringMatching(/^You're booked: The Vic 361 sponsor, week of /)]);
+    expect(mail.sent[0].text).toContain('Best tacos.');
+  });
+
+  it('a free submission with an email gets "we got it", what to expect, the upgrade link and how to reach us', async () => {
+    const mail = fakeMail();
+    await startApp({ resendApiKey: 're_test', resend: mail.resend });
+    const body = { name: 'Fall Fest', date: '2026-10-17', time: '10:00 AM', venue: 'De Leon Plaza', address: '101 N Main St',
+      description: 'Music and food all day.', submitter_kind: 'organizer', submitter_email: 'org@example.com',
+      submitter_first_name: 'Pat', submitter_last_name: 'Lee', submitter_phone: '361-555-0100', icons: ['music'], free: true };
+    const r = await fetch(baseUrl + '/api/submissions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    expect(r.status).toBe(201);
+    await new Promise(res => setTimeout(res, 20));
+    expect(mail.sent).toHaveLength(1);
+    const m = mail.sent[0];
+    expect(m.to).toEqual(['org@example.com']);
+    expect(m.subject).toBe('We got your event: Fall Fest');
+    expect(m.text).toContain('Free listings aren’t guaranteed a spot');
+    expect(m.text).toMatch(/advertise\/checkout\?package=featured&event_name=Fall\+Fest&date=2026-10-17/);
+    expect(m.text).toContain('/contact');
+  });
+
+  it('renders safely', () => {
+    const sub = renderSubmissionReceived({ name: '<b>Show</b>', date: '2026-10-17', venue: 'Hall' }, { siteUrl: 'https://x', upgradeUrl: 'https://x/u' });
+    expect(sub.html).toContain('&lt;b&gt;Show&lt;/b&gt;');
+    expect(sub.html).not.toContain('<b>Show</b>');
+    const w = renderSponsorConfirmed({ kind: 'weekly', business: 'A', week_start: '2026-10-12', sponsor: { name: 'A', text: 'Hi', url: 'javascript:alert(1)' } }, { siteUrl: 'https://x' });
+    expect(w.html).not.toContain('javascript:');
   });
 });
 

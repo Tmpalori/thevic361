@@ -29,6 +29,7 @@ import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys } from './eventcheck.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
+import { createMailer, renderSubmissionReceived } from './notify.js';
 import { stripeConfig, createStripe, createSponsors, samplePreviews } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
@@ -169,8 +170,13 @@ export async function createApp(opts = {}) {
   // Created here because the Stripe webhook needs the raw body and so must
   // be registered before the JSON parser below. Its page routes come later.
   const stripeCfg = stripeConfig(process.env, opts);
+  // Resend: the newsletter and the "we got it" emails (server/notify.js).
+  const newsletter = newsletterConfig(process.env, opts);
+  const nlResend = opts.resend || createResend(newsletter.apiKey);
+  const mailer = createMailer({ resend: nlResend, config: newsletter });
+
   const sponsors = createSponsors({
-    store, siteUrl, config: stripeCfg, slack,
+    store, siteUrl, config: stripeCfg, slack, mailer, mailAddress: newsletter.address,
     nowFn: () => (opts.now || (() => new Date()))(),
     stripe: opts.stripe || createStripe(stripeCfg.secretKey),
     getVenues: () => venues
@@ -331,6 +337,15 @@ export async function createApp(opts = {}) {
       text: ev.description ? ev.description.slice(0, 300) : '',
       link: `${siteUrl}/admin.html`, footer: 'Review it in the Submissions tab'
     });
+    // Tell them it worked and what happens next (no-op without Resend).
+    if (row.submitter_email) {
+      const q = new URLSearchParams({ package: 'featured' });
+      for (const [k, val] of [['event_name', ev.name], ['date', ev.date], ['time', ev.time], ['venue', ev.venue],
+        ['address', ev.address], ['description', ev.description], ['url', ev.url], ['email', row.submitter_email],
+        ['business', row.submitter_name]]) if (val) q.set(k, String(val).slice(0, 2000));
+      const mail = renderSubmissionReceived(ev, { siteUrl, address: newsletter.address, upgradeUrl: `${siteUrl}/advertise/checkout?${q}` });
+      mailer.send(row.submitter_email, mail, `vic361-submission-${row.id}`);
+    }
     return res.status(201).json({ ok: true, queued: true, id: row.id });
   });
 
@@ -1038,8 +1053,6 @@ export async function createApp(opts = {}) {
   }
 
   // ─── Newsletter (Resend; see server/newsletter.js) ───
-  const newsletter = newsletterConfig(process.env, opts);
-  const nlResend = opts.resend || createResend(newsletter.apiKey);
   // Event check (server/eventcheck.js): hide what the weekly check is sure
   // about, restore from admin Home.
   registerEventCheck(app, {
