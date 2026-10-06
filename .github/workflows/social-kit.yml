@@ -56,10 +56,11 @@ permissions:
 
 # A group holds one running and one pending run, and a newer run replaces
 # the pending one, so a push rebuild could drop a queued scheduled post.
-# Posting runs (schedule, or by hand with post) get their own group; two of
-# them still never overlap, so nothing posts twice.
+# Posting runs (schedule, the site scheduler's dispatch with scheduled, or
+# by hand with post) get their own group; two of them still never overlap,
+# so nothing posts twice.
 concurrency:
-  group: social-kit-${{ (github.event_name == 'schedule' || inputs.post) && 'post' || 'build' }}
+  group: social-kit-${{ (github.event_name == 'schedule' || inputs.post || inputs.scheduled) && 'post' || 'build' }}
   cancel-in-progress: false
 
 jobs:
