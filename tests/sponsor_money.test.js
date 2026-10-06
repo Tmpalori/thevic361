@@ -7,7 +7,8 @@
 // the make-good when a debit clears after its week's newsletter, and
 // bounded, shared Vic's Pick pin lookups.
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -202,6 +203,143 @@ describe('booking fails closed', () => {
     expect(r.status).toBe(503);
     expect(await r.text()).toMatch(/try again/i);
     expect(sessions).toHaveLength(0);
+  });
+});
+
+describe('a hanging Resend doesn’t hold the booking lock', () => {
+  it('a checkout books while the webhook’s "you’re booked" email is stuck', async () => {
+    const store = await newStore();
+    await store.saveSponsorOrder(order());
+    const eventsFile = path.join(tmpDir, 'events.json');
+    await fs.writeFile(eventsFile, JSON.stringify({ events: [] }));
+    let release;
+    const gate = new Promise(r => { release = r; });
+    let mails = 0;
+    const resend = { send: async () => { mails++; await gate; return { id: 'e1' }; }, batch: async () => ({ data: [] }) };
+    const sessions = [];
+    const { app } = await createApp({
+      storeBundle: { kind: 'file', store }, eventsFile, trustProxy: false, now: () => NOW,
+      siteUrl: 'https://www.thevic361.com', adminUsername: 'a', adminPassword: 'b', adminSessionSecret: 'c',
+      stripeSecretKey: 'sk_test', stripeWebhookSecret: 'whsec', resendApiKey: 're_test', resend,
+      stripe: { createCheckoutSession: async (params) => { sessions.push(params); return { id: 'cs_x', url: 'https://checkout.stripe.com/x' }; } }
+    });
+    server = http.createServer(app);
+    await new Promise(r => server.listen(0, r));
+    baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const raw = JSON.stringify(paidEvent(order()));
+    const t = Math.floor(Date.now() / 1000);
+    const sig = crypto.createHmac('sha256', 'whsec').update(`${t}.${raw}`).digest('hex');
+    const hook = fetch(baseUrl + '/api/stripe/webhook', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': `t=${t},v1=${sig}` }, body: raw
+    });
+    await vi.waitFor(() => expect(mails).toBe(1));
+    const booking = fetch(baseUrl + '/advertise/checkout', {
+      method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ package: 'weekly', week: '2026-10-26', business: 'Beta', text: 'Hi.', url: 'b.example', email: 'b@b.example' }).toString()
+    }).then(r => r.status);
+    const outcome = await Promise.race([booking, new Promise(r => setTimeout(() => r('blocked'), 2000))]);
+    release();
+    expect(outcome).toBe(303);
+    expect(sessions).toHaveLength(1);
+    expect((await hook).status).toBe(200);
+    expect((await store.listSponsorOrders()).find(o => o.id === 'o1').confirmation_sent).toBeTruthy();
+  });
+});
+
+describe('emails go out after the booking lock, and their results merge into the order as it is now', () => {
+  it('a confirmation that sends while the admin hides the order doesn’t bring it back', async () => {
+    const store = await newStore();
+    const mailer = {
+      enabled: true,
+      send: async () => {
+        // The admin hides it while the email is on its way.
+        const [cur] = await store.listSponsorOrders();
+        await store.saveSponsorOrder({ ...cur, status: 'hidden', hidden_from: 'paid' });
+        return true;
+      }
+    };
+    const sp = setup(store, { mailer });
+    await store.saveSponsorOrder(order({ status: 'paid', paid_at: NOW.toISOString() }));
+    await sp.sendSponsorReports(NOW);
+    const [saved] = await store.listSponsorOrders();
+    expect(saved.status).toBe('hidden');
+    expect(saved.confirmation_sent).toBeTruthy();
+  });
+
+  it('a hanging "you’re booked" send doesn’t hold up the next webhook', async () => {
+    const store = await newStore();
+    let release;
+    const gate = new Promise(r => { release = r; });
+    let calls = 0;
+    const mailer = { enabled: true, send: async () => { calls++; await gate; return true; } };
+    const sp = setup(store, { mailer });
+    const b = order({ id: 'b', session_id: 'cs_b', week_start: '2026-10-26', email: 'b@b.example' });
+    await store.saveSponsorOrder(order());
+    await store.saveSponsorOrder(b);
+    const first = sp.processEvent(paidEvent(order()));
+    await vi.waitFor(() => expect(calls).toBe(1));
+    // b's webhook needs the same lock; it finishes while a's email still hangs.
+    const second = await Promise.race([
+      sp.processEvent(ev('checkout.session.completed', b, { payment_status: 'unpaid' })).then(() => 'done'),
+      new Promise(r => setTimeout(() => r('blocked'), 1000))
+    ]);
+    release();
+    await first;
+    expect(second).toBe('done');
+    expect((await store.listSponsorOrders()).find(o => o.id === 'b').status).toBe('processing');
+    expect((await store.listSponsorOrders()).find(o => o.id === 'o1').confirmation_sent).toBeTruthy();
+  });
+});
+
+describe('report outcomes don’t overwrite a refund that landed meanwhile', () => {
+  it('a weekly click report sent while the order is refunded records the report and keeps the refund', async () => {
+    const store = await newStore();
+    let sp;
+    const mailer = {
+      enabled: true,
+      send: async (to, mail, key) => {
+        if (key.startsWith('vic361-sponsor-report-')) {
+          await sp.processEvent({ type: 'charge.refunded', data: { object: { payment_intent: 'pi_1', refunded: true } } });
+        }
+        return true;
+      }
+    };
+    sp = setup(store, { mailer });
+    await store.saveSponsorOrder(order({ status: 'paid', week_start: '2026-09-28', paid_at: '2026-09-20T00:00:00Z',
+      confirmation_sent: '2026-09-20T00:00:00Z', payment_intent: 'pi_1' }));
+    const out = await sp.sendSponsorReports(NOW);
+    expect(out.sent).toBe(1);
+    const [saved] = await store.listSponsorOrders();
+    expect(saved.status).toBe('refunded');
+    expect(saved.report_sent).toBeTruthy();
+  });
+
+  it('a Vic’s Pick report failure recorded mid-dispute keeps the dispute', async () => {
+    const store = await newStore();
+    let sp;
+    const mailer = {
+      enabled: true,
+      send: async (to, mail, key) => {
+        if (key.startsWith('vic361-pick-report-')) {
+          await sp.processEvent({ type: 'charge.dispute.created', data: { object: { payment_intent: 'pi_2' } } });
+          return false;
+        }
+        return true;
+      }
+    };
+    const { slack } = recorder();
+    sp = createSponsors({
+      store, siteUrl: 'https://www.thevic361.com', nowFn: () => NOW, getVenues: () => [],
+      config: { enabled: true, webhookSecret: 'whsec' }, stripe: {}, slack, mailer, mailAddress: '1 Main St',
+      getPayload: async () => ({ events: [{ date: '2026-10-03', name: 'Fall Fair', time: '9 AM', venue: 'Plaza', page: '/e/fair' }] })
+    });
+    await store.saveSponsorOrder(pick({ status: 'paid', paid_at: '2026-09-25T00:00:00Z', confirmation_sent: '2026-09-25T00:00:00Z',
+      payment_intent: 'pi_2', event: { date: '2026-10-03', name: 'Fall Fair', time: '9 AM', venue: 'Plaza' } }));
+    const out = await sp.sendPickReports(NOW);
+    expect(out.failed).toBe(1);
+    const [saved] = await store.listSponsorOrders();
+    expect(saved.status).toBe('refunded');
+    expect(saved.report_failed).toBeTruthy();
   });
 });
 

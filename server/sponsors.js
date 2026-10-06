@@ -975,7 +975,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       order.submission_id = row.id;
       await save(order);
     }
-    await sendConfirmation(order);
+    // The "you're booked" email goes out after the lock (processEvent).
     if (slack) {
       const pkg = packageFor(order.kind);
       slack.notify({ channel: 'sales',
@@ -994,39 +994,64 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
   // "You're booked" email: what happens next and how to reach us. Once
   // per order. A card checkout gets exactly one completed webhook, so a send
   // that failed (Resend down) is retried by retryConfirmations, and the
-  // owner is alerted once it keeps failing. Callers hold the booking lock,
-  // since the order object is saved back whole. True when it was sent.
+  // owner is alerted once it keeps failing. True when it was sent.
+  // Callers must NOT hold the booking lock: the send can take up to
+  // Resend's 15-second timeout, and checkout, webhooks and admin edits all
+  // queue behind that one lock. So the send happens outside it, and the
+  // result is recorded under it on a fresh read of the order, merging only
+  // the confirmation fields (a refund or edit that landed meanwhile stays).
+  const confirming = new Set();
+  const owesConfirmation = order => Boolean(mailer && mailer.enabled && (order.kind === 'weekly' || order.kind === 'featured') &&
+    !order.confirmation_sent);
   async function sendConfirmation(order) {
-    if (!mailer || !mailer.enabled || (order.kind !== 'weekly' && order.kind !== 'featured') || order.confirmation_sent) return false;
-    const sent = await mailer.send(order.email, renderSponsorConfirmed(order, { siteUrl, address: mailAddress }), `vic361-sponsor-${order.id}`);
-    if (sent) {
-      order.confirmation_sent = nowIso();
-      await save(order);
-      return true;
+    // Already in flight (a webhook and the retry run at once): one send.
+    if (!owesConfirmation(order) || confirming.has(order.id)) return false;
+    confirming.add(order.id);
+    try {
+      const sent = await mailer.send(order.email, renderSponsorConfirmed(order, { siteUrl, address: mailAddress }), `vic361-sponsor-${order.id}`);
+      const failures = await withBookingLock(async () => {
+        const cur = (await freshOrders()).find(o => o.id === order.id);
+        if (!cur || cur.confirmation_sent) return 0;
+        if (sent) {
+          await save({ ...cur, confirmation_sent: nowIso() });
+          return 0;
+        }
+        const n = (Number(cur.confirmation_failures) || 0) + 1;
+        await save({ ...cur, confirmation_failures: n });
+        return n;
+      });
+      if (!sent && slack && failures === CONFIRM_ALERT_AFTER) {
+        slack.alert(`sponsor-confirmation-failed:${order.id}`, `"You're booked" email to ${order.business} isn't sending`,
+          `${order.email} paid but hasn't had their confirmation after ${CONFIRM_ALERT_AFTER} tries. It keeps retrying for ${CONFIRM_RETRY_DAYS} days; check Resend, or email them yourself.`,
+          `${siteUrl}/admin.html`);
+      }
+      return sent;
+    } finally {
+      confirming.delete(order.id);
     }
-    order.confirmation_failures = (Number(order.confirmation_failures) || 0) + 1;
-    await save(order);
-    if (slack && order.confirmation_failures === CONFIRM_ALERT_AFTER) {
-      slack.alert(`sponsor-confirmation-failed:${order.id}`, `"You're booked" email to ${order.business} isn't sending`,
-        `${order.email} paid but hasn't had their confirmation after ${CONFIRM_ALERT_AFTER} tries. It keeps retrying for ${CONFIRM_RETRY_DAYS} days; check Resend, or email them yourself.`,
-        `${siteUrl}/admin.html`);
-    }
-    return false;
   }
 
   // Paid weekly sponsors and Vic's Picks still owed their confirmation
   // (from the last CONFIRM_RETRY_DAYS, while the placement hasn't ended).
-  // Under the booking lock and from a fresh read, so it can't save over a
-  // refund or edit that landed meanwhile.
-  function retryConfirmations(now) {
-    if (!supported || !mailer || !mailer.enabled) return Promise.resolve(0);
+  // Picked from a fresh read under the booking lock; each email then goes
+  // out after the lock is released (see sendConfirmation).
+  async function retryConfirmations(now) {
+    if (!supported || !mailer || !mailer.enabled) return 0;
+    const since = now.getTime() - CONFIRM_RETRY_DAYS * 864e5;
+    const due = await withBookingLock(async () => (await freshOrders()).filter(o => (o.kind === 'weekly' || o.kind === 'featured') &&
+      o.status === 'paid' && !o.confirmation_sent && o.paid_at && Date.parse(o.paid_at) >= since && !paidTooLate(o, now)));
+    let sent = 0;
+    for (const o of due) if (await sendConfirmation(o)) sent++;
+    return sent;
+  }
+
+  // A report outcome, merged into the order as it is now: the run read it
+  // before its traffic queries and email, and a refund, dispute or hide
+  // saved meanwhile must not be overwritten with that older copy.
+  function recordReport(order, fields) {
     return withBookingLock(async () => {
-      const since = now.getTime() - CONFIRM_RETRY_DAYS * 864e5;
-      const due = (await freshOrders()).filter(o => (o.kind === 'weekly' || o.kind === 'featured') && o.status === 'paid' &&
-        !o.confirmation_sent && o.paid_at && Date.parse(o.paid_at) >= since && !paidTooLate(o, now));
-      let sent = 0;
-      for (const o of due) if (await sendConfirmation(o)) sent++;
-      return sent;
+      const cur = (await freshOrders()).find(o => o.id === order.id) || order;
+      await save({ ...cur, ...fields });
     });
   }
 
@@ -1070,7 +1095,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           slack.alert(`sponsor-report:${order.id}`, `Send ${order.business} their click report (email is off)`,
             `${summary.map(([k, v]) => `${k}: ${v}`).join('\n')}\nEmail it to ${order.email}. Set RESEND_API_KEY so these go out on their own.`,
             `${siteUrl}/admin.html`);
-          await save({ ...order, report: stats, report_slack_sent: nowIso() });
+          await recordReport(order, { report: stats, report_slack_sent: nowIso() });
         }
         out.skipped++;
         continue;
@@ -1082,11 +1107,11 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         out.failed++;
         if (slack && !order.report_failed) {
           slack.alert(`sponsor-report-failed:${order.id}`, `Click report to ${order.business} didn't send`, 'It will be retried on the next run.', `${siteUrl}/admin.html`);
-          await save({ ...order, report_failed: nowIso() });
+          await recordReport(order, { report_failed: nowIso() });
         }
         continue;
       }
-      await save({ ...order, report: stats, report_sent: nowIso() });
+      await recordReport(order, { report: stats, report_sent: nowIso() });
       out.sent++;
       if (slack) {
         slack.notify({ channel: 'sales', title: `📊 Click report sent: ${order.business}`, fields: [...summary, ['To', order.email]] });
@@ -1189,7 +1214,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       if (addDays(place.lastDate, 1 + REPORT_CATCHUP_DAYS) < today) continue;
       const name = order.event.name || 'their event';
       if (!place.found) {
-        await save({ ...order, report_skipped: nowIso() });
+        await recordReport(order, { report_skipped: nowIso() });
         out.skipped++;
         if (slack) {
           slack.alert(`pick-report-skipped:${order.id}`, `No Vic's Pick report for ${order.business}: it never went live`,
@@ -1207,7 +1232,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           slack.alert(`pick-report:${order.id}`, `Send ${order.business} their Vic's Pick report (email is off)`,
             `${summary.map(([k, v]) => `${k}: ${v}`).join('\n')}\nEmail it to ${order.email}. Set RESEND_API_KEY so these go out on their own.`,
             `${siteUrl}/admin.html`);
-          await save({ ...order, report: stats, report_slack_sent: nowIso() });
+          await recordReport(order, { report: stats, report_slack_sent: nowIso() });
         }
         out.skipped++;
         continue;
@@ -1217,11 +1242,11 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         out.failed++;
         if (slack && !order.report_failed) {
           slack.alert(`pick-report-failed:${order.id}`, `Vic's Pick report to ${order.business} didn't send`, 'It will be retried on the next run.', `${siteUrl}/admin.html`);
-          await save({ ...order, report_failed: nowIso() });
+          await recordReport(order, { report_failed: nowIso() });
         }
         continue;
       }
-      await save({ ...order, report: stats, report_sent: nowIso() });
+      await recordReport(order, { report: stats, report_sent: nowIso() });
       out.sent++;
       if (slack) slack.notify({ channel: 'sales', title: `📊 Vic's Pick report sent: ${order.business}`, fields: [...summary, ['To', order.email]] });
     }
@@ -1326,11 +1351,20 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
   // can deliver an event twice at once (both would fulfil a pending order),
   // and two weekly orders settling together must not both pass the
   // "is this week already live?" check below.
-  function processEvent(event) {
-    return withBookingLock(() => handleEvent(event));
+  // Emails the event calls for are queued in `mail` and sent after the lock
+  // is released: a slow Resend must not hold up checkouts and other
+  // webhooks. They never throw (createMailer), and a confirmation that
+  // didn't send is retried by retryConfirmations, so the webhook's answer
+  // doesn't depend on them.
+  async function processEvent(event) {
+    const mail = [];
+    await withBookingLock(() => handleEvent(event, mail));
+    for (const job of mail) {
+      try { await job(); } catch (err) { console.warn('[sponsors] post-webhook email failed:', err.message); }
+    }
   }
 
-  async function handleEvent(event) {
+  async function handleEvent(event, mail = []) {
     const obj = (event && event.data && event.data.object) || {};
     if (!supported) return;
     const list = await freshOrders();
@@ -1343,7 +1377,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         // the order is already paid, so finish the job instead of stopping.
         if (LIVE.has(order.status)) {
           if (order.kind === 'featured' && order.event && !order.submission_id) await fulfil(order);
-          else await sendConfirmation(order);
+          mail.push(() => sendConfirmation(order));
           return;
         }
         // 'cancelled': the buyer came back via cancel_url but paid anyway
@@ -1383,7 +1417,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
               'https://dashboard.stripe.com/payments');
           }
           if (mailer && mailer.enabled) {
-            await mailer.send(order.email, renderSponsorTooLate(order, { siteUrl, address: mailAddress }), `vic361-sponsor-late-${order.id}`);
+            mail.push(() => mailer.send(order.email, renderSponsorTooLate(order, { siteUrl, address: mailAddress }), `vic361-sponsor-late-${order.id}`));
           }
           return;
         }
@@ -1414,6 +1448,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         }
         await save(order);
         await fulfil(order);
+        mail.push(() => sendConfirmation(order));
         return;
       }
       case 'checkout.session.async_payment_failed': {
@@ -1809,22 +1844,37 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         const list = supported ? await store.listSponsorOrders() : [];
         const order = list.find(o => o.id === req.params.id);
         if (!order) return res.status(404).json({ ok: false, error: 'not-found' });
-        if (action === 'hide' && LIVE.has(order.status)) {
-          await save({ ...order, status: 'hidden', hidden_from: order.status });
-        } else if (action === 'restore' && order.status === 'hidden') {
-          const status = order.hidden_from || 'paid';
-          const conflict = LIVE.has(status) ? restoreConflict(order, list, nowFn()) : '';
-          if (conflict) return res.status(409).json({ ok: false, error: 'slot-taken', message: conflict });
-          await save({ ...order, status, hidden_from: null });
-        } else if (action === 'remove-logo' && order.sponsor && order.sponsor.logo) {
-          if (typeof store.deleteSponsorLogo === 'function') await store.deleteSponsorLogo(order.id);
-          const { logo: _gone, ...sponsor } = order.sponsor;
-          await save({ ...order, sponsor });
+        if (action === 'hide' || action === 'restore' || action === 'remove-logo') {
+          // Under the booking lock and on a fresh read, like webhooks: a
+          // refund or confirmation saved between the read above and this
+          // save would otherwise be overwritten with the older copy.
+          const out = await withBookingLock(async () => {
+            const fresh = await freshOrders();
+            const cur = fresh.find(o => o.id === order.id);
+            if (!cur) return { status: 404, body: { ok: false, error: 'not-found' } };
+            if (action === 'hide' && LIVE.has(cur.status)) {
+              await save({ ...cur, status: 'hidden', hidden_from: cur.status });
+            } else if (action === 'restore' && cur.status === 'hidden') {
+              const status = cur.hidden_from || 'paid';
+              const conflict = LIVE.has(status) ? restoreConflict(cur, fresh, nowFn()) : '';
+              if (conflict) return { status: 409, body: { ok: false, error: 'slot-taken', message: conflict } };
+              await save({ ...cur, status, hidden_from: null });
+            } else if (action === 'remove-logo' && cur.sponsor && cur.sponsor.logo) {
+              if (typeof store.deleteSponsorLogo === 'function') await store.deleteSponsorLogo(cur.id);
+              const { logo: _gone, ...sponsor } = cur.sponsor;
+              await save({ ...cur, sponsor });
+            } else {
+              return { status: 400, body: { ok: false, error: 'bad-action' } };
+            }
+            return null;
+          });
+          if (out) return res.status(out.status).json(out.body);
         } else if (action === 'edit' && order.kind === 'weekly' && EDITABLE.has(order.status)) {
           const out = await withBookingLock(() => editWeekly(order, req.body || {}));
           if (out.errors) return res.status(400).json({ ok: false, error: 'invalid', errors: out.errors, message: Object.values(out.errors).join(' ') });
-          // A double-booked sponsor's first confirmation (locked: it saves the order).
-          if (out.moved) await withBookingLock(() => sendConfirmation(out.order));
+          // A double-booked sponsor's first confirmation, sent after the
+          // edit's lock is released (sendConfirmation records it under one).
+          if (out.moved) await sendConfirmation(out.order);
         } else {
           return res.status(400).json({ ok: false, error: 'bad-action' });
         }

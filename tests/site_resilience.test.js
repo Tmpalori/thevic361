@@ -214,6 +214,22 @@ describe('editing an edited event', () => {
     expect(JSON.stringify(admin)).not.toContain('7:00 PM');
   });
 
+  it('the second correction shows after a Save & Publish stored the edited shape', async () => {
+    await start();
+    const jazz = { date: '2026-10-10', name: 'Jazz Nite', venue: 'La Cantina', time: '7:00 PM', description: 'Live jazz.' };
+    await post('/api/admin/publish-events', { events: [jazz] });
+    await post('/api/admin/event-edits', { original_key: key(jazz), payload: { ...jazz, name: 'Jazz Night' } });
+    // Save & Publish sends what the admin sees: the edited shape.
+    await post('/api/admin/publish-events', { events: [{ ...jazz, name: 'Jazz Night' }] });
+    const r = await post('/api/admin/event-edits', { original_key: '2026-10-10|Jazz Night|La Cantina', payload: { ...jazz, name: 'Jazz Night', time: '8:00 PM' } });
+    expect(r.status).toBe(200);
+    const feed = await (await get('/events.json')).json();
+    expect(feed.events.map(e => `${e.name} ${e.time}`)).toEqual(['Jazz Night 8:00 PM']);
+    const edits = [{ original_key: key(jazz), payload: { ...jazz, name: 'Jazz Night' } }];
+    expect(resolveEditKey(edits, '2026-10-10|Jazz Night|La Cantina', new Set(['2026-10-10|Jazz Night|La Cantina']))).toBe('2026-10-10|Jazz Night|La Cantina');
+    expect(resolveEditKey(edits, '2026-10-10|Jazz Night|La Cantina', new Set([key(jazz)]))).toBe(key(jazz));
+  });
+
   it('rows already stored under an edited key still apply (chained)', () => {
     const raw = [{ date: '2026-10-10', name: 'Jazz Nite', venue: 'V', time: '7:00 PM' }];
     const edits = [
@@ -272,6 +288,35 @@ describe('same-name pages are numbered the same whatever the order', () => {
     const pageOf = (list, v) => list.find(e => e.venue === v).page;
     expect(pageOf(withPages([a, b]), 'Vida Cafe')).toBe(pageOf(withPages([b, a]), 'Vida Cafe'));
     expect(pageOf(withPages([a, b]), 'Public Library')).toBe('/events/2026-10-10-bookish-society-book-club');
+  });
+
+  it('a page already handed out stays with its event when a newcomer sorts first', () => {
+    const a = { date: '2026-10-07', name: 'Pickleball Games', venue: 'Youth Sports Complex', time: '6:00 PM' };
+    const b = { date: '2026-10-07', name: 'Pickleball Games', venue: 'Victoria Public Library', time: '6:00 PM' };
+    const c = { date: '2026-10-07', name: 'Pickleball Games', venue: 'Adult Center', time: '6:00 PM' };
+    const pageOf = (list, v) => list.find(e => e.venue === v).page;
+    const out = withPages([{ ...a, _page: '/events/2026-10-07-pickleball-games' }, b, { ...c, _page: '/events/2026-10-07-pickleball-games-3' }]);
+    expect(pageOf(out, 'Youth Sports Complex')).toBe('/events/2026-10-07-pickleball-games');
+    expect(pageOf(out, 'Victoria Public Library')).toBe('/events/2026-10-07-pickleball-games-2');
+    expect(pageOf(out, 'Adult Center')).toBe('/events/2026-10-07-pickleball-games-3');
+    expect(out.some(e => '_page' in e)).toBe(false);
+    // A reservation for another base (renamed) is ignored.
+    expect(pageOf(withPages([{ ...b, _page: '/events/2026-10-07-pickle' }, a]), 'Victoria Public Library')).toBe('/events/2026-10-07-pickleball-games');
+  });
+
+  it('keeps the first event on its URL across publishes, end to end', async () => {
+    await start();
+    const a = { date: '2026-10-10', name: 'Pickleball Games', venue: 'Youth Sports Complex', time: '6:00 PM' };
+    const b = { date: '2026-10-10', name: 'Pickleball Games', venue: 'Victoria Public Library', time: '6:00 PM' };
+    await post('/api/admin/publish-events', { events: [a] });
+    await settle();
+    await post('/api/admin/publish-events', { events: [a, b] });
+    await settle();
+    const live = (await (await get('/events.json', { Accept: 'application/json' })).json()).events;
+    expect(live.find(e => e.venue === 'Youth Sports Complex').page).toBe('/events/2026-10-10-pickleball-games');
+    expect(live.find(e => e.venue === 'Victoria Public Library').page).toBe('/events/2026-10-10-pickleball-games-2');
+    const page = await (await get('/events/2026-10-10-pickleball-games')).text();
+    expect(page).toContain('Youth Sports Complex');
   });
 });
 

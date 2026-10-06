@@ -66,9 +66,20 @@ import yaml
 _WARNINGS = []
 
 
+# A connect/SSL/proxy failure puts the request URL in requests' exception
+# text, and warnings land in collection_metadata.json, which the bot commits
+# to the public repo. Apify now gets its token in a header, but mask any
+# secret-looking query value anyway so a future URL-keyed API can't leak.
+_URL_SECRET_RE = re.compile(r"([?&](?:token|key|api_key)=)[^&\s)'\"]+", re.I)
+
+
+def _redact_secrets(text):
+    return _URL_SECRET_RE.sub(r"\1***", text)
+
+
 def _annotate(kind, message, tags):
     detail = " ".join(f"{k}={v}" for k, v in tags.items())
-    text = f"{message} ({detail})" if detail else str(message)
+    text = _redact_secrets(f"{message} ({detail})" if detail else str(message))
     _WARNINGS.append(text.replace("\r", " ").replace("\n", " "))
     # Annotations end at a newline; keep it on one line.
     print(f"::{kind}::{text}".replace("\r", " ").replace("\n", " "), flush=True)
@@ -624,6 +635,9 @@ def fetch_city_calendar(days_ahead=7):
                 detail_url = f"https://www.victoriatx.gov/Calendar.aspx?EID={eid}"
                 detail_resp = requests.get(detail_url, headers=HEADERS, timeout=TIMEOUT)
                 if detail_resp.status_code != 200:
+                    # Partial, not ok: the event on this page isn't gone,
+                    # so auto-publish mustn't count a miss for it.
+                    _mark_partial("city_calendar", f"EID {eid} HTTP {detail_resp.status_code}")
                     continue
                 detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
 
@@ -750,7 +764,8 @@ def fetch_city_calendar(days_ahead=7):
                     "url": detail_url,
                 })
 
-            except Exception:
+            except Exception as e:
+                _mark_partial("city_calendar", f"EID {eid} failed ({type(e).__name__})")
                 continue
 
         print(f"  [City Calendar] Extracted {len(events)} dated events")
@@ -762,6 +777,25 @@ def fetch_city_calendar(days_ahead=7):
 
 
 # ─── SOURCE: CHAMBER OF COMMERCE ─────────────────────────────────────────────
+
+CHAMBER_DESC_LIMIT = 150
+
+
+def _chamber_description(desc_el):
+    """GrowthZone's description block starts with a "Description" label, and
+    get_text(strip=True) glued it on ("DescriptionJoin Golden Crescent...").
+    When the AI review doesn't rewrite the event, this text goes live, so
+    drop the label and cut on a word, not mid-word."""
+    desc = re.sub(r"^\s*Description\b\s*:?\s*", "", desc_el.get_text(" ", strip=True))
+    desc = re.sub(r"\s+", " ", desc).strip()
+    if len(desc) <= CHAMBER_DESC_LIMIT:
+        return desc
+    cut = desc[:CHAMBER_DESC_LIMIT]
+    space = cut.rfind(" ")
+    if space > CHAMBER_DESC_LIMIT * 0.6:
+        cut = cut[:space]
+    return cut.rstrip(" ,;:-") + "…"
+
 
 def fetch_chamber_events(days_ahead=7):
     """Scrape events from Victoria Chamber of Commerce."""
@@ -789,6 +823,8 @@ def fetch_chamber_events(days_ahead=7):
             try:
                 detail_resp = requests.get(detail_url, headers=HEADERS, timeout=TIMEOUT)
                 if detail_resp.status_code != 200:
+                    # Same as the city calendar: a failed page isn't a gone event.
+                    _mark_partial("chamber", f"detail page HTTP {detail_resp.status_code}")
                     continue
                 ds = BeautifulSoup(detail_resp.text, "html.parser")
 
@@ -869,7 +905,7 @@ def fetch_chamber_events(days_ahead=7):
                 desc = ""
                 desc_el = ds.select_one("[class*='description'], .gz-details-description, .event-description")
                 if desc_el:
-                    desc = desc_el.get_text(strip=True)[:150]
+                    desc = _chamber_description(desc_el)
 
                 events.append({
                     "date": event_date,
@@ -883,7 +919,8 @@ def fetch_chamber_events(days_ahead=7):
                     "url": detail_url,
                 })
 
-            except Exception:
+            except Exception as e:
+                _mark_partial("chamber", f"detail page failed ({type(e).__name__})")
                 continue
 
         print(f"  [Chamber] Extracted {len(events)} dated events")
@@ -942,6 +979,9 @@ def fetch_library_events(days_ahead=7):
             resp.raise_for_status()
         except Exception as e:
             print(f"  [Library] Week {cur} fetch error: {e}")
+            # Partial: that week's events aren't gone, and an "ok" run would
+            # retire them after two misses.
+            _mark_partial("library", f"week {cur} failed")
             cur = cur + timedelta(days=7)
             continue
 
@@ -1783,6 +1823,7 @@ def enrich_thin_events(events, cache_path=None, post=None, get=None, today=None)
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             replies = list(pool.map(ask, batches))
+        checks = []
         for batch, data in zip(batches, replies):
             if not data:
                 continue  # not cached: try again next run
@@ -1796,11 +1837,28 @@ def enrich_thin_events(events, cache_path=None, post=None, get=None, today=None)
                 except (TypeError, ValueError):
                     continue
             for i, ev in enumerate(batch, start=1):
-                item = answers.get(i) or {}
-                found = _verified_details({**item, "_name": ev.get("name")}, grounded, get=get) if item else {}
-                cache[_enrich_key(ev)] = {"checked": today_s, "found": found}
-                if found and _apply_enrichment(ev, found):
-                    filled += 1
+                checks.append((ev, answers.get(i) or {}, grounded))
+
+        # Each answer costs up to two 10-second page checks; one after another
+        # for 24 events, a run that reached this step near the deadline could
+        # pass the workflow's step timeout before candidates.json is written.
+        # So check in parallel and start no new check past the deadline.
+        def verify(job):
+            ev, item, grounded = job
+            if not item:
+                return {}
+            if past_deadline():
+                return None
+            return _verified_details({**item, "_name": ev.get("name")}, grounded, get=get)
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(verify, checks))
+        for (ev, _, _), found in zip(checks, results):
+            if found is None:
+                continue  # not checked: not cached, so it's tried next run
+            cache[_enrich_key(ev)] = {"checked": today_s, "found": found}
+            if found and _apply_enrichment(ev, found):
+                filled += 1
 
     if cache_path:
         # Past events don't come back; keep the file small.
@@ -2976,12 +3034,26 @@ def cap_library_events(events, per_day=2, per_week=8):
 
 # ─── LOAD EXTRAS (new_and_notable + sponsor) ─────────────────────────────────
 
+def _yaml_dates_to_str(value):
+    """An unquoted `added: 2026-10-06` loads as a date, which json.dump
+    rejects. That crashed the candidates.json write after every paid scrape,
+    run after run, until someone fixed the YAML."""
+    import datetime as _dt
+    if isinstance(value, (_dt.date, _dt.datetime)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {k: _yaml_dates_to_str(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_yaml_dates_to_str(v) for v in value]
+    return value
+
+
 def load_extras(yaml_path):
     if not os.path.exists(yaml_path):
         return {"new_and_notable": [], "sponsor": None}
     try:
         with open(yaml_path, "r") as f:
-            data = yaml.safe_load(f) or {}
+            data = _yaml_dates_to_str(yaml.safe_load(f) or {})
         return {
             "new_and_notable": data.get("new_and_notable", []),
             "sponsor": data.get("sponsor"),
@@ -3149,6 +3221,7 @@ def fetch_jwelch_events(days_ahead=7):
 
         except Exception as e:
             print(f"  [J Welch Farms] Error on {check_date}: {e}")
+            _mark_partial("jwelch", f"{check_date} failed")
 
     print(f"  [J Welch Farms] {len(events)} events")
     return events
@@ -3550,9 +3623,15 @@ APIFY_RUN_TIMEOUT = 240  # seconds we'll wait for the run to finish
 APIFY_ACTOR_TIMEOUT = 220
 
 
-def _apify_run_url(actor, token):
+def _apify_run_url(actor):
+    # No token here: requests puts the URL in connect-error text, which
+    # reaches _WARNINGS and the committed collection_metadata.json.
     return (f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
-            f"?token={token}&timeout={APIFY_ACTOR_TIMEOUT}")
+            f"?timeout={APIFY_ACTOR_TIMEOUT}")
+
+
+def _apify_headers(token):
+    return {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
 
 # Process-local tombstone: once we see a 403 hard-limit, all later Apify calls
 # in this run skip immediately. Reset on each main() invocation.
@@ -3628,10 +3707,10 @@ def fetch_apify_eventbrite_events(days_ahead=14):
         "maxResults": _resolve_int_env("EVENTBRITE_MAX", 60),
         "proxyConfiguration": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]},
     }
-    url = _apify_run_url(APIFY_EVENTBRITE_ACTOR, token)
+    url = _apify_run_url(APIFY_EVENTBRITE_ACTOR)
     try:
         resp = requests.post(url, json=payload, timeout=APIFY_RUN_TIMEOUT,
-                             headers={"Content-Type": "application/json"})
+                             headers=_apify_headers(token))
         if resp.status_code >= 400:
             print(f"  [Eventbrite] HTTP {resp.status_code}: {resp.text[:300]}")
             if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
@@ -3711,10 +3790,10 @@ def fetch_apify_eventbrite_events(days_ahead=14):
 def _run_apify_search(actor, payload, token):
     """Run an Apify actor synchronously; return its items, or None on failure."""
     global _APIFY_LIMIT_TRIPPED
-    url = _apify_run_url(actor, token)
+    url = _apify_run_url(actor)
     try:
         resp = requests.post(url, json=payload, timeout=APIFY_RUN_TIMEOUT,
-                             headers={"Content-Type": "application/json"})
+                             headers=_apify_headers(token))
         if resp.status_code >= 400:
             print(f"  [Apify FB] {actor} HTTP {resp.status_code}: {resp.text[:300]}")
             if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
@@ -4165,11 +4244,12 @@ Posts:
 {posts_blob}
 
 Return ONLY a JSON array of upcoming events mentioned in these posts. Each object:
-{{"date":"YYYY-MM-DD","weekday":"Friday","recurring":true_or_false,"name":"Event Name","time":"7:00 PM or empty string","venue":"Where it happens if NOT at {venue_name} itself, else empty string","description":"One short sentence or empty string","free":true_or_false,"source_post_index":N}}
+{{"date":"YYYY-MM-DD","weekday":"Friday","recurring":true_or_false,"name":"Event Name","time":"7:00 PM or empty string","venue":"Where it happens if NOT at {venue_name} itself, else empty string","description":"One short sentence or empty string","free":true_or_false,"source_post_index":N,"starts":"YYYY-MM-DD or empty string","ends":"YYYY-MM-DD or empty string"}}
 
 Rules:
 - "weekday" is the day of the week the post gives for the event (e.g. "Thursday"). Copy it from the post; don't work it out from a date.
 - Recurring events the post says happen EVERY week ("every Wednesday", "live music every Friday & Saturday", "Trivia Tuesdays", "brunch on Sundays"): emit ONE object per weekday with "recurring": true and that "weekday". Leave "date" empty; dates are filled in later. A 20-day-old post saying "Live music every Friday" still counts.
+- "starts" and "ends" are only for recurring events with a stated first or last date ("Starting Oct 16, karaoke every Friday" → "starts":"2026-10-16"; "every Saturday in October" → "starts" the 1st, "ends" the 31st). Leave them empty when the post gives no limit, and on one-time events.
 - Everything else is a one-time event: "recurring": false, with its ACTUAL "date" between {today_str} and {end_str}, regardless of when the post was made.
 - A dated schedule for one particular week ("This week @ the farm: Sept 24 bingo, Sept 25 music") lists one-time events for those dates only. Never carry those dates forward to later weeks; if the dates are before {today_str}, skip them (but keep any "every week" line in the same post as recurring).
 - For relative dates ("this Friday", "tomorrow", "next Saturday"), resolve them against the post's own posted-on date — then check the resolved date is in the window.
@@ -4277,7 +4357,10 @@ def _post_event_dates(r, window_start, window_end):
     music every Friday & Saturday" post came back as bingo on Mondays and
     music on Sundays. So the model only reports the weekday the post states,
     and the dates come from here:
-      - recurring (every week): every matching weekday in the window.
+      - recurring (every week): every matching weekday in the window, clipped
+        to the series' "starts"/"ends" when the post gives them, so "Starting
+        Oct 16, karaoke every Friday" doesn't list Oct 9 (post events never
+        retire, so a wrong date stays up until it passes).
       - one-time: the model's date, kept only if it's in the window and, when
         the model gave a weekday, actually falls on that weekday.
     """
@@ -4286,8 +4369,18 @@ def _post_event_dates(r, window_start, window_end):
     if r.get("recurring") is True:
         if dow is None:
             return []
-        out, d = [], window_start
-        while d <= window_end:
+        first, last = window_start, window_end
+        for key in ("starts", "ends"):
+            try:
+                bound = datetime.strptime(str(r.get(key) or "").strip(), "%Y-%m-%d").date()
+            except ValueError:
+                continue  # empty or unreadable: no limit that side
+            if key == "starts":
+                first = max(first, bound)
+            else:
+                last = min(last, bound)
+        out, d = [], first
+        while d <= last:
             if d.weekday() == dow:
                 out.append(d)
             d += timedelta(days=1)
@@ -4359,7 +4452,7 @@ def fetch_apify_facebook_posts(days_ahead=14):
     newer_than = (datetime.now().date() - timedelta(days=_POSTS_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
     print(f"  [Apify FB Posts] Pulling posts from {len(high_conf)} venues (since {newer_than})")
 
-    actor_run_url = _apify_run_url(APIFY_FB_POSTS_ACTOR, token)
+    actor_run_url = _apify_run_url(APIFY_FB_POSTS_ACTOR)
 
     venue_stats = []
     for i, venue in enumerate(high_conf):
@@ -4393,7 +4486,7 @@ def fetch_apify_facebook_posts(days_ahead=14):
                 actor_run_url,
                 json=payload,
                 timeout=APIFY_RUN_TIMEOUT,
-                headers={"Content-Type": "application/json"},
+                headers=_apify_headers(token),
             )
         except Exception as e:
             venue_stats.append(f"{venue_name}: ERROR ({type(e).__name__})")
@@ -4718,7 +4811,7 @@ def fetch_apify_instagram_posts(days_ahead=14):
         f"skipped low_tier={skipped_low_tier}, no_ig={skipped_no_ig})"
     )
 
-    actor_run_url = _apify_run_url(APIFY_IG_POSTS_ACTOR, token)
+    actor_run_url = _apify_run_url(APIFY_IG_POSTS_ACTOR)
 
     venue_stats = []
     n_http_errors = 0
@@ -4755,7 +4848,7 @@ def fetch_apify_instagram_posts(days_ahead=14):
                 actor_run_url,
                 json=payload,
                 timeout=APIFY_RUN_TIMEOUT,
-                headers={"Content-Type": "application/json"},
+                headers=_apify_headers(token),
             )
         except Exception as e:
             n_request_errors += 1
@@ -5047,7 +5140,11 @@ def main():
     global _NOTABLE_FETCHED
     _NOTABLE_FETCHED = False
     notable_ran = False
-    if not args.skip_web:
+    if past_deadline():
+        # Up to 90 s of search plus page checks; notable_ran stays False, so
+        # the live box is left as it is.
+        print(f"\n✨ Skipping New & Notable: past the {COLLECT_DEADLINE_MIN}-minute deadline")
+    elif not args.skip_web:
         print("\n✨ New & Notable (Gemini)...")
         try:
             found = fetch_gemini_notable()
@@ -5098,8 +5195,12 @@ def main():
     # it is. extras.yaml's hand-written items ride along.
     if notable_ran:
         candidates_output["new_and_notable"] = extras["new_and_notable"]
-    with open(candidates_path, "w") as f:
+    # Written whole or not at all: a dump that fails halfway (an unexpected
+    # type) used to leave a truncated candidates.json behind.
+    tmp_path = candidates_path + ".tmp"
+    with open(tmp_path, "w") as f:
         json.dump(candidates_output, f, indent=2)
+    os.replace(tmp_path, candidates_path)
     print(f"  Candidates: {candidates_path}")
 
     # 8b. Write collection_metadata.json (per-source stats for the admin

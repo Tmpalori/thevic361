@@ -207,10 +207,37 @@ def _parse_answer(content):
     return parsed if isinstance(parsed, dict) else None
 
 
+class AIUnavailable(Exception):
+    """The OpenAI account itself can't answer (bad key, no credit, model
+    gone): every later call this run would fail the same way."""
+
+
+def _fatal_reason(e):
+    """Why no call can succeed until someone fixes the account, or None for
+    a one-off failure (timeout, 5xx, rate limit) the next run may get past."""
+    resp = getattr(e, "response", None)
+    status = getattr(resp, "status_code", None)
+    if status is None:
+        return None
+    try:
+        body = (resp.text or "")[:2000]
+    except Exception:  # noqa: BLE001 - the status alone decides then
+        body = ""
+    if status in (401, 403):
+        return f"OpenAI rejected the API key (HTTP {status})"
+    if status == 429 and "insufficient_quota" in body:
+        return "OpenAI credit is used up (insufficient_quota)"
+    if status in (400, 404) and "model" in body and ("not_found" in body or "does not exist" in body):
+        return f"the OpenAI model ({ce._openai_model()}) isn't available (HTTP {status})"
+    return None
+
+
 def ai_review_one(ev, api_key):
-    """The model's answer for one submission, or None (the call failed or
-    the answer was unusable; the next run tries again). One call each, so
-    one submission's text can never sway the verdict on another."""
+    """The model's answer for one submission, or None when the answer was
+    unusable (the next run tries again). One call each, so one submission's
+    text can never sway the verdict on another. A failed call raises (so
+    ai_review can tell a dead AI from one bad answer): AIUnavailable when
+    the account itself is broken."""
     try:
         content = ce._openai_chat(api_key, [
             {"role": "system", "content": PROMPT},
@@ -219,7 +246,10 @@ def ai_review_one(ev, api_key):
         ], max_tokens=1500, timeout=45)
     except Exception as e:  # noqa: BLE001 - nothing is decided; next run retries
         print(f"AI review failed: {e}")
-        return None
+        reason = _fatal_reason(e)
+        if reason:
+            raise AIUnavailable(reason) from e
+        raise
     answer = _parse_answer(content)
     if answer is None:
         print("AI review: unusable answer")
@@ -232,12 +262,29 @@ def ai_review_one(ev, api_key):
 AI_BUDGET_S = 360
 
 
-def ai_review(events, api_key, budget=AI_BUDGET_S):
-    """One answer dict (or None) per event, each from its own call."""
+def ai_review(events, api_key, budget=AI_BUDGET_S, status=None):
+    """One answer dict (or None) per event, each from its own call.
+    `status` (a dict) gets ai_down set when no call could get an answer:
+    the account is broken, or every call this run failed."""
+    status = {} if status is None else status
     start = time.monotonic()
-    out = []
+    out, tried, failed = [], 0, 0
     for e in events:
-        out.append(ai_review_one(e, api_key) if time.monotonic() - start < budget else None)
+        if status.get("ai_down") or time.monotonic() - start >= budget:
+            out.append(None)
+            continue
+        tried += 1
+        try:
+            out.append(ai_review_one(e, api_key))
+        except AIUnavailable as err:
+            # No point spending the rest of the run on calls that can't work.
+            status["ai_down"] = str(err)
+            out.append(None)
+        except Exception:  # noqa: BLE001 - this one waits for the next run
+            failed += 1
+            out.append(None)
+    if tried and failed == tried and not status.get("ai_down"):
+        status["ai_down"] = f"every OpenAI call failed this run ({failed})"
     return out
 
 
@@ -260,8 +307,11 @@ def cleaned_from(answer, ev):
     return out
 
 
-def decide(submissions, live, api_key, known=None):
-    """[{id, decision, reason, cleaned}] for the site, plus a printable log."""
+def decide(submissions, live, api_key, known=None, status=None):
+    """[{id, decision, reason, cleaned}] for the site, plus a printable log.
+    `status` (a dict) gets ai_down when submissions wait for an AI that
+    can't answer, so main() can alert instead of exiting quietly."""
+    status = {} if status is None else status
     known = known_domains(live) if known is None else known
     reviews, log, for_ai = [], [], []
     for s in submissions:
@@ -271,7 +321,9 @@ def decide(submissions, live, api_key, known=None):
             reviews.append({"id": s["id"], "decision": rule[0], "reason": rule[1]})
         else:
             for_ai.append((s, rule))
-    answers = ai_review([s["event"] for s, _ in for_ai], api_key) if for_ai and api_key else None
+    answers = ai_review([s["event"] for s, _ in for_ai], api_key, status=status) if for_ai and api_key else None
+    if for_ai and not api_key:
+        status["ai_down"] = "OPENAI_API_KEY is not set"
     if for_ai and answers is None:
         log.append(f"{len(for_ai)} left for the next run (no AI answer).")
     if answers is not None:
@@ -298,6 +350,36 @@ def decide(submissions, live, api_key, known=None):
     return reviews, log
 
 
+# A broken OpenAI account alerts once, then every ALERT_EVERY_S while it
+# lasts, not on every 15-minute run. The last alert time lives in a small
+# JSON file the workflow keeps in the Actions cache (AI_ALERT_STATE).
+ALERT_EVERY_S = 6 * 3600
+
+
+def ai_down_alert(state_path, down, now=None):
+    """True when this run should fail (and so ping Slack) for a dead AI
+    review. Without a state file every run with the AI down fails."""
+    now = time.time() if now is None else now
+    state = {}
+    if state_path:
+        try:
+            with open(state_path, encoding="utf-8") as f:
+                state = json.load(f) or {}
+        except (OSError, ValueError):
+            state = {}
+    last = state.get("alerted_at") if isinstance(state, dict) else None
+    alert = bool(down) and not (isinstance(last, (int, float)) and now - last < ALERT_EVERY_S)
+    new = {"alerted_at": now if alert else (last if down else None)}
+    if state_path and new != state:
+        try:
+            os.makedirs(os.path.dirname(state_path) or ".", exist_ok=True)
+            with open(state_path, "w", encoding="utf-8") as f:
+                json.dump(new, f)
+        except OSError as e:
+            print(f"Couldn't save the alert state: {e}")
+    return alert
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true", help="print decisions instead of sending them")
@@ -307,10 +389,23 @@ def main(argv=None):
         print("SUBMISSION_REVIEW_SECRET not set; skipping.")
         return 0
     headers = {**UA, "X-Cron-Secret": secret}
-    r = requests.get(f"{SITE}/api/submission-review/pending", headers=headers, timeout=30)
+    # The site being down or its database out (no answer, a timeout, a
+    # 5xx) is a warning, not a failure: this runs every 15 minutes, so a
+    # 3-hour outage would post a dozen identical "review failed" alerts on
+    # top of the site's own health and uptime alerts, and nothing is lost,
+    # since the next run picks the submissions up. A wrong secret (401)
+    # or a failed decisions POST still fails the run.
+    try:
+        r = requests.get(f"{SITE}/api/submission-review/pending", headers=headers, timeout=30)
+    except (requests.ConnectionError, requests.Timeout) as e:
+        print(f"::warning::The site didn't answer ({e}); trying again next run.")
+        return 0
     if r.status_code == 401:
         print("::error::The site rejected the secret (it must match in Railway and GitHub).")
         return 1
+    if r.status_code >= 500:
+        print(f"::warning::The site answered HTTP {r.status_code} (down or database out); trying again next run.")
+        return 0
     r.raise_for_status()
     submissions = r.json().get("submissions") or []
     if not submissions:
@@ -318,14 +413,32 @@ def main(argv=None):
         return 0
     # ?all=1 includes events past their day's limit: still live (own page,
     # guides), so a submission of one is "already listed", not new.
-    live = requests.get(f"{SITE}/events.json?all=1", headers=UA, timeout=30).json().get("events") or []
-    reviews, log = decide(submissions, live, os.environ.get("OPENAI_API_KEY", "").strip())
+    try:
+        lr = requests.get(f"{SITE}/events.json?all=1", headers=UA, timeout=30)
+        lr.raise_for_status()
+        live = lr.json().get("events") or []
+    except (requests.RequestException, ValueError) as e:
+        # Without the live list, copies of listed events can't be caught.
+        print(f"::warning::Couldn't read the live events ({e}); trying again next run.")
+        return 0
+    status = {}
+    reviews, log = decide(submissions, live, os.environ.get("OPENAI_API_KEY", "").strip(), status=status)
     for line in log:
         print(line)
     for rv in reviews:
         print(f"{rv['decision']}: {rv['id']} {rv.get('reason') or ''} {json.dumps(rv.get('cleaned') or {})}")
+    # Submissions are waiting and the AI can't answer: without this the run
+    # exits 0 every 15 minutes and nobody hears the review has stopped.
+    ai_rc = 0
+    if not args.dry_run:
+        down = status.get("ai_down")
+        if ai_down_alert(os.environ.get("AI_ALERT_STATE", "").strip(), down):
+            print(f"::error::The AI review can't run: {down}. Submissions are waiting; fix the key or credit.")
+            ai_rc = 1
+        elif down:
+            print(f"::warning::The AI review is still down ({down}); already alerted.")
     if args.dry_run or not reviews:
-        return 0
+        return ai_rc
     r = requests.post(f"{SITE}/api/submission-review", headers=headers, json={"reviews": reviews}, timeout=120)
     body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
     if not r.ok:
@@ -335,7 +448,7 @@ def main(argv=None):
     if body.get("published") is False:
         print("::error::Approved, but publishing failed (see Slack).")
         return 1
-    return 0
+    return ai_rc
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@
  * `hidden_restored`, so the next check doesn't hide it again.
  *
  * Safety: the hide endpoint needs the shared secret, only hides events that
- * are live and upcoming, and refuses more than MAX_PER_RUN at once, so a bad
+ * are live and upcoming, never hides a paid Vic's Pick, and refuses more than MAX_PER_RUN at once, so a bad
  * rule can't empty the week.
  */
 
@@ -111,6 +111,11 @@ export function registerEventCheck(app, { store, requireAdmin, nowFn, secret, lo
         const ev = PAGE_RE.test(page) ? visible.find(e => e.page === page) : null;
         if (!ev || ev.date < today) { skipped.push({ page, why: 'not-live' }); continue; }
         if (restored.has(ev[OKEY])) { skipped.push({ page, why: 'restored-by-admin' }); continue; }
+        // A paid Vic's Pick (featured, not an editor's pick) was sold and
+        // approved by a person; the check reports it to sales instead.
+        // Guarded here too so an older script or a hand-made call can't
+        // pull a listing someone paid for.
+        if (ev.featured && !ev.editor_pick) { skipped.push({ page, why: 'paid-pick' }); continue; }
         if (add.some(a => a.key === ev[OKEY])) continue;
         const { [OKEY]: key, ...shown } = ev;
         add.push({ key, shown_key: eventKeyOf(shown), page, name: ev.name, date: ev.date, venue: ev.venue || '', reason, at: nowFn().toISOString() });
