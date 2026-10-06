@@ -522,15 +522,6 @@ events:
     url: ""
 
   - date: "2026-10-10"
-    name: "CMC Run Against Cancer 5K"
-    time: ""
-    venue: "Citizens Medical Center"
-    description: "Citizens Medical Center's 5K. Registration and details online."
-    icons: [outdoors, community]
-    free: false
-    url: ""
-
-  - date: "2026-10-10"
     name: "Wags-O-Ween Pet Event"
     time: "4:00 PM – 6:00 PM"
     venue: "Riverside Bark Park"
