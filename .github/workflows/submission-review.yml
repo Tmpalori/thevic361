@@ -1,0 +1,54 @@
+# Submission review — the AI looks at new free event submissions
+# (scripts/review_submissions.py → server/submissionReview.js): tidies the
+# name, description and icons, publishes the good ones, turns away spam and
+# church events, and leaves anything doubtful in the admin queue with a
+# reason. One Slack message per run that decided something.
+#
+# Needs SUBMISSION_REVIEW_SECRET (or EVENT_CHECK_SECRET / NEWSLETTER_CRON_SECRET)
+# set the same in Railway and here, and OPENAI_API_KEY. Set the
+# SUBMISSION_AUTOAPPROVE Railway variable to 0 to have it only flag.
+#
+# When: every 15 minutes (GitHub may run it a little late), or by hand.
+
+name: Submission Review
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: submission-review
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Review new submissions
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          SUBMISSION_REVIEW_SECRET: ${{ secrets.SUBMISSION_REVIEW_SECRET || secrets.EVENT_CHECK_SECRET || secrets.NEWSLETTER_CRON_SECRET }}
+        run: python3 scripts/review_submissions.py
+
+      - name: Tell Slack it failed
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
+        run: python3 scripts/slack_notify.py "🚨 Submission review failed" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

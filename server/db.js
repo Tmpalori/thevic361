@@ -53,6 +53,14 @@ function nowIso() {
 // Normalize a payload into the canonical event shape used by the rest of the
 // site so admin promotion is a straight copy. Trims strings to sane lengths
 // (defense-in-depth on top of route validation).
+// The public copy of an approved submission: the submitter's name and
+// phone stay in the review queue, never in the published list.
+export function withoutSubmitter(ev) {
+  const out = {};
+  for (const [k, v] of Object.entries(ev || {})) if (!k.startsWith('submitter_')) out[k] = v;
+  return out;
+}
+
 export function normalizePayload(input) {
   const s = (v, max = 500) => {
     if (v == null) return '';
@@ -440,6 +448,8 @@ class PgStore {
             review_history JSONB NOT NULL DEFAULT '[]'::jsonb
           );
         `);
+        // The AI submission review's decision (server/submissionReview.js).
+        await this.pool.query('ALTER TABLE event_submissions ADD COLUMN IF NOT EXISTS ai_review JSONB');
         await this.pool.query(`
           CREATE INDEX IF NOT EXISTS event_submissions_status_idx
             ON event_submissions(status);
@@ -555,7 +565,8 @@ class PgStore {
       user_agent: r.user_agent,
       payload: r.payload,
       admin_notes: r.admin_notes,
-      review_history: r.review_history || []
+      review_history: r.review_history || [],
+      ai_review: r.ai_review || null
     };
   }
 
@@ -597,12 +608,12 @@ class PgStore {
   async update(id, patch) {
     await this.ready();
     const fields = ['status', 'source', 'submitter_kind', 'submitter_name',
-      'submitter_email', 'admin_notes', 'payload', 'review_history'];
+      'submitter_email', 'admin_notes', 'payload', 'review_history', 'ai_review'];
     const sets = [];
     const args = [];
     for (const f of fields) {
       if (patch[f] !== undefined) {
-        args.push(f === 'review_history' || f === 'payload' ? JSON.stringify(patch[f]) : patch[f]);
+        args.push(['review_history', 'payload', 'ai_review'].includes(f) ? JSON.stringify(patch[f]) : patch[f]);
         sets.push(`${f} = $${args.length}`);
       }
     }

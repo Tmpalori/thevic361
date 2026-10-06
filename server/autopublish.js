@@ -29,7 +29,8 @@ import { sameEvent } from './sponsors.js';
 // Internal collector fields (_source, _also_from...) aren't public.
 function publicFields(ev) {
   const out = {};
-  for (const [k, v] of Object.entries(ev || {})) if (!k.startsWith('_')) out[k] = v;
+  // Underscore fields are internal; submitter_* is the submitter's contact.
+  for (const [k, v] of Object.entries(ev || {})) if (!k.startsWith('_') && !k.startsWith('submitter_')) out[k] = v;
   return out;
 }
 
@@ -71,7 +72,7 @@ export function mergeNotable(fresh, prior, today) {
 const REPLACE_MIN_RATIO = 0.6;
 
 export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, slack = null, siteUrl, archiveEvents = () => {} }) {
-  async function run({ force = false } = {}) {
+  async function run({ force = false, quiet = false } = {}) {
     let candidates;
     try {
       candidates = await readJsonFile(candidatesFile);
@@ -169,7 +170,7 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
 
     const result = { ok: true, published: events.length, added: added.length, kept: kept.length, retired: retired.length, skipped_removed: skippedRejected, from };
     console.log('[auto-publish]', JSON.stringify(result));
-    if (slack) {
+    if (slack && !quiet) {
       slack.notify({
         title: `🗓️ Published ${events.length} events automatically`,
         fields: [['New this run', added.length], ['Kept from before', kept.length],
