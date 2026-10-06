@@ -39,11 +39,18 @@ describe('coming up', () => {
     ]);
   });
 
-  it('caps the list at 8', () => {
-    const many = withPages(Array.from({ length: 12 }, (_, i) => ({
+  it('shows 4, folds the rest behind Show more, and caps at 20', () => {
+    const many = withPages(Array.from({ length: 25 }, (_, i) => ({
       date: `2026-11-${String(i + 1).padStart(2, '0')}`, name: `Fest ${i}`, venue: 'X', big: true
     })));
-    expect(comingUpEvents(many, TODAY)).toHaveLength(8);
+    expect(comingUpEvents(many, TODAY)).toHaveLength(20);
+    const html = renderComingUp(many, TODAY);
+    const [shown, folded] = html.split('<details class="coming-more">');
+    expect((shown.match(/class="coming-item"/g) || []).length).toBe(4);
+    expect((folded.match(/class="coming-item"/g) || []).length).toBe(16);
+    expect(folded).toContain('<span class="when-closed">Show 16 more</span>');
+    const few = renderComingUp(many.slice(0, 3), TODAY);
+    expect(few).not.toContain('coming-more');
   });
 
   it('renders cards with date, name and a nearby label, escaped', () => {

@@ -1383,6 +1383,12 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 }
 .coming-name { font-family: var(--font-display); font-weight: 700; font-size: var(--text-base); line-height: 1.25; margin-top: 4px; }
 .coming-where { font-size: var(--text-sm); color: var(--color-text-muted); }
+.coming-more { margin-top: var(--space-3); }
+.coming-more > summary { display: inline-flex; list-style: none; cursor: pointer; }
+.coming-more > summary::-webkit-details-marker { display: none; }
+.coming-more > .coming-list { margin-top: var(--space-3); }
+.coming-more .when-open, .coming-more[open] .when-closed { display: none; }
+.coming-more[open] .when-open { display: inline; }
 
 .empty-state { padding: var(--space-4) var(--space-5); font-style: normal; color: var(--color-text-muted); }
 .empty-state a { font-weight: 800; }

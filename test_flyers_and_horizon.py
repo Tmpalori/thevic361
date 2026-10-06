@@ -190,3 +190,116 @@ def test_tags_survive_a_better_ranked_scraped_copy():
                "description": "Holiday fun", "url": "https://x", "_source": "city_calendar"}
     merged = ce._merge_pair(local, scraped)
     assert merged["big"] is True and merged["town"] == "Victoria"
+
+
+# ─── Gap filling ────────────────────────────────────────────────────────────
+
+def _gemini_reply(items, hosts=("facebook.com",)):
+    r = MagicMock()
+    r.status_code = 200
+    r.json.return_value = {"candidates": [{
+        "content": {"parts": [{"text": json.dumps(items)}]},
+        "groundingMetadata": {"groundingChunks": [{"web": {"title": h}} for h in hosts]},
+    }]}
+    return r
+
+
+def _page(text, url):
+    r = MagicMock()
+    r.status_code, r.text, r.url = 200, text, url
+    return r
+
+
+def _thin(n=2, name="Mercy House Trunk or Treat"):
+    return {"date": d(n), "name": name, "time": "", "venue": "Mercy House", "address": "",
+            "description": "Trunk or treat.", "url": "", "icons": ["family"], "_source": "local_events"}
+
+
+def test_enrich_fills_blanks_from_a_cited_page_and_caches(monkeypatch, tmp_path):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    cache = tmp_path / "enrichment_cache.json"
+    ev = _thin()
+    posts = []
+
+    def post(url, **kw):
+        posts.append(kw["json"])
+        return _gemini_reply([{"id": 1, "source": "https://facebook.com/mercyhouse/posts/1",
+                               "url": "https://facebook.com/events/123", "time": "4:30 PM – 6:00 PM",
+                               "address": "4409 John Stockbauer Dr.",
+                               "description": "Costumes welcome; candy, games and a bounce house for kids 12 and under. Free."}])
+
+    get = lambda u: _page("Mercy House Trunk or Treat this Friday", u)
+    out = ce.enrich_thin_events([ev], cache_path=str(cache), post=post, get=get)
+    assert out[0]["time"] == "4:30 PM – 6:00 PM"
+    assert out[0]["address"] == "4409 John Stockbauer Dr."
+    assert out[0]["url"] == "https://facebook.com/events/123"
+    assert out[0]["description"].startswith("Costumes welcome")
+    assert "google_search" in json.dumps(posts[0]) and "Mercy House Trunk or Treat" in json.dumps(posts[0])
+
+    # Next run: the YAML gives the thin copy again; the cache fills it with no lookup.
+    again = ce.enrich_thin_events([_thin()], cache_path=str(cache), post=lambda *a, **k: pytest.fail("looked up twice"))
+    assert again[0]["time"] == "4:30 PM – 6:00 PM"
+
+
+def test_enrich_never_overwrites_and_needs_a_cited_source(monkeypatch, tmp_path):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    ev = _thin()
+    ev["time"] = "5:00 PM"
+    ev["description"] = "A long hand-written description that is plenty to go on for the reader, really."
+    reply = [{"id": 1, "source": "https://randomblog.example/post", "time": "9:00 PM", "address": "1 Fake St",
+              "description": "Made up details that no cited page supports at all here."}]
+    out = ce.enrich_thin_events([ev], cache_path=str(tmp_path / "c.json"),
+                                post=lambda *a, **k: _gemini_reply(reply, hosts=("facebook.com",)))
+    assert out[0]["time"] == "5:00 PM"
+    assert out[0]["address"] == ""
+    assert out[0]["description"].startswith("A long hand-written")
+    cached = json.loads((tmp_path / "c.json").read_text())
+    assert list(cached.values())[0]["found"] == {}
+
+
+def test_enrich_rejects_bad_times_addresses_and_unrelated_links(monkeypatch, tmp_path):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    reply = [{"id": 1, "source": "https://facebook.com/x", "url": "https://facebook.com/events/999",
+              "time": "evening", "address": "Downtown somewhere", "description": "short"}]
+    get = lambda u: _page("A completely different page about bingo", u)
+    out = ce.enrich_thin_events([_thin()], cache_path=str(tmp_path / "c.json"),
+                                post=lambda *a, **k: _gemini_reply(reply), get=get)
+    assert out[0]["time"] == "" and out[0]["address"] == "" and out[0]["url"] == ""
+    assert out[0]["description"] == "Trunk or treat."
+
+
+def test_enrich_soonest_first_capped_and_retries_misses_later(monkeypatch, tmp_path):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setattr(ce, "ENRICH_MAX_PER_RUN", 3)
+    asked = []
+
+    def post(url, **kw):
+        asked.append(kw["json"]["contents"][0]["parts"][0]["text"])
+        return _gemini_reply([])
+
+    evs = [_thin(n, f"Event {n}") for n in (9, 2, 5, 1, 30)]
+    evs.append({**_thin(40, "Big Far Fest"), "big": True})
+    cache = tmp_path / "c.json"
+    ce.enrich_thin_events(evs, cache_path=str(cache), post=post)
+    text = "".join(asked)
+    assert "Event 1 on" in text and "Event 2 on" in text and "Event 5 on" in text
+    assert "Event 9" not in text and "Big Far Fest" not in text
+    # A miss isn't asked again within ENRICH_RETRY_DAYS.
+    asked.clear()
+    ce.enrich_thin_events([_thin(1, "Event 1")], cache_path=str(cache), post=post)
+    assert asked == []
+    later = date.today() + timedelta(days=ce.ENRICH_RETRY_DAYS + 1)
+    cache.write_text(json.dumps({f"{d(10)}|event 1": {"checked": d(0), "found": {}}}))
+    ce.enrich_thin_events([_thin(10, "Event 1")], cache_path=str(cache), post=post, today=later)
+    assert len(asked) == 1
+
+
+def test_enrich_off_without_key_and_prunes_past(monkeypatch, tmp_path):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    cache = tmp_path / "c.json"
+    cache.write_text(json.dumps({f"{d(-3)}|old": {"checked": d(-10), "found": {}},
+                                 f"{d(3)}|keep me": {"checked": d(0), "found": {"time": "7:00 PM"}}}))
+    out = ce.enrich_thin_events([_thin(3, "Keep Me")], cache_path=str(cache),
+                                post=lambda *a, **k: pytest.fail("no key, no lookup"))
+    assert out[0]["time"] == "7:00 PM"
+    assert list(json.loads(cache.read_text())) == [f"{d(3)}|keep me"]

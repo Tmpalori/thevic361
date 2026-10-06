@@ -1542,6 +1542,193 @@ def _parse_ai_json_array(content):
     return None
 
 
+# ─── GAP FILLING (Gemini + Google Search) ────────────────────────────────────
+#
+# Hand-added and post-extracted events often arrive thin: "Trunk or treat."
+# with no time or link (the Oct 2026 community list), so the page says little
+# and the AI review has nothing to work from. This looks each thin event up
+# with Google Search grounding and fills in only what's blank: time, street
+# address, a link, and a fuller description when the current one is a stub.
+#
+# Same trust rules as Gemini discovery: nothing is taken unless the answer
+# names a source page on a site Gemini actually cited, and a link must load
+# and name the event (or be on a cited site that blocks the check). Nothing
+# set by hand or by a venue is overwritten. Results are cached in
+# enrichment_cache.json (committed by weekly-collect.yml) so each event is
+# looked up once; a miss is retried after ENRICH_RETRY_DAYS. Soonest events
+# go first, ENRICH_MAX_PER_RUN per run. GEMINI_ENABLED=0 / ENRICH_ENABLED=0
+# turn it off.
+
+ENRICH_MAX_PER_RUN = 24
+ENRICH_BATCH = 6
+ENRICH_RETRY_DAYS = 7
+THIN_DESCRIPTION_CHARS = 70
+_TIME_RE = re.compile(r"^\d{1,2}(:\d{2})?\s*[AaPp]\.?[Mm]\.?(\s*[–—-]\s*\d{1,2}(:\d{2})?\s*[AaPp]\.?[Mm]\.?)?$")
+
+
+def _enrich_key(ev):
+    return f"{ev.get('date')}|{re.sub(r'[^a-z0-9]+', ' ', str(ev.get('name') or '').lower()).strip()}"
+
+
+def _is_thin(ev):
+    return (not ev.get("time") or not ev.get("url")
+            or len(str(ev.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS)
+
+
+def _enrich_prompt(batch):
+    lines = []
+    for i, ev in enumerate(batch, start=1):
+        town = ev.get("town") or "Victoria"
+        day = datetime.strptime(ev["date"], "%Y-%m-%d").strftime("%A %B %d, %Y")
+        known = "; ".join(f"{k}: {ev[k]}" for k in ("time", "venue", "address", "description", "url") if ev.get(k))
+        lines.append(f"[{i}] {ev.get('name')} on {day} in {town}, Texas. Known: {known or 'nothing else'}")
+    return (
+        "Use Google Search to find details for these local events. For each one, look for the event's own page "
+        "or the organizer's announcement (Facebook event or post, venue site, ticket page, official calendar).\n\n"
+        + "\n".join(lines) +
+        "\n\nReturn ONLY a JSON array, no prose, one object per event you found: "
+        '{"id": N, "source": the page that states these details, "url": the event\'s own page or "", '
+        '"time": "6:00 PM" or "6:00 PM – 8:00 PM" or "", "address": street address or "", '
+        '"description": 1-2 factual sentences from the page (what happens, who it is for, price or registration) or ""}.\n'
+        "Rules: only use a page about this event on this date (not a past year's). Leave any field you can't "
+        "confirm empty; never guess. Skip events you can't find. No search or category pages as url or source."
+    )
+
+
+def _load_enrich_cache(path):
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _apply_enrichment(ev, found):
+    """Fill blanks on ev from a cached/verified lookup. Returns True if changed."""
+    changed = False
+    if found.get("time") and not ev.get("time"):
+        ev["time"] = found["time"]
+        changed = True
+    if found.get("address") and not ev.get("address"):
+        ev["address"] = found["address"]
+        changed = True
+    if found.get("url") and not ev.get("url"):
+        ev["url"] = found["url"]
+        changed = True
+    if found.get("description") and len(str(ev.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS:
+        ev["description"] = found["description"]
+        changed = True
+    return changed
+
+
+def _verified_details(item, grounded, get=None):
+    """The fields from one Gemini answer we can trust, or {}."""
+    source = str(item.get("source") or "").strip()
+    url = str(item.get("url") or "").strip()
+    cited = lambda u: re.match(r"https?://", u) and not is_listing_url(u) and _host_matches(_host(u), grounded)
+    if not (cited(source) or cited(url)):
+        return {}
+    out = {}
+    time_str = _clean_text(item.get("time"))
+    if time_str and _TIME_RE.match(time_str):
+        out["time"] = time_str
+    address = _clean_text(item.get("address"))
+    if address and re.match(r"^\d+\s+\w", address) and len(address) <= 120:
+        out["address"] = address
+    desc = _strip_emojis(_clean_text(item.get("description")))
+    if len(desc) >= 30:
+        out["description"] = desc[:217].rstrip() + "…" if len(desc) > 220 else desc
+    if url and cited(url) and _page_mentions(url, item.get("_name"), get=get, unsure=True):
+        out["url"] = url
+    return out
+
+
+def enrich_thin_events(events, cache_path=None, post=None, get=None, today=None):
+    """Fill blank details on thin events from grounded search; see above."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    cache = _load_enrich_cache(cache_path) if cache_path else {}
+    today = today or now_central().date()
+    today_s = today.isoformat()
+    # Cached finds apply every run: the YAML or post they came from is
+    # re-read each time and doesn't carry them.
+    for ev in events:
+        hit = cache.get(_enrich_key(ev))
+        if hit and hit.get("found"):
+            _apply_enrichment(ev, hit["found"])
+
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    off = (os.environ.get("GEMINI_ENABLED", "1").strip().lower() in ("0", "false", "no")
+           or os.environ.get("ENRICH_ENABLED", "1").strip().lower() in ("0", "false", "no"))
+    todo = []
+    if key and not off:
+        retry_before = (today - timedelta(days=ENRICH_RETRY_DAYS)).isoformat()
+        for ev in sorted(events, key=lambda e: (e["date"] > _WINDOW_END.isoformat() and not e.get("big"), e["date"])):
+            if ev["date"] < today_s or not _is_thin(ev):
+                continue
+            hit = cache.get(_enrich_key(ev))
+            if hit and (hit.get("found") or str(hit.get("checked", "")) > retry_before):
+                continue
+            todo.append(ev)
+            if len(todo) >= ENRICH_MAX_PER_RUN:
+                break
+
+    filled = 0
+    if todo:
+        post = post or requests.post
+        model = os.environ.get("GEMINI_MODEL", "").strip() or _GEMINI_DEFAULT_MODEL
+        batches = [todo[i:i + ENRICH_BATCH] for i in range(0, len(todo), ENRICH_BATCH)]
+
+        def ask(batch):
+            body = {
+                "contents": [{"role": "user", "parts": [{"text": _enrich_prompt(batch)}]}],
+                "tools": [{"google_search": {}}],
+                "generationConfig": {"temperature": 0.1},
+            }
+            try:
+                resp = post(GEMINI_URL.format(model=model), json=body, timeout=90,
+                            headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+                return resp.json() if resp.status_code == 200 else None
+            except Exception as e:
+                print(f"  [Enrich] lookup failed: {e}")
+                return None
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            replies = list(pool.map(ask, batches))
+        for batch, data in zip(batches, replies):
+            if not data:
+                continue  # not cached: try again next run
+            cand = (data.get("candidates") or [{}])[0]
+            text = "".join(p.get("text", "") for p in ((cand.get("content") or {}).get("parts") or []))
+            grounded = _grounded_hosts(cand)
+            answers = {}
+            for item in _gemini_json_array(text):
+                try:
+                    answers[int(item.get("id"))] = item
+                except (TypeError, ValueError):
+                    continue
+            for i, ev in enumerate(batch, start=1):
+                item = answers.get(i) or {}
+                found = _verified_details({**item, "_name": ev.get("name")}, grounded, get=get) if item else {}
+                cache[_enrich_key(ev)] = {"checked": today_s, "found": found}
+                if found and _apply_enrichment(ev, found):
+                    filled += 1
+
+    if cache_path:
+        # Past events don't come back; keep the file small.
+        cache = {k: v for k, v in cache.items() if k[:10] >= today_s}
+        try:
+            with open(cache_path, "w") as f:
+                json.dump(dict(sorted(cache.items())), f, indent=1, ensure_ascii=False)
+                f.write("\n")
+        except OSError as e:
+            print(f"  [Enrich] couldn't save cache: {e}")
+    if todo or filled:
+        print(f"  [Enrich] looked up {len(todo)} thin events, filled in {filled}")
+    return events
+
+
 # ─── AI REVIEW (description + icons polish) ─────────────────────────────────
 #
 # What this does:
@@ -4499,6 +4686,11 @@ def main():
 
     # 6. Fill missing descriptions + URLs
     merged = drop_dead_links(merged)
+    # Look up missing times, links and descriptions before templates fill
+    # descriptions in (a template would make the event look complete).
+    if not args.skip_web:
+        print("\n🔎 Filling in thin events…")
+        merged = enrich_thin_events(merged, cache_path=os.path.join(args.local_dir, "enrichment_cache.json"))
     merged = fill_gaps(merged)
 
     # 7. AI review — polish descriptions + assign icons via OpenAI

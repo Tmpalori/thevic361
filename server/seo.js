@@ -1081,7 +1081,9 @@ export function renderNotFoundPage({ siteUrl, kind = 'page' }) {
 // `big` or it's a Vic's Pick. Server-rendered only; app.js re-renders the
 // week grid, not this.
 const COMING_UP_DAYS = 90;
-const COMING_UP_MAX = 8;
+const COMING_UP_MAX = 20;
+// The rest fold behind "Show more" so a busy season doesn't bury the page.
+const COMING_UP_SHOWN = 4;
 
 export function comingUpEvents(events, today) {
   const week = currentWeek(today);
@@ -1096,7 +1098,7 @@ export function comingUpEvents(events, today) {
 export function renderComingUp(events, today) {
   const list = comingUpEvents(events, today);
   if (!list.length) return '';
-  const items = list.map(ev => {
+  const card = ev => {
     const venue = placeText(ev).split(' · ')[0];
     // "Downtown Cuero · Nearby", not "Downtown Cuero · Nearby · Cuero".
     const nearby = !ev.town ? '' : venue.toLowerCase().includes(townOf(ev).toLowerCase()) ? 'Nearby' : `Nearby · ${townOf(ev)}`;
@@ -1106,11 +1108,17 @@ export function renderComingUp(events, today) {
       `<span class="coming-name">${escHtml(ev.name)}</span>` +
       (where ? `<span class="coming-where">${escHtml(where)}</span>` : '') +
       '</a></li>';
-  }).join('');
+  };
+  const first = list.slice(0, COMING_UP_SHOWN), rest = list.slice(COMING_UP_SHOWN);
+  const more = rest.length ? `
+        <details class="coming-more">
+          <summary class="btn btn--outline"><span class="when-closed">Show ${rest.length} more</span><span class="when-open">Show less</span></summary>
+          <ul class="coming-list" role="list">${rest.map(card).join('')}</ul>
+        </details>` : '';
   return `<section class="coming-up" id="coming-up" aria-labelledby="coming-up-heading">
         <h2 class="section-heading" id="coming-up-heading">Coming up</h2>
         <p class="coming-sub">Big events worth planning for.</p>
-        <ul class="coming-list" role="list">${items}</ul>
+        <ul class="coming-list" role="list">${first.map(card).join('')}</ul>${more}
       </section>`;
 }
 
