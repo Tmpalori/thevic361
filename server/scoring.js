@@ -54,7 +54,6 @@ const clamp = n => Math.max(0, Math.min(100, Math.round(n)));
 // One event's score. `venues` (buildVenues in guides.js) lets popular places
 // (tier HIGH) count; it's optional.
 export function scoreEvent(ev, { venues = [] } = {}) {
-  const text = `${ev.name || ''} ${ev.description || ''}`;
   let s = 50;
   const parts = [];
   const add = (n, why) => { if (n) { s += n; parts.push(`${n > 0 ? '+' : ''}${n} ${why}`); } };
@@ -68,8 +67,10 @@ export function scoreEvent(ev, { venues = [] } = {}) {
     if (ev.favorite === true) add(6, 'weekly favorite');
     else add(-12, 'weekly repeat');
   }
-  if (NICHE.test(text) && ev.big !== true) add(-12, 'niche or small group');
-  if (PROMO.test(text) && ev.big !== true) add(-10, 'store promo or deal');
+  // Name only: a description saying "hosted by The 1824 Club" or "kids eat
+  // free with a ticket" isn't a club meeting or a promo.
+  if (NICHE.test(ev.name || '') && ev.big !== true) add(-12, 'niche or small group');
+  if (PROMO.test(ev.name || '') && ev.big !== true) add(-10, 'store promo or deal');
 
   const icons = ev.icons || [];
   if (icons.includes('family')) add(4, 'family');
