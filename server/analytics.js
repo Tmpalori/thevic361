@@ -171,11 +171,16 @@ export function beaconRow(body, { ip, ua, secret, siteHost, now }) {
   return null;
 }
 
+// Rows may come pre-grouped from the store (PgStore.listTraffic), with `n`
+// raw rows each; raw rows count once.
+const weight = r => (Number(r.n) > 0 ? Number(r.n) : 1);
+const total = rows => rows.reduce((sum, r) => sum + weight(r), 0);
+
 function countBy(rows, keyFn, limit) {
   const m = new Map();
   for (const r of rows) {
     const k = keyFn(r);
-    if (k) m.set(k, (m.get(k) || 0) + 1);
+    if (k) m.set(k, (m.get(k) || 0) + weight(r));
   }
   return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([key, count]) => ({ key, count }));
 }
@@ -192,13 +197,13 @@ function aiSummary(views, crawls) {
   const asks = kind('ask');
   return {
     sent_visitors: uniqueVisitors(sent),
-    sent_views: sent.length,
+    sent_views: total(sent),
     sent_by: countBy(sent, r => r.ref_source, 10),
-    answer_reads: asks.length,
+    answer_reads: total(asks),
     answer_reads_by: countBy(asks, r => r.bot, 10),
     answer_pages: countBy(asks, r => r.path, 10),
-    search_crawls: kind('search').length,
-    training_crawls: kind('training').length
+    search_crawls: total(kind('search')),
+    training_crawls: total(kind('training'))
   };
 }
 
@@ -214,13 +219,19 @@ export function summarize(rows, { now, days = 30 }) {
   const window = (n) => {
     const from = addDays(today, -(n - 1));
     const v = views.filter(r => r.day >= from);
-    return { visitors: uniqueVisitors(v), views: v.length };
+    return { visitors: uniqueVisitors(v), views: total(v) };
   };
 
+  // One pass by day: filtering every row once per day was days x rows.
+  const byDay = new Map();
+  for (const r of views) {
+    if (!byDay.has(r.day)) byDay.set(r.day, []);
+    byDay.get(r.day).push(r);
+  }
   const daily = [];
   for (let d = start; d <= today; d = addDays(d, 1)) {
-    const v = views.filter(r => r.day === d);
-    daily.push({ day: d, visitors: uniqueVisitors(v), views: v.length });
+    const v = byDay.get(d) || [];
+    daily.push({ day: d, visitors: uniqueVisitors(v), views: total(v) });
   }
 
   return {

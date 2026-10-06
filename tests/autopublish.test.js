@@ -125,7 +125,7 @@ describe('auto-publish', () => {
     expect((await store.getPublished()).auto_publish.at).toBe(at);
   });
 
-  it('takes down auto-added events the new run no longer finds, but never hand-added or edited ones', async () => {
+  it('takes down auto-added events two runs no longer find, but never hand-added or edited ones', async () => {
     const key = ev => [ev.date, ev.name, ev.venue].join('|');
     const wrongBingo = { date: '2026-10-05', name: 'Bingo Night', time: '7:00 PM', venue: 'J Welch Farms' };
     const wrongMusic = { date: '2026-10-11', name: 'Live Music', time: '7:00 PM', venue: 'J Welch Farms' };
@@ -142,6 +142,14 @@ describe('auto-publish', () => {
     });
     await store.upsertEventEdit({ original_key: key(editedAuto), payload: { ...editedAuto, time: '8:00 PM' } });
 
+    // Keys from before sources were recorded: one miss isn't enough.
+    expect((await runNow()).retired).toBe(0);
+    expect((await store.getPublished()).auto_publish.missing).toEqual({ [key(wrongBingo)]: 1, [key(wrongMusic)]: 1 });
+    // (One more find keeps the run looking healthy now that run 1 added two.)
+    await fs.writeFile(path.join(tmpDir, 'candidates.json'), JSON.stringify({
+      ...CANDIDATES, last_updated: 'second run', events: [...CANDIDATES.events, { date: '2026-10-13', name: 'Extra Show', time: '7:00 PM', venue: 'Elsewhere' }]
+    }));
+    sent.length = 0;
     const r = await runNow();
     expect(r.retired).toBe(2);
     const names = (await live()).events.map(e => `${e.date} ${e.name}`);
@@ -183,8 +191,9 @@ describe('auto-publish', () => {
       extra: { autoPublish: true, autoPublishDelayMs: 0 }
     });
     await vi.waitFor(async () => expect((await store.getPublished()).auto_publish.rules).toBe(AUTO_PUBLISH_RULES), { timeout: 2000 });
-    expect((await live()).events.map(e => e.name)).not.toContain('Bingo Night');
-    expect((await store.getPublished()).auto_publish.rules).toBe(AUTO_PUBLISH_RULES);
+    // The re-run counts the first miss (one isn't enough to take it down).
+    expect((await store.getPublished()).auto_publish.missing).toEqual({ [[wrong.date, wrong.name, wrong.venue].join('|')]: 1 });
+    expect((await live()).events.map(e => e.name)).toContain('Bingo Night');
   });
 
   it("updates events it published with the collector's newer copy, never hand-made, edited, hidden or submitted ones", async () => {
@@ -402,5 +411,63 @@ describe('auto-publish with far-ahead hand-added events', () => {
     await runNow();
     const [live1] = (await live()).events;
     expect(live1).toMatchObject({ big: true, curated: true, town: 'Victoria' });
+  });
+});
+
+describe('auto-publish retires only reliable misses', () => {
+  const filler = Array.from({ length: 5 }, (_, i) => ({
+    date: '2026-10-08', name: `Library Program ${i}`, time: '10:00 AM', venue: `Room ${i}`, _source: 'library'
+  }));
+  const ok = { library: 'ok', allevents: 'ok', apify_instagram_posts: 'ok', gemini_search: 'ok' };
+  const write = (from, events, sources = ok) =>
+    fs.writeFile(path.join(tmpDir, 'candidates.json'), JSON.stringify({ last_updated: from, events: [...filler, ...events], sources }));
+  const names = async () => (await live()).events.map(e => e.name);
+  const comedy = { date: '2026-10-12', name: 'Comedy Night', time: '8:00 PM', venue: 'The Club', _source: 'allevents' };
+
+  it('never takes down an event found in posts or Gemini search', async () => {
+    const post = { date: '2026-10-10', name: 'Oktoberfest Party', time: '6:00 PM', venue: 'Some Bar', _source: 'apify_instagram_posts' };
+    const gem = { date: '2026-10-11', name: 'Harvest Fair', time: '9:00 AM', venue: 'Fairgrounds', _source: 'allevents', _also_from: ['gemini_search'] };
+    await start({ candidates: { last_updated: 'r1', events: [...filler, post, gem], sources: ok } });
+    await runNow();
+    expect((await store.getPublished()).auto_publish.sources).toMatchObject({
+      '2026-10-10|Oktoberfest Party|Some Bar': ['apify_instagram_posts'],
+      '2026-10-11|Harvest Fair|Fairgrounds': ['allevents', 'gemini_search']
+    });
+    for (const from of ['r2', 'r3', 'r4']) {
+      await write(from, []);
+      expect((await runNow()).retired).toBe(0);
+    }
+    expect(await names()).toEqual(expect.arrayContaining(['Oktoberfest Party', 'Harvest Fair']));
+  });
+
+  it('needs two runs in a row, each with its source ok', async () => {
+    await start({ candidates: { last_updated: 'r1', events: [...filler, comedy], sources: ok } });
+    await runNow();
+    // allevents broke for two runs: nothing counts.
+    await write('r2', [], { ...ok, allevents: 'error' });
+    expect((await runNow()).retired).toBe(0);
+    await write('r3', [], { ...ok, allevents: 'empty' });
+    expect((await runNow()).retired).toBe(0);
+    // First real miss; a forced re-run of the same candidates isn't a second.
+    await write('r4', []);
+    expect((await runNow()).retired).toBe(0);
+    expect((await runNow()).retired).toBe(0);
+    expect(await names()).toContain('Comedy Night');
+    // Second real miss.
+    await write('r5', []);
+    expect((await runNow()).retired).toBe(1);
+    expect(await names()).not.toContain('Comedy Night');
+  });
+
+  it('a find in between starts the count over', async () => {
+    await start({ candidates: { last_updated: 'r1', events: [...filler, comedy], sources: ok } });
+    await runNow();
+    await write('r2', []);
+    await runNow();
+    await write('r3', [comedy]);
+    await runNow();
+    await write('r4', []);
+    expect((await runNow()).retired).toBe(0);
+    expect(await names()).toContain('Comedy Night');
   });
 });

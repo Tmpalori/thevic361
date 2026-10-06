@@ -1,12 +1,12 @@
 # Meta ads — read and manage The Vic 361's ads (scripts/meta_ads.py).
 #
 # Daily: yesterday's and the last 7 days' results to Slack (activity
-# channel); quiet when nothing has spent. Problems go to the alerts channel:
-# a disapproved ad, a billing hold, a disabled account, a live campaign that
-# spent $0 yesterday, or a token/API error that stops the report. By hand
-# (Actions → Meta Ads → Run workflow, or `gh workflow run meta-ads.yml -f
-# command=status`): status, pause/resume an id, or set a daily budget in
-# dollars (over $50 needs force). Results show in the run summary.
+# channel); quiet when nothing has spent and no ad is on, but $0 spent with
+# an ad on, a rejected ad or a disabled account is reported. A dead token
+# or lost account access fails the run and alerts Slack. By hand (Actions → Meta Ads →
+# Run workflow, or `gh workflow run meta-ads.yml -f command=status`):
+# status, pause/resume an id, or set a daily budget in dollars (over $50
+# needs force). Results show in the run summary.
 #
 # When: the site's scheduler (server/scheduler.js) dispatches the daily
 # report at 8:37 AM Central with scheduled=true, because GitHub's own cron
@@ -104,7 +104,7 @@ jobs:
         run: python3 scripts/meta_ads.py "$COMMAND" "$TARGET" "$AMOUNT" $FORCE $SCHEDULED
 
       - name: Tell Slack it failed
-        if: failure()
+        if: failure() && (github.event_name == 'schedule' || inputs.scheduled)
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
-        run: python3 scripts/slack_notify.py "🚨 Meta ads workflow failed" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: python3 scripts/slack_notify.py "🚨 Meta ads daily check failed (token or ad account access?)" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

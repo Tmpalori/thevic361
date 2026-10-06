@@ -128,6 +128,18 @@ jobs:
           # Off until production-validated. Set repository variable
           # IG_POSTS_ENABLED=1 (Settings → Variables → Actions) to enable.
           IG_POSTS_ENABLED:   ${{ vars.IG_POSTS_ENABLED }}
+          # Tuning knobs documented in AGENTS.md, set as repository
+          # variables. Unset reaches the collector as "", which it treats
+          # as the default.
+          FB_POSTS_MAX_VENUES:   ${{ vars.FB_POSTS_MAX_VENUES }}
+          IG_POSTS_MAX_VENUES:   ${{ vars.IG_POSTS_MAX_VENUES }}
+          GEMINI_ENABLED:        ${{ vars.GEMINI_ENABLED }}
+          ENRICH_ENABLED:        ${{ vars.ENRICH_ENABLED }}
+          FLYER_IMAGES:          ${{ vars.FLYER_IMAGES }}
+          EVENTBRITE_ENABLED:    ${{ vars.EVENTBRITE_ENABLED }}
+          EVENTBRITE_MAX:        ${{ vars.EVENTBRITE_MAX }}
+          FB_EVENTS_ALT_ENABLED: ${{ vars.FB_EVENTS_ALT_ENABLED }}
+          FB_EVENTS_MAX:         ${{ vars.FB_EVENTS_MAX }}
         run: |
           # --candidates-only: write candidates.json but DO NOT overwrite
           # docs/events.json. The curated fallback at docs/events.json is
@@ -187,10 +199,19 @@ jobs:
         if: success()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
+          SLACK_ALERTS_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |
           # Next 14 days only: hand-added events run 90 days ahead.
           n=$(python3 -c "import json,datetime as d;e=json.load(open('candidates.json'));e=e.get('events',e) if isinstance(e,dict) else e;end=(d.date.today()+d.timedelta(days=14)).isoformat();print(sum(1 for x in e if x.get('date','')<=end))" 2>/dev/null || echo "?")
-          python3 scripts/slack_notify.py "🗓️ Collect done: $n events in the next two weeks. They'll publish automatically in a minute; edit or remove any in admin." --link "${{ vars.SITE_URL || 'https://www.thevic361.com' }}/admin.html"
+          # The collector's warnings (a source that crashed or came back
+          # empty, an expired token): count + first few, so a broken source
+          # doesn't go unnoticed on a green run. Escaped for Slack.
+          w=$(python3 -c "import json;m=json.load(open('collection_metadata.json'));print((m.get('warnings') or {}).get('summary','').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;'))" 2>/dev/null || true)
+          run_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          python3 scripts/slack_notify.py "🗓️ Collect done: $n events in the next two weeks. They'll publish automatically in a minute; edit or remove any in admin.${w:+ ⚠️ $w}" --link "${{ vars.SITE_URL || 'https://www.thevic361.com' }}/admin.html"
+          if [ -n "$w" ] && [ "$SLACK_ALERTS_URL" != "$SLACK_WEBHOOK_URL" ]; then
+            SLACK_WEBHOOK_URL="$SLACK_ALERTS_URL" python3 scripts/slack_notify.py "⚠️ Weekly collect: $w" --link "$run_url"
+          fi
 
       - name: Tell Slack it failed
         if: failure()

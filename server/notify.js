@@ -113,11 +113,17 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
 
 // ─── Free submission approved and live ───────────────────────────────────
 
-// `pick`: a paid Vic's Pick going live. No upgrade offer (they bought it)
-// and no "we tidied the wording" (the buyer's words are kept).
-export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl, pick = false }) {
+// `pick`: a paid Vic's Pick going live (and still pinned). No upgrade
+// offer (they bought it) and no "we tidied the wording" (the buyer's words
+// are kept). The newsletter line is worded from `at`, when they bought it,
+// like the confirmation: a pick bought after its week's issue went out
+// isn't promised the star. No `upgradeUrl` leaves the upgrade offer out
+// (a paid pick that was refunded or hidden still gets a plain "you're live").
+export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl, pick = false, at = null }) {
   const name = ev.name || 'your event';
   const link = pageUrl || siteUrl;
+  const pickShare = `Share that link anywhere you promote the event. It’s ${pickWhere(ev.date, at)}.`;
+  const offer = !pick && Boolean(upgradeUrl);
   const lead = pick
     ? `Good news: <strong>${escHtml(name)}</strong> is live on The Vic 361 as a Vic’s Pick, pinned to the top of its day.`
     : `Good news: <strong>${escHtml(name)}</strong> is now on The Vic 361.`;
@@ -125,9 +131,9 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
     p(lead) +
     eventTable(ev, siteUrl) +
     `<div style="margin:16px 0;">${btn(link, 'See it on the site')}</div>` +
-    p(pick ? 'Share that link anywhere you promote the event. It’s starred in that week’s newsletter and featured first in our social posts.'
+    p(pick ? escHtml(pickShare)
       : 'Share that link anywhere you promote the event. It can also show up in the Monday newsletter and our social posts.') +
-    (pick ? '' : box(`<strong>Want it pinned to the top of its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`)) +
+    (!offer ? '' : box(`<strong>Want it pinned to the top of its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`)) +
     p(pick ? 'Something wrong? Reply to this email with the fix.'
       : 'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
   return {
@@ -138,9 +144,9 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
       pick ? `Good news: "${name}" is live on The Vic 361 as a Vic's Pick, pinned to the top of its day.` : `Good news: "${name}" is now on The Vic 361.`, '',
       `${ev.date || ''} ${ev.time || ''} · ${ev.venue || ''}`.trim(), '',
       `See it: ${link}`,
-      pick ? "Share that link anywhere you promote the event. It's starred in that week's newsletter and featured first in our social posts."
+      pick ? pickShare
         : 'Share that link anywhere you promote the event. It can also show up in the Monday newsletter and our social posts.', '',
-      ...(pick ? [] : [`Want it pinned to the top of its day? Make it a Vic's Pick: ${upgradeUrl}`, '']),
+      ...(!offer ? [] : [`Want it pinned to the top of its day? Make it a Vic's Pick: ${upgradeUrl}`, '']),
       pick ? 'Something wrong? Reply to this email with the fix.' : 'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.',
       contactText(siteUrl)
     ].join('\n')
@@ -219,6 +225,29 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
       `Need to change a detail? Reply to this email. ${receipt}`,
       contactText(siteUrl)
     ].join('\n')
+  };
+}
+
+// ─── Paid too late ───────────────────────────────────────────────────────
+// A bank payment settled only after the pick's date (or the sponsor week)
+// had passed, so there's nothing left to book. The owner gets a Slack alert
+// to refund it in Stripe (our restricted key can't); this tells the buyer.
+
+export function renderSponsorTooLate(order, { siteUrl, address }) {
+  const business = order.business || 'there';
+  const what = order.kind === 'weekly'
+    ? `the sponsor week of ${formatDay(order.week_start, { month: 'long', day: 'numeric' })}`
+    : `${(order.event && order.event.name) || 'your event'} as a Vic’s Pick on ${order.event && order.event.date ? formatDay(order.event.date, { weekday: 'long', month: 'long', day: 'numeric' }) : 'its day'}`;
+  const lines = [
+    `Thanks, ${business}. Your bank payment for ${what} only cleared after that date had passed, so we couldn't run it.`,
+    'We’re refunding you in full. You’ll see it from Stripe within a few business days; nothing else is needed from you.',
+    'Want to book another date instead? Reply to this email and we’ll set it up.'
+  ];
+  return {
+    subject: 'Your Vic 361 payment cleared too late: we’re refunding you',
+    html: emailShell({ title: 'Sorry, that date has passed', preheader: 'We’re refunding your payment in full.', siteUrl,
+      bodyHtml: lines.map(l => p(escHtml(l))).join(''), footerHtml: contactFooter(siteUrl, address) }),
+    text: [...lines, contactText(siteUrl)].join('\n\n')
   };
 }
 

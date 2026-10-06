@@ -10,7 +10,8 @@
 # it is 0); the scheduled run tells the site it's automatic, so it obeys
 # that too. Run it by hand to send now regardless. Needs the
 # NEWSLETTER_CRON_SECRET secret to match the Railway variable of the same
-# name. The same call sends last week's sponsor click reports.
+# name. A 5xx or no answer is tried up to 3 times about 4 minutes apart
+# (safe: the send resumes and never mails anyone twice). The same call sends last week's sponsor click reports.
 
 name: Newsletter
 
@@ -25,6 +26,7 @@ permissions:
 jobs:
   send:
     runs-on: ubuntu-latest
+    # 3 tries of up to 5 minutes each, 4 minutes apart.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6   # for scripts/slack_notify.py
@@ -35,20 +37,22 @@ jobs:
           SCHEDULED: ${{ github.event_name == 'schedule' && '1' || '0' }}
         run: |
           if [ -z "$SECRET" ]; then echo "::error::NEWSLETTER_CRON_SECRET is not set"; exit 1; fi
-          # Up to 4 tries: a Railway redeploy (502/000) or a Resend hiccup
-          # (500 with failed_emails) clears up, and a retry only resends to
-          # whoever missed it.
-          for wait in 120 300 600 0; do
-            code=$(curl -sS -o out.json -w '%{http_code}' --max-time 300 -X POST \
-              -H "X-Cron-Secret: $SECRET" -H "X-Cron-Scheduled: $SCHEDULED" "$SITE/api/newsletter/cron") || code=000
-            cat out.json 2>/dev/null || true; echo
+          # A 5xx or no answer (Railway mid-restart, a Resend blip) is tried
+          # again, up to 3 times about 4 minutes apart. That's safe:
+          # sendWeekly (server/newsletter.js) answers already-sent for a sent
+          # week, a partial send resumes with only the failed addresses, and
+          # its per-week Resend idempotency keys stop a request that timed
+          # out mid-send from mailing anyone twice. A 4xx (wrong secret)
+          # won't fix itself, so it fails at once.
+          for try in 1 2 3; do
+            : > out.json
+            code=$(curl -sS --max-time 300 -o out.json -w '%{http_code}' -X POST -H "X-Cron-Secret: $SECRET" -H "X-Cron-Scheduled: $SCHEDULED" "$SITE/api/newsletter/cron") || true
+            cat out.json; echo
             [ "$code" = "200" ] && exit 0
-            # 4xx (bad secret, etc.) won't fix itself.
-            case "$code" in 4*) echo "::error::Newsletter send returned HTTP $code"; exit 1;; esac
-            [ "$wait" = "0" ] && break
-            echo "HTTP $code; trying again in ${wait}s"; sleep "$wait"
+            case "$code" in 5*|000|"") ;; *) break ;; esac
+            [ "$try" = 3 ] || { echo "HTTP $code; trying again in 4 minutes"; sleep 240; }
           done
-          echo "::error::Newsletter send returned HTTP $code after 4 tries"; exit 1
+          echo "::error::Newsletter send returned HTTP $code"; exit 1
 
       - name: Tell Slack it failed
         if: failure()

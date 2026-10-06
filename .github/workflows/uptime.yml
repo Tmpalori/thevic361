@@ -6,6 +6,8 @@
 # SLACK_WEBHOOK_URL) and, with the NTFY_TOPIC secret, a phone push via the
 # ntfy app: once when it goes down, hourly while down, once when it's back.
 # Once a day it also flags a stale feed: nothing published for 8+ days.
+# That's its own job and concurrency group: a group keeps only one pending
+# run, so in the shared group a */5 run could replace the queued daily one.
 # ─────────────────────────────────────────────────────────────────────────────
 name: Uptime
 
@@ -18,12 +20,12 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: uptime
-  cancel-in-progress: false
-
 jobs:
   check:
+    if: github.event.schedule != '17 15 * * *'
+    concurrency:
+      group: uptime
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -52,13 +54,27 @@ jobs:
         with:
           path: .uptime
           key: uptime-state-${{ github.run_id }}
+
+  stale-feed:
+    if: github.event.schedule == '17 15 * * *'
+    concurrency:
+      group: uptime-stale-feed
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: scripts
       - name: Stale feed
-        if: github.event.schedule == '17 15 * * *'
         env:
           SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |
-          age=$(python3 scripts/feed_age.py .uptime/events.json 2>/dev/null || echo 99)
+          # A site that's down is the check job's alert, not a stale feed.
+          curl -fsS --max-time 30 -o events.json "$SITE/events.json" ||
+            { echo "::warning::Couldn't fetch events.json; skipping the stale-feed check."; exit 0; }
+          age=$(python3 scripts/feed_age.py events.json 2>/dev/null || echo 99)
           if [ "$age" -ge 8 ]; then
             python3 scripts/slack_notify.py "⏰ No events published in $age days. Pick this week's events in admin." --link "$SITE/admin.html"
           fi

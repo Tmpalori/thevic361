@@ -315,7 +315,7 @@ def test_enrich_soonest_first_capped_and_retries_misses_later(monkeypatch, tmp_p
     ce.enrich_thin_events([_thin(1, "Event 1")], cache_path=str(cache), post=post)
     assert asked == []
     later = date.today() + timedelta(days=ce.ENRICH_RETRY_DAYS + 1)
-    cache.write_text(json.dumps({f"{d(10)}|event 1": {"checked": d(0), "found": {}}}))
+    cache.write_text(json.dumps({f"{d(10)}|event 1|mercy house": {"checked": d(0), "found": {}}}))
     ce.enrich_thin_events([_thin(10, "Event 1")], cache_path=str(cache), post=post, today=later)
     assert len(asked) == 1
 
@@ -324,11 +324,11 @@ def test_enrich_off_without_key_and_prunes_past(monkeypatch, tmp_path):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     cache = tmp_path / "c.json"
     cache.write_text(json.dumps({f"{d(-3)}|old": {"checked": d(-10), "found": {}},
-                                 f"{d(3)}|keep me": {"checked": d(0), "found": {"time": "7:00 PM"}}}))
+                                 f"{d(3)}|keep me|mercy house": {"checked": d(0), "found": {"time": "7:00 PM"}}}))
     out = ce.enrich_thin_events([_thin(3, "Keep Me")], cache_path=str(cache),
                                 post=lambda *a, **k: pytest.fail("no key, no lookup"))
     assert out[0]["time"] == "7:00 PM"
-    assert list(json.loads(cache.read_text())) == [f"{d(3)}|keep me"]
+    assert list(json.loads(cache.read_text())) == [f"{d(3)}|keep me|mercy house"]
 
 
 def test_digest_reviews_only_the_next_two_weeks(tmp_path):

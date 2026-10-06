@@ -67,32 +67,15 @@ jobs:
 
       # The collect run commits candidates.json; Railway redeploys and
       # auto-publish runs on boot. Wait (up to 15 min) until the live list
-      # says it was built from these candidates: /events.json's
-      # collected_at is the candidates.json last_updated auto-publish last
-      # published, and only auto-publish moves it (an approved submission
-      # or an admin edit in the meantime changes last_updated, not this).
-      # candidates.json is the one in the commit this job checked out (main,
-      # after the collect pushed).
+      # holds these candidates (from the commit this job checked out), then
+      # check it. A newer last_updated alone isn't enough: a submission
+      # approved or an admin publish during the deploy bumps it too. See
+      # wait_for_publish in scripts/sweep_events.py.
       - name: Wait for the new events to go live
         if: github.event_name == 'workflow_run'
         env:
-          SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
-        run: |
-          python3 - <<'PY'
-          import json, os, time, urllib.request
-          made = json.load(open("candidates.json"))["last_updated"]
-          for _ in range(30):
-              try:
-                  live = json.load(urllib.request.urlopen(os.environ["SITE"] + "/events.json", timeout=30))
-                  if live.get("collected_at") == made:
-                      print(f"Live list is built from the candidates made {made}")
-                      raise SystemExit(0)
-                  print(f"waiting: live list is from {live.get('collected_at')}, candidates made {made}")
-              except (ValueError, OSError) as e:
-                  print(f"waiting: {e}")
-              time.sleep(30)
-          print("::warning::Live list didn't update within 15 minutes; checking what's there now.")
-          PY
+          SITE_URL: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+        run: python3 scripts/sweep_events.py --wait-for candidates.json
 
       - name: Check the live events
         timeout-minutes: 5

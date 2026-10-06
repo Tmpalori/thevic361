@@ -285,6 +285,9 @@
     } catch (_) { return null; }
   }
 
+  // requireAdmin's 'unauthorized' plus /api/admin/me's reasons (server/auth.js).
+  const SESSION_ERRORS = new Set(['unauthorized', 'missing-credentials', 'missing', 'expired', 'malformed', 'bad-signature', 'not-configured']);
+
   async function adminFetch(path, init) {
     const headers = Object.assign({}, (init && init.headers) || {});
     if (state.session) headers['Authorization'] = 'Bearer ' + state.session;
@@ -294,7 +297,12 @@
     const res = await fetch(apiBaseUrl() + path, Object.assign({}, init, { headers }));
     let json = null;
     try { json = await res.json(); } catch (_) {}
-    if (res.status === 401) {
+    // Only a 401 that's about the admin session signs out. Others carry
+    // their own error code (e.g. 'github-token-invalid' from an older
+    // server's Pull now) and their caller explains them; signing out there
+    // would loop the owner through login and lose an open edit.
+    const code = json && json.error;
+    if (res.status === 401 && (!code || SESSION_ERRORS.has(code))) {
       // Session expired or revoked; force a fresh login.
       state.session = null;
       clearSession();
@@ -1394,6 +1402,9 @@
           setStatus(json.message, 'error');
           return;
         }
+        if (res.status === 413) {
+          throw new Error('That list is too big to publish in one go. Uncheck some events and try again.');
+        }
         if (!res.ok || !json || !json.ok) {
           throw new Error((json && (json.message || json.error)) || ('Publish failed (' + res.status + ')'));
         }
@@ -1593,7 +1604,7 @@
   // ─── SPONSORS TAB ────────────────────────────────────────────────────
   // Paid orders from the Stripe checkout (server/sponsors.js).
   const SPONSOR_KIND = { weekly: 'Weekly sponsor', partner: 'Venue partner', featured: 'Vic’s Pick event' };
-  const SPONSOR_STATUS = { paid: 'Live', active: 'Live', pending: 'Awaiting payment', hidden: 'Hidden', cancelled: 'Cancelled', paused: 'Payment issue', refunded: 'Refunded', processing: 'Payment processing', conflict: 'Double-booked: refund', failed: 'Checkout failed' };
+  const SPONSOR_STATUS = { paid: 'Live', active: 'Live', pending: 'Awaiting payment', hidden: 'Hidden', cancelled: 'Cancelled', paused: 'Payment issue', refunded: 'Refunded', processing: 'Payment processing', conflict: 'Double-booked: refund', late: 'Paid after its date: refund', failed: 'Checkout failed' };
 
   function sponsorDetail(o) {
     if (o.kind === 'weekly') return 'Week of ' + o.week_start + (o.sponsor ? ': ' + o.sponsor.text : '');
@@ -2395,7 +2406,19 @@
       // Session was bad — clear and fall through.
       state.session = null;
       clearSession();
+      // With server login on, a leftover PAT (from before login was set
+      // up) must not take over: PAT publishing commits docs/events.json,
+      // which the live site ignores once a published row exists, so
+      // "published" would change nothing. Sign in again instead.
+      if (state.serverConfig && state.serverConfig.admin_login_enabled) {
+        state.pat = null;
+        showAuthGate('Session expired — please sign in again.');
+        return;
+      }
     }
+    // The PAT path is only for servers without login (the PAT form is
+    // hidden otherwise), so a stale PAT is ignored when login is on.
+    if (state.pat && state.serverConfig && state.serverConfig.admin_login_enabled) state.pat = null;
     if (state.pat) {
       showApp();
       loadHome();

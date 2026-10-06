@@ -60,9 +60,16 @@ import yaml
 # Both print a GitHub Actions ::warning:: line, which shows as an annotation
 # on the Weekly Collect run page, not just buried in the log.
 
+# Every warning this run, for the Slack "collect done" summary: with Sentry
+# gone, an annotation alone goes unseen and a broken source can stay broken
+# for weeks.
+_WARNINGS = []
+
+
 def _annotate(kind, message, tags):
     detail = " ".join(f"{k}={v}" for k, v in tags.items())
     text = f"{message} ({detail})" if detail else str(message)
+    _WARNINGS.append(text.replace("\r", " ").replace("\n", " "))
     # Annotations end at a newline; keep it on one line.
     print(f"::{kind}::{text}".replace("\r", " ").replace("\n", " "), flush=True)
 
@@ -102,6 +109,7 @@ def reset_source_stats():
     """Clear per-run stats. Called at the top of main() and useful in tests."""
     _SOURCE_STATS.clear()
     _SOURCE_NOTES.clear()
+    _WARNINGS.clear()
 
 
 # A scraper's note about a partial run ("skipped 12 listings"), shown with
@@ -116,6 +124,30 @@ def _note_source(name, message):
 def get_source_stats():
     """Return a copy of the per-run stats list."""
     return list(_SOURCE_STATS)
+
+
+WARNINGS_SHOWN = 3
+
+
+def warning_summary(shown=WARNINGS_SHOWN):
+    """One short line for Slack: the count and the first few, or ""."""
+    if not _WARNINGS:
+        return ""
+    first = "; ".join(w[:100] for w in _WARNINGS[:shown])
+    more = f" (+{len(_WARNINGS) - shown} more)" if len(_WARNINGS) > shown else ""
+    return f"{len(_WARNINGS)} warning{'s' if len(_WARNINGS) != 1 else ''}: {first}{more}"
+
+
+def source_status():
+    """{source: status} for this run, for candidates.json. Auto-publish only
+    retires an event from a source whose status is "ok" this run, so a
+    scraper that broke can't take its live events down."""
+    out = {}
+    for s in _SOURCE_STATS:
+        # A source run twice keeps its worst status.
+        if out.get(s["name"]) in (None, "ok"):
+            out[s["name"]] = s["status"]
+    return out
 
 
 def safe_fetch(name, fn, args=(), expect_events=True):
@@ -397,15 +429,18 @@ def _coerce_yaml_events(data):
     return data
 
 
-def load_local_events(yaml_path, days_ahead=7):
+class LocalEventsError(Exception):
+    """local_events.yaml can't be read as a whole (syntax error, not a mapping)."""
+
+
+def load_local_events(yaml_path, days_ahead=7, strict=False):
     """Load recurring + one-time events from the YAML file.
 
-    Wrapped in defensive error handling: a malformed local_events.yaml
-    (bad indentation, an editor mid-save, etc.) must NOT crash the whole
-    collector run. We log a warning so the breakage is visible,
-    print a console message for the GitHub Actions log, and return an
-    empty list so the rest of the pipeline (web scrapers, AI review,
-    candidates.json) still gets to run.
+    One malformed entry is skipped with a warning. A file that can't be
+    read as a whole (syntax error, not a mapping) returns [] with a warning,
+    or with ``strict`` (main) raises LocalEventsError: a run without the
+    hand-added events would let auto-publish take every one of them down,
+    so the collect must fail before it writes candidates.json.
     """
     events = []
     today = _WINDOW_START
@@ -422,14 +457,12 @@ def load_local_events(yaml_path, days_ahead=7):
     try:
         with open(yaml_path, "r") as f:
             data = yaml.safe_load(f) or {}
-    except (yaml.YAMLError, OSError, UnicodeDecodeError) as e:
-        # YAML parse error or I/O error — warn but keep the run alive.
+    except Exception as e:
+        # YAML parse error or I/O error.
         print(f"  [Local] Failed to read/parse {yaml_path}: {e}")
         _report_exception("local_events")
-        return events
-    except Exception as e:  # pragma: no cover - last-resort safety net
-        print(f"  [Local] Unexpected error reading {yaml_path}: {e}")
-        _report_exception("local_events")
+        if strict:
+            raise LocalEventsError(f"{yaml_path}: {e}") from e
         return events
 
     if isinstance(data, dict):
@@ -443,6 +476,8 @@ def load_local_events(yaml_path, days_ahead=7):
             f"[local_events] YAML root is not a mapping in {yaml_path}",
             scraper="local_events",
         )
+        if strict:
+            raise LocalEventsError(f"{yaml_path}: root is not a mapping")
         return events
 
     DAY_MAP = {
@@ -455,7 +490,7 @@ def load_local_events(yaml_path, days_ahead=7):
         try:
             if not isinstance(ev, dict):
                 continue
-            dow = DAY_MAP.get(ev.get("day", "").lower())
+            dow = DAY_MAP.get(str(ev.get("day") or "").strip().lower())
             if dow is None:
                 continue
             start = datetime.strptime(ev["start_date"], "%Y-%m-%d").date() if ev.get("start_date") else today - timedelta(days=1)
@@ -478,7 +513,7 @@ def load_local_events(yaml_path, days_ahead=7):
                         **_local_extras(ev),
                     })
                 d += timedelta(days=1)
-        except (ValueError, KeyError, TypeError) as e:
+        except Exception as e:  # one bad row must not stop the run
             print(f"  [Local] Skipping malformed recurring entry: {e}")
             _warn(
                 "[local_events] malformed recurring entry skipped",
@@ -489,7 +524,10 @@ def load_local_events(yaml_path, days_ahead=7):
     # One-time events, out to the longer local horizon
     horizon = local_horizon_end()
     for ev in data.get("events", []) or []:
-        if not ev or not ev.get("date"):
+        if not isinstance(ev, dict) or not ev.get("date"):
+            if ev:
+                print(f"  [Local] Skipping malformed one-time entry: {str(ev)[:80]}")
+                _warn("[local_events] malformed one-time entry skipped", scraper="local_events")
             continue
         try:
             ev_date = datetime.strptime(ev["date"], "%Y-%m-%d").date()
@@ -506,7 +544,9 @@ def load_local_events(yaml_path, days_ahead=7):
                     "url": ev.get("url", ""),
                     **_local_extras(ev),
                 })
-        except Exception:  # one bad entry must not stop the run
+        except Exception as e:  # one bad entry must not stop the run
+            print(f"  [Local] Skipping malformed one-time entry: {e}")
+            _warn("[local_events] malformed one-time entry skipped", scraper="local_events")
             continue
 
     print(f"  [Local] {len(events)} events from YAML")
@@ -1554,7 +1594,11 @@ _TIME_RE = re.compile(r"^\d{1,2}(:\d{2})?\s*[AaPp]\.?[Mm]\.?(\s*[–—-]\s*\d{1
 
 
 def _enrich_key(ev):
-    return f"{ev.get('date')}|{re.sub(r'[^a-z0-9]+', ' ', str(ev.get('name') or '').lower()).strip()}"
+    # Per venue: "Trivia Night" at two bars the same day are different
+    # events, and one's address must not fill in the other's. (Entries from
+    # before the venue was in the key just miss once.)
+    norm = lambda v: re.sub(r'[^a-z0-9]+', ' ', str(v or '').lower()).strip()
+    return f"{ev.get('date')}|{norm(ev.get('name'))}|{norm(ev.get('venue'))}"
 
 
 def _is_thin(ev):
@@ -1760,7 +1804,7 @@ Icon guidance:
   - community: meetings, fundraisers, civic, volunteer, library programs
   - free: zero cost to attend (also set free=true)
 
-Return ONLY a JSON array, one object per input event in the same order, each: {"description": "...", "icons": [...], "free": true|false, "appeal": 1-5, "keep": true|false}. No prose, no markdown fences."""
+Return ONLY a JSON array, one object per input event, each echoing that event's id: {"id": N, "description": "...", "icons": [...], "free": true|false, "appeal": 1-5, "keep": true|false}. No prose, no markdown fences."""
 
 
 _EMOJI_RE = re.compile(
@@ -1794,8 +1838,11 @@ def _strip_emojis(text):
 def _ai_review_batch(api_key, batch):
     """Send a single batch of events to OpenAI; return list of {description, icons, free} dicts (same length as batch) or None on failure."""
     # Build a slim payload — only the fields the AI needs to make decisions.
+    # Each item carries an id the model echoes, so a reordered reply can't
+    # put one event's description (or keep: false) on its neighbour.
     payload = [
         {
+            "id": n,
             "name": ev.get("name", ""),
             "date": ev.get("date", ""),
             "time": ev.get("time", ""),
@@ -1803,12 +1850,12 @@ def _ai_review_batch(api_key, batch):
             "raw_description": ev.get("description", "")[:600],
             "current_icons": ev.get("icons", []),
         }
-        for ev in batch
+        for n, ev in enumerate(batch, start=1)
     ]
 
     user_msg = (
         f"Review and polish these {len(batch)} events. "
-        f"Return a JSON array of {len(batch)} objects in the same order.\n\n"
+        f"Return a JSON array of {len(batch)} objects, each with its event's id.\n\n"
         f"{json.dumps(payload, ensure_ascii=False)}"
     )
 
@@ -1846,13 +1893,33 @@ def _ai_review_batch(api_key, batch):
         _warn("ai_review_parse_failed", error=str(e)[:200])
         return None
 
-    if not isinstance(parsed, list) or len(parsed) != len(batch):
+    aligned = _align_review(parsed, len(batch))
+    if aligned is None:
         print(f"  [AI Review] Bad shape: got {type(parsed).__name__} "
               f"len={len(parsed) if isinstance(parsed, list) else 'n/a'}, "
               f"expected list len={len(batch)}")
-        return None
+    return aligned
 
-    return parsed
+
+def _align_review(parsed, n):
+    """The reply as a list lined up with the batch (None where an event got
+    no answer), or None when it can't be lined up. Matched by echoed id;
+    by position only when no item has an id and the count is right."""
+    if not isinstance(parsed, list):
+        return None
+    if not any(isinstance(it, dict) and "id" in it for it in parsed):
+        return parsed if len(parsed) == n else None
+    by_id, seen = {}, Counter()
+    for it in parsed:
+        try:
+            i = int(it.get("id")) if isinstance(it, dict) else None
+        except (TypeError, ValueError):
+            i = None
+        if i is not None and 1 <= i <= n:
+            seen[i] += 1
+            by_id[i] = it
+    out = [by_id[i] if seen[i] == 1 else None for i in range(1, n + 1)]
+    return out if any(out) else None
 
 
 def ai_review(events, batch_size=8):
@@ -2591,6 +2658,9 @@ def _clean_text(value):
     return re.sub(r"\s+", " ", html.unescape(str(value))).strip()
 
 
+HAND_SOURCES = {"local_events", "google_sheet"}
+
+
 def merge_events(all_events, days_ahead=7, venues=None):
     """Filter to the window and Victoria County, clean venues, dedupe, sort."""
     today = _WINDOW_START
@@ -2603,6 +2673,8 @@ def merge_events(all_events, days_ahead=7, venues=None):
 
     _set_non_place_names(venues)
     horizon = local_horizon_end()
+    # Hand-entered sources; only these may carry `curated` through.
+    hand = lambda e: e.get("_source") in HAND_SOURCES
     by_date = {}
     dropped_area = []
     dropped_junk = []
@@ -2636,7 +2708,7 @@ def merge_events(all_events, days_ahead=7, venues=None):
             new_entry["_source"] = ev["_source"]
         if ev.get("_venue_guess"):
             new_entry["_venue_guess"] = True
-        if ev.get("_source") == "local_events":
+        if hand(ev):
             new_entry.update(_local_extras(ev))
         if ev.get("recurring") is True:
             new_entry["recurring"] = True
@@ -2644,9 +2716,9 @@ def merge_events(all_events, days_ahead=7, venues=None):
             continue
         clean_venue(new_entry, venues)
 
-        # Hand-curated YAML is trusted; everything scraped must be local
-        # and an actual event.
-        if new_entry.get("_source") != "local_events":
+        # Hand-curated YAML and sheet rows are trusted; everything scraped
+        # must be local and an actual event.
+        if not hand(new_entry):
             reason = out_of_area_reason(new_entry)
             if reason:
                 dropped_area.append(f"{new_entry['name'][:50]} ({reason})")
@@ -2872,7 +2944,11 @@ def fetch_google_sheet_events(days_ahead=7):
             venue = row.get("Venue", "").strip()
             address = row.get("Address", "").strip()
             time_str = row.get("Time", "").strip()
+            town = (row.get("Town") or "").strip()
 
+            # Entered by hand (the owner's sheet), so trusted like the YAML:
+            # merge_events' area/religious/non-event gates and the AI
+            # review's keep: false don't drop it.
             events.append({
                 "date": ev_date.strftime("%Y-%m-%d"),
                 "name": name,
@@ -2883,6 +2959,8 @@ def fetch_google_sheet_events(days_ahead=7):
                 "icons": classify_icons(name, notes, venue),
                 "free": guess_free(name, notes, venue),
                 "url": "",
+                "curated": True,
+                **({"town": town} if town else {}),
             })
 
         print(f"  [Google Sheet] {len(events)} events from submissions")
@@ -3371,6 +3449,14 @@ APIFY_IG_POSTS_ACTOR = "apify~instagram-post-scraper"
 # per 40 results. Lighter alternatives only returned title/date text.
 APIFY_EVENTBRITE_ACTOR = "khadinakbar~eventbrite-events-scraper"
 APIFY_RUN_TIMEOUT = 240  # seconds we'll wait for the run to finish
+# The actor's own limit, a little under ours: without it a run we gave up
+# on keeps running (and billing) on Apify up to the actor's default.
+APIFY_ACTOR_TIMEOUT = 220
+
+
+def _apify_run_url(actor, token):
+    return (f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
+            f"?token={token}&timeout={APIFY_ACTOR_TIMEOUT}")
 
 # Process-local tombstone: once we see a 403 hard-limit, all later Apify calls
 # in this run skip immediately. Reset on each main() invocation.
@@ -3446,7 +3532,7 @@ def fetch_apify_eventbrite_events(days_ahead=14):
         "maxResults": _resolve_int_env("EVENTBRITE_MAX", 60),
         "proxyConfiguration": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]},
     }
-    url = f"https://api.apify.com/v2/acts/{APIFY_EVENTBRITE_ACTOR}/run-sync-get-dataset-items?token={token}"
+    url = _apify_run_url(APIFY_EVENTBRITE_ACTOR, token)
     try:
         resp = requests.post(url, json=payload, timeout=APIFY_RUN_TIMEOUT,
                              headers={"Content-Type": "application/json"})
@@ -3520,7 +3606,7 @@ def fetch_apify_eventbrite_events(days_ahead=14):
 def _run_apify_search(actor, payload, token):
     """Run an Apify actor synchronously; return its items, or None on failure."""
     global _APIFY_LIMIT_TRIPPED
-    url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items?token={token}"
+    url = _apify_run_url(actor, token)
     try:
         resp = requests.post(url, json=payload, timeout=APIFY_RUN_TIMEOUT,
                              headers={"Content-Type": "application/json"})
@@ -3803,6 +3889,10 @@ _FLYER_TYPES = ("image/jpeg", "image/png", "image/webp")
 # filling, the rest of the AI review) are skipped so the run still writes.
 FLYER_TIME_BUDGET_MIN = 20
 COLLECT_DEADLINE_MIN = 38
+# The FB/IG post loops stop starting new venues this far in (Oct 4 2026:
+# FB posts alone took 15.5 minutes). Hung OpenAI calls could otherwise run
+# scraping past the 50-minute step timeout before candidates.json is written.
+SCRAPE_BUDGET_MIN = 30
 _RUN_STARTED = None
 
 
@@ -4107,15 +4197,17 @@ def fetch_apify_facebook_posts(days_ahead=14):
     newer_than = (datetime.now().date() - timedelta(days=_POSTS_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
     print(f"  [Apify FB Posts] Pulling posts from {len(high_conf)} venues (since {newer_than})")
 
-    actor_run_url = (
-        f"https://api.apify.com/v2/acts/{APIFY_FB_POSTS_ACTOR}"
-        f"/run-sync-get-dataset-items?token={token}"
-    )
+    actor_run_url = _apify_run_url(APIFY_FB_POSTS_ACTOR, token)
 
     venue_stats = []
-    for venue in high_conf:
+    for i, venue in enumerate(high_conf):
         if _APIFY_LIMIT_TRIPPED:
             venue_stats.append(f"{venue.get('name','?')}: SKIP (limit tripped)")
+            break
+        if _minutes_in() > SCRAPE_BUDGET_MIN:
+            _note_source("apify_facebook_posts", f"stopped at the {SCRAPE_BUDGET_MIN}-minute scrape budget; "
+                         f"skipped {len(high_conf) - i} of {len(high_conf)} pages")
+            _warn("[Apify FB Posts] scrape budget reached", skipped=len(high_conf) - i)
             break
 
         venue_name = venue.get("name", "?")
@@ -4461,19 +4553,21 @@ def fetch_apify_instagram_posts(days_ahead=14):
         f"skipped low_tier={skipped_low_tier}, no_ig={skipped_no_ig})"
     )
 
-    actor_run_url = (
-        f"https://api.apify.com/v2/acts/{APIFY_IG_POSTS_ACTOR}"
-        f"/run-sync-get-dataset-items?token={token}"
-    )
+    actor_run_url = _apify_run_url(APIFY_IG_POSTS_ACTOR, token)
 
     venue_stats = []
     n_http_errors = 0
     n_request_errors = 0
     n_zero_post_venues = 0
     total_posts_pulled = 0
-    for venue, username, tier, posts_limit in targets:
+    for i, (venue, username, tier, posts_limit) in enumerate(targets):
         if _APIFY_LIMIT_TRIPPED:
             venue_stats.append(f"{venue.get('name','?')}: SKIP (limit tripped)")
+            break
+        if _minutes_in() > SCRAPE_BUDGET_MIN:
+            _note_source("apify_instagram_posts", f"stopped at the {SCRAPE_BUDGET_MIN}-minute scrape budget; "
+                         f"skipped {len(targets) - i} of {len(targets)} accounts")
+            _warn("[Apify IG Posts] scrape budget reached", skipped=len(targets) - i)
             break
 
         venue_name = venue.get("name", "?")
@@ -4670,7 +4764,13 @@ def main():
     print("📂 Local events...")
     yaml_path = os.path.join(args.local_dir, "local_events.yaml")
     _local_started = datetime.now().isoformat(timespec="seconds")
-    _local = load_local_events(yaml_path, args.days)
+    try:
+        _local = load_local_events(yaml_path, args.days, strict=True)
+    except LocalEventsError as e:
+        # Fail before anything is written: the old candidates stay live and
+        # the workflow's failure alert fires.
+        print(f"\n❌ local_events.yaml is unreadable, stopping: {e}")
+        sys.exit(1)
     for _ev in _local:
         _ev.setdefault("_source", "local_events")
     _local_finished = datetime.now().isoformat(timespec="seconds")
@@ -4760,9 +4860,14 @@ def main():
     # add minutes to a job with tight step timeouts.
     if not args.skip_ai and merged:
         print("\n🤖 AI review (descriptions + icons)…")
+        # Past days (the Monday backfill) are skipped too: auto-publish
+        # ignores them, and sorted first they'd use up the deadline before
+        # any upcoming event is reviewed.
         window_end = _WINDOW_END.strftime("%Y-%m-%d")
-        later = [e for e in merged if e["date"] > window_end]
-        merged = ai_review([e for e in merged if e["date"] <= window_end]) + later
+        today_s = now_central().date().isoformat()
+        due = lambda e: today_s <= e["date"] <= window_end
+        kept = {id(e) for e in ai_review([e for e in merged if due(e)])}
+        merged = [e for e in merged if id(e) in kept or not due(e)]
 
     # 5. Load extras. Hand-written New & Notable items (extras.yaml) come
     # first, then what Gemini found this run.
@@ -4807,6 +4912,9 @@ def main():
     candidates_output = {
         "last_updated": now_central().isoformat(timespec="seconds"),
         "events": merged,
+        # {source: ok|empty|error|skipped}: auto-publish only retires a
+        # missing event when its source ran ok (server/autopublish.js).
+        "sources": source_status(),
     }
     with open(candidates_path, "w") as f:
         json.dump(candidates_output, f, indent=2)
@@ -4831,6 +4939,8 @@ def main():
             "merged_count": len(merged),
             "raw_count": sum(s.get("count", 0) for s in get_source_stats()),
             "sources": get_source_stats(),
+            # Read by the workflow's "Collect done" Slack message.
+            "warnings": {"count": len(_WARNINGS), "first": _WARNINGS[:5], "summary": warning_summary()},
         }
         with open(metadata_path, "w") as f:
             json.dump(metadata_output, f, indent=2)

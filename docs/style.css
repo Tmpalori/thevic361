@@ -407,6 +407,9 @@
 /* ─── MAIN CONTENT ─── */
 .main-content {
   padding-block: var(--space-8);
+  /* A long unbroken token (a pasted ticket URL) would push event lists and
+     pages sideways on a phone. */
+  overflow-wrap: anywhere;
 }
 
 /* ─── DAY SECTIONS ─── */

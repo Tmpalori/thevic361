@@ -11,11 +11,12 @@
  *     an event this module added takes the collector's newer copy of it
  *     (time, venue, address, link, description; the name only when the
  *     published one was cut off), so collector fixes reach live events.
- *   - Events this module added on an earlier run that the new run no longer
- *     finds are taken down: the collector fixed or dropped them (e.g. a
- *     misread Instagram post). Skipped when the new run looks broken (far
- *     fewer events than this module has up), so one failed run can't empty
- *     the week.
+ *   - Events this module added on an earlier run that two collector runs in
+ *     a row no longer find are taken down: the collector fixed or dropped
+ *     them. Never one from a source that only looks back a short time or
+ *     answers differently each run (FB/IG posts, Gemini search), nor while
+ *     its source didn't run ok this time, nor when the new run looks broken
+ *     (far fewer events than this module has up).
  *   - An event this module added that the admin later removed is remembered
  *     and not re-added next run.
  *   - Approved community submissions are included.
@@ -52,7 +53,23 @@ function sortKey(ev) {
 // 3: auto-added events take the collector's newer copy of themselves.
 // 4: big/town/curated refresh; the health check counts scraped events only.
 // 5: scoring hints refresh; approved submissions are marked `submitted`.
-export const AUTO_PUBLISH_RULES = 5;
+// 6: retiring needs two misses, a source that ran ok, and never applies to
+//    window-limited or non-deterministic sources.
+export const AUTO_PUBLISH_RULES = 6;
+
+// Sources whose events can't be retired for going missing. FB/IG posts are
+// read back only a couple of weeks, so a post announcing an event weeks out
+// drops out of the window before the event happens; Gemini search finds a
+// different set each run.
+export const NEVER_RETIRE_SOURCES = new Set(['apify_facebook_posts', 'apify_instagram_posts', 'gemini_search']);
+// Consecutive collector runs an event must be missing from before it's
+// taken down: one run's flicker (a slow page, a scraper's cap) isn't enough.
+const RETIRE_AFTER_MISSES = 2;
+
+// Every source that listed a candidate (its own plus the ones merged in).
+function sourcesOf(ev) {
+  return [ev && ev._source, ...((ev && ev._also_from) || [])].filter(s => typeof s === 'string' && s);
+}
 
 // What a newer collector copy may change on an event this module added.
 // The name only when the published one was cut off (see cutOff).
@@ -189,7 +206,12 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
         return { ok: false, error: 'no-candidates', message: err.message };
       }
     }
-    const prior = (await store.getPublished()) || {};
+    const published = await store.getPublished();
+    // Nothing published yet means the site shows the bundled docs/events.json;
+    // a submissions-only publish would replace that whole list with just
+    // the approved submissions. Wait for a candidates publish instead.
+    if (submissionsOnly && !published) return { ok: false, error: 'nothing-published' };
+    const prior = published || {};
     const state = prior.auto_publish || {};
     const from = submissionsOnly ? (state.from || null) : candidates && candidates.last_updated;
     const fresh = !submissionsOnly && Array.isArray(candidates && candidates.events) ? candidates.events : [];
@@ -220,9 +242,34 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     const healthy = !submissionsOnly &&
       freshUpcoming.filter(scraped).length >= ours.filter(scraped).length * REPLACE_MIN_RATIO;
     const stillFound = ev => freshUpcoming.some(f => eventKeyOf(f) === eventKeyOf(ev) || sameEvent(f, ev));
-    const retired = edited && healthy
-      ? ours.filter(ev => !edited.has(eventKeyOf(ev)) && !stillFound(ev))
-      : [];
+    // What each key's source was (keys from before rule 6 have none: they
+    // still need two misses) and how many runs in a row it's been missing.
+    // A miss counts once per collector run (`from`), so a forced re-run or
+    // a rules bump on the same candidates doesn't count it twice.
+    const priorSources = (state.sources && typeof state.sources === 'object') ? state.sources : {};
+    const priorMissing = (state.missing && typeof state.missing === 'object') ? state.missing : {};
+    const newRun = !submissionsOnly && (from || null) !== (state.missing_from ?? null);
+    const runStatus = (candidates && candidates.sources && typeof candidates.sources === 'object') ? candidates.sources : null;
+    const missing = {};
+    const retired = [];
+    for (const ev of ours) {
+      const k = eventKeyOf(ev);
+      if (stillFound(ev)) continue;
+      if (!edited) { // edits unreadable: retire nothing, forget nothing
+        if (priorMissing[k]) missing[k] = priorMissing[k];
+        continue;
+      }
+      if (edited.has(k)) continue;
+      const srcs = Array.isArray(priorSources[k]) ? priorSources[k] : [];
+      if (srcs.some(s => NEVER_RETIRE_SOURCES.has(s))) continue;
+      const n = Number(priorMissing[k]) || 0;
+      // A source that errored or came back empty this run says nothing
+      // about whether its events still exist.
+      const sourceOk = !runStatus || srcs.every(s => runStatus[s] === 'ok');
+      const count = healthy && sourceOk && newRun ? n + 1 : n;
+      if (count >= RETIRE_AFTER_MISSES && healthy && sourceOk) retired.push(ev);
+      else if (count) missing[k] = count;
+    }
     const retiredKeys = new Set(retired.map(eventKeyOf));
     const kept = priorUpcoming.filter(ev => !retiredKeys.has(eventKeyOf(ev)));
     const keptKeys = new Set(kept.map(eventKeyOf));
@@ -296,6 +343,11 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     };
     let updated = 0;
     const freshSet = new Set(fresh);
+    const sourcesNow = new Map();
+    const noteSources = (k, raw) => {
+      const add = sourcesOf(raw);
+      if (add.length) sourcesNow.set(k, [...new Set([...(sourcesNow.get(k) || []), ...add])]);
+    };
     for (const raw of [...approved, ...fresh.filter(upcoming)]) {
       const ev = publicFields(raw);
       const key = eventKeyOf(ev);
@@ -307,17 +359,30 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
         events[i] = { ...events[i], submitted: true };
       }
       if (i !== -1) {
+        const mine = autoKeys.has(eventKeyOf(events[i]));
         if (freshSet.has(raw) && canRefresh(events[i]) && refresh(i, ev)) updated++;
+        if (mine && freshSet.has(raw)) noteSources(eventKeyOf(events[i]), raw);
         continue;
       }
       events.push(ev);
       added.push(key);
+      if (freshSet.has(raw)) noteSources(key, raw);
     }
     events.sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : 1));
 
     const { events: _e, last_updated: _l, auto_publish: _a, ...extras } = prior;
     const now = nowFn().toISOString();
     const stillPresent = new Set(events.map(eventKeyOf));
+    const keys = [...new Set([...(state.keys || []).map(k => renamed.get(k) || k).filter(k => stillPresent.has(k)), ...added])];
+    // Sources found this run add to the ones recorded before (an event once
+    // seen in a post stays never-retired), following renamed keys.
+    const sources = {};
+    const oldKeyOf = new Map([...renamed].map(([o, n]) => [n, o]));
+    for (const k of keys) {
+      const before = priorSources[k] || priorSources[oldKeyOf.get(k)] || [];
+      const all = [...new Set([...(Array.isArray(before) ? before : []), ...(sourcesNow.get(k) || [])])];
+      if (all.length) sources[k] = all;
+    }
     const payload = {
       ...extras,
       // Candidates from before New & Notable was automated have no list:
@@ -332,8 +397,13 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       auto_publish: {
         from: from || null,
         at: now,
-        keys: [...new Set([...(state.keys || []).map(k => renamed.get(k) || k).filter(k => stillPresent.has(k)), ...added])],
+        keys,
         rejected: [...rejected],
+        sources,
+        // Kept for keys still live and still missing; anything found again
+        // starts over.
+        missing: Object.fromEntries(Object.entries(submissionsOnly ? priorMissing : missing).filter(([k]) => stillPresent.has(k))),
+        missing_from: newRun ? (from || null) : (state.missing_from ?? null),
         // A submissions-only run doesn't count as publishing these
         // candidates; the next boot still publishes them as usual.
         rules: submissionsOnly ? (state.rules ?? null) : AUTO_PUBLISH_RULES

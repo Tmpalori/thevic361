@@ -6,10 +6,9 @@ Runs from .github/workflows/meta-ads.yml, so the token never leaves GitHub:
   status            what's running, its delivery/review state, and results
                     (today, yesterday, last 7 days); also checks the token
   report            yesterday + last 7 days to Slack (the daily run); quiet
-                    when nothing has spent in the last 7 days. A disapproved
-                    ad, a billing hold, a disabled account, a live campaign
-                    that spent $0 yesterday, or (scheduled) not being able
-                    to read the account at all goes to the alerts channel
+                    when nothing has spent in the last 7 days and nothing
+                    is on, else says so (a disabled account, a rejected ad
+                    or an ad that's on but spent $0)
   pause  <id>       pause a campaign, ad set or ad
   resume <id>       turn it back on
   budget <id> <$>   set an ad set's (or campaign's) daily budget, in dollars;
@@ -41,6 +40,11 @@ NEEDS = ("ads_read", "ads_management")
 
 class AdsError(RuntimeError):
     pass
+
+
+class NotSetUp(AdsError):
+    """Ads were never set up (the token sees no ad account and none is
+    named), so the daily run has nothing to report rather than a fault."""
 
 
 class Api:
@@ -101,7 +105,7 @@ def find_account(api, wanted=""):
     if len(accounts) == 1:
         return accounts[0], accounts
     if not accounts:
-        raise AdsError("The token sees no ad accounts. In Business settings → System users → your system user → "
+        raise NotSetUp("The token sees no ad accounts. In Business settings → System users → your system user → "
                        "Assign assets → Ad accounts, give it the ad account (Manage ad account), and make sure "
                        "the token has ads_read and ads_management.")
     names = ", ".join(f"{a.get('name')} ({a['id']})" for a in accounts)
@@ -189,79 +193,31 @@ def cmd_status(api, account, out):
         out.append(f"{label}: {line}")
 
 
-# Why spend usually drops to $0 without anyone pausing it.
-TROUBLE = ("DISAPPROVED", "WITH_ISSUES", "PENDING_BILLING_INFO")
-ACCOUNT_STATES = {2: "disabled", 3: "unsettled (a payment failed)", 7: "pending risk review",
-                  8: "pending settlement", 9: "in a grace period", 100: "pending closure", 101: "closed"}
-
-
-def ad_problems(account, campaigns, adsets, ads):
-    """Lines for anything that stops ads delivering: a disapproved ad, a
-    billing hold, a disabled or unpaid account."""
-    out = []
-    status = account.get("account_status")
-    if status not in (None, 1, "1"):
-        try:
-            state = ACCOUNT_STATES.get(int(status), f"in state {status}")
-        except (TypeError, ValueError):
-            state = f"in state {status}"
-        out.append(f"⚠️ The ad account is {state}: check Billing in Ads Manager")
-    for kind, rows in (("Campaign", campaigns), ("Ad set", adsets), ("Ad", ads)):
-        for r in rows:
-            if r.get("effective_status") in TROUBLE:
-                out.append(f"⚠️ {kind} *{r.get('name')}* is {r['effective_status'].lower().replace('_', ' ')}: check it in Ads Manager")
-    return out
-
-
-def running(campaigns, adsets, ads):
-    """True when an active campaign has an active ad set with an active ad,
-    i.e. something is supposed to be spending."""
-    live = {c["id"] for c in campaigns if c.get("effective_status") == "ACTIVE"}
-    sets = {s["id"] for s in adsets if s.get("effective_status") == "ACTIVE" and s.get("campaign_id") in live}
-    return any(a.get("effective_status") == "ACTIVE" and a.get("adset_id") in sets for a in ads)
-
-
 def cmd_report(api, account, out):
-    """Returns (report, alert): the daily numbers for the activity channel,
-    and what needs the owner for the alerts channel. Either may be None.
-    The structure is read first: a disapproved ad or a billing hold is the
-    usual reason spend is $0, so a quiet week must not skip that check."""
-    campaigns, adsets, ads = structure(api, account["id"])
-    problems = ad_problems(account, campaigns, adsets, ads)
     spend7, week = summarize(insights(api, account["id"], "last_7d"))
-    yspend, yday = summarize(insights(api, account["id"], "yesterday"))
-    if running(campaigns, adsets, ads) and yspend <= 0:
-        problems.append("⚠️ A campaign is on but spent $0 yesterday: check delivery in Ads Manager")
-    alert = "\n".join(["🚨 Meta ads need a look"] + problems) if problems else None
+    campaigns, adsets, ads = structure(api, account["id"])
+    problems = [f"⚠️ Ad *{a['name']}* is {a['effective_status'].lower()}: check it in Ads Manager"
+                for a in ads if a.get("effective_status") in ("DISAPPROVED", "WITH_ISSUES")]
+    # account_status 1 is ACTIVE; anything else (disabled, unsettled,
+    # closed) stops every ad. Missing means Meta didn't say.
+    if account.get("account_status") not in (None, 1):
+        problems.insert(0, f"⚠️ The ad account is disabled or on hold (status {account['account_status']}): "
+                           "check Ads Manager → Account overview")
     if spend7 <= 0:
-        out.append("No ad spend in the last 7 days; no report.")
-        if alert:
-            out.append(alert)
-        return None, alert
+        on = [a for a in ads if a.get("effective_status") == "ACTIVE"]
+        if not problems and not on:
+            out.append("No ad spend in the last 7 days and no ads on; no report.")
+            return None
+        # Zero spend with ads on, or a rejected ad / held account, is a
+        # stalled campaign, not a quiet week: say so.
+        head = "📉 Meta ads: $0 spent in the last 7 days" + (f" with {len(on)} ad{'s' if len(on) != 1 else ''} on" if on else "")
+        text = "\n".join([head] + problems)
+        out.append(text)
+        return text
+    _, yday = summarize(insights(api, account["id"], "yesterday"))
     text = "\n".join([f"📈 Meta ads: yesterday {yday}", f"Last 7 days: {week}"] + problems)
     out.append(text)
-    return text, alert
-
-
-def alert_slack(text, link):
-    """Post to the alerts channel (SLACK_ALERTS_WEBHOOK_URL, else the
-    default webhook)."""
-    url = os.environ.get("SLACK_ALERTS_WEBHOOK_URL", "").strip() or os.environ.get("SLACK_WEBHOOK_URL", "")
-    old = os.environ.get("SLACK_WEBHOOK_URL")
-    os.environ["SLACK_WEBHOOK_URL"] = url
-    try:
-        slack_notify.main([text, "--link", link])
-    finally:
-        if old is None:
-            os.environ.pop("SLACK_WEBHOOK_URL", None)
-        else:
-            os.environ["SLACK_WEBHOOK_URL"] = old
-
-
-def not_set_up(err):
-    """The Page-token fallback seeing no ad account just means the ads token
-    isn't set up yet (no META_ADS_TOKEN secret): not worth a daily alert."""
-    return os.environ.get("META_ADS_TOKEN_SOURCE") == "page" and "sees no ad accounts" in str(err)
+    return text
 
 
 def set_status(api, target, status, out):
@@ -288,7 +244,7 @@ def main(argv=None, session=None):
     ap.add_argument("target", nargs="?", default="")
     ap.add_argument("amount", nargs="?", default="")
     ap.add_argument("--force", action="store_true")
-    ap.add_argument("--scheduled", action="store_true", help="the daily run: setup problems alert Slack instead of failing it")
+    ap.add_argument("--scheduled", action="store_true", help="the daily run: ads not set up yet doesn't fail it")
     args = ap.parse_args(argv)
 
     token = os.environ.get("META_ADS_TOKEN", "").strip()
@@ -302,12 +258,9 @@ def main(argv=None, session=None):
         if args.command == "status":
             cmd_status(api, account, out)
         elif args.command == "report":
-            text, alert = cmd_report(api, account, out)
-            manager = f"https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={account['id'][4:]}"
+            text = cmd_report(api, account, out)
             if text:
-                slack_notify.main([text, "--link", manager])
-            if alert:
-                alert_slack(alert, manager)
+                slack_notify.main([text, "--link", f"https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={account['id'][4:]}"])
         elif args.command in ("pause", "resume"):
             if not args.target:
                 raise AdsError("Which campaign, ad set or ad? Pass its id.")
@@ -320,14 +273,11 @@ def main(argv=None, session=None):
             cmd_budget(api, args.target, dollars, args.force, out)
     except AdsError as e:
         print("\n".join(out))
-        if args.scheduled:
-            # The daily report can't run (expired or revoked token, lost
-            # account access, Graph outage). A green run would look just
-            # like a quiet day, so say so in the alerts channel.
+        # Only "ads were never set up" is quiet on the daily run; a dead
+        # token or lost account access fails it so meta-ads.yml alerts
+        # Slack, instead of the daily report just stopping.
+        if args.scheduled and isinstance(e, NotSetUp):
             print(f"::warning::{e}")
-            if not not_set_up(e):
-                alert_slack(f"🚨 Meta ads daily report couldn't run: {e}",
-                            os.environ.get("RUN_URL") or "https://adsmanager.facebook.com/")
             return 0
         print(f"::error::{e}")
         return 1

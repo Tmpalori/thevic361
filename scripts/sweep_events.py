@@ -22,13 +22,15 @@ Two passes:
     without OPENAI_API_KEY; the rules still run.
 
     python3 scripts/sweep_events.py [--days 14] [--dry-run]
+    python3 scripts/sweep_events.py --wait-for candidates.json   # after a collect
 """
 import argparse
 import json
 import os
 import re
 import sys
-from datetime import date, datetime, timedelta
+import time
+from datetime import date, datetime, timedelta, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
@@ -353,17 +355,80 @@ def report(events, findings, ai_ran, days, hidden=(), problem=None):
     return head, lines
 
 
+def _when(raw):
+    """A last_updated as an aware datetime (naive reads as UTC), or None."""
+    try:
+        t = datetime.fromisoformat(str(raw or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
+def _key(e):
+    # server/db.js eventKeyOf
+    return f"{e.get('date') or ''}|{e.get('name') or ''}|{e.get('venue') or ''}"
+
+
+def fetch_live():
+    resp = requests.get(f"{SITE}/events.json?all=1", timeout=30, headers={"User-Agent": "vic361-event-check"})
+    resp.raise_for_status()
+    return resp.json()
+
+
+def wait_for_publish(candidates_path, fetch=fetch_live, sleep=time.sleep, tries=30, interval=30, today=None):
+    """Wait until the live list holds these candidates (after a collect).
+
+    A newer live last_updated alone isn't proof: a submissions-only
+    auto-publish or an admin publish during the deploy bumps it too, and
+    the site exposes nothing that names the candidates it published. So the
+    first answer is the before picture, and the wait ends once the list is
+    newer than the candidates and holds some of the upcoming candidates it
+    didn't have then (half, at most 3: a few may never appear, rejected in
+    admin or merged into a near-twin). With nothing new, newer is enough.
+    True when they're live; False (with a warning) after tries x interval.
+    """
+    with open(candidates_path) as f:
+        cand = json.load(f)
+    made = _when(cand.get("last_updated"))
+    today = today or ce.now_central().date().isoformat()
+    keys = {_key(e) for e in cand.get("events") or [] if e.get("name") and str(e.get("date") or "") >= today}
+    new = need = None
+    for i in range(tries):
+        try:
+            live = fetch()
+            live_keys = {_key(e) for e in live.get("events") or []}
+            if new is None:
+                new = keys - live_keys
+                need = min(3, (len(new) + 1) // 2)
+            updated = _when(live.get("last_updated"))
+            seen = len(new & live_keys)
+            if made and updated and updated >= made and seen >= need:
+                print(f"Live list updated at {updated} with {seen} of {len(new)} new candidates (made {made}).")
+                return True
+            print(f"waiting: live list from {updated}, {seen} of {len(new)} new candidates (need {need})")
+        except (ValueError, OSError, requests.RequestException) as e:
+            print(f"waiting: {e}")
+        if i < tries - 1:
+            sleep(interval)
+    print(f"::warning::The new candidates didn't go live within {tries * interval // 60} minutes; "
+          "checking what's there now.")
+    return False
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=14)
     ap.add_argument("--dry-run", action="store_true", help="print instead of posting to Slack")
+    ap.add_argument("--wait-for", metavar="CANDIDATES_JSON",
+                    help="only wait (up to 15 min) for these candidates to go live, then exit")
     args = ap.parse_args(argv)
+    if args.wait_for:
+        wait_for_publish(args.wait_for)
+        return 0
 
     # ?all=1: every public event, including ones past their day's limit
     # (server/scoring.js), which still have pages and appear in the guides.
-    resp = requests.get(f"{SITE}/events.json?all=1", timeout=30, headers={"User-Agent": "vic361-event-check"})
-    resp.raise_for_status()
-    events = upcoming(resp.json().get("events") or [], ce.now_central().date(), args.days)
+    events = upcoming(fetch_live().get("events") or [], ce.now_central().date(), args.days)
 
     rules = trusted(events, rule_findings(events))
     key = os.environ.get("OPENAI_API_KEY", "").strip()
