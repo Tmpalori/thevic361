@@ -235,7 +235,7 @@ export async function createApp(opts = {}) {
     if (!authFailGlobal.peek('all').ok) {
       slack.alert('admin-auth-flood', 'Many failed admin sign-ins',
         'Too many failed admin sign-ins or wrong admin tokens in 15 minutes, from many addresses. ' +
-        'Each address is still limited on its own; consider changing ADMIN_PASSWORD if it keeps up.');
+        'Each address is still limited on its own; consider changing ADMIN_PASSWORD if it keeps up (that also signs out every session).');
     }
   }
 
@@ -731,7 +731,7 @@ export async function createApp(opts = {}) {
 
     // Merge approved submissions so the editor sees them in the picker.
     try {
-      const approved = await store.list({ status: 'approved' });
+      const approved = await store.list({ status: 'approved', fromDate: localDateStr(nowFn()) });
       const seen = new Set(events.map(e =>
         [e.date || '', e.name || '', e.venue || ''].join('|')
       ));
@@ -1218,7 +1218,7 @@ export async function createApp(opts = {}) {
   // so the existing admin picker/publish flow can ingest them by simply
   // appending them to the candidate list before publishing.
   app.get('/api/admin/approved-events', requireAdmin, wrap(async (req, res) => {
-    const rows = await store.list({ status: 'approved' });
+    const rows = await store.list({ status: 'approved', fromDate: localDateStr(nowFn()) });
     let events = rows.map(r => ({
       ...withoutSubmitter(r.payload),
       submitted: true, // the event score's community-submission bonus
@@ -1296,8 +1296,9 @@ export async function createApp(opts = {}) {
   // event and marks the ones past their day's limit `overflow`: the day
   // lists below leave those out (shownPayload), while event pages, guides
   // and the sitemap keep them.
-  async function getPublicPayload() {
-    const payload = await sponsors.apply(await loadPublicPayload());
+  // strict: paid placements must be read, or this throws (the newsletter).
+  async function getPublicPayload({ strict = false } = {}) {
+    const payload = await sponsors.apply(await loadPublicPayload(), { strict });
     // `kept`: events the admin chose to show anyway (POST
     // /api/admin/keep-event), by key; they skip the daily limit.
     const kept = new Set(Array.isArray(payload.kept) ? payload.kept : []);
@@ -1305,8 +1306,8 @@ export async function createApp(opts = {}) {
     return { ...payload, events: pickDays(capDays(events, { venues })) };
   }
 
-  async function shownPayload() {
-    const payload = await getPublicPayload();
+  async function shownPayload(opts) {
+    const payload = await getPublicPayload(opts);
     return { ...payload, events: shown(payload.events) };
   }
 
@@ -1525,6 +1526,8 @@ export async function createApp(opts = {}) {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
     // The newsletter is a day-by-day list: only events that made their day.
     getPublicPayload: shownPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman,
+    // The send itself must carry the paid placements (see sponsors.apply).
+    getSendPayload: () => shownPayload({ strict: true }),
     // Monday's run also sends last week's sponsor reports (and any Vic's
     // Pick reports due). The submission review cron runs them too, every
     // 15 minutes; both are idempotent (each order records report_sent).
@@ -1777,20 +1780,41 @@ export async function createApp(opts = {}) {
         siteUrl, address: newsletter.address, upgradeUrl: paid ? '' : upgradeUrlFor(row), pick: pinned, at: row.created_at,
         pageUrl: live.page ? `${siteUrl}${live.page}` : ''
       });
-      // mailer.send never throws; it answers false when Resend failed. A
-      // throw here is what the review's retry path already treats as "try
-      // again" (ai_review.live_pending, then retryLive every review run with
-      // the same idempotency key until the date passes), so a buyer promised
-      // this email isn't left without it after a short Resend outage. With
-      // email off (no Resend set up) there's nothing to retry.
-      const sent = await mailer.send(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
-      if (!sent && mailer.enabled) {
+      // mailer.deliver never throws. A throw here is what the review's retry
+      // path already treats as "try again" (ai_review.live_pending, then
+      // retryLive every review run with the same idempotency key until the
+      // date passes), so a buyer promised this email isn't left without it
+      // after a short Resend outage. With email off there's nothing to retry.
+      const result = await mailer.deliver(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
+      if (result === 'failed') {
         const err = new Error('live email failed');
         err.code = 'live-email-failed';
         throw err;
       }
+      if (result === 'refused') await liveEmailRefused(row, live);
     }
     return true;
+  }
+
+  // Resend refuses the address for good ("bob@gmail.com."): retrying only
+  // republished the site every 15 minutes until the event's date and never
+  // told anyone. The event is live, so answer true (that clears
+  // live_pending), note it on the submission, and tell Slack once.
+  async function liveEmailRefused(row, live) {
+    const history = Array.isArray(row.review_history) ? row.review_history : [];
+    if (history.some(h => h && h.action === 'live-email-refused')) return;
+    const at = nowFn().toISOString();
+    try {
+      await store.update(row.id, { review_history: [...history,
+        { at, action: 'live-email-refused', note: 'Resend refused the "you’re live" email to the submitter’s address; not retried' }] });
+    } catch (err) { console.warn('[submissions] live email refusal note failed:', err.message); }
+    slack.notify({
+      channel: 'activity',
+      title: `✉️ “You’re live” email refused: ${row.payload && row.payload.name}`,
+      text: `${(row.payload && row.payload.name) || 'A submission'} is on the site${live.page ? ` (${siteUrl}${live.page})` : ''}, ` +
+        `but Resend refused the address ${row.submitter_email}, so the submitter wasn't told. Reach them another way if it matters.`,
+      link: `${siteUrl}/admin.html`
+    });
   }
 
   // Publish approved submissions now (never the collector's candidates) and
@@ -1819,7 +1843,7 @@ export async function createApp(opts = {}) {
   }
 
   // ─── AI review of submissions (server/submissionReview.js) ───
-  registerSubmissionReview(app, {
+  const submissionReview = registerSubmissionReview(app, {
     store, slack, siteUrl,
     nowFn: () => (opts.now || (() => new Date()))(),
     secret: submissionReviewSecret,
@@ -2107,7 +2131,7 @@ export async function createApp(opts = {}) {
   });
 
   await archiveReady;
-  return { app, store, storeBundle, slack, scheduler };
+  return { app, store, storeBundle, slack, scheduler, submissionReview };
 }
 
 // Start the server when invoked directly. Importing this module (e.g. from

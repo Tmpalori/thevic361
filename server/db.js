@@ -243,11 +243,13 @@ class FileStore {
     });
   }
 
-  async list({ status } = {}) {
+  // fromDate (YYYY-MM-DD): only events on or after it, uncapped. See PgStore.
+  async list({ status, fromDate } = {}) {
     const data = await this._read();
-    const rows = status
+    let rows = status
       ? data.submissions.filter(r => r.status === status)
       : data.submissions.slice();
+    if (fromDate) rows = rows.filter(r => String((r.payload || {}).date || '') >= fromDate);
     rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     return rows;
   }
@@ -606,13 +608,23 @@ function jobReclaimable(row, now) {
 // Whether a pg error means the database itself is unreachable or stuck
 // (trip the breaker) rather than a bad query or a constraint (don't). pg
 // errors from the server carry a 5-character SQLSTATE: class 08 is a
-// connection exception, 57 operator intervention (statement timeout,
-// admin shutdown), 53 insufficient resources (too many connections).
-// Anything without one is a socket error or a client-side timeout
-// ("timeout exceeded when trying to connect", "Query read timeout").
-export function isOutage(err) {
+// connection exception, 53 insufficient resources (too many connections),
+// 57P01-57P05 a shutdown or a dropped session. A statement timeout (57014)
+// or cancel (57000) is not: one slow query (a 90-day traffic report) used to
+// open the breaker for 30 s and fail every unrelated query, while the
+// server that answered with the timeout was plainly up. Anything without a
+// code is a socket error or a client-side timeout ("Query read timeout",
+// "timeout exceeded when trying to connect"), except that a checkout timeout
+// with every client busy (`pool` full) is slow queries, not a dead database:
+// if the database hung, those busy clients' own read timeouts trip it.
+const POOL_TIMEOUT = /timeout exceeded when trying to connect/i;
+export function isOutage(err, pool = null) {
   const code = err && typeof err.code === 'string' ? err.code : '';
-  if (/^[0-9A-Z]{5}$/.test(code)) return ['08', '57', '53'].includes(code.slice(0, 2));
+  if (/^[0-9A-Z]{5}$/.test(code)) {
+    return ['08', '53'].includes(code.slice(0, 2)) || code.startsWith('57P');
+  }
+  if (pool && POOL_TIMEOUT.test(String(err && err.message)) && Number.isFinite(pool.totalCount) &&
+      pool.totalCount >= ((pool.options && pool.options.max) || 10) && pool.idleCount === 0) return false;
   return true;
 }
 
@@ -637,7 +649,9 @@ export function breakerPool(pool, { windowMs = 30000, now = () => Date.now() } =
       openUntil = 0;
       return r;
     } catch (err) {
-      if (isOutage(err)) openUntil = now() + windowMs;
+      // A probe that times out keeps it open: the one query let through
+      // to test a stuck database shouldn't close the breaker by timing out.
+      if (isOutage(err, pool) || (probe && /^57/.test(String(err && err.code)))) openUntil = now() + windowMs;
       else if (probe) openUntil = 0; // it answered: the database is up
       throw err;
     } finally {
@@ -658,6 +672,21 @@ class PgStore {
   async ready() {
     if (!this._readyPromise) {
       this._readyPromise = (async () => {
+        // ALTER TABLE ... ADD COLUMN IF NOT EXISTS takes an ACCESS EXCLUSIVE
+        // lock even when the column is there, so on every boot it queued
+        // behind a long traffic report and every traffic read and write
+        // queued behind it (and a timed-out ALTER failed ready()). Ask once
+        // which of the added columns exist and only ALTER for missing ones.
+        const added = [['event_submissions', 'ai_review'], ['traffic', 'ad'],
+          ['newsletter_sends', 'failed_emails'], ['newsletter_sends', 'picks']];
+        const cols = await this.pool.query(
+          `SELECT table_name, column_name FROM information_schema.columns
+            WHERE table_schema = current_schema() AND column_name = ANY($1::text[])`,
+          [added.map(a => a[1])]);
+        const have = new Set((cols.rows || []).map(r => `${r.table_name}.${r.column_name}`));
+        const addColumn = async (table, column, sql) => {
+          if (!have.has(`${table}.${column}`)) await this.pool.query(sql);
+        };
         await this.pool.query(`
           CREATE TABLE IF NOT EXISTS event_submissions (
             id TEXT PRIMARY KEY,
@@ -676,7 +705,7 @@ class PgStore {
           );
         `);
         // The AI submission review's decision (server/submissionReview.js).
-        await this.pool.query('ALTER TABLE event_submissions ADD COLUMN IF NOT EXISTS ai_review JSONB');
+        await addColumn('event_submissions', 'ai_review', 'ALTER TABLE event_submissions ADD COLUMN IF NOT EXISTS ai_review JSONB');
         await this.pool.query(`
           CREATE INDEX IF NOT EXISTS event_submissions_status_idx
             ON event_submissions(status);
@@ -728,7 +757,7 @@ class PgStore {
         await this.pool.query('CREATE INDEX IF NOT EXISTS traffic_day_idx ON traffic(day);');
         // The sponsor order an impression or click belongs to (data-ad), for
         // sponsor and Vic's Pick reports.
-        await this.pool.query('ALTER TABLE traffic ADD COLUMN IF NOT EXISTS ad TEXT;');
+        await addColumn('traffic', 'ad', 'ALTER TABLE traffic ADD COLUMN IF NOT EXISTS ad TEXT;');
         // Newsletter subscribers (server/newsletter.js). token is the secret
         // in confirm/unsubscribe links.
         await this.pool.query(`
@@ -753,9 +782,9 @@ class PgStore {
           );
         `);
         // Who didn't get it, so a retry resends to them only.
-        await this.pool.query(`ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS failed_emails JSONB NOT NULL DEFAULT '[]'::jsonb`);
+        await addColumn('newsletter_sends', 'failed_emails', `ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS failed_emails JSONB NOT NULL DEFAULT '[]'::jsonb`);
         // Paid Vic's Pick order ids the issue starred, for their reports.
-        await this.pool.query('ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS picks JSONB');
+        await addColumn('newsletter_sends', 'picks', 'ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS picks JSONB');
         // Sponsor orders (server/sponsors.js). Low volume, read whole; the
         // order itself lives in payload so new fields need no migration.
         await this.pool.query(`
@@ -854,12 +883,21 @@ class PgStore {
     return this._row(r.rows[0]);
   }
 
-  async list({ status } = {}) {
+  // The admin's list is the newest 500. Readers that need every upcoming
+  // approval (auto-publish, retryLive, paid pick reminders, the admin
+  // picker) pass fromDate: the cap dropped an approval made long before its
+  // date once 500 newer ones existed, and auto-publish then retired it as
+  // missing. Upcoming rows are few, so that read has no cap.
+  async list({ status, fromDate } = {}) {
     await this.ready();
     const args = [];
+    const where = [];
+    if (status) { args.push(status); where.push(`status = $${args.length}`); }
+    if (fromDate) { args.push(fromDate); where.push(`payload->>'date' >= $${args.length}`); }
     let q = 'SELECT * FROM event_submissions';
-    if (status) { args.push(status); q += ' WHERE status = $1'; }
-    q += ' ORDER BY created_at DESC LIMIT 500';
+    if (where.length) q += ' WHERE ' + where.join(' AND ');
+    q += ' ORDER BY created_at DESC';
+    if (!fromDate) q += ' LIMIT 500';
     const r = await this.pool.query(q, args);
     return r.rows.map(x => this._row(x));
   }

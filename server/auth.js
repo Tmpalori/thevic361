@@ -9,7 +9,8 @@
  *                             Required to enable login.
  *   ADMIN_SESSION_SECRET      HMAC key for signing session tokens. Required.
  *                             Use a long random string (e.g. `openssl rand
- *                             -hex 32`). Rotating it invalidates every
+ *                             -hex 32`). Rotating it, or changing the
+ *                             username or password, invalidates every
  *                             outstanding session.
  *   ADMIN_SESSION_TTL_HOURS   Optional. Token lifetime in hours. Default 12.
  *
@@ -19,6 +20,10 @@
  *
  * No `alg` header — there is exactly one algorithm and one key, so the alg
  * confusion attacks don't apply. Tokens are short-lived; no revocation list.
+ * The key is derived from ADMIN_SESSION_SECRET plus a hash of
+ * ADMIN_USERNAME and ADMIN_PASSWORD, so changing the password (what the
+ * failed-sign-in alert tells the owner to do) also ends every session
+ * already issued, not just rotating the secret.
  *
  * All comparisons that touch secrets use crypto.timingSafeEqual.
  */
@@ -68,6 +73,14 @@ export function createAuth(opts = {}) {
   // pretend login works.
   const configured = Boolean(username && password && secret);
 
+  // Same token format and algorithm; only the key changes with the
+  // credentials. The password enters as a hash, never as key material
+  // directly, and the secret still has to be known to sign.
+  const signingKey = configured
+    ? crypto.createHmac('sha256', secret).update('vic361-admin-session\0' +
+      crypto.createHash('sha256').update(`${username}\0${password}`, 'utf8').digest('hex')).digest()
+    : null;
+
   function signToken({ sub = username, now = Date.now() } = {}) {
     if (!configured) throw new Error('auth-not-configured');
     const payload = {
@@ -76,7 +89,7 @@ export function createAuth(opts = {}) {
       exp: Math.floor((now + ttlMs) / 1000)
     };
     const payloadB64 = b64urlEncode(JSON.stringify(payload));
-    const sig = crypto.createHmac('sha256', secret).update(payloadB64).digest();
+    const sig = crypto.createHmac('sha256', signingKey).update(payloadB64).digest();
     const sigB64 = b64urlEncode(sig);
     return payloadB64 + '.' + sigB64;
   }
@@ -89,7 +102,7 @@ export function createAuth(opts = {}) {
     const payloadB64 = token.slice(0, dot);
     const sigB64 = token.slice(dot + 1);
 
-    const expected = crypto.createHmac('sha256', secret).update(payloadB64).digest();
+    const expected = crypto.createHmac('sha256', signingKey).update(payloadB64).digest();
     let provided;
     try { provided = b64urlDecode(sigB64); } catch (_) { return { ok: false, reason: 'malformed' }; }
     if (!safeEqualBuf(expected, provided)) return { ok: false, reason: 'bad-signature' };

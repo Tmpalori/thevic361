@@ -468,7 +468,8 @@ describe('Admin API auth + transitions', () => {
   });
 
   it('approved-events surfaces all event fields (incl. end_time + address) for the picker', async () => {
-    const c = await fetchJson('POST', '/api/submissions', validBody());
+    // The picker lists upcoming approvals only (an uncapped read).
+    const c = await fetchJson('POST', '/api/submissions', validBody({ date: '2099-05-12' }));
     await fetchJson('POST', '/api/admin/submissions/' + c.json.id,
       { status: 'approved' },
       { Authorization: 'Bearer test-admin-token' });
@@ -489,7 +490,8 @@ describe('Admin API auth + transitions', () => {
   });
 
   it('approved-events endpoint returns candidate-shaped events with source metadata', async () => {
-    const c = await fetchJson('POST', '/api/submissions', validBody());
+    // The picker lists upcoming approvals only (an uncapped read).
+    const c = await fetchJson('POST', '/api/submissions', validBody({ date: '2099-05-12' }));
     await fetchJson('POST', '/api/admin/submissions/' + c.json.id,
       { status: 'approved' },
       { Authorization: 'Bearer test-admin-token' });
@@ -502,6 +504,14 @@ describe('Admin API auth + transitions', () => {
     expect(ev._source).toBe('submission');
     expect(ev._source_id).toBe(c.json.id);
     expect(ev._submitter_kind).toBe('organizer');
+  });
+
+  it('approved-events leaves out approvals whose date has passed', async () => {
+    const c = await fetchJson('POST', '/api/submissions', validBody({ date: '2020-05-12' }));
+    await fetchJson('POST', '/api/admin/submissions/' + c.json.id, { status: 'approved' },
+      { Authorization: 'Bearer test-admin-token' });
+    const r = await fetchJson('GET', '/api/admin/approved-events', undefined, { Authorization: 'Bearer test-admin-token' });
+    expect(r.json.events).toEqual([]);
   });
 });
 
