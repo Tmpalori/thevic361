@@ -76,8 +76,11 @@ function venueEvents(venue, live, archived, today, venues) {
     if (ev && ev.page && venueFor(ev, candidates) === venue) byPage.set(ev.page, ev);
   }
   const all = [...byPage.values()];
+  // Upcoming from the live list only (as for seasons): the archive also
+  // keeps the old page of an event that was renamed or taken down since.
+  const livePages = new Set(live.map(e => e && e.page));
   return {
-    upcoming: sortEvents(all.filter(e => e.date >= today)),
+    upcoming: sortEvents(all.filter(e => e.date >= today && livePages.has(e.page))),
     past: sortEvents(all.filter(e => e.date < today)).reverse().slice(0, 10)
   };
 }
@@ -177,7 +180,7 @@ export function renderVenueIndex(venues, live, archived, { siteUrl, now }) {
 function upcomingCounts(venues, live, archived, today) {
   const counts = new Map();
   const seen = new Set();
-  for (const ev of [...live, ...archived]) {
+  for (const ev of live) {
     if (!ev || !ev.page || seen.has(ev.page) || ev.date < today) continue;
     seen.add(ev.page);
     const v = venueFor(ev, venues);

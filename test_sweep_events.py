@@ -73,12 +73,65 @@ def test_window_is_today_through_n_days():
     assert [e["name"] for e in got] == ["Today", "Last day"]
 
 
-def test_live_cut_off_names_are_flagged_not_hidden():
-    events = [ev("Scenic Root — Plant a", page="/events/a")]
+def test_a_lone_cut_off_name_is_flagged_not_hidden():
+    events = [ev("Scenic Root — Plant a", venue="Moonshine Drinkery", page="/events/a")]
     found = sw.rule_findings(events)
-    assert [(i, k) for i, k, _ in found] == [(0, "other")]
+    assert [(i, k) for i, k, _ in found] == [(0, "cut_off")]
     assert "cut off" in found[0][2]
-    assert sw.to_hide(events, found)[0] == []   # reported, never hidden
+    assert sw.to_hide(events, found)[0] == []   # could be the only listing: reported only
+
+
+def test_cut_off_names_beside_the_whole_listing_are_hidden():
+    # Live 2026-10-08 at Moonshine Drinkery: two cut-off post names next to
+    # the AllEvents listing of the same night.
+    events = [ev("Once Upon A Plant: Maas Edition", date="2026-10-08", time="06:30 PM", venue="Moonshine Drinkery",
+                 page="/events/2026-10-08-once-upon-a-plant-maas-edition"),
+              ev("Scenic Root — Once Upon...", date="2026-10-08", venue="Moonshine Drinkery",
+                 page="/events/2026-10-08-scenic-root-once-upon"),
+              ev("Scenic Root — Plant a", date="2026-10-08", venue="Moonshine Drinkery",
+                 page="/events/2026-10-08-scenic-root-plant-a"),
+              ev("Paint and Sip with the", date="2026-10-08", venue="Aero Crafters", page="/events/z")]
+    picks, _ = sw.to_hide(events, sw.rule_findings(events))
+    assert [(i, k) for i, k, _ in picks] == [(1, "cut_off"), (2, "cut_off")]
+    assert "Once Upon A Plant: Maas Edition" in picks[0][2]
+
+
+def test_library_copy_of_a_city_calendar_program_is_hidden():
+    # Live 2026-10-06/07: the same program at the library (its default
+    # venue) and at its real place from the city calendar.
+    lib = ev("Bookish Society Book Club", time="6:00PM – 7:00PM", venue="Victoria Public Library",
+             url="https://victoriapl.librarycalendar.com/event/bookish-society-book-club-8996", page="/events/a",
+             description="Monthly book club.")
+    city = ev("Bookish Society Book Club", time="6:00 PM – 7:00 PM", venue="Vida Cafe",
+              url="https://www.victoriatx.gov/Calendar.aspx?EID=3969", page="/events/b")
+    for events in ([lib, city], [city, lib]):
+        rules = sw.rule_findings(events)
+        assert (1, "duplicate") in kinds(rules)
+        picks, _ = sw.to_hide(events, rules)
+        assert [events[i]["page"] for i, _, _ in picks] == ["/events/a"]
+        assert "Vida Cafe" in picks[0][2]
+    # Different hours, or no city calendar link: not certain, nothing hidden.
+    other = dict(city, time="7:00 PM – 8:00 PM")
+    assert sw.to_hide([lib, other], sw.rule_findings([lib, other]))[0] == []
+    other = dict(city, url="https://allevents.in/victoria/bookish/1")
+    assert sw.to_hide([lib, other], sw.rule_findings([lib, other]))[0] == []
+
+
+def test_night_events_in_the_morning_are_reported():
+    events = [ev("Comedy Night in Victoria w/Crux Crawford", date="2026-10-07", time="10:00 AM",
+                 venue="Moonshine Drinkery", page="/events/a"),
+              ev("Farmers Market", time="8:00 AM", venue="Market Square", page="/events/b")]
+    rules = sw.rule_findings(events)
+    assert kinds(rules) == [(0, "odd_time")]
+    assert sw.to_hide(events, rules)[0] == []
+
+
+def test_description_only_religious_words_are_reported_not_hidden():
+    events = [ev("Community Night", description="An evening of praise and worship.", page="/events/a"),
+              ev("Live Music", description="Come hear Hope Revival play country hits", page="/events/b")]
+    rules = sw.rule_findings(events)
+    assert kinds(rules) == [(0, "other")]
+    assert sw.to_hide(events, rules)[0] == []
 
 
 class FakeResp:

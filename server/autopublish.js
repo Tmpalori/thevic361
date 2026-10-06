@@ -7,7 +7,10 @@
  *
  * The admin stays in charge:
  *   - Events already published that are still upcoming are kept as-is
- *     (including anything the admin added by hand or edited).
+ *     (including anything the admin added by hand or edited), except that
+ *     an event this module added takes the collector's newer copy of it
+ *     (time, venue, address, link, description; the name only when the
+ *     published one was cut off), so collector fixes reach live events.
  *   - Events this module added on an earlier run that the new run no longer
  *     finds are taken down: the collector fixed or dropped them (e.g. a
  *     misread Instagram post). Skipped when the new run looks broken (far
@@ -46,7 +49,26 @@ function sortKey(ev) {
 // Bump when the publish rules change so the next boot re-applies them to
 // the current candidates (otherwise an unchanged candidates.json is skipped).
 // 2: auto-added events the collector no longer finds are taken down.
-export const AUTO_PUBLISH_RULES = 2;
+// 3: auto-added events take the collector's newer copy of themselves.
+export const AUTO_PUBLISH_RULES = 3;
+
+// What a newer collector copy may change on an event this module added.
+// The name only when the published one was cut off (see cutOff).
+const REFRESH_FIELDS = ['time', 'venue', 'address', 'url', 'description', 'icons', 'free'];
+
+function normName(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+// The published name is a cut-off copy of the new one: it stops mid-word
+// ("... Quilt Guild of Greate" / "... of Greater Victoria") or ends in "...".
+// Any other rename would move the event's page, so it's left alone.
+export function cutOff(oldName, newName) {
+  const a = normName(oldName), b = normName(newName);
+  if (!a || b.length <= a.length) return false;
+  if (b.startsWith(a) && b[a.length] !== ' ') return true;
+  return /(\.\.\.|…)\s*$/.test(String(oldName || '')) && b.startsWith(a);
+}
 
 // New & Notable: this run's items first, then earlier finds still under
 // three weeks old (items carry the date the collector found them).
@@ -205,11 +227,54 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     const events = [...kept];
     const added = [];
     let skippedRejected = 0;
+    // An event this module published earlier gets the collector's newer copy
+    // (cleaned venue, a link, the full name...), or collector fixes would
+    // never reach anything already live. Never an event the admin edited or
+    // added, an approved submission, a featured one, or when edits can't be
+    // read. A hidden or restored event keeps its name and venue (the
+    // hidden entry is matched by its key); so does one whose new key is
+    // taken by another event.
+    const approvedKeys = new Set(approved.map(eventKeyOf));
+    const hiddenKeys = new Set([
+      ...(Array.isArray(prior.hidden) ? prior.hidden.map(h => h && h.key) : []),
+      ...(prior.hidden_restored || [])
+    ]);
+    const refreshed = new Set();
+    const renamed = new Map();
+    const canRefresh = ev => {
+      const k = eventKeyOf(ev);
+      return edited && autoKeys.has(k) && !edited.has(k) && !approvedKeys.has(k) && !ev.featured && !refreshed.has(k);
+    };
+    const refresh = (i, ev) => {
+      const old = events[i];
+      const oldKey = eventKeyOf(old);
+      const next = { ...old };
+      for (const f of REFRESH_FIELDS) if (f in ev) next[f] = ev[f];
+      if (!ev.description) next.description = old.description;
+      if (cutOff(old.name, ev.name)) next.name = ev.name;
+      const newKey = eventKeyOf(next);
+      if (newKey !== oldKey && (hiddenKeys.has(oldKey) || events.some((e, j) => j !== i && eventKeyOf(e) === newKey))) {
+        next.name = old.name;
+        next.venue = old.venue;
+      }
+      const finalKey = eventKeyOf(next);
+      refreshed.add(finalKey);
+      if (JSON.stringify(next) === JSON.stringify(old)) return false;
+      events[i] = next;
+      if (finalKey !== oldKey) renamed.set(oldKey, finalKey);
+      return true;
+    };
+    let updated = 0;
+    const freshSet = new Set(fresh);
     for (const raw of [...approved, ...fresh.filter(upcoming)]) {
       const ev = publicFields(raw);
       const key = eventKeyOf(ev);
       if (rejected.has(key)) { skippedRejected++; continue; }
-      if (events.some(e => eventKeyOf(e) === key || sameEvent(e, ev))) continue;
+      const i = events.findIndex(e => eventKeyOf(e) === key || sameEvent(e, ev));
+      if (i !== -1) {
+        if (freshSet.has(raw) && canRefresh(events[i]) && refresh(i, ev)) updated++;
+        continue;
+      }
       events.push(ev);
       added.push(key);
     }
@@ -230,7 +295,7 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       auto_publish: {
         from: from || null,
         at: now,
-        keys: [...new Set([...(state.keys || []).filter(k => stillPresent.has(k)), ...added])],
+        keys: [...new Set([...(state.keys || []).map(k => renamed.get(k) || k).filter(k => stillPresent.has(k)), ...added])],
         rejected: [...rejected],
         // A submissions-only run doesn't count as publishing these
         // candidates; the next boot still publishes them as usual.
@@ -240,12 +305,12 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     await store.setPublished(payload);
     archiveEvents(events);
 
-    const result = { ok: true, published: events.length, added: added.length, kept: kept.length, retired: retired.length, skipped_removed: skippedRejected, from };
+    const result = { ok: true, published: events.length, added: added.length, kept: kept.length, updated, retired: retired.length, skipped_removed: skippedRejected, from };
     console.log('[auto-publish]', JSON.stringify(result));
     if (slack && !quiet) {
       slack.notify({
         title: `🗓️ Published ${events.length} events automatically`,
-        fields: [['New this run', added.length], ['Kept from before', kept.length],
+        fields: [['New this run', added.length], ['Kept from before', kept.length], ['Updated from the collector', updated],
           ['Taken down (no longer found)', retired.length], ['Skipped (you removed)', skippedRejected]],
         text: events.length ? '' : 'No upcoming events were found. Check the collector run.',
         link: `${siteUrl}/admin.html`, footer: 'Edit or remove anything in admin'
