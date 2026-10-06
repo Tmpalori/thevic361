@@ -189,9 +189,14 @@ export function validateSubmission(input, opts = {}) {
 // contact info needed). Required: name, date, time, venue, description.
 // Optional: end_time, address, url, icons[], free.
 //
+// timeOptional: the event being edited never had a start time (about a
+// quarter of collected events don't). The renderers treat '' as unknown,
+// and forcing one means inventing a time that then shows on the page, the
+// .ics and the JSON-LD; the owner may only be fixing a date or a link.
+//
 // Returns { ok, data } on success or { ok: false, errors } with a per-field
 // error map suitable for surfacing in the admin UI.
-export function validateEventEdit(input) {
+export function validateEventEdit(input, { timeOptional = false } = {}) {
   const errors = {};
   if (!input || typeof input !== 'object') {
     return { ok: false, errors: { _form: 'Invalid request body.' } };
@@ -212,7 +217,7 @@ export function validateEventEdit(input) {
   }
 
   const time = clean(input.time, MAX_TIME);
-  if (!time) errors.time = 'Start time is required.';
+  if (!time && !timeOptional) errors.time = 'Start time is required.';
 
   const end_time = clean(input.end_time, MAX_TIME);
 

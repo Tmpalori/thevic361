@@ -42,7 +42,7 @@ describe('docs/app.js matches the server renderer', () => {
 
   it('folds past days exactly like the server', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 9, 7, 12)); // Wednesday, local time
+    vi.setSystemTime(new Date('2026-10-07T17:00:00Z')); // Wednesday noon in Victoria
     const events = withPages([
       { date: '2026-10-05', name: 'Monday Market', time: '9 AM', icons: ['food'] },
       { date: '2026-10-07', name: 'Trivia', time: '7 PM', icons: ['drinks'] }
@@ -62,9 +62,36 @@ describe('docs/app.js matches the server renderer', () => {
     expect(summary(html)).toBe(summary(server));
   });
 
+  it('builds the week and Today in Victoria time, whatever zone the browser is in', async () => {
+    // Sunday Oct 11, 9 PM in Victoria; a browser on UTC already says Monday.
+    const tz = process.env.TZ;
+    process.env.TZ = 'UTC';
+    try {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-12T02:00:00Z'));
+      const events = [{ date: '2026-10-11', name: 'Sunday Night Jazz', time: '8:00 PM' }];
+      let done;
+      const ready = new Promise(r => { done = r; });
+      boot('', () => Promise.resolve({ ok: true, json: () => { setTimeout(done, 0); return Promise.resolve({ events }); } }));
+      await ready;
+      await new Promise(r => setTimeout(r, 0));
+      const html = document.getElementById('events-container').innerHTML;
+      expect(html).toContain('Sunday Night Jazz');
+      expect(html).toContain('October 5');
+      expect(html).not.toContain('October 12');
+      const sections = [...html.matchAll(/class="day-section[^"]*" id="(day-\d)"/g)].map(m => m[0]);
+      expect(sections.filter(s => s.includes('--past'))).toHaveLength(6);
+      expect(html.match(/today-badge/g)).toHaveLength(1);
+      expect(document.querySelector('#day-6').innerHTML).toContain('today-badge');
+      expect(document.querySelector('.skip-today-btn')).not.toBeNull();
+    } finally {
+      if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz;
+    }
+  });
+
   it('sorts a range sharing one AM/PM by its start, like parseTimes', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 9, 7, 12));
+    vi.setSystemTime(new Date('2026-10-07T17:00:00Z'));
     const events = [
       { date: '2026-10-07', name: 'Late Show', time: '8:00 PM' },
       { date: '2026-10-07', name: 'Early Set', time: '7:30 - 9:00 PM' }
@@ -97,7 +124,7 @@ describe('docs/app.js matches the server renderer', () => {
 
   it('sorts a time without minutes in its place, not at the end of the day', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 9, 7, 12));
+    vi.setSystemTime(new Date('2026-10-07T17:00:00Z'));
     const events = [
       { date: '2026-10-07', name: 'Late Show', time: '9:00 PM' },
       { date: '2026-10-07', name: 'Typed By Hand', time: '7 PM' },
@@ -117,7 +144,7 @@ describe('docs/app.js matches the server renderer', () => {
 
   it('fills in the footer year', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2027, 0, 2, 12));
+    vi.setSystemTime(new Date('2027-01-02T18:00:00Z'));
     document.body.innerHTML = '<footer><span data-year>2026</span></footer><div id="events-container"></div>';
     delete window.__vic361App;
     window.fetch = () => new Promise(() => {});
@@ -165,7 +192,7 @@ describe('filter messages', () => {
 describe('docs/app.js day order', () => {
   it('puts paid Vic’s Picks above editor’s picks, like sortEvents', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 9, 7, 12)); // Wednesday, local time
+    vi.setSystemTime(new Date('2026-10-07T17:00:00Z')); // Wednesday noon in Victoria
     const events = [
       { date: '2026-10-10', name: 'Plain', time: '9:00 AM', icons: [] },
       { date: '2026-10-10', name: 'Editor Pick', time: '1:00 PM', featured: true, editor_pick: true, icons: [] },

@@ -182,6 +182,32 @@ describe('admin Submissions tab — DOM', () => {
   });
 });
 
+describe('admin Submissions tab — a rejected edit', () => {
+  it('shows the server\'s field errors and marks the fields', async () => {
+    const { submissions } = bootDom({ apiBase: 'https://example.up.railway.app', token: 'tok' });
+    const row = { id: 'a', status: 'approved', source: 'submission', submitter_kind: 'organizer',
+      submitter_name: 'Jane', submitter_email: 'j@x.com',
+      payload: { name: 'Fair', date: '2026-11-12', time: '7:00 PM', venue: 'Venue', address: '1 Main', description: 'Hi', icons: [] } };
+    submissions._state.submissions = [row];
+    submissions._state.editing.add('a');
+    submissions.render();
+    window.fetch = vi.fn(async () => ({ ok: false, status: 400,
+      json: async () => ({ ok: false, errors: { address: 'Address is required.' } }) }));
+    const card = document.querySelector('.submission-card[data-id="a"]');
+    card.querySelector('[data-edit="address"]').value = '';
+    card.querySelector('button[data-act="save"]').click();
+    await vi.waitFor(() => expect(window.fetch).toHaveBeenCalled());
+    await new Promise(r => setTimeout(r, 0));
+    const err = document.getElementById('submissions-error');
+    expect(err.hidden).toBe(false);
+    expect(err.textContent).toBe('Address is required.');
+    expect(card.querySelector('[data-edit="address"]').getAttribute('aria-invalid')).toBe('true');
+    expect(card.querySelector('[data-edit="name"]').hasAttribute('aria-invalid')).toBe(false);
+    submissions._state.editing.clear();
+    submissions._state.submissions = [];
+  });
+});
+
 describe('admin source pills + private stripping', () => {
   let admin;
   beforeEach(() => { admin = bootDom().admin; });

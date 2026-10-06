@@ -222,6 +222,26 @@ describe('POST /api/admin/event-edits', () => {
     expect(r.json.errors.date).toBeDefined();
   });
 
+  it('lets an event collected without a time be saved without one, but not one that had a time', async () => {
+    const untimed = { date: '2026-04-27', name: 'Old Name', venue: 'DeTar Hospital', time: '', description: 'x' };
+    const timed = { date: '2026-04-28', name: 'Timed Thing', venue: 'DeTar Hospital', time: '6:00 PM', description: 'x' };
+    await startApp({ seedCandidates: [untimed, timed] });
+    const tok = await loginToken();
+    const auth = { Authorization: 'Bearer ' + tok };
+    let r = await fetchJson('POST', '/api/admin/event-edits',
+      { original_key: '2026-04-27|Old Name|DeTar Hospital', payload: { ...VALID_EDIT, time: '' } }, auth);
+    expect(r.status).toBe(200);
+    expect(r.json.edit.payload.time).toBe('');
+    r = await fetchJson('POST', '/api/admin/event-edits',
+      { original_key: '2026-04-28|Timed Thing|DeTar Hospital', payload: { ...VALID_EDIT, time: '' } }, auth);
+    expect(r.status).toBe(400);
+    expect(r.json.errors.time).toBeDefined();
+    // An event the server can't find keeps the requirement.
+    r = await fetchJson('POST', '/api/admin/event-edits',
+      { original_key: '2026-04-29|Nobody|Nowhere', payload: { ...VALID_EDIT, time: '' } }, auth);
+    expect(r.status).toBe(400);
+  });
+
   it('persists an edit and reports the new event key', async () => {
     await startApp();
     const tok = await loginToken();

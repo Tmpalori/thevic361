@@ -24,24 +24,40 @@
   }, { passive: true });
 
   // ─── DATE HELPERS ───
-  function toLocalDateStr(date) {
-    // Returns YYYY-MM-DD in local time
-    var y = date.getFullYear();
-    var m = String(date.getMonth() + 1).padStart(2, '0');
-    var d = String(date.getDate()).padStart(2, '0');
-    return y + '-' + m + '-' + d;
+  // Days are YYYY-MM-DD strings in Victoria's time (America/Chicago), like
+  // currentWeek/addDays in server/seo.js. The browser's own zone would
+  // move "Today" and the week for a visitor whose clock says UTC (privacy
+  // browsers, VMs) or who is traveling, and this render replaces the
+  // server's correct grid.
+  var CHICAGO_DAY = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit'
+  });
+
+  function victoriaToday() {
+    return CHICAGO_DAY.format(new Date());
   }
 
-  function formatDayName(date) {
-    return date.toLocaleDateString('en-US', { weekday: 'long' });
+  // Noon UTC on the day: formatting it in UTC can't slip to a neighbor day.
+  function dayAt(dateStr) {
+    return new Date(dateStr + 'T12:00:00Z');
   }
 
-  function formatMonthDay(date) {
-    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+  function addDays(dateStr, n) {
+    var d = dayAt(dateStr);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function formatDayName(dateStr) {
+    return dayAt(dateStr).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+  }
+
+  function formatMonthDay(dateStr) {
+    return dayAt(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
   }
 
   function isToday(dateStr) {
-    return dateStr === toLocalDateStr(new Date());
+    return dateStr === victoriaToday();
   }
 
   // ─── RENDER ICONS ───
@@ -188,16 +204,15 @@
   }
 
   // ─── RENDER DAY SECTION ───
-  function renderDaySection(date, events, idx) {
-    var dateStr = toLocalDateStr(date);
+  function renderDaySection(dateStr, events, idx) {
     var today = isToday(dateStr);
-    var dayName = formatDayName(date);
-    var monthDay = formatMonthDay(date);
+    var dayName = formatDayName(dateStr);
+    var monthDay = formatMonthDay(dateStr);
 
     var todayBadgeHtml = today ? ' <span class="today-badge">Today</span>' : '';
     // A day that's already over is folded to its header so the list opens
     // on today (same markup as renderDay in server/seo.js).
-    var past = dateStr < toLocalDateStr(new Date());
+    var past = dateStr < victoriaToday();
 
     var eventsForDay = events.filter(function (e) { return e.date === dateStr; });
     // Sort by time ascending (events without time go last)
@@ -430,20 +445,13 @@
           }) + ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
         }
 
-        // Build Mon–Sun of the current week
-        var today = new Date();
-        today.setHours(0, 0, 0, 0);
-        var dayOfWeek = today.getDay(); // 0=Sun, 1=Mon … 6=Sat
-        var daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-        var monday = new Date(today);
-        monday.setDate(today.getDate() - daysFromMonday);
+        // Build Mon–Sun of the current week in Victoria
+        var todayStr = victoriaToday();
+        var dayOfWeek = dayAt(todayStr).getUTCDay(); // 0=Sun, 1=Mon … 6=Sat
+        var monday = addDays(todayStr, dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
 
         var days = [];
-        for (var i = 0; i < 7; i++) {
-          var d = new Date(monday);
-          d.setDate(monday.getDate() + i);
-          days.push(d);
-        }
+        for (var i = 0; i < 7; i++) days.push(addDays(monday, i));
 
         var html = days.map(function (date, idx) {
           return renderDaySection(date, data.events || [], idx);
@@ -453,11 +461,7 @@
         applyFilter(currentFilter);
 
         // ─── SKIP TO TODAY BUTTON ───
-        var todayStr = toLocalDateStr(new Date());
-        var todayIdx = -1;
-        days.forEach(function (d, i) {
-          if (toLocalDateStr(d) === todayStr) todayIdx = i;
-        });
+        var todayIdx = days.indexOf(todayStr);
         insertNewsletterCard(container, Math.max(todayIdx, 0));
         // Show button whenever today isn't Monday (idx 0)
         if (todayIdx > 0) {
