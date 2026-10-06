@@ -50,8 +50,14 @@ function eventTable(ev, siteUrl) {
 
 // ─── Free submission received ────────────────────────────────────────────
 
+// Anyone can type any address into the public form, so this email carries
+// none of the submitter's free text beyond a shortened event name (escaped):
+// a fixed subject and no description, so it can't be used to mail strangers
+// a message of the sender's choosing. Index.js also caps it per address.
 export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
-  const name = ev.name || 'your event';
+  const short = String(ev.name || '').slice(0, 80);
+  const name = short ? (short.length < String(ev.name).length ? `${short}…` : short) : 'your event';
+  ev = { ...ev, name, description: '', url: '' };
   const bodyHtml =
     p(`Thanks for sending in <strong>${escHtml(name)}</strong>. It's in our review queue. Here's what you sent:`) +
     eventTable(ev, siteUrl) +
@@ -64,7 +70,7 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
     box(`<strong>Want it guaranteed and pinned to the top of its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`) +
     p('Need to change a detail? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
   return {
-    subject: `We got your event: ${name}`,
+    subject: 'We got your event submission',
     html: emailShell({ title: 'Thanks, we got it!', preheader: `${name} is in our review queue. Here's what happens next.`, bodyHtml, siteUrl,
       footerHtml: contactFooter(siteUrl, address) }),
     text: [

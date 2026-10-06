@@ -5,8 +5,9 @@
  * collector's rules and one OpenAI pass over them, and posts back one
  * decision per submission:
  *
- *   approve    tidied up and published (auto-publish runs right away), and
- *              the submitter gets a "you're live" email
+ *   approve    tidied up and published right away (auto-publish, approved
+ *              submissions only), and once it's on the site the submitter
+ *              gets a "you're live" email; past dates are flagged instead
  *   flag       left pending for the admin, with the AI's reason in the notes
  *   reject     spam or a church/worship event (the site doesn't list those)
  *   duplicate  the exact event is already live
@@ -24,6 +25,7 @@
 import crypto from 'node:crypto';
 import { validateSubmission } from './validate.js';
 import { normalizePayload, eventKeyOf } from './db.js';
+import { localDateStr } from './seo.js';
 
 export const MAX_PER_RUN = 20;
 const DECISIONS = new Set(['approve', 'flag', 'reject', 'duplicate']);
@@ -104,24 +106,30 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
         if (!row || !awaitingReview(row)) { skipped.push({ id, why: 'not-awaiting-review' }); continue; }
         if (!DECISIONS.has(decision)) { skipped.push({ id, why: 'bad-decision' }); continue; }
         if (decision === 'approve' && !autoApprove) decision = 'flag';
+        // Auto-publish only lists upcoming events, so a past date can't go live.
+        let reasonNote = reason;
+        if (decision === 'approve' && String((row.payload || {}).date || '') < localDateStr(nowFn())) {
+          decision = 'flag';
+          reasonNote = `the date has already passed${reason ? `; ${reason}` : ''}`;
+        }
 
         // Cleanup is applied only to what goes live; a flagged submission
         // keeps the submitter's words for the admin to judge, with the
         // suggestion in the notes.
         let payload = row.payload;
         let changes = [];
-        let note = reason;
+        let note = reasonNote;
         if (decision === 'approve' || decision === 'flag') {
           const fixed = applyCleanup(row.payload, ask.cleaned);
           if (fixed.error) {
             decision = 'flag';
-            note = `${reason ? reason + ' ' : ''}(AI cleanup was invalid: ${fixed.error})`.trim();
+            note = `${reasonNote ? reasonNote + ' ' : ''}(AI cleanup was invalid: ${fixed.error})`.trim();
           } else if (decision === 'approve') {
             payload = fixed.payload;
             changes = fixed.changes;
           } else if (fixed.changes.length) {
             const s = fixed.payload;
-            note = `${reason} Suggested: ${fixed.changes.includes('name') ? `name “${s.name}”; ` : ''}` +
+            note = `${reasonNote} Suggested: ${fixed.changes.includes('name') ? `name “${s.name}”; ` : ''}` +
               `${fixed.changes.includes('description') ? `description “${s.description}”` : ''}`.trim();
           }
         }
@@ -137,7 +145,7 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
         if (STATUS[decision]) patch.status = STATUS[decision];
         if (decision === 'approve') patch.payload = payload;
         const updated = await store.update(id, patch);
-        done.push({ id, decision, reason: note, changes, row: updated || { ...row, ...patch } });
+        done.push({ id, decision, reason: note, changes, row: updated || { ...row, ...patch }, live: null });
       }
 
       let published = null;
@@ -148,29 +156,39 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
           console.error('[submission-review] publish failed:', err.message);
           published = { ok: false, error: err.message };
         }
+        // onApproved emails "you're live" only when the event is really on
+        // the site, and says whether it is; Slack calls out the ones that
+        // aren't (removed before, or matched an event already listed).
         for (const d of done) if (d.decision === 'approve') {
-          try { await onApproved(d.row); } catch (err) { console.warn('[submission-review] live email failed:', err.message); }
+          try { d.live = published && published.ok ? Boolean(await onApproved(d.row)) : false; } catch (err) {
+            console.warn('[submission-review] live check/email failed:', err.message);
+          }
         }
       }
       if (slack && done.length) {
         const lines = done.map(d => {
           const ev = d.row.payload || {};
           const fixed = d.changes.length ? ` (tidied: ${d.changes.join(', ')})` : '';
-          return `• *${LABEL[d.decision]}*: ${ev.name} · ${ev.date}${fixed}${d.decision === 'approve' ? '' : `: ${d.reason}`}`;
+          const notLive = d.decision === 'approve' && d.live === false
+            ? ': ⚠️ approved but not on the site (removed before, or matches an event already listed); check it' : '';
+          return `• *${LABEL[d.decision]}*: ${ev.name} · ${ev.date}${fixed}${notLive}${d.decision === 'approve' ? '' : `: ${d.reason}`}`;
         });
-        const live = done.filter(d => d.decision === 'approve').length;
+        const live = done.filter(d => d.decision === 'approve' && d.live !== false).length;
         const flagged = done.filter(d => d.decision === 'flag').length;
+        const notOn = done.filter(d => d.decision === 'approve' && d.live === false).length;
+        const turned = done.filter(d => d.decision === 'reject' || d.decision === 'duplicate').length;
         slack.notify({
           channel: 'activity',
           title: `🤖 Submission review: ${[live && `${live} live`, flagged && `${flagged} for you to look at`,
-            done.length - live - flagged && `${done.length - live - flagged} turned away`].filter(Boolean).join(', ')}`,
+            notOn && `${notOn} approved but not live`,
+            turned && `${turned} turned away`].filter(Boolean).join(', ')}`,
           text: lines.join('\n') + (published && !published.ok ? `\n⚠️ Publishing failed: ${published.error || published.message}` : ''),
-          link: `${siteUrl}/admin.html`, footer: 'Undo or edit anything in the Submissions tab'
+          link: `${siteUrl}/admin.html`, footer: 'Reject one in the Submissions tab to take it off the site'
         });
       }
       res.json({
         ok: true,
-        done: done.map(({ id, decision, reason, changes, row }) => ({ id, decision, reason, changes, key: eventKeyOf(row.payload || {}) })),
+        done: done.map(({ id, decision, reason, changes, row, live }) => ({ id, decision, reason, changes, live, key: eventKeyOf(row.payload || {}) })),
         skipped,
         published: published ? Boolean(published.ok) : null
       });

@@ -37,7 +37,8 @@ async function startApp(extra = {}) {
   store = new FileStore(path.join(tmpDir, 's.json'));
   await store.setPublished({ last_updated: 'x', events: [] });
   const candidatesFile = path.join(tmpDir, 'candidates.json');
-  await fs.writeFile(candidatesFile, JSON.stringify({ last_updated: 'c1', events: [] }));
+  await fs.writeFile(candidatesFile, JSON.stringify({ last_updated: 'c1', events: [
+    { date: '2026-10-12', name: 'Collector Candidate', time: '7:00 PM', venue: 'Somewhere' }] }));
   const eventsFile = path.join(tmpDir, 'events.json');
   await fs.writeFile(eventsFile, JSON.stringify({ events: [] }));
   sent = [];
@@ -54,7 +55,7 @@ async function startApp(extra = {}) {
 
 afterEach(async () => {
   if (server) await new Promise(r => server.close(r));
-  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   server = null; tmpDir = null;
 });
 
@@ -173,3 +174,63 @@ describe('submission review: endpoints', () => {
     expect((await review(many)).status).toBe(400);
   });
 });
+
+describe('submission review: publishing safely', () => {
+  async function auth() {
+    const r = await fetch(baseUrl + '/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'a', password: 'b' }) });
+    return { 'Content-Type': 'application/json', Authorization: `Bearer ${(await r.json()).token}` };
+  }
+
+  it('an approval publishes only the submission, never the collector candidates', async () => {
+    await startApp();
+    await store.insert(row('s1'));
+    await review([{ id: 's1', decision: 'approve', cleaned: CLEAN }]);
+    expect((await store.getPublished()).events.map(e => e.name)).toEqual(['Fall Craft Fair']);
+  });
+
+  it('a past date is flagged, not approved', async () => {
+    await startApp();
+    await store.insert(row('s1', { payload: { ...PAYLOAD, date: '2026-10-01' } }));
+    const body = await (await review([{ id: 's1', decision: 'approve', cleaned: CLEAN }])).json();
+    expect(body.done[0]).toMatchObject({ decision: 'flag' });
+    expect(body.done[0].reason).toMatch(/already passed/);
+  });
+
+  it('no "you\'re live" email when it didn\'t go live (the admin removed it before)', async () => {
+    await startApp();
+    await store.setPublished({ last_updated: 'x', events: [], auto_publish: { rejected: ['2026-10-10|Fall Craft Fair|Community Center'] } });
+    await store.insert(row('s1'));
+    const body = await (await review([{ id: 's1', decision: 'approve', cleaned: CLEAN }])).json();
+    expect(body.done[0]).toMatchObject({ decision: 'approve', live: false });
+    expect(sent).toHaveLength(0);
+  });
+
+  it('rejecting an approved submission in admin takes it off the site, for good', async () => {
+    await startApp();
+    await store.insert(row('s1'));
+    await review([{ id: 's1', decision: 'approve', cleaned: CLEAN }]);
+    const r = await fetch(baseUrl + '/api/admin/submissions/s1', { method: 'POST', headers: await auth(), body: JSON.stringify({ status: 'rejected' }) });
+    expect((await r.json()).unpublished).toBe(true);
+    const pub = await store.getPublished();
+    expect(pub.events).toEqual([]);
+    expect(pub.auto_publish.rejected).toContain('2026-10-10|Fall Craft Fair|Community Center');
+  });
+
+  it('Save & Publish from a stale page is refused instead of dropping what went live meanwhile', async () => {
+    await startApp();
+    const h = await auth();
+    const before = await (await fetch(baseUrl + '/api/admin/published-events', { headers: h })).json();
+    await store.insert(row('s1'));
+    await review([{ id: 's1', decision: 'approve', cleaned: CLEAN }]);
+    const stale = await fetch(baseUrl + '/api/admin/publish-events', { method: 'POST', headers: h,
+      body: JSON.stringify({ events: [], based_on: before.last_updated }) });
+    expect(stale.status).toBe(409);
+    expect((await store.getPublished()).events.map(e => e.name)).toEqual(['Fall Craft Fair']);
+    const now = await (await fetch(baseUrl + '/api/admin/published-events', { headers: h })).json();
+    const ok = await fetch(baseUrl + '/api/admin/publish-events', { method: 'POST', headers: h,
+      body: JSON.stringify({ events: now.events, based_on: now.last_updated }) });
+    expect(ok.status).toBe(200);
+  });
+});
+

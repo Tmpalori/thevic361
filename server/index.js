@@ -35,7 +35,7 @@ import { registerSubmissionReview } from './submissionReview.js';
 import { stripeConfig, createStripe, createSponsors, samplePreviews } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
-import { createAutoPublish } from './autopublish.js';
+import { createAutoPublish, unpublishEvent } from './autopublish.js';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import {
@@ -167,6 +167,8 @@ export async function createApp(opts = {}) {
   const submitLimiterDaily = opts.submitLimiterDaily || createRateLimiter({
     windowMs: 24 * 60 * 60 * 1000, max: 30
   });
+  // "We got it" emails per recipient address, whatever IP sends the form.
+  const receiptLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 3 });
 
   // ─── Sponsor checkout (Stripe; see server/sponsors.js) ───
   // Created here because the Stripe webhook needs the raw body and so must
@@ -263,14 +265,10 @@ export async function createApp(opts = {}) {
     res.json({ ok: true, storage: storeBundle.kind });
   });
 
-  // Vic's Pick checkout prefilled with a submission's event.
+  // Vic's Pick checkout prefilled with a submission's event and contact
+  // (by its id; server/sponsors.js fills them in, so none of it is in the URL).
   function upgradeUrlFor(row) {
-    const ev = row.payload || {};
-    const q = new URLSearchParams({ package: 'featured' });
-    for (const [k, val] of [['event_name', ev.name], ['date', ev.date], ['time', ev.time], ['venue', ev.venue],
-      ['address', ev.address], ['description', ev.description], ['url', ev.url], ['email', row.submitter_email],
-      ['business', row.submitter_name]]) if (val) q.set(k, String(val).slice(0, 2000));
-    return `${siteUrl}/advertise/checkout?${q}`;
+    return `${siteUrl}/advertise/checkout?package=featured&from=${encodeURIComponent(row.id)}`;
   }
 
   // ─── Public: submit ───
@@ -319,8 +317,7 @@ export async function createApp(opts = {}) {
         ok: true,
         queued: false,
         duplicate: true,
-        message: 'A matching submission is already in our review queue.',
-        id: dup.id
+        message: 'A matching submission is already in our review queue.'
       });
     }
 
@@ -350,7 +347,7 @@ export async function createApp(opts = {}) {
       link: `${siteUrl}/admin.html`, footer: 'The AI review will publish it or flag it for you within the hour'
     });
     // Tell them it worked and what happens next (no-op without Resend).
-    if (row.submitter_email) {
+    if (row.submitter_email && receiptLimiter.check(row.submitter_email.toLowerCase()).ok) {
       const mail = renderSubmissionReceived(ev, { siteUrl, address: newsletter.address, upgradeUrl: upgradeUrlFor(row) });
       mailer.send(row.submitter_email, mail, `vic361-submission-${row.id}`);
     }
@@ -454,7 +451,17 @@ export async function createApp(opts = {}) {
     patch.review_history = history;
 
     const updated = await store.update(req.params.id, patch);
-    res.json({ ok: true, submission: updated });
+    // Un-approving takes it off the site too (it may have gone live through
+    // auto-publish or the AI review); otherwise it would stay published.
+    let unpublished = false;
+    if (row.status === 'approved' && patch.status && patch.status !== 'approved') {
+      try {
+        unpublished = await unpublishEvent(store, eventKeyOf(row.payload || {}), (opts.now || (() => new Date()))());
+      } catch (err) {
+        console.warn('[admin] unpublish after un-approve failed:', err.message);
+      }
+    }
+    res.json({ ok: true, submission: updated, unpublished });
   });
 
   // ─── Admin: candidates fetch ──────────────────────────────────────────
@@ -623,6 +630,18 @@ export async function createApp(opts = {}) {
     if (!events) {
       return res.status(400).json({ ok: false, error: 'bad-payload', message: 'events[] required' });
     }
+    // The editor sends the version of the live list it started from. If
+    // something published since (an AI-approved submission, a collect run),
+    // publishing this older picture would silently take those events down,
+    // so refuse; the editor reloads the live list and keeps its changes.
+    if (typeof body.based_on === 'string' && body.based_on) {
+      let current = null;
+      try { current = await store.getPublished(); } catch (_) { current = null; }
+      if (current && current.last_updated && current.last_updated !== body.based_on) {
+        return res.status(409).json({ ok: false, error: 'stale',
+          message: 'New events went live since you opened this page. The list has been reloaded with your changes kept; check it and publish again.' });
+      }
+    }
 
     // Carry-forward top-level extras (new_and_notable, sponsor, …) so an
     // events-only Save & Publish doesn't drop them. Priority order:
@@ -674,6 +693,7 @@ export async function createApp(opts = {}) {
     const result = {
       ok: true,
       published: events.length,
+      last_updated: payload.last_updated,
       destinations: { local: { ok: true } }
     };
 
@@ -1251,17 +1271,21 @@ export async function createApp(opts = {}) {
     nowFn: () => (opts.now || (() => new Date()))(),
     secret: opts.submissionReviewSecret ?? (process.env.SUBMISSION_REVIEW_SECRET || process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || ''),
     autoApprove: opts.submissionAutoApprove ?? process.env.SUBMISSION_AUTOAPPROVE !== '0',
-    publish: () => autoPublish.run({ force: true, quiet: true }),
-    // "You're live", with a link to the event's own page once it's there.
+    publish: () => autoPublish.run({ force: true, quiet: true, submissionsOnly: true }),
+    // True when the event is on the public site; then "You're live" goes
+    // out with a link to its page.
     async onApproved(row) {
-      if (!row.submitter_email) return;
       const key = eventKeyOf(row.payload);
       const live = ((await getPublicPayload()).events || []).find(e => eventKeyOf(e) === key);
-      const mail = renderSubmissionLive(row.payload, {
-        siteUrl, address: newsletter.address, upgradeUrl: upgradeUrlFor(row),
-        pageUrl: live && live.page ? `${siteUrl}${live.page}` : ''
-      });
-      await mailer.send(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
+      if (!live) return false;
+      if (row.submitter_email) {
+        const mail = renderSubmissionLive(row.payload, {
+          siteUrl, address: newsletter.address, upgradeUrl: upgradeUrlFor(row),
+          pageUrl: live.page ? `${siteUrl}${live.page}` : ''
+        });
+        await mailer.send(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
+      }
+      return true;
     }
   });
 
