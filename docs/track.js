@@ -115,22 +115,31 @@
     }
   });
 
-  // "Share or copy link" on event pages: the phone's share sheet when
-  // there is one, otherwise copy the link to the clipboard.
+  // Share buttons (event pages, list headers, and the icon on each event in
+  // a list): the phone's share sheet when there is one, otherwise copy the
+  // link. List items carry a site-relative path; resolve it so the copied
+  // link works anywhere.
   document.addEventListener('click', function (e) {
     var btn = e.target && e.target.closest ? e.target.closest('[data-share-url]') : null;
     if (!btn) return;
     var url = btn.getAttribute('data-share-url');
+    try { url = new URL(url, location.href).href; } catch (err) { /* old browser: keep as is */ }
     var text = btn.getAttribute('data-share-text') || '';
-    track('share_native', { link_url: url });
+    var fromList = btn.classList.contains('event-share');
+    track(fromList ? 'share_from_list' : 'share_native', { link_url: url });
     if (navigator.share) {
       navigator.share({ title: text, text: text, url: url }).catch(function () {});  // user closed the sheet
       return;
     }
+    function copied() {
+      if (!fromList) { btn.textContent = 'Link copied'; return; }
+      // The list button is an icon; flag it instead of replacing the icon.
+      btn.classList.add('is-copied');
+      btn.setAttribute('aria-label', 'Link copied');
+      setTimeout(function () { btn.classList.remove('is-copied'); btn.setAttribute('aria-label', 'Share ' + text); }, 2000);
+    }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(function () {
-        btn.textContent = 'Link copied';
-      }, function () { window.prompt('Copy this link:', url); });
+      navigator.clipboard.writeText(url).then(copied, function () { window.prompt('Copy this link:', url); });
     } else {
       window.prompt('Copy this link:', url);
     }

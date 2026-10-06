@@ -35,6 +35,7 @@ import { registerSubmissionReview, isPaidPick } from './submissionReview.js';
 import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage, sameEvent } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
+import { renderEventCard, eventCardVersion } from './ogImage.js';
 import { createAutoPublish, unpublishEvent, replacePublishedEvent, forgetRemoved } from './autopublish.js';
 import crypto from 'node:crypto';
 import net from 'node:net';
@@ -1283,12 +1284,31 @@ export async function createApp(opts = {}) {
     res.type('text/calendar; charset=utf-8').send(renderIcs(ev, ctx));
   }));
 
+  // Link-preview card (server/ogImage.js). The page links it with ?v=<hash
+  // of what's drawn>, so the long cache is safe: an edited event gets a new
+  // URL, and Facebook re-fetches it. Also registered before /events/:slug.
+  app.get('/events/:slug.png', pageHandler(async (req, res, payload) => {
+    const ev = await findEvent(payload, `/events/${req.params.slug}`);
+    if (!ev) return res.status(404).type('text/plain').send('Not found');
+    let png;
+    try {
+      png = renderEventCard({ ...ev, page: `/events/${req.params.slug}` });
+    } catch (err) {
+      // A broken card shouldn't break the share: show the site image instead.
+      console.error('[og] event card render failed:', err.message);
+      return res.redirect(302, '/og-image.png');
+    }
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.type('image/png').send(png);
+  }));
+
   app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
     const ev = await findEvent(payload, `/events/${req.params.slug}`);
     if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), 404);
     const venue = venueFor(ev, venues);
     sendHtml(res, renderEventPage(ev, payload.events, {
-      ...ctx, extras: eventActionsHtml(ev, siteUrl), venuePath: venue ? venue.path : null
+      ...ctx, extras: eventActionsHtml(ev, siteUrl), venuePath: venue ? venue.path : null,
+      image: `${ev.page}.png?v=${eventCardVersion(ev)}`
     }));
   }));
 

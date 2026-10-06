@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "compression": "^1.8.2",
     "express": "^4.19.2",
     "pg": "^8.11.5"

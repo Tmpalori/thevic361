@@ -116,13 +116,13 @@ export function visitorHash(ip, ua, day, secret) {
 
 export const CLICK_TYPES = new Set([
   'event_click', 'sponsor_click', 'subscribe_click', 'advertise_click',
-  'add_to_calendar', 'share_native', 'share_facebook', 'share_x', 'share_text', 'filter'
+  'add_to_calendar', 'share_native', 'share_from_list', 'share_facebook', 'share_x', 'share_text', 'filter'
 ]);
 
 const CLICK_LABELS = {
   event_click: 'Event links', sponsor_click: 'Sponsor clicks', subscribe_click: 'Subscribe clicks',
   advertise_click: 'Advertise page clicks', add_to_calendar: 'Added to calendar',
-  share_native: 'Shares (share sheet / copy)', share_facebook: 'Shares to Facebook',
+  share_native: 'Shares (share sheet / copy)', share_from_list: 'Shares from the event list', share_facebook: 'Shares to Facebook',
   share_x: 'Shares to X', share_text: 'Shares by text', filter: 'Filter taps'
 };
 
