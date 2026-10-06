@@ -330,14 +330,26 @@
     return '';
   }
 
-  async function patch(id, body) {
+  // card: the card being edited, so the fields the server rejected can be
+  // marked. A rejected edit answers only {errors: {field: message}}, and
+  // "Update failed (400)." alone leaves the owner guessing which to fix.
+  async function patch(id, body, card) {
     const prev = (state.submissions.find(s => s.id === id) || {}).status;
     const { res, json } = await apiFetch('/api/admin/submissions/' + encodeURIComponent(id), {
       method: 'POST',
       body: JSON.stringify(body)
     });
     if (!res.ok || !json || !json.ok) {
-      showError((json && json.error) || ('Update failed (' + res.status + ').'));
+      const errors = json && json.errors && typeof json.errors === 'object' ? json.errors : null;
+      if (card) {
+        card.querySelectorAll('[data-edit]').forEach(el => {
+          const bad = !!(errors && errors[el.getAttribute('data-edit')]);
+          el.classList.toggle('is-invalid', bad);
+          if (bad) el.setAttribute('aria-invalid', 'true'); else el.removeAttribute('aria-invalid');
+        });
+      }
+      const fieldMsg = errors ? Object.values(errors).filter(Boolean).join(' ') : '';
+      showError(fieldMsg || (json && json.error) || ('Update failed (' + res.status + ').'));
       return null;
     }
     showNotice(liveNotice(prev, json, body.status));
@@ -374,7 +386,7 @@
         },
         updates
       );
-      const updated = await patch(id, { payload: merged });
+      const updated = await patch(id, { payload: merged }, card);
       if (updated) {
         state.editing.delete(id);
         delete state.drafts[id];

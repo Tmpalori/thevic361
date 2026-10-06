@@ -175,6 +175,19 @@ describe('JSONB writes drop U+0000', () => {
   });
 });
 
+describe('JSONB writes replace lone UTF-16 surrogates', () => {
+  it('turns a cut-off emoji into U+FFFD and keeps whole ones', async () => {
+    const out = toJsonb({ hi: 'Party \ud83d', lo: ['\ude00 time'], ok: 'Fun \ud83c\udf89', mixed: 'a\u0000\ud83d' });
+    expect(out).not.toMatch(/\\ud[89a-f][0-9a-f]{2}/i);
+    expect(JSON.parse(out)).toEqual({ hi: 'Party \ufffd', lo: ['\ufffd time'], ok: 'Fun \ud83c\udf89', mixed: 'a\ufffd' });
+    const pool = fakePool();
+    await new PgStore(pool).setPublished({ events: [{ name: 'Cut \ud83d', description: 'x' }] });
+    for (const p of pool.calls.flatMap(c => c.params).filter(p => typeof p === 'string')) {
+      expect(p).not.toMatch(/\\ud[89a-f][0-9a-f]{2}/i);
+    }
+  });
+});
+
 describe('traffic summary stays cheap for a year', () => {
   it('weighs pre-grouped rows (n) the same as raw rows', () => {
     const raw = [];

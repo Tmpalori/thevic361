@@ -318,16 +318,60 @@ def to_hide(events, rules):
 
 
 def _whole_listing(events, i):
-    """Another listing, not itself cut off, at the same place on the same
-    day as the cut-off one, or None."""
+    """The full listing of the cut-off event: same day, same named place,
+    not itself cut off, and plainly the same event, or None. Sharing a
+    venue isn't enough: a bar's "Trivia Night" is no proof that its "Live
+    Music with Jake and the" is listed elsewhere, and hiding on that pulls
+    the only copy. A vague venue ("Victoria", "Downtown") says no place."""
     e = events[i]
-    if not (e.get("venue") or "").strip():
+    if _vague_venue(e.get("venue")):
         return None
     for j, o in enumerate(events):
-        if j != i and o.get("date") == e.get("date") and (o.get("venue") or "").strip() \
-                and ce._same_place(e, o) and not ce.cut_off_name_reason(o.get("name")):
+        if j != i and o.get("date") == e.get("date") and not _vague_venue(o.get("venue")) \
+                and ce._same_place(e, o) and not ce.cut_off_name_reason(o.get("name")) \
+                and _same_event(e, o):
             return j
     return None
+
+
+def _vague_venue(venue):
+    return not (venue or "").strip() or ce._generic_venue(venue, [])
+
+
+def _distinctive(w):
+    return len(w) >= 4 and w not in ce._GENERIC_CORE_TOKENS
+
+
+def _cut_fragments(name):
+    """Token lists the cut-off name may stand for: all of it, and the part
+    after an "Organizer — " prefix (the AI writes "Scenic Root — Plant a"
+    for Scenic Root's post about "Once Upon A Plant"). The ellipsis and
+    the dangling connector are dropped first."""
+    n = re.sub(r"(\.\.\.|…)\s*$", "", (name or "").strip())
+    words = n.split()
+    if len(words) >= 2 and words[-1].strip(".,;:!?\"'()") in ce._DANGLING_WORDS:
+        n = " ".join(words[:-1])
+    parts = [n] + [p for p in re.split(r"\s+[-\u2013\u2014|:]\s+|:\s+", n)[1:] if p.strip()]
+    return [ce._name_tokens(p) for p in parts]
+
+
+def _same_event(cut, whole):
+    """True when the whole listing's name holds every word left in the
+    cut-off name (the last may be cut mid-word after "..."), with at least
+    one distinctive word among them; or both start at the same known time
+    and share a distinctive word (the AI reworded the name)."""
+    have = ce._name_tokens(whole.get("name"))
+    for toks in _cut_fragments(cut.get("name")):
+        if not toks or not any(_distinctive(w) for w in toks):
+            continue
+        *head, last = toks
+        if all(w in have for w in head) and any(h.startswith(last) for h in have):
+            return True
+    sa, sb = ce._start_minutes(cut.get("time")), ce._start_minutes(whole.get("time"))
+    if sa is not None and sa == sb:
+        cut_words = {w for toks in _cut_fragments(cut.get("name")) for w in toks}
+        return any(_distinctive(w) and w in have for w in cut_words)
+    return False
 
 
 def hide(events, picks, secret):

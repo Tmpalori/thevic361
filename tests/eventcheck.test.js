@@ -122,6 +122,35 @@ describe('event check: hiding', () => {
     expect(await names()).toContain('Gospel Brunch');
   });
 
+  it('never hides a paid Vic\'s Pick that is featured only by its order, and hides nothing if orders can\'t be read', async () => {
+    const events = [
+      { date: '2026-10-07', name: 'Gospel Brunch', time: '11:00 AM', venue: 'Pumphouse' },
+      { date: '2026-10-08', name: 'Parish Fall Festival', time: '6:00 PM', venue: "St. Mary's Church" }
+    ];
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-check-'));
+    store = new FileStore(path.join(tmpDir, 's.json'));
+    await store.setPublished({ last_updated: 'x', events, sponsor: null });
+    await store.saveSponsorOrder({ id: 'pick-1', kind: 'featured', status: 'paid', amount: 4900, created_at: NOW.toISOString(),
+      event: { date: '2026-10-07', name: 'Gospel Brunch', time: '11:00 AM', venue: 'Pumphouse' } });
+    await startApp({}, { keepStore: true });
+    const asks = [{ page: '/events/2026-10-07-gospel-brunch' }, { page: '/events/2026-10-08-parish-fall-festival' }];
+    let r = await hide(asks);
+    let body = await r.json();
+    expect(body.skipped).toEqual([{ page: '/events/2026-10-07-gospel-brunch', why: 'paid-pick' }]);
+    expect(body.hidden.map(h => h.name)).toEqual(['Parish Fall Festival']);
+
+    const listOrders = store.listSponsorOrders;
+    store.listSponsorOrders = async () => { throw new Error('connect ETIMEDOUT'); };
+    try {
+      r = await hide([{ page: '/events/2026-10-07-gospel-brunch' }]);
+      expect(r.status).toBe(503);
+      expect((await r.json()).error).toBe('orders-unavailable');
+    } finally {
+      store.listSponsorOrders = listOrders;
+    }
+    expect(await names()).toContain('Gospel Brunch');
+  }, 15000);
+
   it('survives the admin Save & Publish', async () => {
     await startApp();
     await hide([{ page: CHURCH }]);

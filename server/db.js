@@ -110,8 +110,16 @@ export function parseEventKey(key) {
 
 // JSON for a JSONB column. Postgres refuses a \u0000 anywhere in jsonb, so
 // one NUL in a scraped description would fail the whole publish; drop it.
+// It refuses a lone UTF-16 surrogate too (JSON.stringify writes one as a
+// "\ud83d" escape): a source that cut a description mid-emoji, or a
+// .slice() that split a pair, would fail it the same way. toWellFormed
+// turns those into U+FFFD and leaves real pairs alone.
 export function toJsonb(value) {
-  return JSON.stringify(value, (_k, v) => (typeof v === 'string' && v.includes('\u0000') ? v.replace(/\u0000/g, '') : v));
+  return JSON.stringify(value, (_k, v) => {
+    if (typeof v !== 'string') return v;
+    const clean = v.includes('\u0000') ? v.replace(/\u0000/g, '') : v;
+    return clean.isWellFormed() ? clean : clean.toWellFormed();
+  });
 }
 
 // Apply the admin event-edits overlay on top of a list of events. For each
@@ -350,8 +358,12 @@ class FileStore {
         data.subscribers.push(sub);
         fresh = true;
       } else if (sub.status === 'unsubscribed') {
-        // Coming back: credit where they came back from.
-        Object.assign(sub, { status: 'pending', token: newToken(), unsubscribed_at: null, source });
+        // Coming back: credit where they came back from. A new token, since
+        // it also confirms and the old one sits in every issue they got
+        // (forwarded ones too); but the old one is kept for unsubscribing,
+        // so those issues' links still work (see PgStore.addSubscriber).
+        Object.assign(sub, { status: 'pending', token: newToken(), unsubscribed_at: null, source,
+          old_tokens: [...(sub.old_tokens || []), sub.token] });
         fresh = true;
       }
       await this._write(data);
@@ -378,7 +390,7 @@ class FileStore {
     if (!token) return false;
     return this._withWrite(async () => {
       const data = await this._read();
-      const sub = data.subscribers.find(x => x.token === token);
+      const sub = data.subscribers.find(x => x.token === token || (x.old_tokens || []).includes(token));
       if (!sub) return false;
       Object.assign(sub, { status: 'unsubscribed', unsubscribed_at: nowIso() });
       await this._write(data);
@@ -405,7 +417,7 @@ class FileStore {
   async getSubscriberByToken(token) {
     if (!token) return null;
     const data = await this._read();
-    const sub = data.subscribers.find(x => x.token === token);
+    const sub = data.subscribers.find(x => x.token === token || (x.old_tokens || []).includes(token));
     return sub ? { email: sub.email, status: sub.status } : null;
   }
 
@@ -700,7 +712,7 @@ class PgStore {
         // queued behind it (and a timed-out ALTER failed ready()). Ask once
         // which of the added columns exist and only ALTER for missing ones.
         const added = [['event_submissions', 'ai_review'], ['traffic', 'ad'],
-          ['newsletter_sends', 'failed_emails'], ['newsletter_sends', 'picks']];
+          ['newsletter_sends', 'failed_emails'], ['newsletter_sends', 'picks'], ['subscribers', 'old_tokens']];
         const cols = await this.pool.query(
           `SELECT table_name, column_name FROM information_schema.columns
             WHERE table_schema = current_schema() AND column_name = ANY($1::text[])`,
@@ -805,6 +817,9 @@ class PgStore {
             unsubscribed_at TIMESTAMPTZ
           );
         `);
+        // Tokens a returning subscriber had before (addSubscriber): they
+        // still unsubscribe, so links in older issues keep working.
+        await addColumn('subscribers', 'old_tokens', `ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS old_tokens TEXT[] NOT NULL DEFAULT '{}'`);
         await this.pool.query(`
           CREATE TABLE IF NOT EXISTS newsletter_sends (
             week_key TEXT PRIMARY KEY,
@@ -1032,9 +1047,14 @@ class PgStore {
     if (existing && existing.status === 'active') return existing;
     if (existing && existing.status === 'pending') return existing;
     if (existing) {
-      // Coming back: credit where they came back from.
+      // Coming back: credit where they came back from. The token also
+      // confirms, and the old one is in every issue they got, forwarded
+      // ones included, so whoever holds one could sign them back up without
+      // their mailbox. So: a new token, with the old one kept only for
+      // unsubscribing (Gmail's Unsubscribe on an older issue still works).
       const row = (await this.pool.query(
-        `UPDATE subscribers SET status = 'pending', token = $2, unsubscribed_at = NULL, source = $3 WHERE email = $1 RETURNING *`,
+        `UPDATE subscribers SET status = 'pending', old_tokens = array_append(old_tokens, token), token = $2,
+           unsubscribed_at = NULL, source = $3 WHERE email = $1 RETURNING *`,
         [email, newToken(), source])).rows[0];
       return { ...row, new_signup: true };
     }
@@ -1065,7 +1085,7 @@ class PgStore {
     if (!token) return false;
     await this.ready();
     const r = await this.pool.query(
-      `UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = NOW() WHERE token = $1`, [token]);
+      `UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = NOW() WHERE token = $1 OR $1 = ANY(old_tokens)`, [token]);
     return r.rowCount > 0;
   }
 
@@ -1082,7 +1102,7 @@ class PgStore {
   async getSubscriberByToken(token) {
     if (!token) return null;
     await this.ready();
-    const r = await this.pool.query('SELECT email, status FROM subscribers WHERE token = $1', [token]);
+    const r = await this.pool.query('SELECT email, status FROM subscribers WHERE token = $1 OR $1 = ANY(old_tokens)', [token]);
     return r.rows[0] || null;
   }
 

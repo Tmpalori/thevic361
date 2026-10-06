@@ -802,6 +802,23 @@ export async function createApp(opts = {}) {
   // This endpoint never publishes to the public site by itself. The admin
   // still has to hit Save & Publish to push the corrected event live, which
   // preserves the existing approval/publish workflow.
+  // True when the event an edit targets is known and has no start time:
+  // the published list, the collector's candidates or an earlier edit of
+  // it. Then the edit may leave the time blank (validateEventEdit). An
+  // event that can't be found keeps the requirement.
+  async function neverHadTime(key) {
+    const found = [];
+    const add = list => { for (const e of list || []) if (e && eventKeyOf(e) === key) found.push(e); };
+    try { add(((await store.getPublished()) || {}).events); } catch (_) { /* unreadable: unknown */ }
+    try { add((await readJsonFile(candidatesFile)).events); } catch (_) { /* none */ }
+    try {
+      for (const ed of await store.listEventEdits()) {
+        if (ed.original_key === key || eventKeyOf(ed.payload || {}) === key) found.push(ed.payload || {});
+      }
+    } catch (_) { /* none */ }
+    return found.length > 0 && found.every(e => !String(e.time || '').trim());
+  }
+
   app.post('/api/admin/event-edits', requireAdmin, async (req, res) => {
     const body = req.body || {};
     const original_key = typeof body.original_key === 'string'
@@ -816,7 +833,7 @@ export async function createApp(opts = {}) {
         message: 'original_key must be "date|name|venue".'
       });
     }
-    const v = validateEventEdit(body.payload || {});
+    const v = validateEventEdit(body.payload || {}, { timeOptional: await neverHadTime(original_key) });
     if (!v.ok) return res.status(400).json({ ok: false, errors: v.errors });
 
     try {
@@ -1550,7 +1567,8 @@ export async function createApp(opts = {}) {
   registerEventCheck(app, {
     store, requireAdmin, nowFn: () => (opts.now || (() => new Date()))(),
     secret: eventCheckSecret,
-    loadVisibleKeyed: async () => visibleFrom((await store.getPublished()) || {})
+    loadVisibleKeyed: async () => visibleFrom((await store.getPublished()) || {}),
+    placements: payload => sponsors.apply(payload, { strict: true })
   });
 
   const newsletterApi = registerNewsletter(app, {
@@ -1694,12 +1712,21 @@ export async function createApp(opts = {}) {
     return at === page ? { ev } : { moved: at };
   }
 
+  // A moved event's target can change again (an admin moves a date and
+  // then back, or the collector's name flips between runs), and a browser
+  // keeps an uncached 301 forever, so a revert would loop. Stay 301 so
+  // search engines move the page's standing, but make browsers ask again.
+  function movedRedirect(res, to) {
+    res.set('Cache-Control', 'no-cache');
+    return res.redirect(301, to);
+  }
+
   // Add-to-calendar file. Registered before /events/:slug, which would
   // otherwise treat "<slug>.ics" as a slug.
   app.get('/events/:slug.ics', pageHandler(async (req, res, payload, ctx) => {
     const { ev, gone, moved, unavailable } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
     if (unavailable) return sendUnavailable(res, ctx, false);
-    if (moved) return res.redirect(301, `${moved}.ics`);
+    if (moved) return movedRedirect(res, `${moved}.ics`);
     if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), gone ? 410 : 404);
     res.set('Content-Disposition', `attachment; filename="${String(req.params.slug).replace(/[^a-z0-9-]/gi, '') || 'event'}.ics"`);
     res.type('text/calendar; charset=utf-8').send(renderIcs(ev, ctx));
@@ -1711,7 +1738,7 @@ export async function createApp(opts = {}) {
   app.get('/events/:slug.png', pageHandler(async (req, res, payload, ctx) => {
     const { ev, gone, moved, unavailable } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
     if (unavailable) return sendUnavailable(res, ctx, false);
-    if (moved) return res.redirect(301, `${moved}.png`);
+    if (moved) return movedRedirect(res, `${moved}.png`);
     if (!ev) return res.status(gone ? 410 : 404).type('text/plain').send('Not found');
     let png;
     try {
@@ -1728,7 +1755,7 @@ export async function createApp(opts = {}) {
   app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
     const { ev, gone, moved, unavailable } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
     if (unavailable) return sendUnavailable(res, ctx);
-    if (moved) return res.redirect(301, moved);
+    if (moved) return movedRedirect(res, moved);
     if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), gone ? 410 : 404);
     const venue = venueFor(ev, venues);
     sendHtml(res, renderEventPage(ev, payload.events, {

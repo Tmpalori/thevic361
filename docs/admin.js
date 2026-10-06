@@ -1176,6 +1176,12 @@
     form.elements['name'].value = ev.name || '';
     form.elements['date'].value = ev.date || '';
     form.elements['time'].value = ev.time || '';
+    // An event collected without a time can be corrected without inventing
+    // one (validateEventEdit allows it blank); one that had a time keeps it.
+    const timeRequired = Boolean(String(ev.time || '').trim());
+    form.elements['time'].required = timeRequired;
+    const timeMark = form.querySelector('[data-time-required]');
+    if (timeMark) timeMark.hidden = !timeRequired;
     form.elements['end_time'].value = ev.end_time || '';
     form.elements['venue'].value = ev.venue || '';
     form.elements['address'].value = ev.address || '';

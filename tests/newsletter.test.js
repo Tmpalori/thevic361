@@ -733,3 +733,45 @@ describe('paid placements in the issue', () => {
     expect(await store.getNewsletterSend('2026-10-05')).toBeFalsy();
   });
 });
+
+describe('a returning subscriber', () => {
+  it('old issues\' unsubscribe links still work, but the old token can\'t confirm the comeback', async () => {
+    await startApp();
+    const email = 'back@example.com';
+    const first = await store.addSubscriber({ email, source: 'home' });
+    await store.confirmSubscriber(first.token);
+    const oldToken = first.token;
+    expect((await post(`/unsubscribe?token=${oldToken}`)).status).toBe(200);
+    const again = await store.addSubscriber({ email, source: 'footer' });
+    expect(again.new_signup).toBe(true);
+    // A new token confirms: the old one is in every issue they got,
+    // forwarded copies included.
+    expect(again.token).not.toBe(oldToken);
+    expect(await store.confirmSubscriber(oldToken)).toBeNull();
+    await store.confirmSubscriber(again.token);
+    expect((await store.listSubscribers({ status: 'active' })).map(s => s.email)).toEqual([email]);
+    // Gmail's Unsubscribe on an issue from before the first unsubscribe.
+    expect(await (await fetch(`${baseUrl}/unsubscribe?token=${oldToken}`)).text()).toContain('example.com');
+    expect((await post(`/unsubscribe?token=${oldToken}`)).status).toBe(200);
+    expect(await store.listSubscribers({ status: 'active' })).toEqual([]);
+  });
+
+  it('Postgres keeps the old token for unsubscribing only', async () => {
+    const { PgStore } = await import('../server/db.js');
+    const calls = [];
+    const pool = { query: async (text, params) => {
+      calls.push({ text: String(text), params: params || [] });
+      if (/SELECT \* FROM subscribers WHERE email/.test(text)) return { rows: [{ email: 'a@x.com', status: 'unsubscribed', token: 'old' }] };
+      if (/^\s*UPDATE subscribers SET status = 'pending'/.test(text)) return { rows: [{ email: 'a@x.com', status: 'pending', token: params[1] }] };
+      return { rows: [], rowCount: 1 };
+    } };
+    const st = new PgStore(pool);
+    await st.addSubscriber({ email: 'a@x.com', source: 'home' });
+    const up = calls.find(c => /UPDATE subscribers SET status = 'pending'/.test(c.text));
+    expect(up.text).toMatch(/old_tokens = array_append\(old_tokens, token\)/);
+    await st.unsubscribe('old');
+    expect(calls.at(-1).text).toMatch(/\$1 = ANY\(old_tokens\)/);
+    await st.confirmSubscriber('old');
+    expect(calls.at(-1).text).not.toMatch(/old_tokens/);
+  });
+});
