@@ -100,7 +100,7 @@ The weekly digest workflow uses these to email you the candidates each Sunday.
 The newsletter runs on Resend (`server/newsletter.js`); Beehiiv is no longer used. Signups on the homepage are saved to the site's own list. To send:
 1. Verify thevic361.com in Resend and create an API key
 2. In Railway set `RESEND_API_KEY` and `NEWSLETTER_ADDRESS` (mailing address shown in every email)
-3. Optional: `NEWSLETTER_CRON_SECRET` (Railway + GitHub secret) and the `NEWSLETTER_AUTOSEND=1` repo variable for the Monday auto-send
+3. Optional: `NEWSLETTER_CRON_SECRET` (Railway + GitHub secret) for the Monday auto-send
 
 ## Monthly Costs
 

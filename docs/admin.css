@@ -1264,6 +1264,10 @@ code {
 /* Sponsorship calendar (Sponsors tab) */
 .sponsor-cal { display: grid; gap: 14px; margin-bottom: 12px; }
 .sponsor-admin-logo { display: block; max-height: 48px; max-width: 160px; margin-top: 6px; border: 1px solid #ddd; border-radius: 4px; background: #fff; }
+.sponsor-edit { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; align-items: end; padding: 8px 0; }
+.sponsor-edit__field { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; font-weight: 600; }
+.sponsor-edit__field input, .sponsor-edit__field textarea, .sponsor-edit__field select { font: inherit; font-weight: 400; padding: 6px 8px; border: 1px solid var(--admin-border); border-radius: 6px; }
+.sponsor-edit__hint { grid-column: 1 / -1; margin: 0; font-size: .85rem; }
 .sponsor-not-live { color: #b45309; }
 .cal-week { border: 1px solid var(--admin-border); border-radius: 10px; padding: 10px; }
 .cal-week__head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; margin-bottom: 8px; font-size: .9rem; }

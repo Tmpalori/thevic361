@@ -960,7 +960,7 @@ export const AD_PACKAGES = [
     points: [
       'Your name, message and button on every page of the site, all week',
       'The sponsor spot at the top of the Monday newsletter',
-      'A click report at the end of the week'
+      'A click report emailed to you the Monday after your week'
     ]
   },
   {
@@ -969,11 +969,11 @@ export const AD_PACKAGES = [
     price: '$49 Mon–Thu · $89 Fri–Sun',
     amount: 4900,
     blurb: 'Tell us about your event. Once it\'s listed, it\'s pinned to the top of its day.',
-    where: 'Your event at the top of its day with the Vic’s Pick badge, on the site, its event page, that week’s newsletter and our social posts.',
+    where: 'Your event at the top of its day with the Vic’s Pick badge, on the site, its event page and our social posts, and in the Monday newsletter when you book before its week’s issue.',
     limit: 'Only 3 a day Mon–Thu and 4 a day Fri–Sun, so book early.',
     points: [
       'Guaranteed listing, pinned at the top of its day on the site',
-      'Starred in that week’s newsletter and featured first in our social posts',
+      'Featured first in our social posts, and starred in the Monday newsletter when booked before its week’s issue',
       'Best for concerts, fundraisers, openings, and festivals'
     ]
   }

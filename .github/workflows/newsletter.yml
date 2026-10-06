@@ -2,9 +2,11 @@
 # calling the site's /api/newsletter/cron endpoint (server/newsletter.js),
 # after Sunday-night Save & Publish. 12:43 UTC is 7:43 AM CDT / 6:43 AM CST.
 #
-# On only when the NEWSLETTER_AUTOSEND repo variable is 1 and the
-# NEWSLETTER_CRON_SECRET secret matches the Railway variable of the same
-# name. A week that was already sent from the admin is skipped.
+# Runs every Monday. The NEWSLETTER_CRON_SECRET secret must match the
+# Railway variable of the same name (that's what the admin's "Auto-send
+# Mondays" reflects); if it's missing or wrong the run fails and Slack is
+# told, instead of skipping quietly. A week that was already sent from the
+# admin is skipped. The same call sends last week's sponsor click reports.
 
 name: Newsletter
 
@@ -18,7 +20,6 @@ permissions:
 
 jobs:
   send:
-    if: vars.NEWSLETTER_AUTOSEND == '1' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

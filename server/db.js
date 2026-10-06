@@ -301,6 +301,13 @@ class FileStore {
     });
   }
 
+  async getSubscriberByToken(token) {
+    if (!token) return null;
+    const data = await this._read();
+    const sub = data.subscribers.find(x => x.token === token);
+    return sub ? { email: sub.email, status: sub.status } : null;
+  }
+
   async listSubscribers({ status } = {}) {
     const data = await this._read();
     return data.subscribers.filter(x => !status || x.status === status);
@@ -757,6 +764,13 @@ class PgStore {
     const r = await this.pool.query(
       `UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = NOW() WHERE token = $1`, [token]);
     return r.rowCount > 0;
+  }
+
+  async getSubscriberByToken(token) {
+    if (!token) return null;
+    await this.ready();
+    const r = await this.pool.query('SELECT email, status FROM subscribers WHERE token = $1', [token]);
+    return r.rows[0] || null;
   }
 
   async listSubscribers({ status } = {}) {
