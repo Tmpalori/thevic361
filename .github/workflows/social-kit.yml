@@ -10,7 +10,8 @@
 # Auto-posting to Facebook + Instagram (scripts/social_post.py) runs on the
 # schedule only when the SOCIAL_AUTOPOST repo variable is 1 and the
 # META_PAGE_ID / META_PAGE_TOKEN (+ optional IG_USER_ID) secrets are set.
-# Monday posts "this week", Thursday "this weekend", other days "today".
+# Monday posts "this week", Thursday "this weekend" (plus "today" when
+# Thursday has a Vic's Pick), other days "today".
 # Monday also sends Slack a short list of this week's taggable venues
 # (outreach-slack.txt; the full list is outreach.txt) so
 # they can be sent their link to reshare.
@@ -113,7 +114,15 @@ jobs:
           elif [ "$DOW" = "1" ]; then KIND=week
           elif [ "$DOW" = "4" ]; then KIND=weekend
           else KIND=today; fi
-          python scripts/social_post.py --kind "$KIND"
+          rc=0
+          python scripts/social_post.py --kind "$KIND" || rc=1
+          # Vic's Picks are promised a social post. Thursday's post is the
+          # weekend, so a pick for Thursday itself (often bought after
+          # Monday's week post) gets the "today" post too, pick first.
+          if [ -z "$DISPATCH_KIND" ] && [ "$DOW" = "4" ]; then
+            python scripts/social_post.py --kind today --if-featured || rc=1
+          fi
+          exit $rc
 
       # Record what was posted (posted.json) even when one platform failed,
       # so re-running the job doesn't post to the other one twice.
