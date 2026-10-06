@@ -814,9 +814,10 @@ export async function createApp(opts = {}) {
     const events = Array.isArray(body.events)
       ? body.events.map(ev => {
         if (!ev || typeof ev !== 'object') return ev;
-        const { score: _s, overflow: _o, keep: _k, editor_pick: pick, ...rest } = ev;
+        const { score: _s, overflow: _o, keep: _k, editor_pick: pick, sponsor_order: _so, ...rest } = ev;
         // An editor's pick is `featured` only on read (pickDays); storing
-        // it would pin it for good.
+        // it would pin it for good. sponsor_order is put on paid picks on
+        // read too (applyPlacements).
         if (pick) delete rest.featured;
         return rest;
       })
@@ -1363,10 +1364,11 @@ export async function createApp(opts = {}) {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
     // The newsletter is a day-by-day list: only events that made their day.
     getPublicPayload: shownPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman,
-    // Monday's run also sends last week's sponsor click reports. A daily
-    // scheduler can call sponsors.sendSponsorReports(now) as well; it's
-    // idempotent (each order records report_sent).
-    onCron: now => sponsors.sendSponsorReports(now),
+    // Monday's run also sends last week's sponsor reports (and any Vic's
+    // Pick reports due). The submission review cron runs them too, every
+    // 15 minutes; both are idempotent (each order records report_sent).
+    onCron: now => Promise.all([sponsors.sendSponsorReports(now), sponsors.sendPickReports(now)])
+      .then(([sponsorReports, pickReports]) => ({ ...sponsorReports, picks: pickReports })),
     withNav: async (html, path) => {
       const payload = await getPublicPayload();
       return fillSeasonalNav(html, activeSeasons(payload.events, await listArchived(), nowFn()), path);
@@ -1622,7 +1624,16 @@ export async function createApp(opts = {}) {
     secret: submissionReviewSecret,
     autoApprove: opts.submissionAutoApprove ?? process.env.SUBMISSION_AUTOAPPROVE !== '0',
     publish: () => autoPublish.run({ force: true, quiet: true, submissionsOnly: true }),
-    onApproved: notifyLive
+    onApproved: notifyLive,
+    // The review runs every 15 minutes, server-side and authenticated: the
+    // only frequent scheduler there is, so it also sends Vic's Pick reports
+    // (the day after the event) and catches up weekly sponsor reports the
+    // Monday cron missed. Not awaited: the review shouldn't wait on email.
+    onRun: () => {
+      const now = (opts.now || (() => new Date()))();
+      return Promise.all([sponsors.sendPickReports(now), sponsors.sendSponsorReports(now)])
+        .catch(err => console.warn('[sponsors] reports failed:', err.message));
+    }
   });
 
   const autoOnBoot = opts.autoPublish ??

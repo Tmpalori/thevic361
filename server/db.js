@@ -373,8 +373,11 @@ class FileStore {
   async recordNewsletterSend(rec) {
     return this._withWrite(async () => {
       const data = await this._read();
+      const prev = data.newsletter_sends.find(x => x.week_key === rec.week_key);
       data.newsletter_sends = data.newsletter_sends.filter(x => x.week_key !== rec.week_key);
-      data.newsletter_sends.push({ ...rec, sent_at: nowIso() });
+      // Like PgStore: a record without picks keeps the ones already noted.
+      const picks = Array.isArray(rec.picks) ? rec.picks : prev && prev.picks;
+      data.newsletter_sends.push({ ...rec, ...(picks ? { picks } : {}), sent_at: nowIso() });
       await this._write(data);
     });
   }
@@ -565,6 +568,9 @@ class PgStore {
           );
         `);
         await this.pool.query('CREATE INDEX IF NOT EXISTS traffic_day_idx ON traffic(day);');
+        // The sponsor order an impression or click belongs to (data-ad), for
+        // sponsor and Vic's Pick reports.
+        await this.pool.query('ALTER TABLE traffic ADD COLUMN IF NOT EXISTS ad TEXT;');
         // Newsletter subscribers (server/newsletter.js). token is the secret
         // in confirm/unsubscribe links.
         await this.pool.query(`
@@ -590,6 +596,8 @@ class PgStore {
         `);
         // Who didn't get it, so a retry resends to them only.
         await this.pool.query(`ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS failed_emails JSONB NOT NULL DEFAULT '[]'::jsonb`);
+        // Paid Vic's Pick order ids the issue starred, for their reports.
+        await this.pool.query('ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS picks JSONB');
         // Sponsor orders (server/sponsors.js). Low volume, read whole; the
         // order itself lives in payload so new fields need no migration.
         await this.pool.query(`
@@ -736,10 +744,10 @@ class PgStore {
   async recordTraffic(row) {
     await this.ready();
     await this.pool.query(`
-      INSERT INTO traffic (day, kind, path, visitor, ref_source, ref_host, click_type, click_url, bot)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+      INSERT INTO traffic (day, kind, path, visitor, ref_source, ref_host, click_type, click_url, bot, ad)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
     `, [row.day, row.kind, row.path || null, row.visitor || null, row.ref_source || null,
-        row.ref_host || null, row.click_type || null, row.click_url || null, row.bot || null]);
+        row.ref_host || null, row.click_type || null, row.click_url || null, row.bot || null, row.ad || null]);
     // Prune now and then instead of on a schedule.
     if (Math.random() < 0.002) {
       await this.pool.query(`DELETE FROM traffic WHERE day < CURRENT_DATE - $1::int`, [TRAFFIC_RETENTION_DAYS]);
@@ -754,9 +762,9 @@ class PgStore {
     await this.ready();
     const r = await this.pool.query(`
       SELECT to_char(day, 'YYYY-MM-DD') AS day, kind, path, visitor, ref_source, ref_host,
-             click_type, click_url, bot, COUNT(*)::int AS n
+             click_type, click_url, bot, ad, COUNT(*)::int AS n
       FROM traffic WHERE day >= $1::date
-      GROUP BY day, kind, path, visitor, ref_source, ref_host, click_type, click_url, bot
+      GROUP BY day, kind, path, visitor, ref_source, ref_host, click_type, click_url, bot, ad
     `, [sinceDay]);
     return r.rows;
   }
@@ -852,10 +860,12 @@ class PgStore {
   async recordNewsletterSend(rec) {
     await this.ready();
     await this.pool.query(`
-      INSERT INTO newsletter_sends (week_key, subject, recipients, failed, failed_emails, sent_at) VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
+      INSERT INTO newsletter_sends (week_key, subject, recipients, failed, failed_emails, picks, sent_at) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, NOW())
       ON CONFLICT (week_key) DO UPDATE SET subject = EXCLUDED.subject, recipients = EXCLUDED.recipients,
-        failed = EXCLUDED.failed, failed_emails = EXCLUDED.failed_emails, sent_at = NOW()
-    `, [rec.week_key, rec.subject, rec.recipients, rec.failed, toJsonb(rec.failed_emails || [])]);
+        failed = EXCLUDED.failed, failed_emails = EXCLUDED.failed_emails,
+        picks = COALESCE(EXCLUDED.picks, newsletter_sends.picks), sent_at = NOW()
+    `, [rec.week_key, rec.subject, rec.recipients, rec.failed, toJsonb(rec.failed_emails || []),
+        Array.isArray(rec.picks) ? toJsonb(rec.picks) : null]);
   }
 
   async saveSponsorOrder(order) {

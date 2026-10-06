@@ -2,7 +2,9 @@
 # (scripts/review_submissions.py → server/submissionReview.js): tidies the
 # name, description and icons, publishes the good ones, turns away spam and
 # church events, and leaves anything doubtful in the admin queue with a
-# reason. One Slack message per run that decided something.
+# reason. One Slack message per run that decided something. Each run's
+# pending fetch also sends any sponsor / Vic's Pick reports that are due
+# (server/sponsors.js), so this is the site's 15-minute scheduler too.
 #
 # Needs SUBMISSION_REVIEW_SECRET (or EVENT_CHECK_SECRET / NEWSLETTER_CRON_SECRET)
 # set the same in Railway and here, and OPENAI_API_KEY. Set the

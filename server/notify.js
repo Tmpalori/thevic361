@@ -175,7 +175,7 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
       steps([
         `Your sponsor block goes live on its own on <strong>${escHtml(week)}</strong>, on every page of thevic361.com for the whole week.`,
         'It’s also the sponsor spot at the top of that Monday’s newsletter.',
-        'The Monday after your week, we’ll email you how many people clicked your button, on the site and in the newsletter.'
+        'The Monday after your week, we’ll email you how it did: how many times people saw your block, where, and how many clicked through.'
       ]) +
       p('Here’s your block as it will run:') + block +
       p(`Want to change the wording or link before it goes live? Reply to this email. ${receipt}`, `color:${C.muted};font-size:14px;`);
@@ -188,7 +188,7 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
         'What happens next:',
         `1. Your sponsor block goes live on its own on ${week}, on every page of thevic361.com for the whole week.`,
         '2. It’s also the sponsor spot at the top of that Monday’s newsletter.',
-        '3. The Monday after your week, we’ll email you how many people clicked your button, on the site and in the newsletter.', '',
+        '3. The Monday after your week, we’ll email you how it did: how many times people saw your block, where, and how many clicked through.', '',
         `Your block: ${s.name || business}: ${s.text || ''} ${href ? `(${s.cta || 'Learn more'}: ${href})` : ''}`.trim(), '',
         `Want to change the wording or link before it goes live? Reply to this email. ${receipt}`,
         contactText(siteUrl)
@@ -208,7 +208,8 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
     steps([
       'We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
       `Then it’s <strong>pinned to the top of ${escHtml(day)}</strong> on thevic361.com and its event page, with the Vic’s Pick badge.`,
-      `It’s ${escHtml(where)}.`
+      `It’s ${escHtml(where)}.`,
+      'The day after your event, we’ll email you how it did: how many times it was seen, page views, clicks to your link, calendar adds and shares.'
     ]) +
     p(`Need to change a detail? Reply to this email. ${receipt}`, `color:${C.muted};font-size:14px;`);
   return {
@@ -221,7 +222,8 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
       'What happens next:',
       '1. We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
       `2. Then it's pinned to the top of ${day} on thevic361.com and its event page, with the Vic's Pick badge.`,
-      `3. It's ${where}.`, '',
+      `3. It's ${where}.`,
+      '4. The day after your event, we’ll email you how it did: how many times it was seen, page views, clicks to your link, calendar adds and shares.', '',
       `Need to change a detail? Reply to this email. ${receipt}`,
       contactText(siteUrl)
     ].join('\n')
@@ -251,33 +253,56 @@ export function renderSponsorTooLate(order, { siteUrl, address }) {
   };
 }
 
-// ─── Weekly sponsor click report ─────────────────────────────────────────
-// Sent the Monday after a weekly sponsor's week (server/sponsors.js
-// sendSponsorReports). People are counted once a day each, so a double tap
-// or a mail scanner doesn't pad the number.
+// ─── Sponsor reports ─────────────────────────────────────────────────────
+// Weekly sponsors get theirs the Monday after their week, Vic's Picks the
+// day after their event (server/sponsors.js sendSponsorReports /
+// sendPickReports). People are counted once a day each, so a double tap or
+// a mail scanner doesn't pad the number. Newsletter opens aren't tracked,
+// so the newsletter line only ever says how many it was sent to.
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const people = n => plural(n, 'person', 'people');
+
+// A two-column table that stays readable on a phone (label left, number right).
+function statsTable(rows) {
+  const line = i => (i ? `border-top:2px dashed ${C.line};` : '');
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:14px 0;border:3px solid ${C.ink};border-radius:14px;border-collapse:separate;">` +
+    rows.map(([k, v], i) => `<tr><td style="padding:10px 14px;font-size:15px;${line(i)}">${escHtml(k)}</td>` +
+      `<td align="right" style="padding:10px 14px;font-size:17px;font-weight:bold;white-space:nowrap;${line(i)}">${escHtml(v)}</td></tr>`).join('') +
+    '</table>';
+}
+
+// "Where it ran": views by page type, as a small list under the table.
+function whereHtml(where) {
+  if (!where || !where.length) return '';
+  return `<h2 style="font-size:17px;margin:20px 0 4px;">Where people saw it</h2>` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 10px;font-size:15px;">` +
+    where.map(w => `<tr><td style="padding:3px 0;">${escHtml(w.type)}</td><td align="right" style="padding:3px 0;font-weight:bold;">${escHtml(plural(w.views, 'view', 'views'))}</td></tr>`).join('') +
+    '</table>';
+}
+const whereText = where => (where && where.length ? ['Where people saw it:', ...where.map(w => `- ${w.type}: ${plural(w.views, 'view', 'views')}`), ''] : []);
+
+const COUNTER_NOTE = 'These numbers come from our privacy-friendly counter, which some browsers block, so the real numbers can be a bit higher. A view means at least half of it was on someone’s screen for a second.';
 
 export function renderSponsorReport(order, stats, { siteUrl, address }) {
   const business = order.business || 'there';
   const short = { month: 'short', day: 'numeric' };
   const range = `${formatDay(stats.week_start, short)} – ${formatDay(stats.week_end, short)}`;
-  const people = n => `${n} ${n === 1 ? 'person' : 'people'}`;
   const total = stats.site_people + stats.email_people;
+  const views = Number(stats.views) || 0;
   const rows = [
+    ...(views ? [['Your block was seen on thevic361.com', plural(views, 'time', 'times')]] : []),
     ['Clicked your button on thevic361.com', people(stats.site_people)],
     ['Clicked your button in our emails', people(stats.email_people)],
     ...(stats.newsletter_recipients ? [['Monday newsletter sent to', `${stats.newsletter_recipients} subscribers`]] : []),
     ...(stats.site_visitors ? [['Visits to thevic361.com that week', String(stats.site_visitors)]] : [])
   ];
-  const line = i => (i ? `border-top:2px dashed ${C.line};` : '');
-  const table = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:14px 0;border:3px solid ${C.ink};border-radius:14px;border-collapse:separate;">` +
-    rows.map(([k, v], i) => `<tr><td style="padding:10px 14px;font-size:15px;${line(i)}">${escHtml(k)}</td>` +
-      `<td align="right" style="padding:10px 14px;font-size:17px;font-weight:bold;${line(i)}">${escHtml(v)}</td></tr>`).join('') +
-    '</table>';
   const bodyHtml =
     p(`Thanks for sponsoring The Vic 361, ${escHtml(business)}! Here’s how your week (${escHtml(range)}) went.`) +
     p(`<strong>${escHtml(people(total))}</strong> clicked through to you in total.`, 'font-size:17px;') +
-    table +
-    p('Site clicks are counted by our privacy-friendly counter, which some browsers block, so the real number can be a little higher. In your own analytics our visits are tagged utm_source=thevic361.', `color:${C.muted};font-size:13px;`) +
+    statsTable(rows) +
+    whereHtml(stats.where) +
+    p(`${escHtml(COUNTER_NOTE)} In your own analytics our visits are tagged utm_source=thevic361.`, `color:${C.muted};font-size:13px;`) +
     box(`<strong>Want another week?</strong> One sponsor a week, so book early.<br><br>${btn(`${siteUrl}/advertise/checkout?package=weekly`, 'Book another week')}`);
   return {
     subject: `Your Vic 361 sponsor week: ${people(total)} clicked`,
@@ -287,8 +312,43 @@ export function renderSponsorReport(order, stats, { siteUrl, address }) {
       `Thanks for sponsoring The Vic 361, ${business}! Here's how your week (${range}) went.`, '',
       `${people(total)} clicked through to you in total.`,
       ...rows.map(([k, v]) => `- ${k}: ${v}`), '',
-      'Site clicks are counted by our privacy-friendly counter, which some browsers block, so the real number can be a little higher.', '',
+      ...whereText(stats.where),
+      COUNTER_NOTE, '',
       `Want another week? ${siteUrl}/advertise/checkout?package=weekly`,
+      contactText(siteUrl)
+    ].join('\n')
+  };
+}
+
+export function renderPickReport(order, stats, { siteUrl, address }) {
+  const business = order.business || 'there';
+  const name = (order.event && order.event.name) || 'your event';
+  const shown = Number(stats.shown) || 0;
+  const rows = [
+    ['Shown in our event lists as a Vic’s Pick', plural(shown, 'time', 'times')],
+    ['Views of its event page', String(stats.page_views || 0)],
+    ['Clicked through to your link', people(stats.link_people || 0)],
+    ['Added it to their calendar', String(stats.calendar_adds || 0)],
+    ['Shared it', String(stats.shares || 0)],
+    ...(stats.newsletter_starred ? [['Starred in the Monday newsletter, sent to', `${stats.newsletter_recipients} subscribers`]] : [])
+  ];
+  const headline = `${name} was seen ${plural(shown, 'time', 'times')} as a Vic’s Pick.`;
+  const bodyHtml =
+    p(`Thanks for making <strong>${escHtml(name)}</strong> a Vic’s Pick, ${escHtml(business)}! Here’s how it did on The Vic 361.`) +
+    statsTable(rows) +
+    whereHtml(stats.where) +
+    p(escHtml(COUNTER_NOTE), `color:${C.muted};font-size:13px;`) +
+    box(`<strong>Got another event coming up?</strong> Pin it to the top of its day too.<br><br>${btn(`${siteUrl}/advertise/checkout?package=featured`, 'Make it a Vic’s Pick')}`);
+  return {
+    subject: `Your Vic's Pick report: ${name}`,
+    html: emailShell({ title: 'Your Vic’s Pick report', preheader: headline, bodyHtml, siteUrl,
+      footerHtml: contactFooter(siteUrl, address) }),
+    text: [
+      `Thanks for making "${name}" a Vic's Pick, ${business}! Here's how it did on The Vic 361.`, '',
+      ...rows.map(([k, v]) => `- ${k}: ${v}`), '',
+      ...whereText(stats.where),
+      COUNTER_NOTE, '',
+      `Got another event coming up? Make it a Vic's Pick: ${siteUrl}/advertise/checkout?package=featured`,
       contactText(siteUrl)
     ].join('\n')
   };

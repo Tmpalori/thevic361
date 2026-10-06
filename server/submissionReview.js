@@ -127,10 +127,15 @@ export function applyCleanup(payload, cleaned) {
   return { payload: out, changes };
 }
 
-export function registerSubmissionReview(app, { store, secret, nowFn, autoApprove, publish, onApproved = () => {}, slack = null, siteUrl = '' }) {
+// onRun: called (not awaited) on each authenticated pending fetch; the
+// server hangs the sponsor reports on it, since this is its 15-minute cron.
+export function registerSubmissionReview(app, { store, secret, nowFn, autoApprove, publish, onApproved = () => {}, onRun = () => {}, slack = null, siteUrl = '' }) {
   app.get('/api/submission-review/pending', async (req, res, next) => {
     if (!secretOk(req.get('x-cron-secret'), secret)) return res.status(401).json({ ok: false, error: 'unauthorized' });
     try {
+      try { Promise.resolve(onRun()).catch(err => console.warn('[submission-review] onRun failed:', err.message)); } catch (err) {
+        console.warn('[submission-review] onRun failed:', err.message);
+      }
       // Each review run passes through here, so it's also when paid picks
       // close to their date and still unpublished are called out.
       try { await remindPaidPicks({ store, slack, nowFn, siteUrl }); } catch (err) {
