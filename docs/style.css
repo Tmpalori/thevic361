@@ -1292,6 +1292,38 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
   margin-block: var(--space-2);
 }
 .event-entry--featured:hover { background: var(--sun-light); }
+/* Share icon on each event in a list (seo.js shareButton / app.js). */
+.event-share {
+  position: relative;
+  flex-shrink: 0;
+  align-self: center;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.event-share:hover { color: var(--ink); background: var(--sun); border-color: var(--ink); }
+.event-share:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.event-share.is-copied::after {
+  content: 'Copied';
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
 .badge {
   font-family: var(--font-display);
   font-weight: 600;

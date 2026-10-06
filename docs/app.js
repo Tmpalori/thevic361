@@ -88,6 +88,8 @@
     }
   }
 
+  var SHARE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M8 10H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-2"/></svg>';
+
   // ─── RENDER SINGLE EVENT ───
   function renderEvent(ev) {
     var iconHtml = renderIcons(ev.icons);
@@ -118,6 +120,13 @@
       ? '<div class="event-desc">' + escHtml(ev.description) + '</div>'
       : '';
 
+    // Share button, same markup as shareButton in server/seo.js. Admin
+    // preview data has no ev.page, so no button there.
+    var shareHtml = ev.page
+      ? '<button type="button" class="event-share" data-share-url="' + escHtml(ev.page) + '" data-share-text="' + escHtml(ev.name) +
+        '" aria-label="Share ' + escHtml(ev.name) + '" title="Share">' + SHARE_ICON + '</button>'
+      : '';
+
     var iconAttr = (ev.icons || []).join(' ') + (ev.free === true ? ' free' : '');
     return '<li class="event-entry' + (ev.featured ? ' event-entry--featured' : '') + '" data-icons="' + escHtml(iconAttr) + '">' +
       '<span class="event-icons" aria-hidden="true">' + iconHtml + '</span>' +
@@ -129,6 +138,7 @@
         freeBadge +
         descHtml +
       '</div>' +
+      shareHtml +
     '</li>';
   }
 

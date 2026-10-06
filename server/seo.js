@@ -574,6 +574,15 @@ function icons(ev) {
 // Mirrors renderEvent() in docs/app.js so the server markup and the
 // client re-render look identical. The name links to our event page (the
 // crawlable, internal link); the venue keeps the external source link.
+// Share button on each list item, so an event can go out from the list
+// without opening its page first. docs/track.js handles the tap (share
+// sheet, or copy the link); docs/app.js renders the same button.
+const SHARE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M8 10H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-2"/></svg>';
+function shareButton(ev) {
+  if (!ev.page) return '';
+  return `<button type="button" class="event-share" data-share-url="${escHtml(ev.page)}" data-share-text="${escHtml(ev.name)}" aria-label="Share ${escHtml(ev.name)}" title="Share">${SHARE_ICON}</button>`;
+}
+
 export function renderEventItem(ev) {
   const place = placeText(ev);
   return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}" data-icons="${escHtml((ev.icons || []).join(' ') + (ev.free === true ? ' free' : ''))}">` +
@@ -585,6 +594,7 @@ export function renderEventItem(ev) {
       (place ? `<span class="event-venue">${escHtml(place)}</span>` : '') +
       (ev.description ? `<div class="event-desc">${escHtml(ev.description)}</div>` : '') +
     '</div>' +
+    shareButton(ev) +
   '</li>';
 }
 
@@ -711,7 +721,7 @@ export function breadcrumbLd(siteUrl, trail) {
 // carrying a subscriber's token (confirm, unsubscribe) use it: both tools
 // report the page URL to a third party, and no third party should see the
 // token. GA_SNIPPET strips query strings anyway; this is belt and braces.
-export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = OG_IMAGE, pixel = true, analytics = pixel }) {
+export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = OG_IMAGE, imageSize = image === OG_IMAGE ? [1200, 630] : null, pixel = true, analytics = pixel }) {
   const url = siteUrl + path;
   return `<!DOCTYPE html>
 <html lang="en">
@@ -727,7 +737,7 @@ ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <meta property="og:url" content="${escHtml(url)}">
 <meta property="og:site_name" content="${SITE_NAME}">
 <meta property="og:image" content="${siteUrl}${image}">
-${image === OG_IMAGE ? '<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n' : ''}<meta name="twitter:card" content="summary_large_image">
+${imageSize ? `<meta property="og:image:width" content="${imageSize[0]}">\n<meta property="og:image:height" content="${imageSize[1]}">\n` : ''}<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="${siteUrl}${image}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -830,7 +840,9 @@ export function renderHubPage(page, events, { siteUrl, now, sponsor }) {
   return layout({ siteUrl, path: page.path, title: `${page.title} | ${SITE_NAME}`, description: page.description, body, ld });
 }
 
-export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = '', venuePath = null }) {
+// image: the event's own link-preview card (server/ogImage.js), passed in
+// by the route; falls back to the site-wide image.
+export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = '', venuePath = null, image = null }) {
   const today = localDateStr(now);
   const src = safeUrl(ev.url);
   const when = formatDay(ev.date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -880,7 +892,8 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   return layout({
     siteUrl, path: ev.page, nav: null,
     title: `${heading} | ${SITE_NAME}`,
-    description: description.slice(0, 300), body, ld
+    description: description.slice(0, 300), body, ld,
+    ...(image ? { image, imageSize: [1200, 630] } : {})
   });
 }
 
