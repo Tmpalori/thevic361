@@ -36,6 +36,7 @@ import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoT
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
 import { renderEventCard, eventCardVersion } from './ogImage.js';
+import { capDays, shown } from './scoring.js';
 import { createAutoPublish, unpublishEvent, replacePublishedEvent, forgetRemoved } from './autopublish.js';
 import crypto from 'node:crypto';
 import net from 'node:net';
@@ -708,7 +709,16 @@ export async function createApp(opts = {}) {
   //      explicitly to update them.
   app.post('/api/admin/publish-events', requireAdmin, async (req, res) => {
     const body = req.body || {};
-    const events = Array.isArray(body.events) ? body.events : null;
+    // score/overflow/keep are worked out on read (server/scoring.js; keep
+    // comes from the `kept` list), never stored on an event: a stored copy
+    // would go stale or outlive the admin's Undo.
+    const events = Array.isArray(body.events)
+      ? body.events.map(ev => {
+        if (!ev || typeof ev !== 'object') return ev;
+        const { score: _s, overflow: _o, keep: _k, ...rest } = ev;
+        return rest;
+      })
+      : null;
     if (!events) {
       return res.status(400).json({ ok: false, error: 'bad-payload', message: 'events[] required' });
     }
@@ -880,6 +890,18 @@ export async function createApp(opts = {}) {
       } catch (err) {
         console.warn('[admin] published-events overlay skipped:', err.message);
       }
+      // Score and whether each event made its day's list (server/scoring.js),
+      // as the public site sees it, for the admin's "Dropped" label.
+      let scored = new Map();
+      try {
+        scored = new Map((await getPublicPayload()).events.map(e => [eventKeyOf(e), e]));
+      } catch (err) {
+        console.warn('[admin] published-events scoring skipped:', err.message);
+      }
+      events = events.map(ev => {
+        const s = scored.get(eventKeyOf(ev));
+        return s ? { ...ev, score: s.score, overflow: Boolean(s.overflow), keep: Boolean(s.keep) } : ev;
+      });
       res.json({
         ok: true,
         events,
@@ -893,6 +915,32 @@ export async function createApp(opts = {}) {
         error: 'published-lookup-failed',
         message: err.message
       });
+    }
+  });
+
+  // ─── Admin: show a dropped event anyway ──────────────────────────────
+  // Body: { key: "date|name|venue", keep: true|false }. A day shows its best
+  // 15 (Mon–Thu) or 20 (Fri–Sun) events by score; `keep` puts one back in
+  // whatever its score. Stored in the published payload (`kept`), like the
+  // event check's hidden list, so Save & Publish and auto-publish carry it
+  // forward; keys start with the date, so past ones age out.
+  app.post('/api/admin/keep-event', requireAdmin, async (req, res) => {
+    const key = String(req.body && req.body.key || '').slice(0, 600);
+    const keep = Boolean(req.body && req.body.keep);
+    if (key.split('|').length !== 3 || !/^\d{4}-\d{2}-\d{2}\|/.test(key)) {
+      return res.status(400).json({ ok: false, error: 'bad-key' });
+    }
+    try {
+      const published = await store.getPublished();
+      if (!published) return res.status(404).json({ ok: false, error: 'nothing-published' });
+      const today = localDateStr(nowFn());
+      const kept = new Set((Array.isArray(published.kept) ? published.kept : []).filter(k => String(k).slice(0, 10) >= today));
+      if (keep) kept.add(key); else kept.delete(key);
+      await store.setPublished({ ...published, kept: [...kept] });
+      res.json({ ok: true, key, keep });
+    } catch (err) {
+      console.error('[admin] keep-event failed:', err.message);
+      res.status(500).json({ ok: false, error: 'keep-failed', message: err.message });
     }
   });
 
@@ -1069,8 +1117,24 @@ export async function createApp(opts = {}) {
   // they always agree.
   // Paid placements (sponsor of the week, featured events, venue partners)
   // are layered on at read time so every consumer sees the same thing.
+  let venues = [];
+
+  // Every public view reads this. capDays (server/scoring.js) scores each
+  // event and marks the ones past their day's limit `overflow`: the day
+  // lists below leave those out (shownPayload), while event pages, guides
+  // and the sitemap keep them.
   async function getPublicPayload() {
-    return sponsors.apply(await loadPublicPayload());
+    const payload = await sponsors.apply(await loadPublicPayload());
+    // `kept`: events the admin chose to show anyway (POST
+    // /api/admin/keep-event), by key; they skip the daily limit.
+    const kept = new Set(Array.isArray(payload.kept) ? payload.kept : []);
+    const events = (payload.events || []).map(ev => kept.has(eventKeyOf(ev)) ? { ...ev, keep: true } : ev);
+    return { ...payload, events: capDays(events, { venues }) };
+  }
+
+  async function shownPayload() {
+    const payload = await getPublicPayload();
+    return { ...payload, events: shown(payload.events) };
   }
 
   // The public events of a published payload, with the edits overlay
@@ -1139,8 +1203,11 @@ export async function createApp(opts = {}) {
   async function serveEventsJson(req, res, next) {
     try {
       // auto_publish and the hidden lists are bookkeeping, not public.
-      const { source, auto_publish: _auto, hidden: _h, hidden_restored: _r, ...payload } = await getPublicPayload();
+      // The homepage app, social kit and event check read this: day lists.
+      const { source, auto_publish: _auto, hidden: _h, hidden_restored: _r, kept: _k, ...payload } = await shownPayload();
       if (source === 'empty') return next();
+      // The score and the admin's keep flag are internal (server/scoring.js).
+      payload.events = payload.events.map(({ score: _s, keep: _kp, overflow: _o, ...ev }) => ev);
       // Store-backed payloads change on publish; the bundled file only on deploy.
       if (source === 'store') res.set('Cache-Control', 'no-store');
       return res.json(payload);
@@ -1184,7 +1251,8 @@ export async function createApp(opts = {}) {
 
   registerNewsletter(app, {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
-    getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman,
+    // The newsletter is a day-by-day list: only events that made their day.
+    getPublicPayload: shownPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman,
     // Monday's run also sends last week's sponsor click reports. A daily
     // scheduler can call sponsors.sendSponsorReports(now) as well; it's
     // idempotent (each order records report_sent).
@@ -1209,8 +1277,8 @@ export async function createApp(opts = {}) {
     res.type('html').send(html);
   }
 
-  // venues.json ships with the deploy; read once at boot.
-  let venues = [];
+  // venues.json ships with the deploy; read once at boot (declared above,
+  // with getPublicPayload, which scores events by venue).
   try {
     venues = buildVenues(await readJsonFile(opts.venuesFile || VENUES_FILE));
   } catch (err) {
@@ -1254,14 +1322,16 @@ export async function createApp(opts = {}) {
     if (!indexTemplate || opts.reloadTemplates) {
       indexTemplate = await fsp.readFile(path.join(DOCS_DIR, 'index.html'), 'utf8');
     }
-    sendHtml(res, renderHome(indexTemplate, payload.events, {
+    sendHtml(res, renderHome(indexTemplate, shown(payload.events), {
       ...ctx, signupHtml: signupFormHtml()
     }));
   }));
 
   for (const page of HUB_PAGES) {
     app.get(page.path, pageHandler(async (req, res, payload, ctx) => {
-      sendHtml(res, renderHubPage(page, payload.events, ctx));
+      // Day pages (today, this weekend, next week) are day lists; the
+      // category pages (free, kids, music...) are guides and keep everything.
+      sendHtml(res, renderHubPage(page, page.range === 'upcoming' ? payload.events : shown(payload.events), ctx));
     }));
   }
 
@@ -1366,7 +1436,7 @@ export async function createApp(opts = {}) {
       ['Event venues in Victoria, TX', '/venues', 'every venue we track, with its upcoming events'],
       ...activeSeasons(payload.events, ctx.archived, ctx.now).map(s => [s.title, s.path, s.description])
     ];
-    res.type('text/plain; charset=utf-8').send(renderLlmsTxt(payload.events, { ...ctx, extraLinks, sponsor: payload.sponsor || null }));
+    res.type('text/plain; charset=utf-8').send(renderLlmsTxt(shown(payload.events), { ...ctx, extraLinks, sponsor: payload.sponsor || null }));
   }));
 
   // The social kit lives at docs/social/latest/index.html; static serving
