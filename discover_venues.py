@@ -64,10 +64,14 @@ def _warn(message: str, **tags: Any) -> None:
     _annotate("warning", message, tags)
 
 
-def _report_exception(stage: str, **tags: Any) -> None:
-    import traceback
-    last = traceback.format_exc(limit=1).strip().splitlines()[-1][:200]
-    _annotate("warning", f"{stage} failed", {**tags, "error": last})
+def _report_exception(stage: str, error: Any = None, **tags: Any) -> None:
+    # Pass `error` when calling outside an except block (the retry loop
+    # gets the failure back as a value): format_exc() there only says
+    # "NoneType: None".
+    if error is None:
+        import traceback
+        error = traceback.format_exc(limit=1).strip().splitlines()[-1]
+    _annotate("warning", f"{stage} failed", {**tags, "error": str(error)[:200]})
 
 
 # ─── Constants ──────────────────────────────────────────────────────────────
@@ -442,7 +446,7 @@ def _run_actor_with_retries(
         if kind == "exc":
             print(f"  [discover] {label}: request failed ({info})")
             _report_exception(
-                "apify_request", actor=APIFY_GMAPS_ACTOR, search=label,
+                "apify_request", error=info, actor=APIFY_GMAPS_ACTOR, search=label,
             )
         elif kind == "http":
             status, body = info
@@ -456,7 +460,7 @@ def _run_actor_with_retries(
         elif kind == "parse":
             print(f"  [discover] {label}: response parse failed: {info}")
             _report_exception(
-                "apify_parse", actor=APIFY_GMAPS_ACTOR, search=label,
+                "apify_parse", error=info, actor=APIFY_GMAPS_ACTOR, search=label,
             )
         elif kind == "shape":
             print(f"  [discover] {label}: unexpected payload type: {info}")

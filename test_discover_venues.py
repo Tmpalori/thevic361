@@ -705,3 +705,15 @@ def test_apify_zero_results_fires_warn(tmp_path, monkeypatch):
     summary = dv.discover_and_update(repo_root=str(tmp_path))
     assert summary["ran_apify"] is True
     assert any("0 HIGH and 0 MEDIUM" in m for m, _t in warns), warns
+
+
+def test_retry_loop_warning_names_the_real_error(monkeypatch, capsys):
+    """The retry loop reports a failure it got back as a value, outside an
+    except block, so the warning must carry that error, not 'NoneType: None'."""
+    def boom(*a, **kw):
+        raise RuntimeError("network down")
+
+    dv.run_apify_discovery("tok", http_post=boom, sleep=lambda *_a, **_k: None)
+    out = capsys.readouterr().out
+    assert "network down" in out
+    assert "NoneType: None" not in out
