@@ -1,0 +1,69 @@
+# Meta ads — read and manage The Vic 361's ads (scripts/meta_ads.py).
+#
+# Daily: yesterday's and the last 7 days' results to Slack (activity
+# channel); quiet when nothing has spent. By hand (Actions → Meta Ads →
+# Run workflow, or `gh workflow run meta-ads.yml -f command=status`):
+# status, pause/resume an id, or set a daily budget in dollars (over $50
+# needs force). Results show in the run summary.
+#
+# Token: META_ADS_TOKEN (system user with ads_read + ads_management and the
+# ad account assigned), else META_PAGE_TOKEN. Optional repo variable
+# META_AD_ACCOUNT_ID when the token sees more than one ad account.
+
+name: Meta Ads
+
+on:
+  schedule:
+    - cron: '37 13 * * *'   # 8:37 AM CDT
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'What to do'
+        type: choice
+        options: [status, report, pause, resume, budget]
+        default: status
+      target:
+        description: 'Campaign, ad set or ad id (pause/resume/budget)'
+        required: false
+        default: ''
+      amount:
+        description: 'Daily budget in dollars (budget)'
+        required: false
+        default: ''
+      force:
+        description: 'Allow a budget over $50/day'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: meta-ads
+  cancel-in-progress: false
+
+jobs:
+  ads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Meta ads
+        env:
+          META_ADS_TOKEN: ${{ secrets.META_ADS_TOKEN || secrets.META_PAGE_TOKEN }}
+          META_AD_ACCOUNT_ID: ${{ vars.META_AD_ACCOUNT_ID }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
+          COMMAND: ${{ github.event_name == 'schedule' && 'report' || inputs.command }}
+          TARGET: ${{ inputs.target }}
+          AMOUNT: ${{ inputs.amount }}
+          FORCE: ${{ inputs.force && '--force' || '' }}
+          SCHEDULED: ${{ github.event_name == 'schedule' && '--scheduled' || '' }}
+        run: python3 scripts/meta_ads.py "$COMMAND" "$TARGET" "$AMOUNT" $FORCE $SCHEDULED
