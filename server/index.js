@@ -36,7 +36,7 @@ import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoT
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
 import { renderEventCard, eventCardVersion } from './ogImage.js';
-import { capDays, shown } from './scoring.js';
+import { capDays, pickDays, shown } from './scoring.js';
 import { createAutoPublish, unpublishEvent, replacePublishedEvent, forgetRemoved } from './autopublish.js';
 import crypto from 'node:crypto';
 import net from 'node:net';
@@ -715,7 +715,10 @@ export async function createApp(opts = {}) {
     const events = Array.isArray(body.events)
       ? body.events.map(ev => {
         if (!ev || typeof ev !== 'object') return ev;
-        const { score: _s, overflow: _o, keep: _k, ...rest } = ev;
+        const { score: _s, overflow: _o, keep: _k, editor_pick: pick, ...rest } = ev;
+        // An editor's pick is `featured` only on read (pickDays); storing
+        // it would pin it for good.
+        if (pick) delete rest.featured;
         return rest;
       })
       : null;
@@ -900,7 +903,7 @@ export async function createApp(opts = {}) {
       }
       events = events.map(ev => {
         const s = scored.get(eventKeyOf(ev));
-        return s ? { ...ev, score: s.score, overflow: Boolean(s.overflow), keep: Boolean(s.keep) } : ev;
+        return s ? { ...ev, score: s.score, overflow: Boolean(s.overflow), keep: Boolean(s.keep), editor_pick: Boolean(s.editor_pick) } : ev;
       });
       res.json({
         ok: true,
@@ -1129,7 +1132,7 @@ export async function createApp(opts = {}) {
     // /api/admin/keep-event), by key; they skip the daily limit.
     const kept = new Set(Array.isArray(payload.kept) ? payload.kept : []);
     const events = (payload.events || []).map(ev => kept.has(eventKeyOf(ev)) ? { ...ev, keep: true } : ev);
-    return { ...payload, events: capDays(events, { venues }) };
+    return { ...payload, events: pickDays(capDays(events, { venues })) };
   }
 
   async function shownPayload() {
@@ -1208,6 +1211,7 @@ export async function createApp(opts = {}) {
       if (source === 'empty') return next();
       // The score and the admin's keep flag are internal (server/scoring.js).
       payload.events = payload.events.map(({ score: _s, keep: _kp, overflow: _o, ...ev }) => ev);
+      // editor_pick stays: it tells an editor's Vic's Pick from a paid one.
       // Store-backed payloads change on publish; the bundled file only on deploy.
       if (source === 'store') res.set('Cache-Control', 'no-store');
       return res.json(payload);

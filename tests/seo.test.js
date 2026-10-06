@@ -371,7 +371,7 @@ describe('paid placements', () => {
     await startApp(events);
     const llms = (await get('/llms.txt')).text;
     expect(llms).toContain("## Vic's Picks");
-    expect(llms).toContain('Some are paid placements');
+    expect(llms).toContain('some are paid placements');
     expect(llms).toMatch(/Paid Late Show\]\([^)]+\) at B \(Vic's Pick\)/);
     expect(llms).not.toMatch(/Early Show\]\([^)]+\) at A \(Vic's Pick\)/);
     const list = (await get('/this-weekend')).text;

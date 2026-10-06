@@ -1092,7 +1092,7 @@ export function comingUpEvents(events, today) {
   // week's list; don't announce its later days as "coming up".
   const thisWeek = new Set((events || []).filter(ev => ev.date >= week[0] && ev.date <= week[6])
     .map(ev => `${ev.name}|${ev.town || ''}`));
-  return sortEvents((events || []).filter(ev => ev.date > week[6] && ev.date <= last && (ev.big === true || ev.featured) &&
+  return sortEvents((events || []).filter(ev => ev.date > week[6] && ev.date <= last && (ev.big === true || (ev.featured && !ev.editor_pick)) &&
     !thisWeek.has(`${ev.name}|${ev.town || ''}`)))
     .sort((a, b) => a.date.localeCompare(b.date))
     // One line per event: a multi-day festival shows its first day.
@@ -1217,7 +1217,7 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
   }
   if (picks.length) {
     lines.push("## Vic's Picks", '',
-      "Featured events, pinned to the top of their day on The Vic 361. Some are paid placements by the venue or organizer.", '',
+      "Featured events, pinned to the top of their day on The Vic 361. Some are our editors' can't-miss picks; some are paid placements by the venue or organizer.", '',
       ...picks.map(line), '');
   }
   lines.push(`## Upcoming events (as of ${formatDay(today, { month: 'long', day: 'numeric', year: 'numeric' })})`, '');
