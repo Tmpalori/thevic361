@@ -386,6 +386,7 @@ describe('auto-publish with far-ahead hand-added events', () => {
     }));
     await runNow();
     const [now] = (await live()).events;
+    // recurring is sticky: a weekly staple shouldn't flicker between runs.
     expect(now.big).toBeUndefined();
     expect(now.town).toBeUndefined();
     expect(now).toMatchObject({ curated: true, appeal: 5, sources: 2 });

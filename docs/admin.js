@@ -1175,7 +1175,9 @@
     form.elements['url'].value = ev.url || '';
     syncEditUrlOpenLink();
     form.elements['free'].checked = Boolean(ev.free);
-    if (form.elements['featured']) form.elements['featured'].checked = Boolean(ev.featured);
+    // An editor's pick is featured only by its score (server/scoring.js);
+    // the box means a real Vic's Pick, so it starts unticked for one.
+    if (form.elements['featured']) form.elements['featured'].checked = Boolean(ev.featured && !ev.editor_pick);
     const haveIcons = new Set(Array.isArray(ev.icons) ? ev.icons : []);
     form.querySelectorAll('input[name="icons"]').forEach(cb => {
       cb.checked = haveIcons.has(cb.value);
@@ -1242,6 +1244,9 @@
       const k = eventKey(ev);
       if (k === originalKey) {
         const merged = { ...ev, ...edited };
+        // Ticked Vic's Pick: a real one now, not the score's (Save & Publish
+        // strips `featured` from editor's picks).
+        if (edited.featured) delete merged.editor_pick;
         const mk = eventKey(merged);
         if (!seen.has(mk)) { seen.add(mk); next.push(merged); }
         replaced = true;

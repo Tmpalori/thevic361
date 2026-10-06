@@ -7,7 +7,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { scoreEvent, capDays, shown, dayMax, pickDays } from '../server/scoring.js';
-import { comingUpEvents, withPages } from '../server/seo.js';
+import { comingUpEvents, withPages, sortEvents } from '../server/seo.js';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
 import { promises as fs } from 'node:fs';
@@ -173,6 +173,17 @@ describe('editor’s picks (pickDays)', () => {
       { date: '2026-10-21', name: 'Paid Pick', venue: 'Y', featured: true }
     ]);
     expect(comingUpEvents(list, '2026-10-07').map(e => e.name)).toEqual(['Paid Pick']);
+  });
+});
+
+describe('order within a day', () => {
+  it('paid Vic’s Picks first, then editor’s picks, then the rest by time', () => {
+    const day = [
+      { date: '2026-10-10', name: 'Plain', time: '9:00 AM' },
+      { date: '2026-10-10', name: 'Editor Pick', time: '1:00 PM', featured: true, editor_pick: true },
+      { date: '2026-10-10', name: 'Paid Pick', time: '7:00 PM', featured: true }
+    ];
+    expect(sortEvents(day).map(e => e.name)).toEqual(['Paid Pick', 'Editor Pick', 'Plain']);
   });
 });
 

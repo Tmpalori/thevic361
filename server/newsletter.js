@@ -30,7 +30,7 @@
 
 import crypto from 'node:crypto';
 import {
-  SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem,
+  SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank,
   sponsorLinkUrl
 } from './seo.js';
 
@@ -256,7 +256,9 @@ export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, ad
   const short = d => formatDay(d, { month: 'short', day: 'numeric' });
   const range = week.length ? (week.length === 1 ? short(week[0]) : `${short(week[0])}–${short(week[week.length - 1])}`) : '';
   const subject = `This week in Victoria: ${total} ${total === 1 ? 'thing' : 'things'} to do (${range})`;
-  const highlights = byDay.flatMap(x => x.list).filter(e => e.featured).concat(byDay.flatMap(x => x.list)).map(e => e.name);
+  // Paid Vic's Picks lead, then editor's picks (pickRank), then the rest.
+  const highlights = byDay.flatMap(x => x.list).filter(e => e.featured).sort((a, b) => pickRank(a) - pickRank(b))
+    .concat(byDay.flatMap(x => x.list)).map(e => e.name);
   const preheader = [...new Set(highlights)].slice(0, 3).join(' · ');
 
   // Day colors follow the weekday (Monday yellow ... Sunday coral), like the site.
@@ -317,7 +319,7 @@ const WELCOME_PICKS = 5;
 export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeUrl, address }) {
   const today = localDateStr(now);
   const soon = sortEvents((events || []).filter(e => e.date >= today && e.date <= addDays(today, 6)));
-  const picks = [...soon.filter(e => e.featured), ...soon.filter(e => !e.featured)].slice(0, WELCOME_PICKS);
+  const picks = [...soon.filter(e => e.featured).sort((a, b) => pickRank(a) - pickRank(b)), ...soon.filter(e => !e.featured)].slice(0, WELCOME_PICKS);
   const dayLabel = (d) => d === today ? 'Today' : formatDay(d, { weekday: 'long' });
   const coming = picks.length ? `
 <p style="margin:22px 0 6px;font-family:${DISPLAY};font-size:19px;font-weight:bold;">Coming up this week</p>
@@ -385,7 +387,7 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0 
   // Vic's Picks get a spot first, then the list reads in date order with
   // the day on each line (renderEventItem alone shows only the time).
   const dayOf = d => d === today ? 'Today' : formatDay(d, { weekday: 'short' });
-  const picks = sortEvents(next7.filter(e => e.featured).concat(next7)
+  const picks = sortEvents(next7.filter(e => e.featured).sort((a, b) => pickRank(a) - pickRank(b)).concat(next7)
     .filter(e => e.page && !seen.has(e.name) && seen.add(e.name)).slice(0, 5))
     .map(e => ({ ...e, time: [dayOf(e.date), e.time].filter(Boolean).join(' · ') }));
   const crowd = subscriberCount >= SHOW_COUNT_FROM
