@@ -15,8 +15,15 @@
  * The AI may only rewrite the name, description and icons. Date, time,
  * venue, address, link and the submitter's details always stay as sent.
  * Each submission is reviewed once (`ai_review` on the row); an admin edit
- * or decision always wins, and paid Vic's Pick submissions are left to the
- * admin. SUBMISSION_AUTOAPPROVE=0 turns approvals into flags.
+ * or decision always wins. SUBMISSION_AUTOAPPROVE=0 turns approvals into
+ * flags.
+ *
+ * Paid Vic's Picks go through the same review, so a clean one goes live
+ * without waiting for the owner, but the buyer's words are kept (they saw
+ * a preview before paying), and nothing paid for is turned away
+ * automatically: a reject becomes a flag, and an exact copy of a live
+ * event is approved (the pin finds the listed one). A paid pick still
+ * unpublished close to its date is called out in Slack (remindPaidPicks).
  *
  * Safety: the shared secret (like the event check), pending rows only, at
  * most MAX_PER_RUN decisions per call.
@@ -38,13 +45,59 @@ function secretOk(given, want) {
   return w.length > 0 && g.length === w.length && crypto.timingSafeEqual(g, w);
 }
 
-// Waiting for the AI: pending public submissions it hasn't seen and the
-// admin hasn't touched (anything beyond the "submitted" history entry).
+const REVIEWED_SOURCES = new Set(['submission', 'paid-feature']);
+export const isPaidPick = row => Boolean(row) && row.source === 'paid-feature';
+
+// Waiting for the AI: pending submissions (free or paid) it hasn't seen
+// and the admin hasn't touched (anything beyond the "submitted" history
+// entry and Slack reminders).
 export function awaitingReview(row) {
-  if (!row || row.status !== 'pending' || (row.source || 'submission') !== 'submission') return false;
+  if (!row || row.status !== 'pending' || !REVIEWED_SOURCES.has(row.source || 'submission')) return false;
   if (row.ai_review) return false;
   const history = Array.isArray(row.review_history) ? row.review_history : [];
-  return history.every(h => h && h.action === 'submitted');
+  return history.every(h => h && (h.action === 'submitted' || h.action === 'reminder'));
+}
+
+// Paid picks this close to their date (days) that still aren't approved
+// get a Slack reminder, at most every REMIND_EVERY_MS, once they've had
+// REMIND_GRACE_MS for the review to publish them.
+const REMIND_DAYS = 2;
+const REMIND_EVERY_MS = 6 * 3600 * 1000;
+const REMIND_GRACE_MS = 30 * 60 * 1000;
+
+function addDaysStr(dateStr, n) {
+  return new Date(Date.parse(dateStr + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+}
+
+// Called on every review run (the pending fetch). Returns the reminded rows.
+export async function remindPaidPicks({ store, slack, nowFn, siteUrl = '' }) {
+  if (!slack) return [];
+  const now = nowFn();
+  const today = localDateStr(now);
+  const until = addDaysStr(today, REMIND_DAYS);
+  const rows = (await store.list({ status: 'pending' })).filter(r => isPaidPick(r) && r.payload &&
+    r.payload.date >= today && r.payload.date <= until &&
+    now.getTime() - Date.parse(r.created_at || 0) >= REMIND_GRACE_MS);
+  const due = rows.filter(r => {
+    const last = (Array.isArray(r.review_history) ? r.review_history : []).filter(h => h && h.action === 'reminder').pop();
+    return !last || now.getTime() - Date.parse(last.at) >= REMIND_EVERY_MS;
+  });
+  if (!due.length) return [];
+  const at = now.toISOString();
+  for (const r of due) {
+    await store.update(r.id, { review_history: [...(Array.isArray(r.review_history) ? r.review_history : []),
+      { at, action: 'reminder', note: 'Reminded in Slack: paid Vic’s Pick not published yet' }] });
+  }
+  slack.notify({
+    channel: 'sales',
+    title: `⏰ ${due.length === 1 ? 'A paid Vic’s Pick isn’t' : `${due.length} paid Vic’s Picks aren’t`} on the site yet`,
+    text: due.map(r => {
+      const why = r.ai_review && r.ai_review.reason ? `: ${r.ai_review.reason}` : r.ai_review ? '' : ': not reviewed yet';
+      return `• ${r.payload.name} · ${r.payload.date === today ? 'TODAY' : r.payload.date} (${r.submitter_name || r.submitter_email || 'buyer'})${why}`;
+    }).join('\n'),
+    link: `${siteUrl}/admin.html`, footer: 'Approve it in the Submissions tab, or refund it in Stripe'
+  });
+  return due;
 }
 
 // The stored payload with only the AI's allowed changes applied. Returns
@@ -78,11 +131,16 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
   app.get('/api/submission-review/pending', async (req, res, next) => {
     if (!secretOk(req.get('x-cron-secret'), secret)) return res.status(401).json({ ok: false, error: 'unauthorized' });
     try {
+      // Each review run passes through here, so it's also when paid picks
+      // close to their date and still unpublished are called out.
+      try { await remindPaidPicks({ store, slack, nowFn, siteUrl }); } catch (err) {
+        console.warn('[submission-review] paid pick reminder failed:', err.message);
+      }
       const rows = (await store.list({ status: 'pending' })).filter(awaitingReview);
       // Only what the review needs: no emails, phone numbers or IPs.
       const submissions = rows.slice(0, MAX_PER_RUN).map(r => {
         const { submitter_first_name: _f, submitter_last_name: _l, submitter_phone: _p, ...event } = r.payload || {};
-        return { id: r.id, created_at: r.created_at, submitter_kind: r.submitter_kind || 'other', event };
+        return { id: r.id, created_at: r.created_at, submitter_kind: r.submitter_kind || 'other', paid: isPaidPick(r), event };
       });
       res.json({ ok: true, auto_approve: autoApprove, submissions });
     } catch (err) { next(err); }
@@ -105,9 +163,19 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
         const row = id ? await store.get(id) : null;
         if (!row || !awaitingReview(row)) { skipped.push({ id, why: 'not-awaiting-review' }); continue; }
         if (!DECISIONS.has(decision)) { skipped.push({ id, why: 'bad-decision' }); continue; }
+        const paid = isPaidPick(row);
+        let reasonNote = reason;
+        // Nothing paid for is turned away without the owner: a refund is
+        // their call. An exact copy of a live event is fine for a paid
+        // pick: the pin finds the listed one.
+        if (paid && decision === 'reject') {
+          decision = 'flag';
+          reasonNote = `paid Vic’s Pick the review would have turned away${reason ? `: ${reason}` : ''}`;
+        } else if (paid && decision === 'duplicate') {
+          decision = 'approve';
+        }
         if (decision === 'approve' && !autoApprove) decision = 'flag';
         // Auto-publish only lists upcoming events, so a past date can't go live.
-        let reasonNote = reason;
         if (decision === 'approve' && String((row.payload || {}).date || '') < localDateStr(nowFn())) {
           decision = 'flag';
           reasonNote = `the date has already passed${reason ? `; ${reason}` : ''}`;
@@ -120,7 +188,9 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
         let changes = [];
         let note = reasonNote;
         if (decision === 'approve' || decision === 'flag') {
-          const fixed = applyCleanup(row.payload, ask.cleaned);
+          // A paid pick keeps the buyer's words (they saw a preview before
+          // paying); the review only decides whether it can go live.
+          const fixed = applyCleanup(row.payload, paid ? {} : ask.cleaned);
           if (fixed.error) {
             decision = 'flag';
             note = `${reasonNote ? reasonNote + ' ' : ''}(AI cleanup was invalid: ${fixed.error})`.trim();
@@ -145,7 +215,7 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
         if (STATUS[decision]) patch.status = STATUS[decision];
         if (decision === 'approve') patch.payload = payload;
         const updated = await store.update(id, patch);
-        done.push({ id, decision, reason: note, changes, row: updated || { ...row, ...patch }, live: null });
+        done.push({ id, decision, reason: note, changes, paid, row: updated || { ...row, ...patch }, live: null });
       }
 
       let published = null;
@@ -171,7 +241,7 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
           const fixed = d.changes.length ? ` (tidied: ${d.changes.join(', ')})` : '';
           const notLive = d.decision === 'approve' && d.live === false
             ? ': ⚠️ approved but not on the site (removed before, or matches an event already listed); check it' : '';
-          return `• *${LABEL[d.decision]}*: ${ev.name} · ${ev.date}${fixed}${notLive}${d.decision === 'approve' ? '' : `: ${d.reason}`}`;
+          return `• *${LABEL[d.decision]}*${d.paid ? ' (💰 paid Vic’s Pick)' : ''}: ${ev.name} · ${ev.date}${fixed}${notLive}${d.decision === 'approve' ? '' : `: ${d.reason}`}`;
         });
         const live = done.filter(d => d.decision === 'approve' && d.live !== false).length;
         const flagged = done.filter(d => d.decision === 'flag').length;
