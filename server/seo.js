@@ -366,6 +366,13 @@ export function chicagoOffset(dateStr) {
 
 // Pull "7:00 PM" / "10am" style times out of free-form strings like
 // "10:00AM – 11:00AM" or "10am - 3pm". Returns ["HH:MM", ...] (24h).
+// A range that shares one am/pm ("7-9 PM", "7:30 – 9:30pm") starts with a
+// bare time; it takes the end's meridiem ("11-1 PM" flips to 11 AM, since a
+// start can't be after its end). Without this the end time was read as the
+// start (JSON-LD startDate, .ics, sorting, /tonight). docs/app.js sorts
+// the homepage the same way (toMins).
+const SHARED_RANGE = /(^|[^\d:])(\d{1,2})(?::(\d{2}))?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b/i;
+
 export function parseTimes(time) {
   if (!time) return [];
   const out = [];
@@ -377,6 +384,18 @@ export function parseTimes(time) {
     let h = Number(m[1]) % 12;
     if (m[3].toLowerCase() === 'p') h += 12;
     out.push(String(h).padStart(2, '0') + ':' + (m[2] || '00'));
+  }
+  const r = SHARED_RANGE.exec(String(time));
+  // Only when the range is the first time in the string ("Doors 6 PM, show
+  // 7-9 PM" starts at 6) and its end is the first time parsed above.
+  const first = /(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m/i.exec(String(time));
+  if (r && out.length && first && first.index > r.index + r[1].length &&
+      Number(r[2]) <= 12 && Number(r[3] || 0) <= 59) {
+    const [eh, em] = out[0].split(':').map(Number);
+    let h = (Number(r[2]) % 12) + (eh >= 12 ? 12 : 0);
+    const mins = r[3] || '00';
+    if (h * 60 + Number(mins) > eh * 60 + em) h = (h + 12) % 24;
+    return [String(h).padStart(2, '0') + ':' + mins, out[0]];
   }
   return out;
 }
@@ -403,7 +422,9 @@ export function slugify(str) {
 }
 
 // Attach a stable `page` path to each event: /events/<date>-<name-slug>.
-// Same date + name twice gets -2, -3 in payload order so links stay unique.
+// Same date + name twice gets -2, -3 so links stay unique, numbered by
+// start time, then venue, then name (not payload order: Save & Publish and
+// auto-publish order ties differently, which swapped the pair's URLs).
 // Some sources hand us text that's already HTML-encoded ("Texas A&amp;M");
 // decode it once so escaping on render doesn't show "&amp;" on the page.
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
@@ -509,15 +530,33 @@ const FIXED_URLS = {
   'https://www.weaverhouseconcerts.com': ''
 };
 
+const tieKey = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+function pageNumbers(list) {
+  const bases = list.map(ev => `${ev.date}-${slugify(ev.name) || 'event'}`);
+  const groups = new Map();
+  bases.forEach((b, i) => groups.set(b, [...(groups.get(b) || []), i]));
+  const n = new Array(list.length).fill(1);
+  for (const idx of groups.values()) {
+    if (idx.length < 2) continue;
+    const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+    idx.sort((i, j) => (timeKey(list[i]) - timeKey(list[j])) ||
+      cmp(tieKey(list[i].venue), tieKey(list[j].venue)) ||
+      cmp(tieKey(list[i].name), tieKey(list[j].name)) ||
+      cmp(String(list[i].time || ''), String(list[j].time || '')) || (i - j));
+    idx.forEach((i, rank) => { n[i] = rank + 1; });
+  }
+  return { bases, n };
+}
+
 export function withPages(events) {
-  const seen = new Map();
-  return (Array.isArray(events) ? events : [])
-    .filter(ev => ev && ev.date && ev.name)
-    .map(ev => {
+  const list = (Array.isArray(events) ? events : []).filter(ev => ev && ev.date && ev.name);
+  const { bases, n: nums } = pageNumbers(list);
+  return list
+    .map((ev, i) => {
       // Slug from the stored name so existing event URLs don't move.
-      const base = `${ev.date}-${slugify(ev.name) || 'event'}`;
-      const n = (seen.get(base) || 0) + 1;
-      seen.set(base, n);
+      const base = bases[i];
+      const n = nums[i];
       const clean = {};
       for (const k of ['name', 'venue', 'address', 'description', 'time']) {
         if (typeof ev[k] === 'string') clean[k] = decodeEntities(ev[k]);

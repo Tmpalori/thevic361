@@ -168,7 +168,16 @@
         var h = parseInt(m[1]), min = parseInt(m[2]), ampm = m[3].toUpperCase();
         if (ampm === 'PM' && h !== 12) h += 12;
         if (ampm === 'AM' && h === 12) h = 0;
-        return h * 60 + min;
+        var end = h * 60 + min;
+        // "7:00 - 9:00 PM" shares the end's AM/PM: sort by the start, like
+        // parseTimes in server/seo.js (flipped when it would pass the end).
+        var r = t.match(/^\s*(\d{1,2}):(\d{2})\s*(?:-|–|—|to)\s*\d{1,2}:\d{2}\s*(AM|PM)/i);
+        if (r && parseInt(r[1]) <= 12) {
+          var s = (parseInt(r[1]) % 12) * 60 + parseInt(r[2]) + (end >= 720 ? 720 : 0);
+          if (s > end) s = (s + 720) % 1440;
+          return s;
+        }
+        return end;
       }
       // Paid Vic's Picks pin to the top of their day, then editor's picks
       // (pickRank in server/seo.js).

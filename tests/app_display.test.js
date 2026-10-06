@@ -53,6 +53,23 @@ describe('docs/app.js matches the server renderer', () => {
     expect(summary(html)).toBe(summary(server));
   });
 
+  it('sorts a range sharing one AM/PM by its start, like parseTimes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 7, 12));
+    const events = [
+      { date: '2026-10-07', name: 'Late Show', time: '8:00 PM' },
+      { date: '2026-10-07', name: 'Early Set', time: '7:30 - 9:00 PM' }
+    ];
+    let done;
+    const ready = new Promise(r => { done = r; });
+    boot('', () => Promise.resolve({ ok: true, json: () => { setTimeout(done, 0); return Promise.resolve({ events }); } }));
+    await ready;
+    await new Promise(r => setTimeout(r, 0));
+    const html = document.getElementById('events-container').innerHTML;
+    expect(html.indexOf('Early Set')).toBeGreaterThan(-1);
+    expect(html.indexOf('Early Set')).toBeLessThan(html.indexOf('Late Show'));
+  });
+
   it('marks the sponsor link as paid and tags it for the sponsor', () => {
     const app = boot('');
     const html = app.renderSponsor({ name: 'Acme', text: 'Hi', cta: 'Visit', url: 'https://acme.example/' });

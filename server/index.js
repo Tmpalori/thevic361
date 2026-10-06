@@ -19,7 +19,7 @@ import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter } from './db.js';
+import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter, resolveEditKey } from './db.js';
 import { validateSubmission, validateEventEdit, checkBotSignals } from './validate.js';
 import { verifyTurnstile } from './turnstile.js';
 import { createRateLimiter, ipKey } from './rateLimit.js';
@@ -28,7 +28,7 @@ import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
-import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys } from './eventcheck.js';
+import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys, keyedEvents } from './eventcheck.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { createMailer, renderSubmissionReceived, renderSubmissionLive } from './notify.js';
 import { registerSubmissionReview, isPaidPick } from './submissionReview.js';
@@ -43,7 +43,7 @@ import * as sponsorsModule from './sponsors.js';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import {
-  HUB_PAGES, localDateStr, withPages, renderHome, renderHubPage, renderEventPage,
+  HUB_PAGES, localDateStr, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderPrivacyPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
   , fillSeasonalNav
 } from './seo.js';
@@ -169,7 +169,13 @@ export async function createApp(opts = {}) {
   app.disable('x-powered-by');
   const adminCsp = await adminPageCsp();
   app.use((req, res, next) => {
-    const isAdminPage = req.path === '/admin.html' || req.path === '/admin';
+    // express.static decodes %-escapes and normalizes the path before it
+    // picks a file, so decide on the same form: /admin%2Ehtml and
+    // /%61dmin.html serve admin.html and must get its CSP too. (The static
+    // handler below also sets it by the file it actually serves.)
+    let p = req.path;
+    try { p = path.posix.normalize(decodeURIComponent(p)); } catch (_) { /* bad escape: answered 400 later */ }
+    const isAdminPage = /^\/admin(\.html)?$/i.test(p);
     res.set({
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
@@ -240,6 +246,17 @@ export async function createApp(opts = {}) {
       `${err.message}\nThe site is up on the bundled events.json and retries the database on the next request.`)
   });
   const store = storeBundle.store;
+  // Production on the JSON file store means DATABASE_URL resolved empty (a
+  // renamed or re-provisioned Postgres service): everything looks fine, and
+  // every subscriber, submission and paid order written meanwhile is lost
+  // on the next deploy (Railway's disk is ephemeral). Loud, not silent.
+  const railwayEnv = opts.railwayEnvironment ?? process.env.RAILWAY_ENVIRONMENT_NAME;
+  const missingDatabase = railwayEnv === 'production' && storeBundle.kind !== 'postgres';
+  const NO_DATABASE = 'Production is running without its database (DATABASE_URL is missing or empty), so new subscribers, submissions and orders are kept on a disk that is wiped on the next deploy. Fix the DATABASE_URL reference in Railway.';
+  if (missingDatabase) {
+    console.error('[db] production without DATABASE_URL: using the ephemeral file store');
+    slack.alert('db-missing', 'Production has no database', NO_DATABASE);
+  }
 
   // Note crawler hits on public pages for the admin Traffic tab. Registered
   // before every route so it sees the server-rendered pages too.
@@ -364,6 +381,9 @@ export async function createApp(opts = {}) {
   // loads but nothing can be saved or published" counts as down. Plain
   // /api/health stays process-only, so a database blip can't fail a deploy.
   app.get('/api/health', async (req, res) => {
+    if (req.query.deep && missingDatabase) {
+      return res.status(503).json({ ok: false, storage: storeBundle.kind, error: 'no-database' });
+    }
     if (req.query.deep && storeBundle.pool) {
       let timer;
       try {
@@ -396,12 +416,14 @@ export async function createApp(opts = {}) {
   app.post('/api/submissions', wrap(async (req, res) => {
     const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-    const burst = submitLimiter.check(ip);
+    // Limits key on the /64 for IPv6 (clientKey), so rotating addresses
+    // inside one subscriber's block doesn't buy fresh budgets.
+    const burst = submitLimiter.check(clientKey(req));
     if (!burst.ok) {
       res.set('Retry-After', String(burst.retryAfter || 60));
       return res.status(429).json({ ok: false, error: 'rate-limited' });
     }
-    const daily = submitLimiterDaily.check(ip);
+    const daily = submitLimiterDaily.check(clientKey(req));
     if (!daily.ok) {
       res.set('Retry-After', String(daily.retryAfter || 3600));
       return res.status(429).json({ ok: false, error: 'rate-limited-daily' });
@@ -607,10 +629,31 @@ export async function createApp(opts = {}) {
     // Tries every key it has had, so an edit before the reject can't leave
     // the old version up.
     if (wasApproved && !isApproved) {
-      const keys = [oldKey, eventKeyOf((updated || {}).payload || {}),
+      let keys = [oldKey, eventKeyOf((updated || {}).payload || {}),
         ...history.map(h => h && h.prev_key).filter(Boolean)];
+      // "Duplicate" says the event is listed already. When the collector
+      // lists it too (same key, or the same event under another name), the
+      // live listing is that one: taking it down would remove the only
+      // listing, and recording its key as removed would stop auto-publish
+      // from ever putting the collector's copy back. So leave those up.
+      if (patch.status === 'duplicate') {
+        let collector = [];
+        try {
+          const c = await readJsonFile(candidatesFile);
+          collector = Array.isArray(c && c.events) ? c.events : [];
+        } catch (_) { /* no candidates: unpublish as before */ }
+        const listed = k => {
+          const ev = parseEventKey(k);
+          return collector.some(c => eventKeyOf(c) === k || (ev && sameEvent(c, ev)));
+        };
+        const before = keys.length;
+        keys = keys.filter(k => !listed(k));
+        if (keys.length < before) result.kept_listing = true;
+      }
       try {
-        result.unpublished = await unpublishEvent(store, keys, now);
+        result.unpublished = keys.length ? await unpublishEvent(store, keys, now) : false;
+        // Settles the archive: its page now answers 410 for good.
+        if (result.unpublished) archiveEvents(((await store.getPublished()) || {}).events || []);
       } catch (err) {
         console.warn('[admin] unpublish after un-approve failed:', err.message);
       }
@@ -763,19 +806,22 @@ export async function createApp(opts = {}) {
 
     try {
       let previousKey = null;
+      let target = original_key;
       try {
-        const prev = (await store.listEventEdits()).find(e => e.original_key === original_key);
+        const edits = await store.listEventEdits();
+        target = resolveEditKey(edits, original_key);
+        const prev = edits.find(e => e.original_key === target);
         if (prev) previousKey = eventKeyOf(prev.payload);
       } catch (_) { /* no earlier edit to follow */ }
       const row = await store.upsertEventEdit({
-        original_key,
+        original_key: target,
         payload: v.data
       });
       // A "Show anyway" (kept) key follows the event to its new name/date.
       try {
         const published = await store.getPublished();
         const newKey = eventKeyOf(v.data);
-        const old = new Set([original_key, previousKey].filter(k => k && k !== newKey));
+        const old = new Set([original_key, target, previousKey].filter(k => k && k !== newKey));
         if (published && Array.isArray(published.kept) && published.kept.some(k => old.has(k))) {
           await store.setPublished({ ...published, kept: [...new Set(published.kept.map(k => (old.has(k) ? newKey : k)))] });
         }
@@ -840,9 +886,18 @@ export async function createApp(opts = {}) {
     // something published since (an AI-approved submission, a collect run),
     // publishing this older picture would silently take those events down,
     // so refuse; the editor reloads the live list and keeps its changes.
+    // A read that fails is not "nothing published": treating it so would
+    // skip this check and take the extras (hidden, kept, auto_publish) from
+    // the bundled file, wiping them if the write then succeeds. Refuse
+    // instead; the editor keeps its changes and can retry.
+    const storeDown = err => {
+      console.warn('[admin] published lookup failed, not publishing:', err.message);
+      return res.status(503).json({ ok: false, error: 'store-unavailable',
+        message: "The database didn't answer, so nothing was published. Your changes are kept; try again in a minute." });
+    };
+    let current;
+    try { current = await store.getPublished(); } catch (err) { return storeDown(err); }
     if (typeof body.based_on === 'string' && body.based_on) {
-      let current = null;
-      try { current = await store.getPublished(); } catch (_) { current = null; }
       if (current && current.last_updated && current.last_updated !== body.based_on) {
         return res.status(409).json({ ok: false, error: 'stale',
           message: 'New events went live since you opened this page. The list has been reloaded with your changes kept; check it and publish again.' });
@@ -863,10 +918,8 @@ export async function createApp(opts = {}) {
         if (!PROTECTED_KEYS.has(k)) extras[k] = v;
       }
     } else {
-      // Try previously published first.
-      let prior = null;
-      try { prior = await store.getPublished(); }
-      catch (err) { console.warn('[admin] prior published lookup failed:', err.message); }
+      // Previously published first (read above).
+      let prior = current;
       if (!prior) {
         // Fall back to the bundled snapshot.
         try { prior = await readJsonFile(EVENTS_FILE); }
@@ -1189,7 +1242,7 @@ export async function createApp(opts = {}) {
     res.status(204).end();
     if (typeof store.recordTraffic !== 'function') return;
     const ip = req.ip || req.socket.remoteAddress || '';
-    if (!trackLimiter.check(ip).ok) return;
+    if (!trackLimiter.check(clientKey(req)).ok) return;
     let body = req.body;
     if (typeof body === 'string') { try { body = JSON.parse(body); } catch { return; } }
     const row = beaconRow(body, {
@@ -1252,18 +1305,27 @@ export async function createApp(opts = {}) {
     return { ...payload, events: shown(payload.events) };
   }
 
+  // The last edits list read, for when the next read fails: dropping the
+  // overlay would put every corrected name and time back to the raw one.
+  let lastEdits = [];
   // The public events of a published payload, with the edits overlay
   // applied and hidden events left out, still carrying original keys.
   async function visibleFrom(published) {
-    let edits = [];
+    let edits = lastEdits;
     try {
-      edits = await store.listEventEdits();
+      edits = lastEdits = await store.listEventEdits();
     } catch (err) {
-      console.warn('[events] overlay skipped:', err.message);
+      console.warn('[events] overlay read failed, using the last one:', err.message);
     }
     return visibleKeyed(published, edits);
   }
 
+  // The last payload read from the store. A failed read serves this copy
+  // (at most minutes old) rather than the bundled docs/events.json, which
+  // is months old and all past events: an empty week for every visitor,
+  // cached by browsers and Googlebot. The bundle is only for a process
+  // that has never read the store.
+  let lastGood = null;
   async function loadPublicPayload() {
     try {
       const published = await store.getPublished();
@@ -1273,10 +1335,15 @@ export async function createApp(opts = {}) {
         // between publishes shows up without another Save & Publish.
         // Events the event check hid stay published but off the site
         // (server/eventcheck.js matches them by original key).
-        return { ...published, events: stripKeys(await visibleFrom(published)).map(withoutSubmitter), source: 'store' };
+        lastGood = { ...published, events: stripKeys(await visibleFrom(published)).map(withoutSubmitter), source: 'store' };
+        return lastGood;
       }
     } catch (err) {
       console.warn('[events] published lookup failed:', err.message);
+      if (lastGood) {
+        slack.alert('db-read', 'Database unreachable: the site is serving its last good copy of the event list', err.message);
+        return { ...lastGood, source: 'last-good' };
+      }
       // The bundled copy is months old; visitors see past events until the
       // database is back, so this must not be quiet.
       slack.alert('db-read', 'Database unreachable: the site is serving the old bundled event list', err.message);
@@ -1302,14 +1369,62 @@ export async function createApp(opts = {}) {
   // block a publish or a page view.
   // Archive what the site actually shows: the edits overlay changes names
   // (and so page slugs), and those are the URLs people share.
+  // Calls run one after another, so an older list can't settle pages
+  // (below) against a newer publish.
+  let archiveChain = Promise.resolve();
   function archiveEvents(events) {
     if (typeof store.archiveEvents !== 'function') return Promise.resolve();
     archiveCache = null;
-    return Promise.resolve(typeof store.listEventEdits === 'function' ? store.listEventEdits() : [])
-      .catch(() => [])
-      .then(edits => store.archiveEvents(withPages(applyEventEdits(events, edits))))
+    const run = async () => {
+      let edits = [];
+      let editsOk = true;
+      try {
+        if (typeof store.listEventEdits === 'function') edits = await store.listEventEdits();
+      } catch (_) { editsOk = false; }
+      // Original keys ride along (_okey), so a later rename can be traced.
+      const pages = keyedEvents(events, edits);
+      await store.archiveEvents(pages);
+      // Without the overlay every edited event would look taken down.
+      if (editsOk) await settleArchive(pages);
+    };
+    archiveChain = archiveChain.then(run)
       .then(() => { archiveCache = null; })
       .catch(err => console.warn('[events] archive skipped:', err.message));
+    return archiveChain;
+  }
+
+  // The live event an archived page now lives as: same original key, the
+  // same key under another page (renumbered), or the one live listing of
+  // the same event (auto-publish completing a cut-off name renames it).
+  function successorOf(old, live) {
+    const oldKey = eventKeyOf(old);
+    const byKey = live.find(e => (old._okey && e._okey === old._okey) || e._okey === oldKey || eventKeyOf(e) === oldKey);
+    if (byKey) return byKey;
+    const same = live.filter(e => sameEvent(e, old));
+    return same.length === 1 ? same[0] : null;
+  }
+
+  // An upcoming page this publish no longer shows was renamed, re-dated
+  // or taken down (an un-approved submission, removed in Save & Publish,
+  // retired by auto-publish). Its archive row records which: _moved_to
+  // (the page 301s there) or _removed (410, before and after its date, and
+  // left out of venue and seasonal guides). Without this the old URL of a
+  // renamed event answered 410 while the event was still on, and a
+  // deliberately removed event came back as a normal page once its date
+  // passed. Publishing the page again overwrites the row and clears both.
+  async function settleArchive(pages) {
+    if (typeof store.listArchivedEvents !== 'function') return;
+    const today = localDateStr((opts.now || (() => new Date()))());
+    const livePages = new Set(pages.map(e => e.page));
+    const updates = [];
+    for (const old of await store.listArchivedEvents()) {
+      if (!old || !old.page || livePages.has(old.page) || old._moved_to || old._removed) continue;
+      // Past pages rotated out of the week; they keep their archive page.
+      if (!(old.date >= today)) continue;
+      const next = successorOf(old, pages);
+      updates.push(next ? { ...old, _moved_to: next.page } : { ...old, _removed: nowIso() });
+    }
+    if (updates.length) await store.archiveEvents(updates);
   }
 
   // Backfill the archive with whatever is live at boot, so pages published
@@ -1333,8 +1448,9 @@ export async function createApp(opts = {}) {
       payload.events = payload.events.map(({ score: _s, keep: _kp, overflow, ...ev }) =>
         (all && overflow ? { ...ev, overflow: true } : ev));
       // editor_pick stays: it tells an editor's Vic's Pick from a paid one.
-      // Store-backed payloads change on publish; the bundled file only on deploy.
-      if (source === 'store') res.set('Cache-Control', 'no-store');
+      // Store-backed payloads change on publish, and a fallback copy
+      // (database down) must be replaced the moment the database is back.
+      res.set('Cache-Control', 'no-store');
       // collected_at: the candidates.json (its last_updated) auto-publish
       // last put live. Unlike last_updated, an approved submission or an
       // admin edit doesn't move it, so the event check can wait for the
@@ -1404,7 +1520,10 @@ export async function createApp(opts = {}) {
     html = fillSeasonalNav(html, res.locals.seasons || [], res.req.path);
     // Short public cache: a new publish shows up within minutes, and a
     // burst of crawler traffic doesn't hit Postgres on every request.
-    res.status(status).set('Cache-Control', cacheControl || (status === 200 ? 'public, max-age=300' : 'no-store'));
+    // A page built from a fallback list (database down) isn't cached:
+    // browsers and crawlers would keep it after the database is back.
+    const fallback = res.locals.payloadSource && res.locals.payloadSource !== 'store';
+    res.status(status).set('Cache-Control', cacheControl || (status === 200 && !fallback ? 'public, max-age=300' : 'no-store'));
     res.type('html').send(html);
   }
 
@@ -1422,7 +1541,8 @@ export async function createApp(opts = {}) {
     if (typeof store.listArchivedEvents !== 'function') return [];
     if (archiveCache && Date.now() - archiveCache.at < ARCHIVE_TTL_MS) return archiveCache.events;
     try {
-      const events = await store.listArchivedEvents();
+      // Moved and removed pages (settleArchive) aren't listed anywhere.
+      const events = (await store.listArchivedEvents()).filter(ev => ev && !ev._moved_to && !ev._removed);
       archiveCache = { at: Date.now(), events };
       return events;
     } catch (err) {
@@ -1434,6 +1554,7 @@ export async function createApp(opts = {}) {
   const pageHandler = render => async (req, res, next) => {
     try {
       const payload = await getPublicPayload();
+      res.locals.payloadSource = payload.source;
       // Hidden events keep their archive row; keep their pages off too.
       const archived = withoutHidden(await listArchived(), payload);
       const now = nowFn();
@@ -1466,25 +1587,42 @@ export async function createApp(opts = {}) {
     }));
   }
 
-  // { ev } for a page to show, { gone: true } for an upcoming event that's
-  // only in the archive: it was taken down, retired or re-dated, so its old
-  // copy mustn't keep passing for a live listing. Past events keep their
-  // archive pages.
+  // { ev } for a page to show; { moved: page } for a renamed or re-dated
+  // event (301 there); { gone: true } (410) for an event deliberately taken
+  // off the site (settleArchive marked it _removed), whatever its date, and
+  // for an upcoming event that's only in the archive, so an old copy can't
+  // pass for a live listing. Other past events keep their archive pages.
   async function findEvent(payload, page, now) {
+    const isLive = p => payload.events.some(e => e.page === p);
     const live = payload.events.find(e => e.page === page);
     if (live) return { ev: live };
     if (typeof store.getArchivedEvent !== 'function') return {};
-    const ev = await store.getArchivedEvent(page);
+    let at = page;
+    let ev = await store.getArchivedEvent(at);
     // A hidden event's archived copy stays hidden.
     if (!ev || !withoutHidden([{ ...ev, page }], payload).length) return {};
-    if (ev.date >= localDateStr(now)) return { gone: true };
-    return { ev };
+    // Follow a rename (renamed twice is two hops).
+    for (let hops = 0; ev && ev._moved_to && hops < 5; hops++) {
+      at = ev._moved_to;
+      if (isLive(at)) return { moved: at };
+      ev = await store.getArchivedEvent(at);
+    }
+    if (!ev || !withoutHidden([{ ...ev, page: at }], payload).length) return {};
+    if (ev._removed || ev._moved_to) return { gone: true };
+    if (ev.date >= localDateStr(now)) {
+      // Not settled yet (archived before settleArchive existed): still
+      // send a rename to its live page.
+      const next = successorOf(ev, payload.events);
+      return next ? { moved: next.page } : { gone: true };
+    }
+    return at === page ? { ev } : { moved: at };
   }
 
   // Add-to-calendar file. Registered before /events/:slug, which would
   // otherwise treat "<slug>.ics" as a slug.
   app.get('/events/:slug.ics', pageHandler(async (req, res, payload, ctx) => {
-    const { ev, gone } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    const { ev, gone, moved } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    if (moved) return res.redirect(301, `${moved}.ics`);
     if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), gone ? 410 : 404);
     res.set('Content-Disposition', `attachment; filename="${String(req.params.slug).replace(/[^a-z0-9-]/gi, '') || 'event'}.ics"`);
     res.type('text/calendar; charset=utf-8').send(renderIcs(ev, ctx));
@@ -1494,7 +1632,8 @@ export async function createApp(opts = {}) {
   // of what's drawn>, so the long cache is safe: an edited event gets a new
   // URL, and Facebook re-fetches it. Also registered before /events/:slug.
   app.get('/events/:slug.png', pageHandler(async (req, res, payload, ctx) => {
-    const { ev, gone } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    const { ev, gone, moved } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    if (moved) return res.redirect(301, `${moved}.png`);
     if (!ev) return res.status(gone ? 410 : 404).type('text/plain').send('Not found');
     let png;
     try {
@@ -1509,7 +1648,8 @@ export async function createApp(opts = {}) {
   }));
 
   app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
-    const { ev, gone } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    const { ev, gone, moved } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    if (moved) return res.redirect(301, moved);
     if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), gone ? 410 : 404);
     const venue = venueFor(ev, venues);
     sendHtml(res, renderEventPage(ev, payload.events, {
@@ -1657,17 +1797,51 @@ export async function createApp(opts = {}) {
 
   const autoOnBoot = opts.autoPublish ??
     (process.env.AUTO_PUBLISH !== '0' && process.env.RAILWAY_ENVIRONMENT_NAME === 'production');
+  // One collector publish at a time: the hourly retry below must not race
+  // a boot run that is still waiting on a slow database.
+  let autoRun = null;
+  let autoFailed = false;
+  function runAutoPublish() {
+    if (!autoRun) autoRun = autoPublish.run().finally(() => { autoRun = null; });
+    return autoRun;
+  }
   if (autoOnBoot) {
     const t = setTimeout(() => {
-      autoPublish.run().then(r => {
+      runAutoPublish().then(r => {
         // e.g. candidates.json unreadable: run() reports it rather than throwing.
-        if (r && !r.ok) slack.alert('auto-publish', 'Auto-publish could not run', r.message || r.error, `${siteUrl}/admin.html`);
+        if (r && !r.ok) {
+          autoFailed = true;
+          slack.alert('auto-publish', 'Auto-publish could not run', r.message || r.error, `${siteUrl}/admin.html`);
+        }
       }).catch(err => {
+        autoFailed = true;
         console.error('[auto-publish] failed:', err.message);
         slack.alert('auto-publish', 'Auto-publish failed', err.message, `${siteUrl}/admin.html`);
       });
     }, opts.autoPublishDelayMs ?? 3000);
     if (t.unref) t.unref();
+  }
+  // The boot publish runs once, seconds after a deploy. A database blip at
+  // that moment would leave the new collect unpublished until the next
+  // deploy (and Monday's newsletter would go out from the old list), so the
+  // hourly site check tries again. Not forced: once this collect is live it
+  // answers "already-published" without writing, so it only does work when
+  // a boot publish was missed. Failures here only log; the boot alert has
+  // already said so, and the site check flags a stalled list.
+  async function retryAutoPublish() {
+    if (!autoOnBoot) return null;
+    try {
+      const r = await runAutoPublish();
+      if (r && r.ok && !r.skipped && autoFailed) {
+        autoFailed = false;
+        slack.notify({ title: '✅ Auto-publish caught up', text: `Published ${r.published} events (${r.added} new) on the hourly retry.`, channel: 'alerts' });
+      }
+      if (r && !r.ok) console.warn('[auto-publish] hourly retry:', r.message || r.error);
+      return r;
+    } catch (err) {
+      console.warn('[auto-publish] hourly retry failed:', err.message);
+      return null;
+    }
   }
 
   // ─── Scheduler (server/scheduler.js) ───
@@ -1684,7 +1858,10 @@ export async function createApp(opts = {}) {
         : typeof sponsorsModule.sendSponsorReports === 'function'
           ? now => sponsorsModule.sendSponsorReports(now)
           : undefined,
-      health: now => healthCheck(now)
+      health: async now => {
+        await retryAutoPublish();
+        return healthCheck(now);
+      }
     }
   });
   if (opts.startScheduler ?? schedulerEnabled()) scheduler.start();
@@ -1704,6 +1881,7 @@ export async function createApp(opts = {}) {
   const healthState = new Map(); // problem key → last alerted (ms)
   async function healthCheck(now) {
     const problems = {};
+    if (missingDatabase) problems.nodb = NO_DATABASE;
     let pub = null;
     try {
       pub = (await store.getPublished()) || {};
@@ -1829,6 +2007,8 @@ export async function createApp(opts = {}) {
       else if (/\.(png|jpe?g|webp|gif|svg|ico|woff2?)$/i.test(rel)) cc = 'public, max-age=86400';
       else if (/\.(css|js)$/i.test(rel)) cc = 'public, max-age=600';
       res.setHeader('Cache-Control', cc);
+      // Whatever URL spelling reached it, the admin page gets the admin CSP.
+      if (rel === 'admin.html') res.setHeader('Content-Security-Policy', adminCsp);
     }
   }));
 

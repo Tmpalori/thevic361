@@ -292,6 +292,18 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       ...(state.rejected || []),
       ...(state.keys || []).filter(k => !keptKeys.has(k) && !retiredKeys.has(k))
     ].filter(k => k.slice(0, 10) >= today));
+    // An approved submission that merged into a listed event under another
+    // name (sameEvent) is recorded as an alias of that event's key. When
+    // that event is gone (the admin removed it) and wasn't retired, the
+    // submission's copy counts as removed too; otherwise the next run would
+    // find no match and put the event the admin took down back up.
+    const priorKeys = new Set((Array.isArray(prior.events) ? prior.events : []).map(eventKeyOf));
+    const priorAliases = (state.aliases && typeof state.aliases === 'object') ? state.aliases : {};
+    for (const [alias, target] of Object.entries(priorAliases)) {
+      if (alias.slice(0, 10) < today) continue;
+      if (rejected.has(target) || (!priorKeys.has(target) && !retiredKeys.has(target))) rejected.add(alias);
+    }
+    const aliases = {};
 
     let approved = [];
     try {
@@ -344,6 +356,7 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     };
     let updated = 0;
     const freshSet = new Set(fresh);
+    const approvedSet = new Set(approved);
     const sourcesNow = new Map();
     const noteSources = (k, raw) => {
       const add = sourcesOf(raw);
@@ -359,6 +372,7 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
         // doesn't carry the flag; the score's submission bonus needs it.
         events[i] = { ...events[i], submitted: true };
       }
+      if (i !== -1 && approvedSet.has(raw) && eventKeyOf(events[i]) !== key) aliases[key] = eventKeyOf(events[i]);
       if (i !== -1) {
         const mine = autoKeys.has(eventKeyOf(events[i]));
         if (freshSet.has(raw) && canRefresh(events[i]) && refresh(i, ev)) updated++;
@@ -405,6 +419,11 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
         // starts over.
         missing: Object.fromEntries(Object.entries(submissionsOnly ? priorMissing : missing).filter(([k]) => stillPresent.has(k))),
         missing_from: newRun ? (from || null) : (state.missing_from ?? null),
+        // Kept while the alias is upcoming, following a key this run renamed.
+        aliases: Object.fromEntries([
+          ...Object.entries(priorAliases).filter(([a]) => a.slice(0, 10) >= today && !aliases[a] && !rejected.has(a)),
+          ...Object.entries(aliases)
+        ].map(([a, t]) => [a, renamed.get(t) || t])),
         // A submissions-only run doesn't count as publishing these
         // candidates; the next boot still publishes them as usual.
         rules: submissionsOnly ? (state.rules ?? null) : AUTO_PUBLISH_RULES
