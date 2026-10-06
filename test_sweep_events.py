@@ -177,3 +177,12 @@ def test_ai_reasons_name_events_instead_of_index_numbers():
     assert out == [(0, "other", "Same ghost tour as “Spooky Season: Victoria Historic Ghost Mystery”, same plaza; not another listing")]
     assert "never by their index number" in chat.call_args[0][1][0]["content"]
 
+
+
+def test_ai_reasons_name_hash_and_event_references_but_leave_names_alone():
+    events = [ev("Trivia"), ev("Karaoke"), ev("Line Dancing")]
+    assert sw._named("same as #1", events) == "same as “Karaoke”"
+    assert sw._named("duplicate of event 2 (see #0)", events) == "duplicate of “Line Dancing” (see “Trivia”)"
+    assert sw._named("same as line 1", events) == "same as “Karaoke”"
+    assert sw._named("Line 2 Dance Night at the hall", events) == "Line 2 Dance Night at the hall"
+    assert sw._named("#1 Fan Day is not an event", events) == "#1 Fan Day is not an event"

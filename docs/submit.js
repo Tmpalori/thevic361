@@ -16,14 +16,76 @@
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
 
+  // Errors used to be a small line of text under the field only; on a long
+  // form the field was often off-screen, so "fix the highlighted fields"
+  // pointed at nothing visible. Now the field is outlined, the message near
+  // the button names the problems, and the page scrolls to the first one.
+  // The message is tied to its field (aria-describedby) so a screen reader
+  // reads the reason, not just "invalid".
   function showFieldError(name, msg) {
     const el = document.querySelector(`[data-error-for="${name}"]`);
-    if (el) el.textContent = msg || '';
+    if (el) { el.textContent = msg || ''; el.id = 'err-' + name; }
+    const input = document.querySelector(`#submit-form [name="${name}"]`);
+    if (input) {
+      input.setAttribute('aria-invalid', 'true');
+      if (el) input.setAttribute('aria-describedby', el.id);
+    }
+  }
+  function clearFieldError(name) {
+    const el = document.querySelector(`[data-error-for="${name}"]`);
+    if (el) el.textContent = '';
+    const input = document.querySelector(`#submit-form [name="${name}"]`);
+    if (input) { input.removeAttribute('aria-invalid'); input.removeAttribute('aria-describedby'); }
   }
   function clearFieldErrors() {
     $$('.field-error').forEach(el => { el.textContent = ''; });
+    $$('#submit-form [aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
+    $$('#submit-form [aria-describedby^="err-"]').forEach(el => el.removeAttribute('aria-describedby'));
     const fe = $('#form-error');
     if (fe) { fe.textContent = ''; fe.hidden = true; }
+  }
+  // Show every error, list them by the button, and bring the first into view.
+  function showErrors(errors) {
+    const names = Object.keys(errors);
+    names.forEach(k => showFieldError(k, errors[k]));
+    const msgs = names.map(k => errors[k]).filter(Boolean);
+    showFormError(msgs.length ? 'Please fix: ' + msgs.join(' ') : 'Please fix the highlighted fields.');
+    const first = names.map(k => document.querySelector(`#submit-form [name="${k}"]`)).find(Boolean);
+    if (first) {
+      if (first.scrollIntoView) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      try { first.focus({ preventScroll: true }); } catch (e) { /* old browser */ }
+    }
+  }
+
+  // The same required fields the server checks (server/validate.js), so
+  // most mistakes are caught before anything is sent.
+  const REQUIRED = [
+    ['name', 'Event name is required.'], ['date', 'Date is required.'], ['time', 'Start time is required.'],
+    ['venue', 'Venue is required.'], ['address', 'Address is required.'], ['description', 'Description is required.'],
+    ['submitter_first_name', 'First name is required.'], ['submitter_last_name', 'Last name is required.'],
+    ['submitter_email', 'Email is required.'], ['submitter_phone', 'Phone number is required.']
+  ];
+  function checkForm(body) {
+    const errors = {};
+    REQUIRED.forEach(([k, msg]) => { if (!String(body[k] || '').trim()) errors[k] = msg; });
+    if (!errors.submitter_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.submitter_email.trim())) {
+      errors.submitter_email = 'Email looks invalid.';
+    }
+    // 7+ digits, like the server: local and short international numbers are fine.
+    if (!errors.submitter_phone && (body.submitter_phone.match(/\d/g) || []).length < 7) {
+      errors.submitter_phone = 'Phone number looks invalid.';
+    }
+    return errors;
+  }
+
+  // A full US number becomes (361) 555-0123. Anything else (7-digit local,
+  // international +44…, or an extension like "x12") is left as typed.
+  function formatPhone(value) {
+    if (/^\s*\+(?!1)/.test(value) || /[a-z#]/i.test(value)) return value;
+    let d = value.replace(/\D/g, '');
+    if (d.length === 11 && d[0] === '1') d = d.slice(1);
+    if (d.length !== 10) return value;
+    return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
   }
   function showFormError(msg) {
     const fe = $('#form-error');
@@ -150,10 +212,12 @@
   async function handleSubmit(e) {
     e.preventDefault();
     clearFieldErrors();
+    const body = collectForm();
+    const local = checkForm(body);
+    if (Object.keys(local).length) { showErrors(local); return; }
     const btn = $('#submit-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
 
-    const body = collectForm();
     let res, json;
     try {
       res = await fetch(API_BASE + '/api/submissions', {
@@ -171,8 +235,7 @@
     if (!res.ok || !json || json.ok === false) {
       if (btn) { btn.disabled = false; btn.textContent = 'Submit for review'; }
       if (json && json.errors) {
-        for (const k of Object.keys(json.errors)) showFieldError(k, json.errors[k]);
-        showFormError('Please fix the highlighted fields.');
+        showErrors(json.errors);
       } else if (json && json.error === 'turnstile-failed') {
         showFormError('We couldn\'t verify you aren\'t a bot. Try the challenge again.');
         if (window.turnstile && window.turnstile.reset) window.turnstile.reset();
@@ -223,6 +286,10 @@
       const thanks = $('#thanks-card');
       const form = $('#submit-form');
       if (form) form.reset();
+      // reset() fires no input events and empties the date, so put today
+      // back and redraw the preview.
+      setDefaultDate();
+      updatePreview();
       clearFieldErrors();
       if (window.turnstile && window.turnstile.reset) window.turnstile.reset();
       setTurnstileToken(null);
@@ -234,13 +301,46 @@
     });
   }
 
-  async function init() {
-    populateTimeSelects();
-    const form = $('#submit-form');
-    if (form) form.addEventListener('submit', handleSubmit);
-    wireResetForAnother();
+  // Live preview of the listing as they type: same pieces as the site's
+  // event row (day card, time pill, icons, name, venue, free tag, blurb).
+  const DAY_COLORS = ['#FF8A80', '#FFC93C', '#8FD3FF', '#FF8FC0', '#3DBE8B', '#FF7A3D', '#B9A6FF']; // Sun..Sat
+  function updatePreview() {
+    const get = n => { const el = document.querySelector(`#submit-form [name="${n}"]`); return el ? el.value.trim() : ''; };
+    const text = (id, v, fallback) => { const el = document.getElementById(id); if (el) el.textContent = v || fallback; };
+    const date = get('date');
+    const day = $('#sp-day') && $('#sp-day').closest('.sp-day');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      const d = new Date(date + 'T12:00:00');
+      text('sp-day', d.toLocaleDateString('en-US', { weekday: 'long' }));
+      text('sp-date', d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }));
+      if (day) day.style.setProperty('--sp-color', DAY_COLORS[d.getDay()]);
+    } else {
+      text('sp-day', '', 'Your event’s day'); text('sp-date', '', '');
+    }
+    const t = get('time'); const end = get('end_time');
+    const timeEl = $('#sp-time');
+    if (timeEl) { timeEl.hidden = !t; timeEl.textContent = t ? (end ? `${t} – ${end}` : t) : ''; }
+    text('sp-name', get('name'), 'Your event name');
+    text('sp-venue', get('venue'), 'Venue');
+    const desc = get('description');
+    text('sp-desc', desc.length > 220 ? desc.slice(0, 217) + '…' : desc, 'Your description shows here.');
+    const free = (document.querySelector('input[name="free"]:checked') || {}).value === 'true';
+    const freeEl = $('#sp-free'); if (freeEl) freeEl.hidden = !free;
+    const icons = $('#sp-icons');
+    if (icons) {
+      icons.textContent = '';
+      collectIcons().concat(free ? ['free'] : []).slice(0, 3).forEach(k => {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'sp-ico'); svg.setAttribute('aria-hidden', 'true');
+        const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        use.setAttribute('href', '/icons.svg#i-' + k);
+        svg.appendChild(use); icons.appendChild(svg);
+      });
+    }
+  }
 
-    // Pre-fill date with today (local) so users don't have to pick a year first.
+  // Pre-fill date with today (local) so users don't have to pick a year first.
+  function setDefaultDate() {
     const dateEl = $('#f-date');
     if (dateEl && !dateEl.value) {
       const d = new Date();
@@ -249,6 +349,31 @@
       const day = String(d.getDate()).padStart(2, '0');
       dateEl.value = `${y}-${m}-${day}`;
     }
+  }
+
+  async function init() {
+    populateTimeSelects();
+    const form = $('#submit-form');
+    if (form) {
+      form.addEventListener('submit', handleSubmit);
+      // Fixing a field clears its error right away.
+      form.addEventListener('input', ev => { if (ev.target && ev.target.name) clearFieldError(ev.target.name); updatePreview(); });
+      form.addEventListener('change', ev => { if (ev.target && ev.target.name) clearFieldError(ev.target.name); updatePreview(); });
+    }
+    // Fill the preview once the date default below is in.
+    setTimeout(updatePreview, 0);
+    const phone = $('#f-sub-phone');
+    if (phone) {
+      // Format while typing at the end (but not on a trailing space, so
+      // " x12" can be typed); always tidy it when they leave.
+      phone.addEventListener('input', () => {
+        if (phone.selectionStart === phone.value.length && !/\s$/.test(phone.value)) phone.value = formatPhone(phone.value);
+      });
+      phone.addEventListener('blur', () => { phone.value = formatPhone(phone.value); });
+    }
+    wireResetForAnother();
+
+    setDefaultDate();
 
     const cfg = await loadConfig();
     if (cfg && cfg.turnstile_site_key) {
@@ -265,7 +390,8 @@
   // Test hook — exposes the form collector + token setter for jsdom tests.
   if (typeof window !== 'undefined') {
     window.__vic361Submit = {
-      collectForm, setTurnstileToken, FORM_LOAD_TS, buildTimeOptions, populateTimeSelects
+      collectForm, setTurnstileToken, FORM_LOAD_TS, buildTimeOptions, populateTimeSelects,
+      checkForm, showErrors, formatPhone, updatePreview
     };
   }
 })();

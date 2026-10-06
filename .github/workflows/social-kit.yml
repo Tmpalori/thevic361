@@ -24,7 +24,11 @@ on:
     branches: [main]
     paths:
       - scripts/social_kit.py
+      - scripts/social_slides.py
       - scripts/social_post.py
+      - docs/icons.svg
+      - docs/logo-512.png
+      - docs/skyline.svg
       - .github/workflows/social-kit.yml
   workflow_dispatch:
     inputs:
@@ -50,7 +54,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # Always the latest main, not the commit that triggered the run: a
+      # re-run must see the kit and posted.json an earlier attempt pushed,
+      # or it rebuilds over them (push conflict) and can post twice.
       - uses: actions/checkout@v6
+        with:
+          ref: main
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
@@ -60,6 +69,7 @@ jobs:
       - name: Install ffmpeg
         run: command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
       - name: Build kit
+        id: build
         env:
           PYTHONUNBUFFERED: 1
           EVENT: ${{ github.event_name }}
@@ -82,6 +92,7 @@ jobs:
           # main may have moved while the kit built (weekly collect, a merge).
           for i in 1 2 3; do
             git pull --rebase origin main && git push && exit 0
+            git rebase --abort 2>/dev/null || true
             sleep $((i * 10))
           done
           exit 1
@@ -116,12 +127,14 @@ jobs:
           git commit -m "📣 Social posts $(date +'%Y-%m-%d')"
           for i in 1 2 3; do
             git pull --rebase origin main && git push && exit 0
+            git rebase --abort 2>/dev/null || true
             sleep $((i * 10))
           done
           exit 1
 
       - name: Send Slack this week's venues to tag
-        if: always() && github.event_name == 'schedule' && hashFiles('docs/social/latest/outreach-slack.txt') != ''
+        # Only after this run's build: otherwise the file is last week's list.
+        if: always() && steps.build.outcome == 'success' && github.event_name == 'schedule' && hashFiles('docs/social/latest/outreach-slack.txt') != ''
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |

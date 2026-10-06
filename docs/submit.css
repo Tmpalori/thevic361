@@ -89,6 +89,7 @@ html, body {
 
 .submit-form input[type="text"],
 .submit-form input[type="email"],
+.submit-form input[type="tel"],
 .submit-form input[type="url"],
 .submit-form input[type="date"],
 .submit-form textarea {
@@ -218,7 +219,7 @@ body {
 }
 .submit-card h1 { font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 1.9rem; }
 .submit-form label, .submit-form legend { font-family: 'Fredoka', sans-serif; font-weight: 600; }
-.submit-form input[type="text"], .submit-form input[type="email"], .submit-form input[type="url"],
+.submit-form input[type="text"], .submit-form input[type="email"], .submit-form input[type="tel"], .submit-form input[type="url"],
 .submit-form input[type="date"], .submit-form textarea, .submit-form .field-fieldset {
   border: 2.5px solid var(--ink);
   border-radius: 12px;
@@ -257,4 +258,39 @@ body {
   font-size: 0.95rem;
 }
 .submit-promo a { font-weight: 800; }
+
+/* A field with a problem: red outline (set by submit.js showFieldError). */
+.submit-form [aria-invalid="true"] {
+  border-color: #c0392b !important;
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.18);
+}
+.submit-form [aria-invalid="true"] + .field-error,
+.field-error { font-weight: 700; }
+#form-error { font-weight: 700; }
+
+/* Category chips use the site's drawn icons. */
+.chip-ico { width: 22px; height: 22px; vertical-align: middle; margin-right: 0.3rem; }
+
+/* Live preview of the listing (submit.js updatePreview), styled after the
+   site's day cards in docs/style.css. */
+.sub-preview { margin: 0.5rem 0 1.25rem; padding: 0.9rem; border: 2px dashed var(--ink, #1F1A3D); border-radius: 16px; }
+.sub-preview-h { font-family: 'Fredoka', sans-serif; font-size: 0.85rem; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 0.6rem; opacity: .7; }
+.sp-day { --sp-color: #FFC93C; background: #fff; border: 3px solid var(--ink, #1F1A3D); border-radius: 18px; box-shadow: 4px 4px 0 var(--ink, #1F1A3D); overflow: hidden; color: #1F1A3D; }
+.sp-day__head { background: var(--sp-color); border-bottom: 3px solid var(--ink, #1F1A3D); padding: 0.55rem 0.9rem; display: flex; align-items: center; gap: 0.6rem; }
+.sp-day__name { font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 1.4rem; }
+.sp-day__date { font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 0.8rem; background: #fff; border: 2px solid var(--ink, #1F1A3D); border-radius: 999px; padding: 0 0.6rem; }
+.sp-day__date:empty { display: none; }
+.sp-event { display: flex; gap: 0.6rem; padding: 0.8rem 0.9rem; }
+.sp-icons { display: flex; gap: 2px; flex-shrink: 0; }
+.sp-ico { width: 24px; height: 24px; }
+.sp-body { min-width: 0; }
+.sp-time { display: inline-block; font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 0.75rem; border: 2px solid var(--ink, #1F1A3D); border-radius: 999px; padding: 0 0.5rem; margin-right: 0.3rem; }
+.sp-name { font-weight: 800; font-size: 1.05rem; margin-right: 0.3rem; overflow-wrap: anywhere; }
+.sp-venue { color: #554E7A; font-size: 0.9rem; }
+.sp-venue::before { content: "· "; }
+.sp-free { color: #2FA876; font-weight: 700; font-size: 0.85rem; margin-left: 0.3rem; }
+.sp-free::before { content: "· "; }
+.sp-desc { color: #554E7A; font-size: 0.85rem; margin-top: 0.2rem; overflow-wrap: anywhere; }
+/* Keep checkbox, icon and label on one line inside each chip. */
+.chip span { display: inline-flex; align-items: center; white-space: nowrap; }
 

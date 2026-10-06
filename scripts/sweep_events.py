@@ -120,9 +120,15 @@ def _named(why, events):
     """Swap "index 12" (the model's line numbers, meaningless in Slack) for
     the event's name; drop the reference if the number isn't valid."""
     def name(m):
-        n = int(m.group(1))
+        n = int(m.group(1) or m.group(2))
         return f"“{events[n]['name']}”" if 0 <= n < len(events) else "another listing"
-    return re.sub(r"\b(?:index|item|line|#)\s*(\d+)\b", name, why, flags=re.IGNORECASE)
+    # "index 12" always means a line number. "#12", "event 12", "item 12" and
+    # "line 12" usually do, but not when they start a quoted name ("Line 2
+    # Dance Night", "#1 Fan Day"), so those skip a following capitalized word.
+    # "line" only lowercase: a reason quoting a name keeps its capital.
+    return re.sub(r"(?:\b(?i:index)\s*#?\s*(\d+)\b"
+                  r"|(?:\b(?:[Ii]tem|[Ee]vent|line)\s*#?\s*|#\s*)(\d+)\b(?!\s+[A-Z]))",
+                  name, why)
 
 
 def ai_findings(events, api_key):
