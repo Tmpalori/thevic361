@@ -10,6 +10,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "scripts"))
 import social_post as sp
 
 
+@pytest.fixture(autouse=True)
+def no_retry_wait(monkeypatch):
+    # _graph's retries back off with real sleeps; keep the tests instant.
+    monkeypatch.setattr(sp, "RETRY_DELAYS", (0, 0), raising=False)
+
+
 class FakeResp:
     def __init__(self, body, status=200):
         self._body, self.status_code, self.ok, self.text = body, status, status < 400, json.dumps(body)
@@ -371,3 +377,85 @@ def test_thursday_workflow_also_posts_today_with_a_pick():
     assert "social_post.py --kind today --if-featured" in wf
     assert "'47 13 * * *'" in wf  # schedule unchanged
 
+
+
+class FlakySession(FakeSession):
+    """Answers the first `times` calls to a path suffix with a Meta error."""
+
+    def __init__(self, suffix, error, status=500, times=1):
+        super().__init__()
+        self.suffix, self.error, self.status, self.left = suffix, error, status, times
+
+    def request(self, method, url, **kw):
+        if url.endswith(self.suffix) and self.left:
+            self.left -= 1
+            self.calls.append((method, url.split("/", 4)[-1], {}))
+            return FakeResp({"error": self.error}, self.status)
+        return super().request(method, url, **kw)
+
+
+@pytest.mark.parametrize("error,status", [
+    ({"message": "An unexpected error has occurred. Please retry your request later.", "code": 2,
+      "is_transient": True}, 500),
+    ({"message": "Application request limit reached", "code": 4}, 400),
+    ({"message": "Media download has failed.", "code": 9004}, 400),
+])
+def test_a_transient_meta_error_on_a_safe_call_is_retried(tmp_path, monkeypatch, error, status):
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.setenv("IG_USER_ID", "ig7")
+    monkeypatch.setattr(sp.time, "sleep", lambda s: None)
+    sess = FlakySession("ig7/media", error, status)
+    kit = write_kit(tmp_path)
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=sess) == 0
+    assert json.loads((kit / "posted.json").read_text())["2026-10-08:weekend"] == {
+        "facebook": "post1", "instagram": "post1"}
+
+
+def test_retries_are_bounded_and_a_plain_error_is_not_retried(monkeypatch):
+    monkeypatch.setattr(sp.time, "sleep", lambda s: None)
+    sess = FlakySession("/photos", {"message": "down", "code": 2}, 500, times=99)
+    with pytest.raises(sp.PostError):
+        sp._graph("POST", "page9/photos", sess, url="u", access_token="t")
+    assert len(sess.calls) == len(sp.RETRY_DELAYS) + 1
+    sess = FlakySession("/photos", {"message": "bad param", "code": 100}, 400, times=99)
+    with pytest.raises(sp.PostError):
+        sp._graph("POST", "page9/photos", sess, url="u", access_token="t")
+    assert len(sess.calls) == 1
+
+
+def test_the_publish_call_is_never_retried(tmp_path, monkeypatch):
+    # A second publish could post twice.
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+    sess = FlakySession("/feed", {"message": "retry later", "code": 2, "is_transient": True}, 500)
+    kit = write_kit(tmp_path)
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=sess) == 1
+    assert sum(c[1].endswith("/feed") for c in sess.calls) == 1
+
+
+def test_a_retired_graph_version_is_named_in_the_error_and_the_slack_alert(tmp_path, monkeypatch):
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+    out = tmp_path / "gh_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+    sess = FlakySession("/photos", {"message": "(#2635) You are calling a deprecated version of the Ads API.",
+                                    "code": 2635}, 400, times=99)
+    kit = write_kit(tmp_path)
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=sess) == 1
+    assert "alert=" in out.read_text() and sp.GRAPH_VERSION in out.read_text()
+    assert "GRAPH_API_VERSION" in out.read_text()
+
+
+def test_graph_version_comes_from_the_repo_variable_with_a_default(monkeypatch):
+    import importlib
+    try:
+        monkeypatch.setenv("GRAPH_API_VERSION", "")
+        assert importlib.reload(sp).GRAPH.endswith("/v23.0")
+        monkeypatch.setenv("GRAPH_API_VERSION", "25.0")
+        assert importlib.reload(sp).GRAPH.endswith("/v25.0")
+    finally:
+        monkeypatch.delenv("GRAPH_API_VERSION")
+        importlib.reload(sp)

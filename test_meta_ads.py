@@ -204,3 +204,31 @@ def test_an_ad_that_started_today_is_not_a_stalled_campaign():
     # Running for weeks with nothing spent is still reported.
     assert ma.main(["report"], session=StartedToday("0", "2026-09-01T09:00:00-0500")) == 0
     assert len(sent) == 1 and "$0 spent in the last 7 days" in sent[0][0]
+
+
+def test_a_retired_api_version_is_named_not_blamed_on_the_token(tmp_path, monkeypatch, capsys):
+    # Once Meta retires the version, every Marketing API call answers #2635.
+    class Retired(FakeMeta):
+        def request(self, method, url, **kw):
+            self.calls.append((method, url))
+            return Resp({"error": {"message": "(#2635) You are calling a deprecated version of the Ads API. "
+                                              "Please update to the latest version.", "code": 2635}}, 400)
+    out = tmp_path / "gh_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+    assert ma.main(["report", "--scheduled"], session=Retired()) == 1
+    printed = capsys.readouterr().out
+    assert ma.GRAPH_VERSION in printed and "GRAPH_API_VERSION" in printed
+    alert = out.read_text()
+    assert alert.startswith("alert=") and ma.GRAPH_VERSION in alert and "token" not in alert
+
+
+def test_graph_version_comes_from_the_repo_variable_with_a_default(monkeypatch):
+    import importlib
+    try:
+        monkeypatch.setenv("GRAPH_API_VERSION", "")
+        assert importlib.reload(ma).GRAPH.endswith("/v23.0")
+        monkeypatch.setenv("GRAPH_API_VERSION", "v25.0")
+        assert importlib.reload(ma).GRAPH.endswith("/v25.0")
+    finally:
+        monkeypatch.delenv("GRAPH_API_VERSION")
+        importlib.reload(ma)

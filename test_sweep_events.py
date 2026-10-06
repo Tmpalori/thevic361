@@ -382,3 +382,34 @@ def test_paid_picks_flagged_go_to_the_sales_channel(monkeypatch):
         sw.notify_sales(events, flagged)
     assert seen and seen[0][0] == "https://hooks.slack.com/sales" and "paid Vic's Pick" in seen[0][1]
     assert os.environ["SLACK_WEBHOOK_URL"] == "https://hooks.slack.com/activity"
+
+
+def test_an_approved_submission_is_reported_not_auto_hidden():
+    # The owner approved it in admin over the same rule ("rules say: ..."),
+    # and the submitter was told it's live: report it, don't hide it.
+    church = ev("St. Mary's Parish Fall Festival", page="/events/b", submitted=True)
+    found = sw.trusted([church], sw.rule_findings([church]))
+    assert [k for _, k, _ in found] == ["religious"]          # still in the report
+    assert sw.to_hide([church], found)[0] == []               # but never hidden
+    assert sw.to_hide([dict(church, submitted=False)], found)[0] != []
+    # Nor is it the copy hidden for an exact duplicate.
+    twin = {"date": "2026-10-10", "name": "Harvest Festival", "venue": "DeLeon Plaza", "time": "5:00 PM"}
+    dups = [dict(twin, page="/events/a", submitted=True), dict(twin, page="/events/b", url="https://x")]
+    assert sw.to_hide(dups, sw.rule_findings(dups))[0] == []
+
+
+def test_wait_ends_once_collected_at_shows_these_candidates_are_live(tmp_path):
+    # Auto-publish ran before the first fetch, and some candidates never
+    # show live (hidden, rejected or merged): collected_at is the proof.
+    made = "2026-10-04T20:27:09-05:00"
+    live = {"last_updated": "2026-10-05T01:40:00Z", "collected_at": made,
+            "events": [{"date": "2026-10-10", "name": "Bingo", "venue": "Hall"}]}
+    path = _cands(tmp_path, [("2026-10-10", n) for n in ("Bingo", "Rodeo", "Fair", "Gala", "Swap")], made=made)
+    sleeps = []
+    assert sw.wait_for_publish(path, lambda: live, sleep=sleeps.append, tries=30, today="2026-10-06") is True
+    assert sleeps == []
+    # An older collect still live (no deploy yet) keeps waiting, even when
+    # last_updated moved and the keys happen to be there.
+    old = dict(live, collected_at="2026-10-03T20:00:00-05:00", events=[
+        {"date": "2026-10-10", "name": n, "venue": "Hall"} for n in ("Bingo", "Rodeo", "Fair", "Gala", "Swap")])
+    assert sw.wait_for_publish(path, lambda: old, sleep=lambda s: None, tries=2, today="2026-10-06") is False

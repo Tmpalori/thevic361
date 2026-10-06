@@ -27,6 +27,7 @@ include it.
 import argparse
 import datetime as dt
 import os
+import re
 import sys
 
 import requests
@@ -34,13 +35,23 @@ import requests
 sys.path.insert(0, os.path.dirname(__file__))
 import slack_notify  # noqa: E402
 
-GRAPH = f"https://graph.facebook.com/{os.environ.get('GRAPH_API_VERSION', 'v23.0')}"
+# One place for the Graph/Marketing API version. The GRAPH_API_VERSION repo
+# variable (passed in meta-ads.yml) overrides it, so moving off a version
+# Meta retires needs no code change; empty (variable unset) means the default.
+GRAPH_VERSION = os.environ.get("GRAPH_API_VERSION", "").strip() or "v23.0"
+GRAPH_VERSION = GRAPH_VERSION if GRAPH_VERSION.startswith("v") else f"v{GRAPH_VERSION}"
+GRAPH = f"https://graph.facebook.com/{GRAPH_VERSION}"
 MAX_DAILY_BUDGET = 50  # dollars; a typo like 1000 shouldn't go live
 NEEDS = ("ads_read", "ads_management")
 
 
 class AdsError(RuntimeError):
     pass
+
+
+class VersionRetired(AdsError):
+    """Meta refused the API version (#2635 once the Marketing API retires
+    it). Named as such: otherwise the alert reads like a token problem."""
 
 
 class NotSetUp(AdsError):
@@ -66,6 +77,10 @@ class Api:
             body = {}
         if r.status_code >= 400 or (isinstance(body, dict) and body.get("error")):
             err = body.get("error", {}) if isinstance(body, dict) else {}
+            if err.get("code") in (12, 2635) or re.search(
+                    r"(deprecated|unsupported|unknown|invalid)\W+(api\W+)?version", str(err.get("message") or ""), re.I):
+                raise VersionRetired(f"Meta refused API {GRAPH_VERSION} (retired or unsupported?). Set the "
+                                     "GRAPH_API_VERSION repo variable to a current version, e.g. v24.0.")
             raise AdsError(f"{method} {path} failed: {err.get('message') or f'HTTP {r.status_code}'}")
         return body
 
@@ -100,6 +115,8 @@ def find_account(api, wanted=""):
         # Not in the list (e.g. no access via this route): try it directly.
         try:
             return api.call("GET", wanted, fields="id,name,account_status,currency"), accounts
+        except VersionRetired:
+            raise
         except AdsError:
             raise AdsError(f"The token can't see ad account {wanted}. In Business settings → System users, "
                            "assign that ad account to the system user (Manage ad account).") from None
@@ -303,6 +320,10 @@ def main(argv=None, session=None):
             print(f"::warning::{e}")
             return 0
         print(f"::error::{e}")
+        if isinstance(e, VersionRetired):
+            # meta-ads.yml's Slack alert says this instead of "token or ad
+            # account access?".
+            set_output("alert", f"🚨 Meta ads daily check failed: {e}")
         return 1
     text = "\n".join(out)
     print(text)
@@ -311,6 +332,14 @@ def main(argv=None, session=None):
         with open(summary, "a") as f:
             f.write(f"### Meta ads: {args.command}\n\n" + "\n".join(f"{x}  " for x in out) + "\n")
     return 0
+
+
+def set_output(name, value):
+    """A step output for the workflow (single line), when run in Actions."""
+    path = os.environ.get("GITHUB_OUTPUT")
+    if path:
+        with open(path, "a") as f:
+            f.write(f"{name}={value.replace(chr(10), ' ')}\n")
 
 
 if __name__ == "__main__":
