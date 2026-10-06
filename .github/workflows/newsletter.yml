@@ -18,13 +18,48 @@ name: Newsletter
 on:
   schedule:
     - cron: '43 12 * * 1'   # 7:43 AM CDT; usually runs hours late (fallback)
+    - cron: '43 13 * * 1'   # 7:43 AM CST
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  # A cron at the other DST's time is skipped (pinned to CDT alone, the
+  # winter run sent at 6:43 CST, before the 6:43 event check had hidden
+  # anything), and so is a late run after the site already sent.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      run: ${{ steps.g.outputs.run }}
+    steps:
+      - id: g
+        env:
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+          CDT_CRON: '43 12 * * 1'
+          CST_CRON: '43 13 * * 1'
+        run: |
+          run=true
+          if [ "$EVENT" = "schedule" ]; then
+            # GitHub's cron is UTC, so the slot is listed at its CDT and its
+            # CST time and only the one matching Central's offset today
+            # counts. One cron pinned to CDT fires an hour early all winter,
+            # when /api/scheduler/ran still answers for yesterday's slot.
+            if [ "$(TZ=America/Chicago date -d "${GATE_NOW:-now}" +%z)" = "-0500" ]; then want="$CDT_CRON"; else want="$CST_CRON"; fi
+            if [ "$SCHEDULE" != "$want" ]; then
+              echo "This is the other DST's cron ($SCHEDULE); the $want run covers today."; run=false
+            elif curl -fsS --max-time 20 "$SITE/api/scheduler/ran?job=newsletter" | grep -q '"ran":true'; then
+              echo "The site's scheduler already ran this week's send; skipping this late cron run."; run=false
+            fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
   send:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     # 3 tries of up to 5 minutes each, 4 minutes apart.
     timeout-minutes: 30

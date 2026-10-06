@@ -275,14 +275,20 @@ def to_hide(events, rules):
     for i, kind, why in rules:
         if kind not in AUTO_HIDE:
             continue
+        # A paid Vic's Pick was approved by the owner and sold to someone who
+        # was told it's live; a rule match ("Grand Opening Giveaway" reads
+        # as not an event, "Gospel Brunch" as religious) is not reason enough
+        # to pull it. It stays in the report and goes to sales instead.
+        if _paid(events[i]):
+            continue
         if kind == "cut_off":
             whole = _whole_listing(events, i)
-            if whole is None or _paid(events[i]):
+            if whole is None:
                 continue
             why = f"{why}; “{events[whole]['name']}” is listed there that day"
         if kind == "duplicate":
             j = _dup_of(events, i)
-            if j is None or _paid(events[i]) or _paid(events[j]):
+            if j is None or _paid(events[j]):
                 continue
             if _library_twin(events[i], events[j]):
                 # The city calendar's copy has the real meeting place.
@@ -336,6 +342,36 @@ def hide(events, picks, secret):
     restored = {by_page[x["page"]] for x in out.get("skipped") or []
                 if x.get("why") == "restored-by-admin" and x.get("page") in by_page}
     return hidden, restored, None
+
+
+def paid_findings(events, findings):
+    """Findings about paid Vic's Picks that a rule would have hidden: the
+    sales channel hears about these, since a refund or a word with the
+    buyer is a sales call, not an edit."""
+    return [f for f in findings if f[1] in AUTO_HIDE and _paid(events[f[0]])]
+
+
+def notify_sales(events, flagged):
+    """Post flagged paid picks to the sales channel (SLACK_SALES_WEBHOOK_URL),
+    falling back to the alerts webhook so they're never only a line in
+    the activity channel. No webhook set: nothing posted."""
+    if not flagged:
+        return
+    url = (os.environ.get("SLACK_SALES_WEBHOOK_URL") or os.environ.get("SLACK_ALERTS_WEBHOOK_URL") or "").strip()
+    if not url:
+        return
+    lines = [f"💳 Event check: {len({f[0] for f in flagged})} paid Vic's Pick(s) matched a hide rule. "
+             "Not hidden; check with the buyer:"]
+    lines += [f"• {describe(events[i])}: *{LABEL.get(kind, kind)}*, {esc(why)}" for i, kind, why in flagged]
+    old = os.environ.get("SLACK_WEBHOOK_URL")
+    os.environ["SLACK_WEBHOOK_URL"] = url
+    try:
+        slack_notify.main(["\n".join(lines), "--link", f"{SITE}/admin.html"])
+    finally:
+        if old is None:
+            os.environ.pop("SLACK_WEBHOOK_URL", None)
+        else:
+            os.environ["SLACK_WEBHOOK_URL"] = old
 
 
 def report(events, findings, ai_ran, days, hidden=(), problem=None):
@@ -472,6 +508,7 @@ def main(argv=None):
             f.write("\n".join([f"### {head}", ""] + [f"- {x}" for x in lines]) + "\n")
     if not args.dry_run:
         slack_notify.main([text, "--link", f"{SITE}/admin.html"])
+        notify_sales(events, paid_findings(events, findings))
     return 0
 
 

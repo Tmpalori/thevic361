@@ -14,7 +14,9 @@
 # dispatches it on time, because GitHub's own cron runs hours late; the
 # cron below stays as a fallback. A repeat run is harmless: each submission
 # is decided once, and the concurrency group runs them one at a time.
-# Also by hand.
+# Also by hand. The site being down or answering 5xx is only a warning
+# (the run passes), so an outage doesn't add an alert every 15 minutes on
+# top of the health and uptime alerts; a wrong secret still fails.
 
 name: Submission Review
 

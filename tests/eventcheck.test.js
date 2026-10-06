@@ -109,6 +109,19 @@ describe('event check: hiding', () => {
     expect((await names())).toHaveLength(11);
   });
 
+  it('never hides a paid Vic\'s Pick, and still hides the rest of the batch', async () => {
+    const events = [
+      { date: '2026-10-07', name: 'Gospel Brunch', time: '11:00 AM', venue: 'Pumphouse', featured: true },
+      { date: '2026-10-08', name: 'Parish Fall Festival', time: '6:00 PM', venue: "St. Mary's Church" }
+    ];
+    await startApp({}, { events });
+    const r = await hide([{ page: '/events/2026-10-07-gospel-brunch' }, { page: '/events/2026-10-08-parish-fall-festival' }]);
+    const body = await r.json();
+    expect(body.skipped).toEqual([{ page: '/events/2026-10-07-gospel-brunch', why: 'paid-pick' }]);
+    expect(body.hidden.map(h => h.name)).toEqual(['Parish Fall Festival']);
+    expect(await names()).toContain('Gospel Brunch');
+  });
+
   it('survives the admin Save & Publish', async () => {
     await startApp();
     await hide([{ page: CHURCH }]);

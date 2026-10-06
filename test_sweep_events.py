@@ -351,3 +351,34 @@ def test_slack_text_escapes_names_venues_and_reasons():
     assert "(Bar &lt;!channel&gt;)" in line and "AI says &lt;!here&gt; &amp; more" in line
     # The link markup itself stays intact.
     assert line.count("<https://www.thevic361.com/events/2026-10-06-fall-fest|") == 1
+
+
+def test_paid_picks_are_never_auto_hidden_whatever_the_rule():
+    # A sold Vic's Pick the owner approved: a rule match is a sales call,
+    # not a removal (religious / not_an_event used to slip through).
+    paid = dict(featured=True)
+    events = [ev("Gospel Brunch", page="/events/a", **paid),
+              ev("Grand Opening Giveaway", page="/events/b", **paid),
+              ev("St. Mary's Parish Fall Festival", page="/events/c", **paid),
+              ev("St. Joseph Parish Fall Festival", page="/events/d")]
+    rules = sw.rule_findings(events)
+    assert any(i in (0, 1, 2) and k in sw.AUTO_HIDE for i, k, _ in rules)
+    picks, _ = sw.to_hide(events, rules)
+    assert [i for i, _, _ in picks] == [3]
+    flagged = sw.paid_findings(events, rules)
+    assert {i for i, _, _ in flagged} == {i for i, k, _ in rules if i in (0, 1, 2) and k in sw.AUTO_HIDE}
+    # An editor's pick is featured for its score only; it gets no shield.
+    events = [ev("St. Mary's Parish Fall Festival", page="/events/c", featured=True, editor_pick=True)]
+    assert [i for i, _, _ in sw.to_hide(events, sw.rule_findings(events))[0]] == [0]
+
+
+def test_paid_picks_flagged_go_to_the_sales_channel(monkeypatch):
+    events = [ev("St. Mary's Parish Fall Festival", page="/events/c", featured=True)]
+    flagged = sw.paid_findings(events, sw.rule_findings(events))
+    monkeypatch.setenv("SLACK_SALES_WEBHOOK_URL", "https://hooks.slack.com/sales")
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/activity")
+    seen = []
+    with patch.object(sw.slack_notify, "main", side_effect=lambda a: seen.append((os.environ["SLACK_WEBHOOK_URL"], a[0]))):
+        sw.notify_sales(events, flagged)
+    assert seen and seen[0][0] == "https://hooks.slack.com/sales" and "paid Vic's Pick" in seen[0][1]
+    assert os.environ["SLACK_WEBHOOK_URL"] == "https://hooks.slack.com/activity"

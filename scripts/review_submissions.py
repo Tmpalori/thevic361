@@ -307,10 +307,23 @@ def main(argv=None):
         print("SUBMISSION_REVIEW_SECRET not set; skipping.")
         return 0
     headers = {**UA, "X-Cron-Secret": secret}
-    r = requests.get(f"{SITE}/api/submission-review/pending", headers=headers, timeout=30)
+    # The site being down or its database out (no answer, a timeout, a
+    # 5xx) is a warning, not a failure: this runs every 15 minutes, so a
+    # 3-hour outage would post a dozen identical "review failed" alerts on
+    # top of the site's own health and uptime alerts, and nothing is lost,
+    # since the next run picks the submissions up. A wrong secret (401)
+    # or a failed decisions POST still fails the run.
+    try:
+        r = requests.get(f"{SITE}/api/submission-review/pending", headers=headers, timeout=30)
+    except (requests.ConnectionError, requests.Timeout) as e:
+        print(f"::warning::The site didn't answer ({e}); trying again next run.")
+        return 0
     if r.status_code == 401:
         print("::error::The site rejected the secret (it must match in Railway and GitHub).")
         return 1
+    if r.status_code >= 500:
+        print(f"::warning::The site answered HTTP {r.status_code} (down or database out); trying again next run.")
+        return 0
     r.raise_for_status()
     submissions = r.json().get("submissions") or []
     if not submissions:
@@ -318,7 +331,14 @@ def main(argv=None):
         return 0
     # ?all=1 includes events past their day's limit: still live (own page,
     # guides), so a submission of one is "already listed", not new.
-    live = requests.get(f"{SITE}/events.json?all=1", headers=UA, timeout=30).json().get("events") or []
+    try:
+        lr = requests.get(f"{SITE}/events.json?all=1", headers=UA, timeout=30)
+        lr.raise_for_status()
+        live = lr.json().get("events") or []
+    except (requests.RequestException, ValueError) as e:
+        # Without the live list, copies of listed events can't be caught.
+        print(f"::warning::Couldn't read the live events ({e}); trying again next run.")
+        return 0
     reviews, log = decide(submissions, live, os.environ.get("OPENAI_API_KEY", "").strip())
     for line in log:
         print(line)

@@ -5,7 +5,11 @@ helpers that decide what gets posted.
 """
 import os
 import sys
+import urllib.error
 from datetime import date
+from unittest.mock import patch
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "scripts"))
 import social_kit as sk
@@ -325,3 +329,48 @@ def test_paid_picks_lead_editors_picks_and_only_paid_ones_count_for_thursday():
     assert [e["name"] for e in g[date(2026, 10, 10)]] == ["Paid Pick", "Editor Pick", "Plain"]
     assert sk.is_paid_pick(events[1]) and not sk.is_paid_pick(events[0])
     assert sorted(events, key=sk.pick_rank)[0]["name"] == "Paid Pick"
+
+
+class _Resp:
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return self.body
+
+
+def test_fetch_events_retries_a_blip_with_backoff():
+    # One failed fetch used to fail the day's build, and the scheduler had
+    # already marked the run done, so the fallback cron skipped it.
+    answers = [urllib.error.URLError("connection refused"),
+               urllib.error.HTTPError("u", 502, "Bad Gateway", {}, None),
+               _Resp(b'{"events": [{"name": "A &amp; B"}]}')]
+
+    def fake(req, timeout):
+        a = answers.pop(0)
+        if isinstance(a, Exception):
+            raise a
+        return a
+    sleeps = []
+    with patch.object(sk.urllib.request, "urlopen", side_effect=fake):
+        events = sk.fetch_events("https://example.test/events.json", sleep=sleeps.append)
+    assert events == [{"name": "A & B"}] and sleeps == [30, 60]
+
+
+def test_fetch_events_gives_up_on_a_4xx_and_after_its_tries():
+    sleeps = []
+    with patch.object(sk.urllib.request, "urlopen",
+                      side_effect=urllib.error.HTTPError("u", 404, "Not Found", {}, None)):
+        with pytest.raises(urllib.error.HTTPError):
+            sk.fetch_events("https://example.test/x", sleep=sleeps.append)
+    assert sleeps == []
+    with patch.object(sk.urllib.request, "urlopen", side_effect=urllib.error.URLError("down")):
+        with pytest.raises(urllib.error.URLError):
+            sk.fetch_events("https://example.test/x", sleep=sleeps.append)
+    assert sleeps == list(sk.FETCH_BACKOFF)

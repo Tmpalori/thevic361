@@ -118,3 +118,93 @@ def test_meta_ads_failure_alerts_slack():
 @pytest.mark.parametrize("name", sorted(f for f in os.listdir(WF) if f.endswith(".yml")))
 def test_every_workflow_parses(name):
     assert load(name)["jobs"]
+
+
+def _git(cwd, *args):
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd, check=True,
+                   capture_output=True, text=True)
+
+
+def run_kit_commit(tmp_path, posting):
+    """Run social-kit's Commit step after another run pushed a different kit."""
+    origin, other, mine = tmp_path / "origin.git", tmp_path / "other", tmp_path / "mine"
+    _git(tmp_path, "init", "-q", "--bare", "-b", "main", str(origin))
+    _git(tmp_path, "clone", "-q", str(origin), str(other))
+    kit = other / "docs" / "social" / "latest"
+    kit.mkdir(parents=True)
+    (kit / "kit.json").write_text('{"v": "base"}\n')
+    _git(other, "add", ".")
+    _git(other, "commit", "-qm", "base")
+    _git(other, "push", "-q", "origin", "HEAD:main")
+    _git(tmp_path, "clone", "-q", str(origin), str(mine))
+    (kit / "kit.json").write_text('{"v": "theirs"}\n')   # the concurrent run lands first
+    _git(other, "commit", "-qam", "other kit")
+    _git(other, "push", "-q", "origin", "HEAD:main")
+    (mine / "docs" / "social" / "latest" / "kit.json").write_text('{"v": "mine"}\n')
+    script = step(load("social-kit.yml")["jobs"]["build"], "Commit")["run"]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _exe(bin_dir / "sleep", "#!/bin/sh\nexit 0\n")
+    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", POSTING="true" if posting else "false",
+               GIT_CONFIG_GLOBAL=os.devnull)
+    r = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", script], cwd=mine, env=env,
+                       capture_output=True, text=True, timeout=60)
+    _git(other, "pull", "-q", "--rebase", "origin", "main")
+    return r.returncode, (kit / "kit.json").read_text()
+
+
+def test_social_kit_posting_run_wins_a_kit_conflict(tmp_path):
+    # A push rebuild committed docs/social/latest first: the posting run's
+    # retries all conflicted and it exited 1 before posting.
+    rc, on_main = run_kit_commit(tmp_path, posting=True)
+    assert rc == 0 and '"mine"' in on_main
+
+
+def test_social_kit_rebuild_yields_to_a_newer_kit(tmp_path):
+    rc, on_main = run_kit_commit(tmp_path, posting=False)
+    assert rc == 0 and '"theirs"' in on_main
+
+
+def test_social_kit_installs_ffmpeg_only_for_the_reel_and_bounded():
+    job = load("social-kit.yml")["jobs"]["build"]
+    ff = step(job, "Install ffmpeg")
+    assert "weekend" in ff["if"] and ff["timeout-minutes"] <= 5 and ff["continue-on-error"] is True
+
+
+def run_gate(tmp_path, wf, schedule, now, ran=False, event="schedule"):
+    """Run a fallback cron's gate step at `now` with the site answering `ran`."""
+    g = next(s for s in load(wf)["jobs"]["gate"]["steps"] if s.get("id") == "g")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    _exe(bin_dir / "curl", '#!/bin/sh\necho \'{"ok":true,"ran":%s}\'\n' % ("true" if ran else "false"))
+    out = tmp_path / "out"
+    out.write_text("")
+    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", GITHUB_OUTPUT=str(out),
+               GATE_NOW=now, EVENT=event, SCHEDULE=schedule, SITE="https://example.test",
+               CDT_CRON=g["env"]["CDT_CRON"], CST_CRON=g["env"]["CST_CRON"])
+    r = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", g["run"]], env=env,
+                       capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    return out.read_text().strip()
+
+
+SUMMER, WINTER = "2026-07-06T18:00:00Z", "2026-12-07T18:00:00Z"
+
+
+@pytest.mark.parametrize("wf,cdt,cst", [("event-check.yml", "43 11 * * 1", "43 12 * * 1"),
+                                        ("newsletter.yml", "43 12 * * 1", "43 13 * * 1"),
+                                        ("meta-ads.yml", "37 13 * * *", "37 14 * * *"),
+                                        ("social-kit.yml", "47 13 * * *", "47 14 * * *")])
+def test_fallback_crons_fire_at_the_slot_in_both_cdt_and_cst(tmp_path, wf, cdt, cst):
+    # Pinned to CDT alone, the winter run came an hour before the slot,
+    # when the scheduler's "ran" still answered for the previous slot.
+    crons = [c["cron"] for c in load(wf)[True]["schedule"]]
+    assert cdt in crons and cst in crons
+    assert run_gate(tmp_path, wf, cdt, SUMMER) == "run=true"
+    assert run_gate(tmp_path, wf, cst, SUMMER) == "run=false"
+    assert run_gate(tmp_path, wf, cst, WINTER) == "run=true"
+    assert run_gate(tmp_path, wf, cdt, WINTER) == "run=false"
+    # Still skipped when the site's scheduler already ran the slot; by-hand
+    # runs are never gated.
+    assert run_gate(tmp_path, wf, cst, WINTER, ran=True) == "run=false"
+    assert run_gate(tmp_path, wf, "", WINTER, ran=True, event="workflow_dispatch") == "run=true"

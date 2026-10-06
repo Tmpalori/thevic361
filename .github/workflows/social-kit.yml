@@ -4,7 +4,7 @@
 #
 # Runs every morning at 8:47 AM Central: the site's scheduler
 # (server/scheduler.js) dispatches it with scheduled=true, because GitHub's
-# own cron runs hours late. The 13:47 UTC cron below stays as a fallback and
+# own cron runs hours late. The 13:47 (CDT) / 14:47 (CST) UTC crons stay as a fallback and
 # skips itself when the site already dispatched today's run (posted.json
 # also stops a second post). Either way the run is "scheduled": Monday
 # rebuilds the week, weekend and today kits; Thursday the weekend (plus its
@@ -24,7 +24,8 @@ name: Social Kit
 
 on:
   schedule:
-    - cron: '47 13 * * *'
+    - cron: '47 13 * * *'   # CDT slot (fallback; the gate keeps the one matching DST)
+    - cron: '47 14 * * *'   # CST slot
   push:
     branches: [main]
     paths:
@@ -75,11 +76,23 @@ jobs:
       - id: g
         env:
           EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
           SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+          CDT_CRON: '47 13 * * *'
+          CST_CRON: '47 14 * * *'
         run: |
           run=true
-          if [ "$EVENT" = "schedule" ] && curl -fsS --max-time 20 "$SITE/api/scheduler/ran?job=social-kit" | grep -q '"ran":true'; then
-            echo "The site's scheduler already ran today's kit; skipping this late cron run."; run=false
+          if [ "$EVENT" = "schedule" ]; then
+            # GitHub's cron is UTC, so the slot is listed at its CDT and its
+            # CST time and only the one matching Central's offset today
+            # counts. One cron pinned to CDT fires an hour early all winter,
+            # when /api/scheduler/ran still answers for yesterday's slot.
+            if [ "$(TZ=America/Chicago date -d "${GATE_NOW:-now}" +%z)" = "-0500" ]; then want="$CDT_CRON"; else want="$CST_CRON"; fi
+            if [ "$SCHEDULE" != "$want" ]; then
+              echo "This is the other DST's cron ($SCHEDULE); the $want run covers today."; run=false
+            elif curl -fsS --max-time 20 "$SITE/api/scheduler/ran?job=social-kit" | grep -q '"ran":true'; then
+              echo "The site's scheduler already ran today's kit; skipping this late cron run."; run=false
+            fi
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
 
@@ -102,22 +115,35 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install pillow requests
-      # The weekend Reel is stitched with ffmpeg, which runner images don't
-      # always include.
-      - name: Install ffmpeg
-        run: command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
-      - name: Build kit
-        id: build
+      - name: Pick the kits
+        id: kinds
         env:
-          PYTHONUNBUFFERED: 1
           SCHEDULED: ${{ github.event_name == 'schedule' || inputs.scheduled }}
         run: |
           DOW="$(TZ=America/Chicago date +%u)"
           if [ "$SCHEDULED" != "true" ] || [ "$DOW" = "1" ]; then KINDS=week,weekend,today
           elif [ "$DOW" = "4" ]; then KINDS=weekend,today
           else KINDS=today; fi
-          python scripts/social_kit.py --kinds "$KINDS"
+          echo "kinds=$KINDS" >> "$GITHUB_OUTPUT"
+      # The weekend Reel is stitched with ffmpeg, which runner images don't
+      # always include. Only the weekend kit makes a Reel, so a daily "today"
+      # run skips apt entirely (one slow mirror took 12 minutes, run
+      # 37496281450). Bounded and allowed to fail: without ffmpeg
+      # social_kit.py falls back to the carousel.
+      - name: Install ffmpeg
+        if: contains(steps.kinds.outputs.kinds, 'weekend')
+        timeout-minutes: 4
+        continue-on-error: true
+        run: command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+      - name: Build kit
+        id: build
+        env:
+          PYTHONUNBUFFERED: 1
+          KINDS: ${{ steps.kinds.outputs.kinds }}
+        run: python scripts/social_kit.py --kinds "$KINDS"
       - name: Commit
+        env:
+          POSTING: ${{ github.event_name == 'schedule' || inputs.post || inputs.scheduled }}
         run: |
           git config user.name "The Vic 361 Bot"
           git config user.email "bot@thevic361.com"
@@ -127,9 +153,22 @@ jobs:
             exit 0
           fi
           git commit -m "📣 Social kit $(date +'%Y-%m-%d')"
-          # main may have moved while the kit built (weekly collect, a merge).
+          # main may have moved while the kit built (weekly collect, a merge,
+          # or a push rebuild and a posting run, which sit in different
+          # concurrency groups, both committing docs/social/latest). A
+          # posting run keeps its own kit on a conflict (-X theirs is the
+          # commit being replayed), since that's what it is about to post; a
+          # rebuild that conflicts yields to the kit already on main.
           for i in 1 2 3; do
-            git pull --rebase origin main && git push && exit 0
+            if [ "$POSTING" = "true" ]; then
+              git pull --rebase -X theirs origin main && git push && exit 0
+            elif git pull --rebase origin main; then
+              git push && exit 0
+            elif [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; then
+              git rebase --abort
+              echo "::notice::A newer kit landed on main meanwhile; keeping it."
+              exit 0
+            fi
             git rebase --abort 2>/dev/null || true
             sleep $((i * 10))
           done

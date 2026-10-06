@@ -13,7 +13,7 @@
 #   - Monday 6:43 AM Central, an hour before the newsletter, to catch
 #     anything from Sunday-night edits. The site's scheduler
 #     (server/scheduler.js) dispatches it on time, because GitHub's own
-#     cron runs hours late; the 11:43 UTC cron below is a fallback that
+#     cron runs hours late; the 11:43 (CDT) / 12:43 (CST) UTC crons are a fallback that
 #     skips itself when the site already ran it
 #   - by hand (workflow_dispatch)
 
@@ -24,7 +24,8 @@ on:
     workflows: ['Weekly Collect']
     types: [completed]
   schedule:
-    - cron: '43 11 * * 1'
+    - cron: '43 11 * * 1'   # CDT slot (fallback; the gate keeps the one matching DST)
+    - cron: '43 12 * * 1'   # CST slot
   workflow_dispatch:
 
 permissions:
@@ -41,11 +42,23 @@ jobs:
       - id: g
         env:
           EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
           SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+          CDT_CRON: '43 11 * * 1'
+          CST_CRON: '43 12 * * 1'
         run: |
           run=true
-          if [ "$EVENT" = "schedule" ] && curl -fsS --max-time 20 "$SITE/api/scheduler/ran?job=event-check" | grep -q '"ran":true'; then
-            echo "The site's scheduler already ran Monday's check; skipping this late cron run."; run=false
+          if [ "$EVENT" = "schedule" ]; then
+            # GitHub's cron is UTC, so the slot is listed at its CDT and its
+            # CST time and only the one matching Central's offset today
+            # counts. One cron pinned to CDT fires an hour early all winter,
+            # when /api/scheduler/ran still answers for yesterday's slot.
+            if [ "$(TZ=America/Chicago date -d "${GATE_NOW:-now}" +%z)" = "-0500" ]; then want="$CDT_CRON"; else want="$CST_CRON"; fi
+            if [ "$SCHEDULE" != "$want" ]; then
+              echo "This is the other DST's cron ($SCHEDULE); the $want run covers today."; run=false
+            elif curl -fsS --max-time 20 "$SITE/api/scheduler/ran?job=event-check" | grep -q '"ran":true'; then
+              echo "The site's scheduler already ran Monday's check; skipping this late cron run."; run=false
+            fi
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
 
@@ -88,6 +101,10 @@ jobs:
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           EVENT_CHECK_SECRET: ${{ secrets.EVENT_CHECK_SECRET || secrets.NEWSLETTER_CRON_SECRET }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
+          # Paid Vic's Picks a rule would hide are never hidden; they go to
+          # sales (else alerts) so the buyer hears from a person.
+          SLACK_SALES_WEBHOOK_URL: ${{ secrets.SLACK_SALES_WEBHOOK_URL }}
+          SLACK_ALERTS_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: python3 scripts/sweep_events.py
 
       - name: Tell Slack it failed
