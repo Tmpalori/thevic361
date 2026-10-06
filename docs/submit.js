@@ -196,6 +196,8 @@
       add('business', [body.submitter_first_name, body.submitter_last_name].filter(Boolean).join(' '));
       promo.href = '/advertise/checkout?' + q.toString();
     }
+    const emailNote = $('#thanks-email');
+    if (emailNote) emailNote.hidden = !(body.submitter_email && !json.duplicate);
     const card = $('#form-card');
     const thanks = $('#thanks-card');
     if (card) card.hidden = true;

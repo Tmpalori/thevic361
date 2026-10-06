@@ -89,7 +89,7 @@ export function createResend(apiKey, fetchImpl = globalThis.fetch) {
 // colors, rounded type. Email clients can't load icons.svg or web fonts
 // reliably, so icons and the skyline are PNGs in docs/email/ and the font
 // stack falls back to rounded system faces.
-const C = {
+export const C = {
   bg: '#FFF4D6', card: '#FFFFFF', ink: '#1F1A3D', muted: '#554E7A', accent: '#4B3FD1',
   line: '#E8D9AE', sun: '#FFC93C', sunLight: '#FFF0BF', sunset: '#FF7A3D', navy: '#2B2370', sky: '#DDF2FF'
 };
@@ -97,7 +97,7 @@ const DAY_COLORS = ['#FFC93C', '#8FD3FF', '#FF8FC0', '#3DBE8B', '#FF7A3D', '#B9A
 const ICON_KEYS = new Set(['food', 'music', 'family', 'drinks', 'arts', 'shopping', 'outdoors', 'community', 'free']);
 const DISPLAY = "'Fredoka','Baloo 2','Trebuchet MS',Arial,sans-serif";
 const BODY = "'Nunito','Helvetica Neue',Arial,sans-serif";
-const btn = (href, label) => `<a href="${escHtml(href)}" style="display:inline-block;background:${C.accent};color:#fff;font-family:${DISPLAY};font-weight:bold;font-size:16px;padding:11px 22px;border:3px solid ${C.ink};border-radius:999px;box-shadow:3px 3px 0 ${C.ink};text-decoration:none;">${escHtml(label)}</a>`;
+export const btn = (href, label) => `<a href="${escHtml(href)}" style="display:inline-block;background:${C.accent};color:#fff;font-family:${DISPLAY};font-weight:bold;font-size:16px;padding:11px 22px;border:3px solid ${C.ink};border-radius:999px;box-shadow:3px 3px 0 ${C.ink};text-decoration:none;">${escHtml(label)}</a>`;
 
 // ─── Dark mode ───────────────────────────────────────────────────────────
 // Email apps decide how a message looks in dark mode, and they disagree:
@@ -145,7 +145,7 @@ export function darkSafe(html) {
   return body.replace('</head>', () => `${head}</head>`);
 }
 
-function emailShell({ title, preheader, bodyHtml, footerHtml, siteUrl }) {
+export function emailShell({ title, preheader, bodyHtml, footerHtml, siteUrl }) {
   return darkSafe(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only"><title>${escHtml(title)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@400;700;800&display=swap" rel="stylesheet"></head>
@@ -175,7 +175,7 @@ function iconImgs(ev, siteUrl) {
     .map(k => `<img src="${siteUrl}/email/${k}.png" width="22" height="22" alt="" style="vertical-align:middle;border:0;margin-right:2px;">`).join('');
 }
 
-function eventRow(ev, siteUrl) {
+export function eventRow(ev, siteUrl) {
   const link = ev.page ? `${siteUrl}${ev.page}` : (safeUrl(ev.url) || siteUrl);
   const where = [ev.venue].filter(Boolean).join('');
   const rowStyle = ev.featured

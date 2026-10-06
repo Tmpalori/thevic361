@@ -45,6 +45,7 @@ import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso } from './db.js';
 import { normalizeEmail } from './newsletter.js';
 import { venueFor } from './guides.js';
+import { renderSponsorConfirmed } from './notify.js';
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 // Stripe's shortest Checkout expiry is 30 minutes; hold a week a little
@@ -502,19 +503,36 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
 
 export function renderThanksPage(order, { siteUrl }) {
   let msg = 'We\'re confirming your payment. Stripe will email your receipt in a minute or two.';
+  let next = [];
   if (order && LIVE.has(order.status)) {
-    if (order.kind === 'weekly') msg = `You're booked. Your sponsor block goes live the week of ${escHtml(formatDay(order.week_start, { month: 'long', day: 'numeric' }))}, including that Monday's newsletter.`;
-    else if (order.kind === 'partner') msg = `You're a venue partner. Every event at ${escHtml(order.venue_name)} is now a Vic’s Pick.`;
-    else msg = 'Thanks! We\'ll review your event shortly. Once it\'s listed, it\'s pinned to the top of its day.';
+    if (order.kind === 'weekly') {
+      const week = formatDay(order.week_start, { weekday: 'long', month: 'long', day: 'numeric' });
+      msg = `You're booked for the week of ${escHtml(week)}.`;
+      next = [`Your sponsor block goes live on its own on ${escHtml(week)}, on every page of the site and at the top of that Monday’s newsletter.`,
+        'We’ve emailed you a confirmation with a copy of your block. Stripe sends your receipt separately.',
+        'Want to change the wording or link before it goes live? Reply to that email.'];
+    } else if (order.kind === 'partner') {
+      msg = `You're a venue partner. Every event at ${escHtml(order.venue_name)} is now a Vic’s Pick.`;
+    } else {
+      const day = order.event ? formatDay(order.event.date, { weekday: 'long', month: 'long', day: 'numeric' }) : 'its day';
+      msg = `Thanks! ${escHtml(order.event ? order.event.name : 'Your event')} is a Vic’s Pick.`;
+      next = ['We check the details and publish it, usually within a day. If anything needs fixing, we’ll email you.',
+        `Then it’s pinned to the top of ${escHtml(day)} with the Vic’s Pick badge, starred in that week’s newsletter and featured first in our social posts.`,
+        'We’ve emailed you a confirmation. Stripe sends your receipt separately.'];
+    }
+  } else if (order && order.status === 'processing') {
+    msg = 'Your payment is processing (bank payments can take a few days). Your spot is held, and we’ll email you as soon as it clears.';
   }
-  const body = `<h1 class="page-title">Thank you</h1><p class="page-lead">${msg}</p>
+  const steps = next.length ? `<h2 class="section-heading">What happens next</h2><ol class="thanks-steps">${next.map(x => `<li>${x}</li>`).join('')}</ol>` : '';
+  const body = `<h1 class="page-title">Thank you</h1><p class="page-lead">${msg}</p>${steps}
+    <p>Questions or something not right? <a href="/contact?topic=advertising">Contact us</a> and we’ll sort it out.</p>
     <p><a class="btn btn--primary" href="/">See this week's events</a></p>`;
   return layout({ siteUrl, path: '/advertise/thanks', nav: '/advertise', noindex: true, title: `Thank you | ${SITE_NAME}`, description: 'Thank you.', body });
 }
 
 // ─── Wiring ──────────────────────────────────────────────────────────────
 
-export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenues, slack = null }) {
+export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenues, slack = null, mailer = null, mailAddress = '' }) {
   const supported = typeof store.listSponsorOrders === 'function';
   let cache = null;
 
@@ -567,6 +585,15 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       await store.insert(row);
       order.submission_id = row.id;
       await save(order);
+    }
+    // "You're booked" email: what happens next and how to reach us. Once
+    // per order (a webhook retry finishing a fulfil doesn't resend).
+    if (mailer && (order.kind === 'weekly' || order.kind === 'featured') && !order.confirmation_sent) {
+      const sent = await mailer.send(order.email, renderSponsorConfirmed(order, { siteUrl, address: mailAddress }), `vic361-sponsor-${order.id}`);
+      if (sent) {
+        order.confirmation_sent = nowIso();
+        await save(order);
+      }
     }
     if (slack) {
       const pkg = packageFor(order.kind);
