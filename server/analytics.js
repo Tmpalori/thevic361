@@ -134,8 +134,9 @@ function cleanPath(p) {
 // Middleware: record page hits from known crawlers (humans come in through
 // the beacon): HTML pages plus the machine-readable feeds AI assistants
 // read (/events.json, /llms.txt). Runs after the response is sent; failures
-// are logged and never affect the request.
-export function crawlerMiddleware(store) {
+// are logged and never affect the request. `now` is the app's clock, so a
+// crawl lands on the same day the summary is anchored on.
+export function crawlerMiddleware(store, now = () => new Date()) {
   return (req, res, next) => {
     if (req.method !== 'GET' || req.path.startsWith('/api/') || req.path.startsWith('/admin') ||
       req.path === '/robots.txt') return next();
@@ -145,7 +146,7 @@ export function crawlerMiddleware(store) {
       const type = String(res.get('content-type') || '');
       if (res.statusCode !== 200 || !/text\/html|application\/json|text\/plain/.test(type)) return;
       store.recordTraffic({
-        day: localDateStr(new Date()), kind: 'crawl', path: cleanPath(req.path), bot
+        day: localDateStr(now()), kind: 'crawl', path: cleanPath(req.path), bot
       }).catch(err => console.warn('[traffic] crawl record failed:', err.message));
     });
     next();

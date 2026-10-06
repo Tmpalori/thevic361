@@ -3,7 +3,7 @@
 // Auto-publish (server/autopublish.js): collector candidates go live without
 // the admin, but the admin's removals stick.
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
 import { promises as fs } from 'node:fs';
@@ -107,8 +107,7 @@ describe('auto-publish', () => {
 
   it('runs on boot once per candidates file', async () => {
     await start({ candidates: CANDIDATES, extra: { autoPublish: true, autoPublishDelayMs: 0 } });
-    await new Promise(r => setTimeout(r, 100));
-    expect((await live()).events).toHaveLength(3);
+    await vi.waitFor(async () => expect((await live()).events).toHaveLength(3), { timeout: 2000 });
     const at = (await store.getPublished()).auto_publish.at;
 
     // Same candidates on the next boot: nothing changes.
@@ -121,7 +120,7 @@ describe('auto-publish', () => {
     });
     server = http.createServer(app);
     await new Promise(r => server.listen(0, r));
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 100)); // checks nothing changes, so a fixed wait
     expect((await store.getPublished()).auto_publish.at).toBe(at);
   });
 
@@ -182,9 +181,8 @@ describe('auto-publish', () => {
       },
       extra: { autoPublish: true, autoPublishDelayMs: 0 }
     });
-    await new Promise(r => setTimeout(r, 100));
+    await vi.waitFor(async () => expect((await store.getPublished()).auto_publish.rules).toBe(2), { timeout: 2000 });
     expect((await live()).events.map(e => e.name)).not.toContain('Bingo Night');
-    expect((await store.getPublished()).auto_publish.rules).toBe(2);
   });
 
   it('publishes New & Notable from the collector and keeps recent earlier finds for three weeks', async () => {
@@ -210,7 +208,7 @@ describe('auto-publish', () => {
 
   it('is off by default outside production', async () => {
     await start({ candidates: CANDIDATES });
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise(r => setTimeout(r, 50)); // checks nothing runs, so a fixed wait
     expect(await store.getPublished()).toBeNull();
   });
 });
@@ -230,6 +228,28 @@ describe('admin setup checklist', () => {
     expect(r.status.upcoming_events).toBe(3);
     expect(r.status.collected_at).toBe(CANDIDATES.last_updated);
     expect(JSON.stringify(r)).not.toMatch(/"b"|"c"/); // no password/secret values
+  });
+
+  it('flags cron secrets that share one value', async () => {
+    const checks = async () => Object.fromEntries((await (await fetch(baseUrl + '/api/admin/setup', { headers: await auth() })).json())
+      .checks.map(c => [c.key, c.ok]));
+
+    // Only the newsletter secret set: the other two still work through the
+    // fallback, but all three share it.
+    const saved = process.env.NEWSLETTER_CRON_SECRET;
+    process.env.NEWSLETTER_CRON_SECRET = 'only-one-secret';
+    try {
+      await start({ candidates: CANDIDATES });
+      const c = await checks();
+      expect([c.event_check, c.submission_review, c.separate_secrets]).toEqual([true, true, false]);
+    } finally {
+      if (saved === undefined) delete process.env.NEWSLETTER_CRON_SECRET; else process.env.NEWSLETTER_CRON_SECRET = saved;
+    }
+    await new Promise(r => server.close(r));
+    await fs.rm(tmpDir, { recursive: true, force: true });
+
+    await start({ candidates: CANDIDATES, extra: { newsletterCronSecret: 'n', eventCheckSecret: 'e', submissionReviewSecret: 's' } });
+    expect((await checks()).separate_secrets).toBe(true);
   });
 
   it('counts the Postgres store as set up', async () => {

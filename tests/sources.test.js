@@ -53,6 +53,26 @@ describe('nextWeeklyRunUtc', () => {
   });
 });
 
+// AGENTS.md don't-touch #5: the admin's "next auto-pull" must follow the
+// workflow's real schedule. Fails when one changes without the other.
+describe('weekly-collect.yml schedule', () => {
+  it('matches next_run_cron and nextWeeklyRunUtc', async () => {
+    const yml = await fs.readFile(new URL('../.github/workflows/weekly-collect.yml', import.meta.url), 'utf8');
+    const crons = [...yml.matchAll(/^\s*-\s*cron:\s*'([^']+)'/gm)].map(m => m[1].trim().split(/\s+/));
+    expect(crons.length).toBeGreaterThan(0);
+    const [minute, hour] = crons[0];
+    for (const c of crons) expect([c[0], c[1], c[2], c[3]]).toEqual([minute, hour, '*', '*']);
+    const days = crons.map(c => c[4]).join(',');
+    const payload = buildSourcesPayload({ metadata: null, mtime: null, now: new Date(), githubConfigured: false, actionsUrl: '' });
+    expect(payload.next_run_cron).toBe(`${minute} ${hour} * * ${days}`);
+    // A run time is what nextWeeklyRunUtc returns from one minute before it.
+    for (const d of days.split(',').map(Number)) {
+      const run = new Date(Date.UTC(2026, 4, 3 + d, Number(hour), Number(minute))); // 2026-05-03 is a Sunday
+      expect(nextWeeklyRunUtc(new Date(run.getTime() - 60000)).toISOString()).toBe(run.toISOString());
+    }
+  });
+});
+
 describe('buildSourcesPayload', () => {
   it('renders placeholder rows for every known source when metadata is missing', () => {
     const payload = buildSourcesPayload({
