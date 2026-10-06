@@ -118,6 +118,11 @@ export function toJsonb(value) {
 // event matching an edit's original_key (or current key), replace it with the
 // edited payload. New keys produced by an edit replace any existing event
 // that would otherwise collide so the admin sees a single corrected row.
+//
+// Edits chain: before resolveEditKey, a second edit of an edited event was
+// stored under the edited key (the only key the admin sees), so such a row
+// is applied after the one that produced its key, up to EDIT_CHAIN_HOPS.
+const EDIT_CHAIN_HOPS = 5;
 export function applyEventEdits(events, edits) {
   if (!Array.isArray(events) || !edits || !edits.length) return events || [];
   const byOriginal = new Map();
@@ -127,15 +132,41 @@ export function applyEventEdits(events, edits) {
   const seen = new Set();
   const out = [];
   for (const ev of events) {
-    const k = eventKeyOf(ev);
-    const edit = byOriginal.get(k);
-    const merged = edit ? { ...ev, ...edit.payload } : ev;
+    let merged = ev;
+    const used = new Set();
+    for (let hop = 0; hop < EDIT_CHAIN_HOPS; hop++) {
+      const k = eventKeyOf(merged);
+      const edit = byOriginal.get(k);
+      if (!edit || used.has(k)) break; // a cycle (A→B, B→A) stops here
+      used.add(k);
+      merged = { ...merged, ...edit.payload };
+    }
     const newKey = eventKeyOf(merged);
     if (seen.has(newKey)) continue;
     seen.add(newKey);
     out.push(merged);
   }
   return out;
+}
+
+// The key an edit should be stored under. The admin only sees events with
+// the overlay applied, so a second edit of an edited event arrives with the
+// edited key; stored under that, it never matched the original event and
+// the correction silently didn't show. Follow edited keys back to the
+// original one (a few hops for rows stored the old way), unless an edit
+// row already exists under the key as given.
+export function resolveEditKey(edits, key) {
+  const rows = Array.isArray(edits) ? edits : [];
+  if (rows.some(e => e && e.original_key === key)) return key;
+  let target = key;
+  const seen = new Set([key]);
+  for (let hop = 0; hop < EDIT_CHAIN_HOPS; hop++) {
+    const from = rows.find(e => e && e.original_key && !seen.has(e.original_key) && eventKeyOf(e.payload) === target);
+    if (!from) break;
+    target = from.original_key;
+    seen.add(target);
+  }
+  return target;
 }
 
 // ─── JSON FILE BACKEND ───
@@ -552,9 +583,55 @@ function jobReclaimable(row, now) {
 }
 
 // ─── POSTGRES BACKEND ───
+// Whether a pg error means the database itself is unreachable or stuck
+// (trip the breaker) rather than a bad query or a constraint (don't). pg
+// errors from the server carry a 5-character SQLSTATE: class 08 is a
+// connection exception, 57 operator intervention (statement timeout,
+// admin shutdown), 53 insufficient resources (too many connections).
+// Anything without one is a socket error or a client-side timeout
+// ("timeout exceeded when trying to connect", "Query read timeout").
+export function isOutage(err) {
+  const code = err && typeof err.code === 'string' ? err.code : '';
+  if (/^[0-9A-Z]{5}$/.test(code)) return ['08', '57', '53'].includes(code.slice(0, 2));
+  return true;
+}
+
+// Circuit breaker around the pool. When Postgres hangs (accepts TCP, never
+// answers), every query would wait out its own 5 s connect timeout and a
+// page view chains several, so each request took 10-15 s instead of
+// falling back to the last good copy. After an outage error, every query
+// fails at once for `windowMs`; then one query is let through as a probe
+// (the rest keep failing fast) and a success closes the breaker.
+export function breakerPool(pool, { windowMs = 30000, now = () => Date.now() } = {}) {
+  let openUntil = 0;
+  let probing = false;
+  const down = () => Object.assign(new Error('database unavailable (circuit open)'), { code: 'CIRCUIT_OPEN' });
+  async function query(...args) {
+    let probe = false;
+    if (openUntil) {
+      if (now() < openUntil || probing) throw down();
+      probing = probe = true;
+    }
+    try {
+      const r = await pool.query(...args);
+      openUntil = 0;
+      return r;
+    } catch (err) {
+      if (isOutage(err)) openUntil = now() + windowMs;
+      else if (probe) openUntil = 0; // it answered: the database is up
+      throw err;
+    } finally {
+      if (probe) probing = false;
+    }
+  }
+  return { query, get open() { return Boolean(openUntil); } };
+}
+
 class PgStore {
-  constructor(pool) {
-    this.pool = pool;
+  // opts.breaker: { windowMs, now } for the circuit breaker (tests).
+  constructor(pool, opts = {}) {
+    this.rawPool = pool;
+    this.pool = breakerPool(pool, opts.breaker);
     this._readyPromise = null;
   }
 

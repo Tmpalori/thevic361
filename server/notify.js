@@ -169,12 +169,17 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
       `<div style="font-size:20px;font-weight:bold;margin:4px 0;">${escHtml(s.name || business)}</div>` +
       (s.text ? `<div>${escHtml(s.text)}</div>` : '') +
       (href ? `<div style="margin-top:8px;"><a href="${escHtml(href)}" style="color:${C.accent};font-weight:bold;">${escHtml(s.cta || 'Learn more')} →</a></div>` : ''));
+    // A bank payment that cleared after that Monday's issue went out
+    // (sponsors.js sets newsletter_missed) can't be promised the issue.
+    const newsletterLine = order.newsletter_missed
+      ? 'Your payment cleared after that Monday’s newsletter went out, so your block wasn’t in it. We’ll be in touch to make that up to you.'
+      : 'It’s also the sponsor spot at the top of that Monday’s newsletter.';
     const bodyHtml =
       p(`Thanks, ${escHtml(business)}! Your payment went through and <strong>the week of ${escHtml(week)}</strong> is yours.`) +
       `<h2 style="font-size:18px;margin:20px 0 4px;">What happens next</h2>` +
       steps([
         `Your sponsor block goes live on its own on <strong>${escHtml(week)}</strong>, on every page of thevic361.com for the whole week.`,
-        'It’s also the sponsor spot at the top of that Monday’s newsletter.',
+        escHtml(newsletterLine),
         'The Monday after your week, we’ll email you how it did: how many times people saw your block, where, and how many clicked through.'
       ]) +
       p('Here’s your block as it will run:') + block +
@@ -187,7 +192,7 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
         `Thanks, ${business}! Your payment went through and the week of ${week} is yours.`, '',
         'What happens next:',
         `1. Your sponsor block goes live on its own on ${week}, on every page of thevic361.com for the whole week.`,
-        '2. It’s also the sponsor spot at the top of that Monday’s newsletter.',
+        `2. ${newsletterLine}`,
         '3. The Monday after your week, we’ll email you how it did: how many times people saw your block, where, and how many clicked through.', '',
         `Your block: ${s.name || business}: ${s.text || ''} ${href ? `(${s.cta || 'Learn more'}: ${href})` : ''}`.trim(), '',
         `Want to change the wording or link before it goes live? Reply to this email. ${receipt}`,

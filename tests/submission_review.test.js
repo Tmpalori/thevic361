@@ -436,3 +436,83 @@ describe('paid Vic\'s Picks in the review', () => {
   });
 });
 
+describe('paid picks and approvals that aren\'t live yet', () => {
+  const ORDER = (extra = {}) => ({
+    id: 'ord1', kind: 'featured', status: 'paid', email: 'pat@example.com', business: 'Pat Co', amount: 4900,
+    created_at: NOW.toISOString(), paid_at: NOW.toISOString(), submission_id: 'p1',
+    event: { date: '2026-10-10', name: 'FALL CRAFT FAIR!!!', time: '9:00 AM', venue: 'Community Center' }, ...extra
+  });
+  let notes;
+  const paidRow = (extra = {}) => row('p1', { source: 'paid-feature', submitter_name: 'Pat Co', ...extra });
+  const reminders = () => notes.filter(n => /Vic’s Picks? (isn|aren)’t on the site/.test(n.title));
+  async function startPaid(extra = {}) {
+    notes = [];
+    await startApp({
+      slack: { notify: m => notes.push(m), alert: () => {} },
+      stripeSecretKey: 'sk_test', stripeWebhookSecret: 'whsec_test',
+      stripe: { createCheckoutSession: async () => ({}), expireCheckoutSession: async () => ({}) }, ...extra
+    });
+  }
+  // Publishing fails (the database write times out) until the returned
+  // function is called.
+  function breakPublishing() {
+    const real = store.setPublished.bind(store);
+    store.setPublished = async () => { throw new Error('statement timeout'); };
+    return () => { store.setPublished = real; };
+  }
+
+  it('reminds before the Monday newsletter that promised a star, not only 2 days before the pick', async () => {
+    // Bought Thursday Oct 8 for Saturday Oct 17: promised a star in Monday Oct 12's issue.
+    const clock = new Date('2026-10-11T15:00:00Z'); // Sunday
+    await startPaid({ now: () => clock });
+    const bought = '2026-10-08T15:00:00Z';
+    await store.saveSponsorOrder(ORDER({ created_at: bought, paid_at: bought, event: { ...ORDER().event, date: '2026-10-17' } }));
+    await store.insert(paidRow({ created_at: bought, payload: { ...PAYLOAD, date: '2026-10-17' } }));
+    await pending();
+    expect(reminders()).toHaveLength(1);
+    expect(reminders()[0].text).toMatch(/2026-10-17/);
+  });
+
+  it('a refunded pick loses the paid privileges: no softened review, no reminders', async () => {
+    await startPaid();
+    const earlier = new Date(NOW.getTime() - 3600 * 1000).toISOString();
+    await store.saveSponsorOrder(ORDER({ status: 'refunded' }));
+    await store.insert(paidRow({ created_at: earlier, payload: { ...PAYLOAD, date: '2026-10-06' } }));
+    const body = await (await pending()).json();
+    expect(body.submissions.find(s => s.id === 'p1').paid).toBe(false);
+    expect(reminders()).toHaveLength(0);
+    const r = await (await review([{ id: 'p1', decision: 'reject', reason: 'spam' }])).json();
+    expect(r.done[0].decision).toBe('reject');
+  });
+
+  it('an approval whose publish failed is published and emailed on a later run', async () => {
+    await startApp();
+    await store.insert(row('s1'));
+    const up = breakPublishing();
+    const body = await (await review([{ id: 's1', decision: 'approve', cleaned: CLEAN }])).json();
+    expect(body.published).toBe(false);
+    expect(sent).toHaveLength(0);
+    expect((await store.get('s1')).ai_review.live_pending).toBeTruthy();
+    up();
+    await pending();
+    expect((await store.getPublished()).events.map(e => e.name)).toEqual(['Fall Craft Fair']);
+    expect(sent.map(m => m.key)).toEqual(['vic361-submission-live-s1']);
+    expect((await store.get('s1')).ai_review).toMatchObject({ live_pending: null, live: true });
+    await pending();
+    expect(sent).toHaveLength(1);
+  });
+
+  it('a paid pick approved but not published yet is still reminded about near its date', async () => {
+    await startPaid();
+    const earlier = new Date(NOW.getTime() - 3600 * 1000).toISOString();
+    await store.saveSponsorOrder(ORDER());
+    await store.insert(paidRow({ created_at: earlier, payload: { ...PAYLOAD, date: '2026-10-06' } }));
+    breakPublishing();
+    await review([{ id: 'p1', decision: 'approve', cleaned: CLEAN }]);
+    expect((await store.get('p1')).status).toBe('approved');
+    await pending();
+    expect(reminders()).toHaveLength(1);
+    expect(reminders()[0].text).toMatch(/publishing it failed/);
+  });
+});
+

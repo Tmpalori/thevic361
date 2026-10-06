@@ -42,7 +42,11 @@ export function slackConfig(env = process.env, overrides = {}) {
   };
 }
 
-export function createSlack(config, { fetchImpl = globalThis.fetch, nowFn = () => Date.now() } = {}) {
+// A hung Slack must not hold a caller (the contact form awaits notify) for
+// undici's default 300 s; past this a post counts as failed.
+const POST_TIMEOUT_MS = 8000;
+
+export function createSlack(config, { fetchImpl = globalThis.fetch, nowFn = () => Date.now(), timeoutMs = POST_TIMEOUT_MS } = {}) {
   const lastAlert = new Map();
 
   // Configs built by hand (tests) may only carry url.
@@ -56,7 +60,8 @@ export function createSlack(config, { fetchImpl = globalThis.fetch, nowFn = () =
       const res = await fetchImpl(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(blocks ? { text, blocks } : { text })
+        body: JSON.stringify(blocks ? { text, blocks } : { text }),
+        signal: AbortSignal.timeout(timeoutMs)
       });
       if (!res.ok) console.warn('[slack] HTTP', res.status);
       return res.ok;

@@ -11,6 +11,10 @@
  */
 
 const SITEVERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+// Without a timeout a slow Cloudflare holds the visitor's form request open
+// for undici's default 300 s. Past this it counts as a network error, so
+// the form answers (and the visitor can retry) instead of freezing.
+const TIMEOUT_MS = 8000;
 
 export async function verifyTurnstile(token, opts = {}) {
   const secret = opts.secret ?? process.env.TURNSTILE_SECRET_KEY;
@@ -33,12 +37,14 @@ export async function verifyTurnstile(token, opts = {}) {
     res = await fetchImpl(SITEVERIFY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
+      body: body.toString(),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS)
     });
   } catch (err) {
     return { ok: false, error: 'network-error', detail: err.message };
   }
   let json;
+  // The body read is covered by the same signal.
   try { json = await res.json(); } catch (_) { json = null; }
   if (!json || !json.success) {
     return { ok: false, error: 'verification-failed', codes: json && json['error-codes'] };

@@ -5,11 +5,21 @@ Reads SLACK_WEBHOOK_URL (repo secret). Unset means do nothing, and a Slack
 failure never fails the job: a notification must not turn a green run red.
 
     python3 scripts/slack_notify.py "🚨 Weekly collect failed" [--link URL]
+
+The text is sent as mrkdwn as given, so callers can include links; run
+anything that came from outside (event names, AI text) through escape().
 """
 import json
 import os
 import sys
 import urllib.request
+
+
+def escape(text):
+    """Text safe to drop into Slack mrkdwn: &, < and > are control characters
+    there (a name like "Fest <!channel>" would ping everyone or break a
+    link), so they go as entities. Same as slackEscape in server/slack.js."""
+    return str(text if text is not None else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def main(argv):

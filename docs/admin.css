@@ -964,6 +964,7 @@ code {
 }
 .source-card__status.is-ok { color: var(--admin-success); border-color: var(--admin-success); }
 .source-card__status.is-empty { color: var(--admin-warn); border-color: var(--admin-warn); }
+.source-card__status.is-partial { color: var(--admin-warn); border-color: var(--admin-warn); }
 .source-card__status.is-error { color: var(--admin-danger); border-color: var(--admin-danger); }
 .source-card__status.is-unknown { color: var(--admin-muted); }
 .source-card__message {

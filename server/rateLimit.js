@@ -6,6 +6,14 @@
  * deliberately small.
  */
 
+import { isIP } from 'node:net';
+
+// Keys that are client addresses go through ipKey, so every limiter keys an
+// IPv6 client on its /64 even when the caller passes the raw req.ip (the
+// contact, newsletter and sponsor forms do). Other keys (an email address,
+// 'all', an already-keyed "/64") pass through unchanged.
+const normKey = key => (typeof key === 'string' && isIP(key) ? ipKey(key) : key);
+
 export function createRateLimiter({ windowMs, max } = {}) {
   const w = windowMs ?? 60 * 1000;
   const m = max ?? 5;
@@ -21,7 +29,8 @@ export function createRateLimiter({ windowMs, max } = {}) {
     }
   }
 
-  function check(key) {
+  function check(rawKey) {
+    const key = normKey(rawKey);
     const now = Date.now();
     sweep(now);
     const cutoff = now - w;
@@ -37,7 +46,8 @@ export function createRateLimiter({ windowMs, max } = {}) {
 
   // Would check() refuse this key right now? Records nothing, so failures
   // can be counted apart from attempts (the login and admin-token caps).
-  function peek(key) {
+  function peek(rawKey) {
+    const key = normKey(rawKey);
     const now = Date.now();
     const arr = (buckets.get(key) || []).filter(t => t > now - w);
     if (arr.length >= m) return { ok: false, retryAfter: Math.ceil((arr[0] + w - now) / 1000) };

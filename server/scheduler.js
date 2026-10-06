@@ -11,7 +11,8 @@
  *   social-kit         daily 8:47 AM dispatch social-kit.yml (scheduled=true)
  *   sponsor-reports    daily 9:00 AM sponsors.sendSponsorReports(now), if it exists
  *   submission-review  every 15 min  dispatch submission-review.yml
- *   health             hourly        database, upcoming events, collector freshness
+ *   health             hourly        retry a missed boot auto-publish, then check the
+ *                                    database, upcoming events, collector freshness
  *
  * Each daily/weekly job runs once per slot (its Central date). The claim is
  * a row in the store (scheduler_runs), taken atomically, so a restart or the
