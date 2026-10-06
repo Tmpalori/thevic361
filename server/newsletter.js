@@ -30,7 +30,8 @@
 
 import crypto from 'node:crypto';
 import {
-  SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem
+  SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem,
+  sponsorLinkUrl
 } from './seo.js';
 
 const RESEND_API = 'https://api.resend.com';

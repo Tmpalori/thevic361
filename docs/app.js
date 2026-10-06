@@ -10,30 +10,8 @@
     return '<svg class="ico" aria-hidden="true" focusable="false"><use href="icons.svg#i-' + key + '"></use></svg>';
   }
 
-  // ─── DARK MODE TOGGLE ───
-  const toggle = document.querySelector('[data-theme-toggle]');
-  const root = document.documentElement;
-  let currentTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  root.setAttribute('data-theme', currentTheme);
-  updateToggleIcon();
-
-  if (toggle) {
-    toggle.addEventListener('click', function () {
-      currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
-      root.setAttribute('data-theme', currentTheme);
-      toggle.setAttribute('aria-label', 'Switch to ' + (currentTheme === 'dark' ? 'light' : 'dark') + ' mode');
-      updateToggleIcon();
-    });
-  }
-
-  function updateToggleIcon() {
-    if (!toggle) return;
-    if (currentTheme === 'dark') {
-      toggle.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
-    } else {
-      toggle.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-    }
-  }
+  // Dark mode: the toggle is handled by the inline THEME_SCRIPT in the page
+  // head (server/seo.js), which saves the choice for every page.
 
   // ─── STICKY HEADER SHADOW ───
   const header = document.getElementById('site-header');
@@ -84,6 +62,32 @@
     return /^https?:\/\/[^\s"'<>`]+$/i.test(u) ? escHtml(u) : '';
   }
 
+  // Same as formatTime() in server/seo.js: "04:00PM-6PM" -> "4:00 PM – 6 PM".
+  // Display only; ev.time itself is left alone.
+  function formatTime(time) {
+    if (typeof time !== 'string') return '';
+    return time.trim()
+      .replace(/(^|[^\d:])0(\d)(?=(?::\d{2})?\s*[ap]\.?\s*m\b)/gi, '$1$2')
+      .replace(/(\d)\s*([ap])\.?\s*m\b\.?/gi, function (m, d, ap) { return d + ' ' + ap.toUpperCase() + 'M'; })
+      .replace(/([\dM])\s*(?:[–—-]+|\bto\b)\s*(?=\d)/g, '$1 – ');
+  }
+
+  // Sponsor clicks carry utm_* tags for the sponsor's own analytics, like
+  // sponsorLinkUrl() in server/seo.js. href is already safeHref()-checked.
+  function sponsorLink(url) {
+    var href = safeHref(url);
+    if (!href || /[?&](amp;)?utm_/i.test(href)) return href;
+    try {
+      var u = new URL(url.trim());
+      u.searchParams.set('utm_source', 'thevic361');
+      u.searchParams.set('utm_medium', 'sponsor');
+      u.searchParams.set('utm_campaign', 'weekly-sponsor');
+      return safeHref(u.toString()) || href;
+    } catch (e) {
+      return href;
+    }
+  }
+
   // ─── RENDER SINGLE EVENT ───
   function renderEvent(ev) {
     var iconHtml = renderIcons(ev.icons);
@@ -119,7 +123,7 @@
       '<span class="event-icons" aria-hidden="true">' + iconHtml + '</span>' +
       '<div class="event-details">' +
         (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
-        (ev.time ? '<span class="event-time">' + escHtml(ev.time) + '</span> ' : '') +
+        (ev.time ? '<span class="event-time">' + escHtml(formatTime(ev.time)) + '</span> ' : '') +
         '<span class="event-name">' + nameHtml + '</span>' +
         (venuePart ? '<span class="event-venue">' + escHtml(venuePart) + '</span>' : '') +
         freeBadge +
@@ -136,6 +140,9 @@
     var monthDay = formatMonthDay(date);
 
     var todayBadgeHtml = today ? ' <span class="today-badge">Today</span>' : '';
+    // A day that's already over is folded to its header so the list opens
+    // on today (same markup as renderDay in server/seo.js).
+    var past = dateStr < toLocalDateStr(new Date());
 
     var eventsForDay = events.filter(function (e) { return e.date === dateStr; });
     // Sort by time ascending (events without time go last)
@@ -157,18 +164,23 @@
 
     var bodyHtml;
     if (eventsForDay.length === 0) {
-      bodyHtml = '<div class="empty-state">Nothing listed yet — know something happening? <a href="#submit">Submit an event.</a></div>';
+      bodyHtml = '<div class="empty-state">Nothing listed yet — know something happening? <a href="/submit">Submit an event.</a></div>';
     } else {
       bodyHtml = '<ul class="event-list" role="list">' +
         eventsForDay.map(renderEvent).join('') +
       '</ul>';
     }
 
+    var headHtml = '<h2 class="day-name">' + dayName + todayBadgeHtml + '</h2>' +
+      '<span class="day-date">' + monthDay + '</span>';
+    if (past) {
+      return '<section class="day-section day-section--past" id="day-' + idx + '"><details>' +
+        '<summary class="day-header">' + headHtml + '<span class="past-count">' +
+          (eventsForDay.length === 1 ? '1 event' : eventsForDay.length + ' events') + '</span></summary>' +
+        bodyHtml + '</details></section>';
+    }
     return '<section class="day-section" id="day-' + idx + '">' +
-      '<div class="day-header">' +
-        '<h2 class="day-name">' + dayName + todayBadgeHtml + '</h2>' +
-        '<span class="day-date">' + monthDay + '</span>' +
-      '</div>' +
+      '<div class="day-header">' + headHtml + '</div>' +
       bodyHtml +
     '</section>';
   }
@@ -259,9 +271,9 @@
     if (!sponsor) return '';
     var ctaHtml = '';
     if (sponsor.cta) {
-      var sponsorHref = safeHref(sponsor.url);
+      var sponsorHref = sponsorLink(sponsor.url);
       if (sponsorHref) {
-        ctaHtml = '<a href="' + sponsorHref + '" class="btn btn--outline sponsor-cta" target="_blank" rel="noopener noreferrer">' + escHtml(sponsor.cta) + '</a>';
+        ctaHtml = '<a href="' + sponsorHref + '" class="btn btn--outline sponsor-cta" target="_blank" rel="sponsored noopener">' + escHtml(sponsor.cta) + '</a>';
       } else {
         ctaHtml = '<span class="btn btn--outline" style="cursor:default; opacity:0.6">' + escHtml(sponsor.cta) + '</span>';
       }
@@ -498,8 +510,9 @@
         if (!empty) {
           empty = document.createElement('div');
           empty.className = 'empty-state filter-empty';
-          empty.textContent = 'Nothing in this category today.';
-          sec.appendChild(empty);
+          empty.textContent = sec.querySelector('.today-badge')
+            ? 'Nothing in this category today.' : 'Nothing in this category on this day.';
+          (sec.querySelector('details') || sec).appendChild(empty);
         }
         empty.hidden = false;
       } else if (empty) {
@@ -522,7 +535,10 @@
       applyFilter: applyFilter,
       escHtml: escHtml,
       safeHref: safeHref,
-      renderEvent: renderEvent
+      sponsorLink: sponsorLink,
+      formatTime: formatTime,
+      renderEvent: renderEvent,
+      renderSponsor: renderSponsor
     };
   }
 
