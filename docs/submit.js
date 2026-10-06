@@ -247,16 +247,19 @@
       return;
     }
 
-    // Success branch. Offer the paid upgrade with this event prefilled
-    // (server/sponsors.js reads these query fields into the checkout form).
+    // Success branch. Offer the paid upgrade with this event prefilled:
+    // the link names the new submission and server/sponsors.js fills in the
+    // form, so no contact details end up in the URL. A duplicate has no id
+    // of ours; prefill just the event.
     const promo = $('#thanks-promo-link');
     if (promo) {
       const q = new URLSearchParams({ package: 'featured' });
-      const add = (k, v) => { if (v) q.set(k, String(v).slice(0, 2000)); };
-      add('event_name', body.name); add('date', body.date); add('time', body.time);
-      add('venue', body.venue); add('address', body.address); add('description', body.description);
-      add('url', body.url); add('email', body.submitter_email);
-      add('business', [body.submitter_first_name, body.submitter_last_name].filter(Boolean).join(' '));
+      if (json.id) q.set('from', json.id);
+      else {
+        const add = (k, v) => { if (v) q.set(k, String(v).slice(0, 2000)); };
+        add('event_name', body.name); add('date', body.date); add('time', body.time);
+        add('venue', body.venue); add('address', body.address); add('url', body.url);
+      }
       promo.href = '/advertise/checkout?' + q.toString();
     }
     const emailNote = $('#thanks-email');

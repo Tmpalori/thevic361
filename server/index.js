@@ -7,7 +7,8 @@
  *     stand alone without GitHub Pages — DNS cutover is a separate decision)
  *
  * Hard rules:
- *   - Public submissions never auto-publish; everything goes to a review queue.
+ *   - Public submissions go to a review queue; the AI review
+ *     (server/submissionReview.js) publishes the clean ones and flags the rest.
  *   - When TURNSTILE_SECRET_KEY is set, missing/invalid tokens are rejected.
  *   - Submitter email + IP never leave the admin scope.
  */
@@ -18,7 +19,7 @@ import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf } from './db.js';
+import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, withoutSubmitter } from './db.js';
 import { validateSubmission, validateEventEdit, checkBotSignals } from './validate.js';
 import { verifyTurnstile } from './turnstile.js';
 import { createRateLimiter } from './rateLimit.js';
@@ -29,11 +30,12 @@ import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys } from './eventcheck.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
-import { createMailer, renderSubmissionReceived } from './notify.js';
+import { createMailer, renderSubmissionReceived, renderSubmissionLive } from './notify.js';
+import { registerSubmissionReview } from './submissionReview.js';
 import { stripeConfig, createStripe, createSponsors, samplePreviews } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
-import { createAutoPublish } from './autopublish.js';
+import { createAutoPublish, unpublishEvent } from './autopublish.js';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import {
@@ -165,6 +167,8 @@ export async function createApp(opts = {}) {
   const submitLimiterDaily = opts.submitLimiterDaily || createRateLimiter({
     windowMs: 24 * 60 * 60 * 1000, max: 30
   });
+  // "We got it" emails per recipient address, whatever IP sends the form.
+  const receiptLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 3 });
 
   // ─── Sponsor checkout (Stripe; see server/sponsors.js) ───
   // Created here because the Stripe webhook needs the raw body and so must
@@ -261,6 +265,12 @@ export async function createApp(opts = {}) {
     res.json({ ok: true, storage: storeBundle.kind });
   });
 
+  // Vic's Pick checkout prefilled with a submission's event and contact
+  // (by its id; server/sponsors.js fills them in, so none of it is in the URL).
+  function upgradeUrlFor(row) {
+    return `${siteUrl}/advertise/checkout?package=featured&from=${encodeURIComponent(row.id)}`;
+  }
+
   // ─── Public: submit ───
   app.post('/api/submissions', async (req, res) => {
     const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -307,8 +317,7 @@ export async function createApp(opts = {}) {
         ok: true,
         queued: false,
         duplicate: true,
-        message: 'A matching submission is already in our review queue.',
-        id: dup.id
+        message: 'A matching submission is already in our review queue.'
       });
     }
 
@@ -335,15 +344,11 @@ export async function createApp(opts = {}) {
       fields: [['Event', ev.name], ['When', [ev.date, ev.time].filter(Boolean).join(' ')], ['Venue', ev.venue],
         ['From', [row.submitter_name, row.submitter_email].filter(Boolean).join(' · ')]],
       text: ev.description ? ev.description.slice(0, 300) : '',
-      link: `${siteUrl}/admin.html`, footer: 'Review it in the Submissions tab'
+      link: `${siteUrl}/admin.html`, footer: 'The AI review will publish it or flag it for you within the hour'
     });
     // Tell them it worked and what happens next (no-op without Resend).
-    if (row.submitter_email) {
-      const q = new URLSearchParams({ package: 'featured' });
-      for (const [k, val] of [['event_name', ev.name], ['date', ev.date], ['time', ev.time], ['venue', ev.venue],
-        ['address', ev.address], ['description', ev.description], ['url', ev.url], ['email', row.submitter_email],
-        ['business', row.submitter_name]]) if (val) q.set(k, String(val).slice(0, 2000));
-      const mail = renderSubmissionReceived(ev, { siteUrl, address: newsletter.address, upgradeUrl: `${siteUrl}/advertise/checkout?${q}` });
+    if (row.submitter_email && receiptLimiter.check(row.submitter_email.toLowerCase()).ok) {
+      const mail = renderSubmissionReceived(ev, { siteUrl, address: newsletter.address, upgradeUrl: upgradeUrlFor(row) });
       mailer.send(row.submitter_email, mail, `vic361-submission-${row.id}`);
     }
     return res.status(201).json({ ok: true, queued: true, id: row.id });
@@ -446,7 +451,17 @@ export async function createApp(opts = {}) {
     patch.review_history = history;
 
     const updated = await store.update(req.params.id, patch);
-    res.json({ ok: true, submission: updated });
+    // Un-approving takes it off the site too (it may have gone live through
+    // auto-publish or the AI review); otherwise it would stay published.
+    let unpublished = false;
+    if (row.status === 'approved' && patch.status && patch.status !== 'approved') {
+      try {
+        unpublished = await unpublishEvent(store, eventKeyOf(row.payload || {}), (opts.now || (() => new Date()))());
+      } catch (err) {
+        console.warn('[admin] unpublish after un-approve failed:', err.message);
+      }
+    }
+    res.json({ ok: true, submission: updated, unpublished });
   });
 
   // ─── Admin: candidates fetch ──────────────────────────────────────────
@@ -505,7 +520,7 @@ export async function createApp(opts = {}) {
       ));
       for (const r of approved) {
         const ev = {
-          ...r.payload,
+          ...withoutSubmitter(r.payload),
           _source: r.source || 'submission',
           _source_id: r.id,
           _submitter_kind: r.submitter_kind || null
@@ -615,6 +630,18 @@ export async function createApp(opts = {}) {
     if (!events) {
       return res.status(400).json({ ok: false, error: 'bad-payload', message: 'events[] required' });
     }
+    // The editor sends the version of the live list it started from. If
+    // something published since (an AI-approved submission, a collect run),
+    // publishing this older picture would silently take those events down,
+    // so refuse; the editor reloads the live list and keeps its changes.
+    if (typeof body.based_on === 'string' && body.based_on) {
+      let current = null;
+      try { current = await store.getPublished(); } catch (_) { current = null; }
+      if (current && current.last_updated && current.last_updated !== body.based_on) {
+        return res.status(409).json({ ok: false, error: 'stale',
+          message: 'New events went live since you opened this page. The list has been reloaded with your changes kept; check it and publish again.' });
+      }
+    }
 
     // Carry-forward top-level extras (new_and_notable, sponsor, …) so an
     // events-only Save & Publish doesn't drop them. Priority order:
@@ -666,6 +693,7 @@ export async function createApp(opts = {}) {
     const result = {
       ok: true,
       published: events.length,
+      last_updated: payload.last_updated,
       destinations: { local: { ok: true } }
     };
 
@@ -890,7 +918,7 @@ export async function createApp(opts = {}) {
   app.get('/api/admin/approved-events', requireAdmin, async (req, res) => {
     const rows = await store.list({ status: 'approved' });
     let events = rows.map(r => ({
-      ...r.payload,
+      ...withoutSubmitter(r.payload),
       _source: r.source || 'submission',
       _source_id: r.id,
       _submitter_kind: r.submitter_kind || null
@@ -984,7 +1012,7 @@ export async function createApp(opts = {}) {
         // between publishes shows up without another Save & Publish.
         // Events the event check hid stay published but off the site
         // (server/eventcheck.js matches them by original key).
-        return { ...published, events: stripKeys(await visibleFrom(published)), source: 'store' };
+        return { ...published, events: stripKeys(await visibleFrom(published)).map(withoutSubmitter), source: 'store' };
       }
     } catch (err) {
       console.warn('[events] published lookup failed:', err.message);
@@ -993,7 +1021,7 @@ export async function createApp(opts = {}) {
       const bundled = await readJsonFile(eventsFile);
       // The bundled copy can carry a `hidden` list too (Save & Publish
       // commits the whole payload), so a database outage hides the same.
-      return { ...bundled, events: stripKeys(visibleKeyed(bundled, [])), source: 'bundled' };
+      return { ...bundled, events: stripKeys(visibleKeyed(bundled, [])).map(withoutSubmitter), source: 'bundled' };
     } catch (err) {
       console.warn('[events] bundled events.json unreadable:', err.message);
       return { events: [], source: 'empty' };
@@ -1237,6 +1265,30 @@ export async function createApp(opts = {}) {
   app.post('/api/admin/auto-publish', requireAdmin, async (req, res, next) => {
     try { res.json(await autoPublish.run({ force: true })); } catch (err) { next(err); }
   });
+  // ─── AI review of free submissions (server/submissionReview.js) ───
+  registerSubmissionReview(app, {
+    store, slack, siteUrl,
+    nowFn: () => (opts.now || (() => new Date()))(),
+    secret: opts.submissionReviewSecret ?? (process.env.SUBMISSION_REVIEW_SECRET || process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || ''),
+    autoApprove: opts.submissionAutoApprove ?? process.env.SUBMISSION_AUTOAPPROVE !== '0',
+    publish: () => autoPublish.run({ force: true, quiet: true, submissionsOnly: true }),
+    // True when the event is on the public site; then "You're live" goes
+    // out with a link to its page.
+    async onApproved(row) {
+      const key = eventKeyOf(row.payload);
+      const live = ((await getPublicPayload()).events || []).find(e => eventKeyOf(e) === key);
+      if (!live) return false;
+      if (row.submitter_email) {
+        const mail = renderSubmissionLive(row.payload, {
+          siteUrl, address: newsletter.address, upgradeUrl: upgradeUrlFor(row),
+          pageUrl: live.page ? `${siteUrl}${live.page}` : ''
+        });
+        await mailer.send(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
+      }
+      return true;
+    }
+  });
+
   const autoOnBoot = opts.autoPublish ??
     (process.env.AUTO_PUBLISH !== '0' && process.env.RAILWAY_ENVIRONMENT_NAME === 'production');
   if (autoOnBoot) {

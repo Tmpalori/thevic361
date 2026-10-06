@@ -180,6 +180,21 @@
     return '<div class="submission-edit__field">' + label + control + '</div>';
   }
 
+  // What the AI review (server/submissionReview.js) decided, and why.
+  const AI_LABEL = { approve: 'Approved and published', flag: 'Needs your look', reject: 'Turned away', duplicate: 'Already listed' };
+  function aiBlock(row) {
+    const ai = row.ai_review;
+    if (!ai || !ai.decision) return '';
+    const changed = (ai.changes || []).length
+      ? ' · tidied ' + escapeHtml(ai.changes.join(', ')) +
+        (ai.original && ai.original.name && ai.original.name !== (row.payload || {}).name
+          ? ' (was “' + escapeHtml(ai.original.name) + '”)' : '')
+      : '';
+    return '<p class="submission-card__ai submission-card__ai--' + escapeHtml(ai.decision) + '">' +
+      '<strong>AI review: ' + escapeHtml(AI_LABEL[ai.decision] || ai.decision) + '</strong>' +
+      (ai.reason ? ' · ' + escapeHtml(ai.reason) : '') + changed + '</p>';
+  }
+
   function renderRow(row) {
     const p = row.payload || {};
     const cats = (p.icons || []).join(', ');
@@ -229,6 +244,7 @@
         (p.description ? '<p class="submission-card__desc">' + escapeHtml(p.description) + '</p>' : '') +
         (p.url ? '<p><a href="' + escapeHtml(httpUrl(p.url)) + '" target="_blank" rel="noopener">' +
           escapeHtml(p.url) + '</a></p>' : '') +
+        aiBlock(row) +
         submitterBlock +
         editBlock +
         (editing ? '' : ('<div class="submission-card__actions">' +

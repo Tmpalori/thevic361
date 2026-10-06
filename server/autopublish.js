@@ -29,7 +29,8 @@ import { sameEvent } from './sponsors.js';
 // Internal collector fields (_source, _also_from...) aren't public.
 function publicFields(ev) {
   const out = {};
-  for (const [k, v] of Object.entries(ev || {})) if (!k.startsWith('_')) out[k] = v;
+  // Underscore fields are internal; submitter_* is the submitter's contact.
+  for (const [k, v] of Object.entries(ev || {})) if (!k.startsWith('_') && !k.startsWith('submitter_')) out[k] = v;
   return out;
 }
 
@@ -70,18 +71,45 @@ export function mergeNotable(fresh, prior, today) {
 // up before it may take any of them down.
 const REPLACE_MIN_RATIO = 0.6;
 
-export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, slack = null, siteUrl, archiveEvents = () => {} }) {
-  async function run({ force = false } = {}) {
-    let candidates;
-    try {
-      candidates = await readJsonFile(candidatesFile);
-    } catch (err) {
-      return { ok: false, error: 'no-candidates', message: err.message };
+// Take one event off the published list (an approved submission the admin
+// rejected) and remember it as removed so auto-publish doesn't put it back.
+export async function unpublishEvent(store, key, now) {
+  const prior = await store.getPublished();
+  if (!prior || !Array.isArray(prior.events)) return false;
+  const events = prior.events.filter(ev => eventKeyOf(ev) !== key);
+  if (events.length === prior.events.length) return false;
+  const state = prior.auto_publish || {};
+  await store.setPublished({
+    ...prior,
+    last_updated: now.toISOString(),
+    events,
+    auto_publish: {
+      ...state,
+      keys: (state.keys || []).filter(k => k !== key),
+      rejected: [...new Set([...(state.rejected || []), key])]
     }
-    const from = candidates && candidates.last_updated;
-    const fresh = Array.isArray(candidates && candidates.events) ? candidates.events : [];
+  });
+  return true;
+}
+
+export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, slack = null, siteUrl, archiveEvents = () => {} }) {
+  // submissionsOnly: add newly approved submissions and nothing else (the AI
+  // submission review). The collector's candidates are left out entirely,
+  // so it never publishes them when AUTO_PUBLISH=0 and never re-adds or
+  // retires anything on its own.
+  async function run({ force = false, quiet = false, submissionsOnly = false } = {}) {
+    let candidates = null;
+    if (!submissionsOnly) {
+      try {
+        candidates = await readJsonFile(candidatesFile);
+      } catch (err) {
+        return { ok: false, error: 'no-candidates', message: err.message };
+      }
+    }
     const prior = (await store.getPublished()) || {};
     const state = prior.auto_publish || {};
+    const from = submissionsOnly ? (state.from || null) : candidates && candidates.last_updated;
+    const fresh = !submissionsOnly && Array.isArray(candidates && candidates.events) ? candidates.events : [];
     if (!force && from && state.from === from && state.rules === AUTO_PUBLISH_RULES) {
       return { ok: true, skipped: 'already-published', from };
     }
@@ -104,7 +132,7 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     }
     const freshUpcoming = fresh.filter(upcoming);
     const ours = priorUpcoming.filter(ev => autoKeys.has(eventKeyOf(ev)));
-    const healthy = freshUpcoming.length >= ours.length * REPLACE_MIN_RATIO;
+    const healthy = !submissionsOnly && freshUpcoming.length >= ours.length * REPLACE_MIN_RATIO;
     const stillFound = ev => freshUpcoming.some(f => eventKeyOf(f) === eventKeyOf(ev) || sameEvent(f, ev));
     const retired = edited && healthy
       ? ours.filter(ev => !edited.has(eventKeyOf(ev)) && !stillFound(ev))
@@ -112,7 +140,7 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     const retiredKeys = new Set(retired.map(eventKeyOf));
     const kept = priorUpcoming.filter(ev => !retiredKeys.has(eventKeyOf(ev)));
     const keptKeys = new Set(kept.map(eventKeyOf));
-    if (!healthy && ours.length) {
+    if (!healthy && ours.length && !submissionsOnly) {
       console.warn(`[auto-publish] new run has ${freshUpcoming.length} upcoming events vs ${ours.length} auto-published; retiring nothing`);
     }
 
@@ -151,7 +179,7 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       ...extras,
       // Candidates from before New & Notable was automated have no list:
       // keep whatever is published.
-      ...(Array.isArray(candidates.new_and_notable)
+      ...(candidates && Array.isArray(candidates.new_and_notable)
         ? { new_and_notable: mergeNotable(candidates.new_and_notable, extras.new_and_notable, today) }
         : {}),
       last_updated: now,
@@ -161,7 +189,9 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
         at: now,
         keys: [...new Set([...(state.keys || []).filter(k => stillPresent.has(k)), ...added])],
         rejected: [...rejected],
-        rules: AUTO_PUBLISH_RULES
+        // A submissions-only run doesn't count as publishing these
+        // candidates; the next boot still publishes them as usual.
+        rules: submissionsOnly ? (state.rules ?? null) : AUTO_PUBLISH_RULES
       }
     };
     await store.setPublished(payload);
@@ -169,7 +199,7 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
 
     const result = { ok: true, published: events.length, added: added.length, kept: kept.length, retired: retired.length, skipped_removed: skippedRejected, from };
     console.log('[auto-publish]', JSON.stringify(result));
-    if (slack) {
+    if (slack && !quiet) {
       slack.notify({
         title: `🗓️ Published ${events.length} events automatically`,
         fields: [['New this run', added.length], ['Kept from before', kept.length],

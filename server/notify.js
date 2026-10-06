@@ -50,32 +50,66 @@ function eventTable(ev, siteUrl) {
 
 // ─── Free submission received ────────────────────────────────────────────
 
+// Anyone can type any address into the public form, so this email carries
+// none of the submitter's free text beyond a shortened event name (escaped):
+// a fixed subject and no description, so it can't be used to mail strangers
+// a message of the sender's choosing. Index.js also caps it per address.
 export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
-  const name = ev.name || 'your event';
+  const short = String(ev.name || '').slice(0, 80);
+  const name = short ? (short.length < String(ev.name).length ? `${short}…` : short) : 'your event';
+  ev = { ...ev, name, description: '', url: '' };
   const bodyHtml =
     p(`Thanks for sending in <strong>${escHtml(name)}</strong>. It's in our review queue. Here's what you sent:`) +
     eventTable(ev, siteUrl) +
     `<h2 style="font-size:18px;margin:20px 0 4px;">What happens next</h2>` +
     steps([
-      'We review every submission, usually within a day or two.',
+      'We review every submission. Most go live within the hour, and we’ll email you when it does; some need a closer look and take a day or two.',
       `If it's a fit, it goes on <a href="${siteUrl}" style="color:${C.accent};">thevic361.com</a> and can show up in the Monday newsletter and our social posts.`,
       'Free listings aren’t guaranteed a spot, and we may tidy up the wording.'
     ]) +
     box(`<strong>Want it guaranteed and pinned to the top of its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`) +
     p('Need to change a detail? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
   return {
-    subject: `We got your event: ${name}`,
+    subject: 'We got your event submission',
     html: emailShell({ title: 'Thanks, we got it!', preheader: `${name} is in our review queue. Here's what happens next.`, bodyHtml, siteUrl,
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
       `Thanks for sending in "${name}". It's in our review queue.`, '',
       `${ev.date || ''} ${ev.time || ''} · ${ev.venue || ''}`.trim(), '',
       'What happens next:',
-      '1. We review every submission, usually within a day or two.',
+      '1. We review every submission. Most go live within the hour, and we’ll email you when it does; some need a closer look and take a day or two.',
       `2. If it's a fit, it goes on ${siteUrl} and can show up in the Monday newsletter and our social posts.`,
       '3. Free listings aren’t guaranteed a spot, and we may tidy up the wording.', '',
       `Want it guaranteed and pinned to the top of its day? Make it a Vic's Pick: ${upgradeUrl}`, '',
       'Need to change a detail? Reply to this email with the fix.',
+      contactText(siteUrl)
+    ].join('\n')
+  };
+}
+
+// ─── Free submission approved and live ───────────────────────────────────
+
+export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl }) {
+  const name = ev.name || 'your event';
+  const link = pageUrl || siteUrl;
+  const bodyHtml =
+    p(`Good news: <strong>${escHtml(name)}</strong> is now on The Vic 361.`) +
+    eventTable(ev, siteUrl) +
+    `<div style="margin:16px 0;">${btn(link, 'See it on the site')}</div>` +
+    p('Share that link anywhere you promote the event. It can also show up in the Monday newsletter and our social posts.') +
+    box(`<strong>Want it pinned to the top of its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`) +
+    p('We may have tidied the wording a little. Something wrong? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
+  return {
+    subject: `You're live: ${name}`,
+    html: emailShell({ title: 'Your event is live!', preheader: `${name} is now on thevic361.com.`, bodyHtml, siteUrl,
+      footerHtml: contactFooter(siteUrl, address) }),
+    text: [
+      `Good news: "${name}" is now on The Vic 361.`, '',
+      `${ev.date || ''} ${ev.time || ''} · ${ev.venue || ''}`.trim(), '',
+      `See it: ${link}`,
+      'Share that link anywhere you promote the event. It can also show up in the Monday newsletter and our social posts.', '',
+      `Want it pinned to the top of its day? Make it a Vic's Pick: ${upgradeUrl}`, '',
+      'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.',
       contactText(siteUrl)
     ].join('\n')
   };

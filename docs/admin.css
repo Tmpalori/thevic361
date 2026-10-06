@@ -699,6 +699,16 @@ code {
   font-size: 0.95rem;
   color: var(--admin-text);
 }
+.submission-card__ai {
+  margin: 0 0 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border-left: 3px solid var(--admin-muted, #888);
+  font-size: 0.85rem;
+  color: var(--admin-text);
+}
+.submission-card__ai--approve { border-left-color: #2e9e5b; }
+.submission-card__ai--flag { border-left-color: #e0a100; }
+.submission-card__ai--reject, .submission-card__ai--duplicate { border-left-color: #c8483a; }
 .submission-card__submitter {
   font-size: 0.85rem;
   color: var(--admin-muted);
