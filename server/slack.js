@@ -46,8 +46,19 @@ export function slackConfig(env = process.env, overrides = {}) {
 // undici's default 300 s; past this a post counts as failed.
 const POST_TIMEOUT_MS = 8000;
 
+// Slack's answers that mean the webhook itself is dead (channel archived,
+// app removed, token revoked), not a hiccup: retrying never helps and every
+// later alert vanishes too, so these are remembered and shown in the admin
+// checklist and the hourly site check instead of only logged.
+const REFUSED_STATUSES = new Set([403, 404, 410]);
+const REFUSED_ERRORS = new Set(['no_service', 'channel_is_archived', 'channel_not_found',
+  'invalid_token', 'action_prohibited', 'no_active_hooks', 'team_disabled']);
+
 export function createSlack(config, { fetchImpl = globalThis.fetch, nowFn = () => Date.now(), timeoutMs = POST_TIMEOUT_MS } = {}) {
   const lastAlert = new Map();
+  // channel → { channel, status, error, at } for the last refused post;
+  // cleared by the next post that goes through on that channel.
+  const refusals = new Map();
 
   // Configs built by hand (tests) may only carry url.
   const urlFor = (channel) => (config.urls && config.urls[channel]) ||
@@ -63,8 +74,17 @@ export function createSlack(config, { fetchImpl = globalThis.fetch, nowFn = () =
         body: JSON.stringify(blocks ? { text, blocks } : { text }),
         signal: AbortSignal.timeout(timeoutMs)
       });
-      if (!res.ok) console.warn('[slack] HTTP', res.status);
-      return res.ok;
+      if (res.ok) {
+        refusals.delete(channel);
+        return true;
+      }
+      let error = '';
+      try { error = typeof res.text === 'function' ? String(await res.text()).trim().slice(0, 100) : ''; } catch { /* no body */ }
+      console.warn('[slack] HTTP', res.status, error);
+      if (REFUSED_STATUSES.has(res.status) || REFUSED_ERRORS.has(error)) {
+        refusals.set(channel, { channel, status: res.status, error, at: new Date(nowFn()).toISOString() });
+      }
+      return false;
     } catch (err) {
       console.warn('[slack] send failed:', err.message);
       return false;
@@ -94,5 +114,8 @@ export function createSlack(config, { fetchImpl = globalThis.fetch, nowFn = () =
     return notify({ title: `🚨 ${title}`, text: detail, link, footer: config.commit ? `deploy ${config.commit}` : '', channel: 'alerts' });
   }
 
-  return { enabled: config.enabled, notify, alert, post };
+  // Channels whose webhook Slack refused, most recent first.
+  const refused = () => [...refusals.values()].sort((a, b) => (a.at < b.at ? 1 : -1));
+
+  return { enabled: config.enabled, notify, alert, post, refused };
 }

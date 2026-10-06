@@ -2,7 +2,10 @@
 """Post a one-line message to Slack from a GitHub Actions step.
 
 Reads SLACK_WEBHOOK_URL (repo secret). Unset means do nothing, and a Slack
-failure never fails the job: a notification must not turn a green run red.
+hiccup (timeout, 5xx) never fails the job: a notification must not turn a
+green run red. A refused webhook (archived channel, removed app: HTTP
+403/404/410 or no_service, channel_is_archived, ...) exits 2 instead, since
+every later alert would vanish too; the red run makes GitHub email the owner.
 
     python3 scripts/slack_notify.py "🚨 Weekly collect failed" [--link URL]
 
@@ -12,7 +15,14 @@ anything that came from outside (event names, AI text) through escape().
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
+
+# Slack's answers meaning the webhook is dead, not busy (same list as
+# REFUSED_* in server/slack.js).
+REFUSED_STATUSES = {403, 404, 410}
+REFUSED_ERRORS = {"no_service", "channel_is_archived", "channel_not_found", "invalid_token",
+                  "action_prohibited", "no_active_hooks", "team_disabled"}
 
 
 def escape(text):
@@ -40,6 +50,17 @@ def main(argv):
                                  headers={"Content-Type": "application/json"})
     try:
         urllib.request.urlopen(req, timeout=15).read()
+    except urllib.error.HTTPError as e:
+        try:
+            error = e.read().decode("utf-8", "replace").strip()[:100]
+        except Exception:  # noqa: BLE001 - the body is only a detail
+            error = ""
+        if e.code in REFUSED_STATUSES or error in REFUSED_ERRORS:
+            print(f"::error::Slack refused the webhook (HTTP {e.code} {error}). The channel may be archived "
+                  "or the Slack app removed; alerts are not arriving. Make a new incoming webhook and "
+                  "update the SLACK_*_WEBHOOK_URL secret.")
+            return 2
+        print(f"Slack notification failed: HTTP {e.code} {error}")
     except Exception as e:  # noqa: BLE001 - best effort by design
         print(f"Slack notification failed: {e}")
     return 0

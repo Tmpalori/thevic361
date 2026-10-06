@@ -1948,6 +1948,10 @@ export async function createApp(opts = {}) {
   async function healthCheck(now) {
     const problems = {};
     if (missingDatabase) problems.nodb = NO_DATABASE;
+    // A dead webhook silences every later alert, so it is a problem of its
+    // own (shown in the admin checklist too; see slackRefusedText).
+    const slackDead = slackRefusedText();
+    if (slackDead) problems.slack = slackDead;
     let pub = null;
     try {
       pub = (await store.getPublished()) || {};
@@ -1984,6 +1988,16 @@ export async function createApp(opts = {}) {
     return { ok: true, problems: Object.keys(problems) };
   }
 
+  // Slack refused a post (archived channel, removed app): say which channel
+  // and when, or '' when every channel is fine. Fakes in tests may not
+  // track refusals.
+  function slackRefusedText() {
+    const list = typeof slack.refused === 'function' ? slack.refused() : [];
+    if (!list.length) return '';
+    return 'Slack refused alerts on ' + list.map(r => `${r.channel} (HTTP ${r.status}${r.error ? ` ${r.error}` : ''} at ${r.at})`).join(', ') +
+      '. The channel may be archived or the Slack app removed: make a new incoming webhook and update the SLACK_*_WEBHOOK_URL variable in Railway (and GitHub).';
+  }
+
   // ─── Admin home: setup checklist + at-a-glance numbers ───
   // Presence checks only; no secret value ever leaves the server. Things the
   // server can't see (GitHub Actions secrets) are listed as "check in GitHub".
@@ -1998,8 +2012,8 @@ export async function createApp(opts = {}) {
         fix: 'Set ADMIN_USERNAME, ADMIN_PASSWORD and ADMIN_SESSION_SECRET in Railway.' },
       { key: 'auto_publish', label: 'Auto-publish events', ok: env.AUTO_PUBLISH !== '0', level: 'required',
         fix: 'Remove AUTO_PUBLISH=0 from Railway.' },
-      { key: 'slack', label: 'Slack alerts', ok: slack.enabled, level: 'recommended',
-        fix: 'Set SLACK_WEBHOOK_URL in Railway (and as a GitHub secret) to get pings for breakage, sponsors and submissions. Optional: SLACK_SALES_WEBHOOK_URL, SLACK_ACTIVITY_WEBHOOK_URL and SLACK_ALERTS_WEBHOOK_URL send each kind to its own channel.' },
+      { key: 'slack', label: 'Slack alerts', ok: slack.enabled && !slackRefusedText(), level: 'recommended',
+        fix: slackRefusedText() || 'Set SLACK_WEBHOOK_URL in Railway (and as a GitHub secret) to get pings for breakage, sponsors and submissions. Optional: SLACK_SALES_WEBHOOK_URL, SLACK_ACTIVITY_WEBHOOK_URL and SLACK_ALERTS_WEBHOOK_URL send each kind to its own channel.' },
       { key: 'newsletter', label: 'Email newsletter (Resend)', ok: newsletter.enabled && Boolean(newsletter.address), level: 'recommended',
         fix: newsletter.enabled ? 'Set NEWSLETTER_ADDRESS (a mailing address is required by law in every email).' : 'Set RESEND_API_KEY and NEWSLETTER_ADDRESS in Railway.' },
       { key: 'newsletter_auto', label: 'Newsletter sends itself Mondays at 7:43 AM', ok: newsletter.enabled && newsletter.autosend, level: 'recommended',

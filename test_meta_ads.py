@@ -232,3 +232,40 @@ def test_graph_version_comes_from_the_repo_variable_with_a_default(monkeypatch):
     finally:
         monkeypatch.delenv("GRAPH_API_VERSION")
         importlib.reload(ma)
+
+
+def test_an_ad_under_a_finished_ad_set_or_campaign_is_not_on():
+    # Ads keep reading ACTIVE after their ad set or campaign ends; counting
+    # them made a finished boost send "$0 spent ... with 1 ad on" daily.
+    class Finished(FakeMeta):
+        def __init__(self, adset=None, campaign=None):
+            super().__init__(spend="0")
+            self.adset, self.campaign = adset or {}, campaign or {}
+
+        def request(self, method, url, **k):
+            if url.endswith("/ads"):
+                return Resp({"data": [{"id": "5", "name": "Video", "adset_id": "999", "effective_status": "ACTIVE",
+                                       "created_time": "2026-09-01T09:00:00-0500"}]})
+            if url.endswith("/adsets"):
+                return Resp({"data": [{"id": "999", "name": "Victoria", "campaign_id": "1",
+                                       "effective_status": "ACTIVE", **self.adset}]})
+            if url.endswith("/campaigns"):
+                return Resp({"data": [{"id": "1", "name": "Boost", "effective_status": "ACTIVE", **self.campaign}]})
+            if url.endswith("/insights"):
+                return Resp({"data": [{"spend": "0"}]})
+            return super().request(method, url, **k)
+
+    assert ma.main(["report"], session=Finished(adset={"end_time": "2026-09-20T23:59:00-0500"})) == 0
+    assert sent == []
+    assert ma.main(["report"], session=Finished(campaign={"stop_time": "2026-09-20T23:59:00-0500"})) == 0
+    assert sent == []
+    assert ma.main(["report"], session=Finished(campaign={"effective_status": "PAUSED"})) == 0
+    assert sent == []
+    # Still running (end date ahead): a stalled campaign, reported.
+    assert ma.main(["report"], session=Finished(adset={"end_time": "2099-01-01T00:00:00-0500"})) == 0
+    assert len(sent) == 1 and "1 ad on" in sent[0][0]
+
+
+def test_a_refused_slack_webhook_fails_the_daily_report(monkeypatch):
+    monkeypatch.setattr(ma.slack_notify, "main", lambda args: 2)
+    assert ma.main(["report"], session=FakeMeta()) == 2

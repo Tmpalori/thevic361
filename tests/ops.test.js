@@ -18,7 +18,7 @@ import path from 'node:path';
 import http from 'node:http';
 
 const NOW = new Date('2026-10-05T15:00:00Z');
-let tmpDir, server, base, store, slack;
+let tmpDir, server, base, store, slack, sched;
 
 function fakeSlack() {
   const s = { alerts: [], notes: [], enabled: true };
@@ -60,6 +60,7 @@ async function start(extra = {}, { candidates = null } = {}) {
     siteUrl: 'https://www.thevic361.com', adminUsername: 'a', adminPassword: 'b', adminSessionSecret: 'c',
     slack, startScheduler: false, ...extra
   });
+  sched = out.scheduler;
   server = http.createServer(out.app);
   await new Promise(r => server.listen(0, r));
   base = `http://127.0.0.1:${server.address().port}`;
@@ -191,6 +192,23 @@ describe('newsletter switch', () => {
     expect(byKey.submission_review.ok).toBe(false);
     expect(byKey.meta_ads.ok).toBeNull();
     expect(byKey.instagram.ok).toBeNull();
+  });
+});
+
+describe('a Slack webhook Slack refuses', () => {
+  // An archived channel or removed app answers 404/410 forever; only logging
+  // it meant every later alert vanished while the checklist said "configured".
+  it('fails the setup checklist and is a site-check problem', async () => {
+    const refusal = { channel: 'alerts', status: 410, error: 'channel_is_archived', at: '2026-10-05T14:00:00.000Z' };
+    const s = fakeSlack();
+    s.refused = () => [refusal];
+    await start({ slack: s });
+    const setup = await (await fetch(base + '/api/admin/setup', { headers: await auth() })).json();
+    const check = setup.checks.find(c => c.key === 'slack');
+    expect(check.ok).toBe(false);
+    expect(check.fix).toContain('channel_is_archived');
+    await sched.tick(NOW);
+    expect(s.alerts.some(a => a.d.includes('Slack refused alerts on alerts (HTTP 410'))).toBe(true);
   });
 });
 

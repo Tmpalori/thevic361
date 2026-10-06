@@ -311,3 +311,50 @@ def test_the_dead_ai_alert_fires_once_then_waits_until_it_recovers(monkeypatch, 
     # And a long outage reminds every ALERT_EVERY_S.
     saved = json.loads(state.read_text())
     assert rs.ai_down_alert(str(state), "down", now=saved["alerted_at"] + rs.ALERT_EVERY_S + 1) is True
+
+
+def test_a_site_outage_during_the_decisions_post_is_a_warning(monkeypatch, capsys):
+    # A Railway redeploy between the pending fetch and the POST (the AI calls
+    # take minutes) failed the run and alerted, though the next run re-sends:
+    # the site only applies decisions to rows still awaiting review.
+    rc = _run_main_with_post(monkeypatch, lambda *a, **k: _Status(502))
+    assert rc == 0 and "::warning::" in capsys.readouterr().out
+
+    def reset(*a, **k):
+        raise rs.requests.ConnectionError("connection reset")
+    rc = _run_main_with_post(monkeypatch, reset)
+    assert rc == 0
+
+    def timeout(*a, **k):
+        raise rs.requests.Timeout("read timed out")
+    rc = _run_main_with_post(monkeypatch, timeout)
+    assert rc == 0
+    # A refused POST (bad secret, bad request) still fails the run.
+    rc = _run_main_with_post(monkeypatch, lambda *a, **k: _Status(401))
+    assert rc == 1
+
+
+def _run_main_with_post(monkeypatch, post):
+    class R:
+        def __init__(self, body):
+            self.body, self.status_code, self.ok = body, 200, True
+            self.headers = {"content-type": "application/json"}
+
+        def json(self):
+            return self.body
+
+        def raise_for_status(self):
+            pass
+
+    def get(url, headers=None, timeout=None):
+        if url.endswith("/pending"):
+            return R({"submissions": [sub(1, ev("Fall Craft Fair"))]})
+        return R({"events": []})
+
+    monkeypatch.setenv("SUBMISSION_REVIEW_SECRET", "s3cret")
+    monkeypatch.setenv("OPENAI_API_KEY", "key")
+    monkeypatch.delenv("AI_ALERT_STATE", raising=False)
+    monkeypatch.setattr(rs.requests, "get", get)
+    monkeypatch.setattr(rs.requests, "post", post)
+    with patch.object(rs.ce, "_openai_chat", return_value=json.dumps([answer()])):
+        return rs.main([])

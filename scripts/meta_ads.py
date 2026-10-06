@@ -169,8 +169,11 @@ def insights(api, account_id, preset):
 
 def structure(api, account_id):
     fields = "id,name,effective_status"
-    campaigns = api.all(f"{account_id}/campaigns", fields=fields + ",objective,daily_budget")
-    adsets = api.all(f"{account_id}/adsets", fields=fields + ",campaign_id,daily_budget,optimization_goal")
+    # stop_time / end_time: a finished campaign or ad set (and its ads) keeps
+    # reading ACTIVE in the API ("Completed" is only an Ads Manager label),
+    # so the end date is how running_ads tells it has stopped.
+    campaigns = api.all(f"{account_id}/campaigns", fields=fields + ",objective,daily_budget,stop_time")
+    adsets = api.all(f"{account_id}/adsets", fields=fields + ",campaign_id,daily_budget,optimization_goal,end_time")
     ads = api.all(f"{account_id}/ads", fields=fields + ",adset_id,ad_review_feedback,created_time")
     return campaigns, adsets, ads
 
@@ -221,6 +224,30 @@ def _age_days(created, now=None):
     return ((now or dt.datetime.now(dt.timezone.utc)) - t).total_seconds() / 86400
 
 
+def _ended(obj, key, now):
+    """True when a Graph end time ('2026-10-06T09:12:00-0500') is past. No
+    end time (runs until paused) or an unreadable one counts as running."""
+    try:
+        return dt.datetime.strptime(str(obj.get(key)), "%Y-%m-%dT%H:%M:%S%z") <= now
+    except ValueError:
+        return False
+
+
+def running_ads(campaigns, adsets, ads, now=None):
+    """Ads that should be delivering: ACTIVE themselves and under an ACTIVE,
+    unfinished ad set and campaign. An ad's own effective_status stays
+    ACTIVE after its ad set or campaign ends, which made a finished boost
+    read as "$0 spent with 1 ad on" every morning. A parent missing from the
+    listing (archived or deleted) doesn't deliver either."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    live_campaigns = {c["id"] for c in campaigns
+                      if c.get("effective_status") == "ACTIVE" and not _ended(c, "stop_time", now)}
+    live_adsets = {s["id"] for s in adsets
+                   if s.get("effective_status") == "ACTIVE" and s.get("campaign_id") in live_campaigns
+                   and not _ended(s, "end_time", now)}
+    return [a for a in ads if a.get("effective_status") == "ACTIVE" and a.get("adset_id") in live_adsets]
+
+
 def cmd_report(api, account, out):
     spend7, week = summarize(insights(api, account["id"], "last_7d"))
     campaigns, adsets, ads = structure(api, account["id"])
@@ -232,7 +259,7 @@ def cmd_report(api, account, out):
         problems.insert(0, f"⚠️ The ad account is disabled or on hold (status {account['account_status']}): "
                            "check Ads Manager → Account overview")
     if spend7 <= 0:
-        on = [a for a in ads if a.get("effective_status") == "ACTIVE"]
+        on = running_ads(campaigns, adsets, ads)
         if not problems and not on:
             out.append("No ad spend in the last 7 days and no ads on; no report.")
             return None
@@ -293,14 +320,17 @@ def main(argv=None, session=None):
         return 0
     api = Api(token, session)
     out = []
+    slack_rc = 0
     try:
         account, _ = find_account(api, os.environ.get("META_AD_ACCOUNT_ID", "").strip())
         if args.command == "status":
             cmd_status(api, account, out)
         elif args.command == "report":
             text = cmd_report(api, account, out)
+            # A refused webhook (slack_notify returns 2) fails the run below,
+            # so GitHub emails the owner instead of the report vanishing.
             if text:
-                slack_notify.main([text, "--link", f"https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={account['id'][4:]}"])
+                slack_rc = slack_notify.main([text, "--link", f"https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={account['id'][4:]}"])
         elif args.command in ("pause", "resume"):
             if not args.target:
                 raise AdsError("Which campaign, ad set or ad? Pass its id.")
@@ -331,7 +361,7 @@ def main(argv=None, session=None):
     if summary:
         with open(summary, "a") as f:
             f.write(f"### Meta ads: {args.command}\n\n" + "\n".join(f"{x}  " for x in out) + "\n")
-    return 0
+    return slack_rc or 0
 
 
 def set_output(name, value):

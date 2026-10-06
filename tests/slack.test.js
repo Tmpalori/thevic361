@@ -59,6 +59,21 @@ describe('createSlack', () => {
     expect(sent).toEqual(['sales']);
   });
 
+  it('remembers a refused webhook per channel until a post goes through', async () => {
+    let answer = { ok: false, status: 410, text: async () => 'channel_is_archived' };
+    const s = createSlack(slackConfig({ SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/T/B/x' }),
+      { fetchImpl: async () => answer, nowFn: () => Date.parse('2026-10-05T14:00:00Z') });
+    expect(await s.alert('k', 'Broke')).toBe(false);
+    expect(s.refused()).toEqual([{ channel: 'alerts', status: 410, error: 'channel_is_archived', at: '2026-10-05T14:00:00.000Z' }]);
+    // A 500 is a hiccup, not a dead webhook.
+    answer = { ok: false, status: 500, text: async () => 'oops' };
+    await s.notify({ title: 'x' });
+    expect(s.refused().map(r => r.channel)).toEqual(['alerts']);
+    answer = { ok: true, status: 200 };
+    await s.alert('k2', 'Broke');
+    expect(s.refused()).toEqual([]);
+  });
+
   it('never throws when Slack is down', async () => {
     const s = createSlack(slackConfig({ SLACK_WEBHOOK_URL: 'https://hooks.slack.com/x' }), { fetchImpl: async () => { throw new Error('down'); } });
     expect(await s.notify({ title: 'x' })).toBe(false);
