@@ -46,7 +46,7 @@ import re
 import sys
 from collections import Counter
 from difflib import SequenceMatcher
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin
 
 import requests
@@ -109,6 +109,7 @@ def reset_source_stats():
     """Clear per-run stats. Called at the top of main() and useful in tests."""
     _SOURCE_STATS.clear()
     _SOURCE_NOTES.clear()
+    _SOURCE_PARTIAL.clear()
     _WARNINGS.clear()
 
 
@@ -119,6 +120,24 @@ _SOURCE_NOTES = {}
 
 def _note_source(name, message):
     _SOURCE_NOTES[name] = message
+
+
+# Scrapers that got only part of what they look at this run (a page that
+# failed, an actor that was down, a result cap that was hit). Their status is
+# "partial", not "ok": auto-publish only retires a missing event when its
+# source ran ok, and an event the missing page or capped search would have
+# found isn't gone.
+_SOURCE_PARTIAL = {}
+
+
+def _mark_partial(name, reason):
+    _SOURCE_PARTIAL.setdefault(name, []).append(reason)
+
+
+def _stamp():
+    """Run timestamps with their offset: the admin's new Date() reads a
+    naive one as the viewer's local time, 5-6 hours off."""
+    return now_central().isoformat(timespec="seconds")
 
 
 def get_source_stats():
@@ -162,7 +181,8 @@ def safe_fetch(name, fn, args=(), expect_events=True):
     Side effect: records a per-source stats entry consumed by the admin
     "Sources" tab via collection_metadata.json.
     """
-    started = datetime.now().isoformat(timespec="seconds")
+    started = _stamp()
+    _SOURCE_PARTIAL.pop(name, None)
     try:
         result = fn(*args)
         if not isinstance(result, list):
@@ -172,25 +192,29 @@ def safe_fetch(name, fn, args=(), expect_events=True):
         for ev in result:
             if isinstance(ev, dict):
                 ev.setdefault("_source", name)
-        finished = datetime.now().isoformat(timespec="seconds")
+        finished = _stamp()
+        partial = _SOURCE_PARTIAL.pop(name, None)
+        note = _SOURCE_NOTES.pop(name, None)
+        if partial:
+            note = "; ".join(([note] if note else []) + ["partial: " + ", ".join(partial)])
         if len(result) == 0:
             if expect_events:
                 _warn(
                     f"[scraper] {name} returned 0 events",
                     scraper=name,
                 )
-            _record_source_stat(name, 0, "empty", started, finished,
-                                message=_SOURCE_NOTES.pop(name, None))
+            _record_source_stat(name, 0, "empty", started, finished, message=note)
         else:
-            _record_source_stat(name, len(result), "ok", started, finished,
-                                message=_SOURCE_NOTES.pop(name, None))
+            _record_source_stat(name, len(result), "partial" if partial else "ok",
+                                started, finished, message=note)
         return result
     except Exception as e:
         _report_exception(name)
         import traceback
         print(f"  [{name}] CRASHED: ", end="")
         traceback.print_exc()
-        finished = datetime.now().isoformat(timespec="seconds")
+        finished = _stamp()
+        _SOURCE_PARTIAL.pop(name, None)
         _record_source_stat(name, 0, "error", started, finished, message=str(e))
         return []
 
@@ -327,21 +351,24 @@ VENUE_URLS = {
     "victoria country club": "https://victoriacc.com",
 }
 
-# Description templates by icon category — used when no description available
+# Description templates by icon category, for an event that still has no
+# description after the AI review. The icons come from keyword matches, so a
+# template says only what kind of event it is: "Free and open to all ages"
+# or "Live music" went live on events where neither was true (Oct 2026).
 DESC_TEMPLATES = {
-    "music":    "Live music in Victoria. Check the venue for lineup details.",
-    "family":   "Family-friendly event at {venue}. Free and open to all ages.",
-    "food":     "Food and community at {venue}. Come hungry.",
-    "drinks":   "Drinks and good times at {venue}.",
-    "arts":     "Arts event at {venue}. Open to the public.",
-    "outdoors": "Outdoor activity in Victoria. Bring the family.",
-    "community":"Community event open to the public.",
-    "shopping": "Local vendors and shopping at {venue}.",
+    "music":    "Music at {venue}. Check the venue for details.",
+    "family":   "Family event at {venue}. Check the venue for details.",
+    "food":     "Food event at {venue}. Check the venue for details.",
+    "drinks":   "Drinks event at {venue}. Check the venue for details.",
+    "arts":     "Arts event at {venue}. Check the venue for details.",
+    "outdoors": "Outdoor event at {venue}. Check the venue for details.",
+    "community":"Community event at {venue}. Check the venue for details.",
+    "shopping": "Shopping event at {venue}. Check the venue for details.",
 }
 
 CATEGORY_KEYWORDS = {
     "music":     ["music", "concert", "band", "live music", "jazz", "acoustic",
-                  "dj", "karaoke", "open mic", "k-pop", "kpop", "symphony", "trivia"],
+                  "dj", "karaoke", "open mic", "k-pop", "kpop", "symphony"],
     "food":      ["food", "restaurant", "bbq", "taco", "dinner", "lunch",
                   "brunch", "cook", "chef", "farmers market", "taste", "delicatessen"],
     "drinks":    ["beer", "wine", "cocktail", "brew", "drinkery", "bar ",
@@ -1297,6 +1324,14 @@ def fetch_gemini_events(days_ahead=14, post=None, categories=None, get=None, wor
             if bad_key:
                 break
 
+    # gemini_search runs with expect_events=False, so a revoked key or lapsed
+    # billing would otherwise read as a quiet week while gap filling and New
+    # & Notable stop too.
+    if bad_key:
+        _warn("[Gemini] API key rejected; search, gap filling and New & Notable are off", status=bad_key[0])
+    elif cats and not any(replies):
+        _warn("[Gemini] every search call failed", calls=len(cats), **dict(dropped))
+
     seen = set()
     unverified = []  # (event, url, name): link on a site Gemini didn't cite
     cited = []  # link on a site Gemini cited
@@ -1411,8 +1446,16 @@ def _notable_prompt(today):
     )
 
 
+# Set when the search came back (even with nothing): main() only then hands
+# the list to auto-publish, which replaces the live box with it, so an off or
+# failed step can't empty the box.
+_NOTABLE_FETCHED = False
+
+
 def fetch_gemini_notable(post=None, get=None):
     """New & Notable items from Gemini + Google Search, or [] when off/failed."""
+    global _NOTABLE_FETCHED
+    _NOTABLE_FETCHED = False
     key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not key or os.environ.get("GEMINI_ENABLED", "1").strip().lower() in ("0", "false", "no"):
         return []
@@ -1429,11 +1472,14 @@ def fetch_gemini_notable(post=None, get=None):
                     headers={"x-goog-api-key": key, "Content-Type": "application/json"})
         if resp.status_code != 200:
             print(f"  [Gemini notable] HTTP {resp.status_code}: {resp.text[:200]}")
+            _warn("[Gemini notable] HTTP error", status=resp.status_code, body=resp.text[:100])
             return []
         data = resp.json()
     except Exception as e:
         print(f"  [Gemini notable] failed: {e}")
+        _warn("[Gemini notable] request failed", error=str(e)[:200])
         return []
+    _NOTABLE_FETCHED = True
     cand = (data.get("candidates") or [{}])[0]
     text = "".join(p.get("text", "") for p in ((cand.get("content") or {}).get("parts") or []))
     grounded = _grounded_hosts(cand)
@@ -1661,17 +1707,26 @@ def _verified_details(item, grounded, get=None):
     if not (cited(source) or cited(url)):
         return {}
     out = {}
-    time_str = _clean_text(item.get("time"))
-    if time_str and _TIME_RE.match(time_str):
-        out["time"] = time_str
-    address = _clean_text(item.get("address"))
-    if address and re.match(r"^\d+\s+\w", address) and len(address) <= 120:
-        out["address"] = address
     desc = _strip_emojis(_clean_text(item.get("description")))
     if len(desc) >= 30:
         out["description"] = desc[:217].rstrip() + "…" if len(desc) > 220 else desc
-    if url and cited(url) and _page_mentions(url, item.get("_name"), get=get, unsure=True):
+    # None: the check couldn't tell (network error, bot block).
+    url_check = _page_mentions(url, item.get("_name"), get=get, unsure=None) if url and cited(url) else False
+    if url_check is not False:
         out["url"] = url
+    # A cited host only says the batch used that site, not that this
+    # event's time came from it (and the find is cached for every later
+    # run). Time and address need a page that loads and names this event.
+    tied = url_check is True or (
+        bool(source) and source != url and cited(source)
+        and _page_mentions(source, item.get("_name"), get=get) is True)
+    if tied:
+        time_str = _clean_text(item.get("time"))
+        if time_str and _TIME_RE.match(time_str):
+            out["time"] = time_str
+        address = _clean_text(item.get("address"))
+        if address and re.match(r"^\d+\s+\w", address) and len(address) <= 120:
+            out["address"] = address
     return out
 
 
@@ -2043,30 +2098,59 @@ def is_listing_url(url):
 _LINK_CHECK_SKIP = re.compile(r"(facebook|instagram|fb)\.com", re.I)
 
 
-def drop_dead_links(events, get=None, timeout=10):
+# The link check runs before any deadline check, right after the ~30-minute
+# scrape phase: past this it stops, so a hanging host can't push gap filling
+# and the AI review past COLLECT_DEADLINE_MIN.
+LINK_CHECK_STOP_MIN = 34
+LINK_CHECK_HOST_TIMEOUTS = 2
+
+
+def drop_dead_links(events, get=None, timeout=6, workers=8):
     """Blank links that answer 404/410 so nobody lands on a dead page.
 
-    Each unique URL is checked once. Network errors and bot blocks (403,
-    429...) keep the link; only a definite "not found" removes it. Facebook
-    and Instagram are skipped since they answer every bot with a login page.
+    Each unique URL is checked once, several at a time. Network errors and
+    bot blocks (403, 429...) keep the link; only a definite "not found"
+    removes it. Facebook and Instagram are skipped since they answer every
+    bot with a login page. A host that times out twice isn't asked again.
     """
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+
     get = get or (lambda u: requests.get(u, headers=HEADERS, timeout=timeout, allow_redirects=True, stream=True))
+    urls = []
+    for ev in events:
+        url = (ev.get("url") or "").strip()
+        if url and not _LINK_CHECK_SKIP.search(url) and url not in urls:
+            urls.append(url)
+    timeouts = Counter()
+    lock = threading.Lock()
+
+    def check(url):
+        host = _host(url)
+        with lock:
+            if timeouts[host] >= LINK_CHECK_HOST_TIMEOUTS or _minutes_in() > LINK_CHECK_STOP_MIN:
+                return None
+        try:
+            resp = get(url)
+            close = getattr(resp, "close", None)
+            if close:
+                close()
+            return resp.status_code
+        except requests.Timeout:
+            with lock:
+                timeouts[host] += 1
+            return None
+        except Exception:
+            return None
+
     status = {}
+    if urls:
+        with ThreadPoolExecutor(max_workers=max(1, min(workers, len(urls)))) as pool:
+            status = dict(zip(urls, pool.map(check, urls)))
     dead = 0
     for ev in events:
         url = (ev.get("url") or "").strip()
-        if not url or _LINK_CHECK_SKIP.search(url):
-            continue
-        if url not in status:
-            try:
-                resp = get(url)
-                status[url] = resp.status_code
-                close = getattr(resp, "close", None)
-                if close:
-                    close()
-            except Exception:
-                status[url] = None
-        if status[url] in (404, 410):
+        if status.get(url) in (404, 410):
             ev["url"] = ""
             dead += 1
     if dead:
@@ -2077,8 +2161,12 @@ def drop_dead_links(events, get=None, timeout=10):
 
 # ─── FILL GAPS (description + url) ──────────────────────────────────────────
 
-def fill_gaps(events):
-    """Fill missing descriptions and URLs using venue lookups and templates."""
+def fill_gaps(events, templates=True):
+    """Fill missing descriptions and URLs using venue lookups and templates.
+
+    main() runs it with templates=False before the AI review and again after:
+    a template read as source text gets echoed back as fact ("Bring the
+    family for outdoor vocal exercises")."""
     for ev in events:
         if is_listing_url(ev.get("url")):
             ev["url"] = ""
@@ -2091,7 +2179,7 @@ def fill_gaps(events):
                     break
 
         # Fill description from template if missing
-        if not ev.get("description"):
+        if templates and not ev.get("description"):
             icons = ev.get("icons", [])
             venue = ev.get("venue") or ev.get("address") or "this venue"
             # Use first matching template
@@ -2817,8 +2905,14 @@ def cap_library_events(events, per_day=2, per_week=8):
     if not events:
         return events
 
-    library_events = [e for e in events if _is_library_event(e)]
-    other_events = [e for e in events if not _is_library_event(e)]
+    # Hand-added events at the library (the owner's weekly Chess Club, a
+    # one-off "VPL Rec Night") were decided on by a person: never capped and
+    # not counted, or a busy calendar week drops them with no warning.
+    def hand_added(e):
+        return bool(_sources_of(e) & HAND_SOURCES) or e.get("curated") or e.get("big")
+
+    library_events = [e for e in events if _is_library_event(e) and not hand_added(e)]
+    other_events = [e for e in events if not _is_library_event(e) or hand_added(e)]
 
     if not library_events:
         return events
@@ -2849,8 +2943,9 @@ def cap_library_events(events, per_day=2, per_week=8):
     # Step 2: Apply per-day and per-week caps.
     # Sort so adult programs win ties (they are arguably more interesting / less noisy).
     def priority(e):
-        # Lower = kept first
-        return (0 if not _is_recurring_kid_program(e) else 1, e["date"], e.get("time", "ZZ"))
+        # Lower = kept first. Clock time, not text: "10:30 AM" < "9:30 AM".
+        start = _start_minutes(e.get("time"))
+        return (0 if not _is_recurring_kid_program(e) else 1, e["date"], start if start is not None else 24 * 60)
 
     pruned_library.sort(key=priority)
 
@@ -3310,6 +3405,7 @@ def fetch_allevents_events(days_ahead=14):
             resp.raise_for_status()
         except Exception as e:
             per_page.append(f"{url.rsplit('/', 1)[-1]}: error {str(e)[:40]}")
+            _mark_partial("allevents", f"{url.rsplit('/', 1)[-1]} page failed")
             continue
         _parse_allevents_page(resp.text, events, seen_urls)
         per_page.append(f"{url.rsplit('/', 1)[-1]}: +{len(events) - before}")
@@ -3541,14 +3637,23 @@ def fetch_apify_eventbrite_events(days_ahead=14):
             if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
                 _APIFY_LIMIT_TRIPPED = True
                 _warn("Apify monthly hard limit tripped", actor=APIFY_EVENTBRITE_ACTOR, status=403)
+            else:
+                # Runs with expect_events=False, so without this a bad token
+                # or a renamed actor reads as a quiet week.
+                _warn("[Eventbrite] actor HTTP error", actor=APIFY_EVENTBRITE_ACTOR,
+                      status=resp.status_code, body=resp.text[:100])
             return events
         items = resp.json()
     except Exception as e:
         print(f"  [Eventbrite] Run failed: {e}")
+        _warn("[Eventbrite] actor run failed", actor=APIFY_EVENTBRITE_ACTOR, error=str(e)[:200])
         return events
     if not isinstance(items, list):
         print(f"  [Eventbrite] Unexpected response type: {type(items).__name__}")
         return events
+    if len(items) >= payload["maxResults"]:
+        # A capped search returns a different slice each run.
+        _mark_partial("apify_eventbrite", f"hit the {payload['maxResults']}-result cap")
 
     skipped = {"window": 0, "online_or_cancelled": 0, "not_victoria": 0, "no_data": 0}
     for item in items:
@@ -3615,10 +3720,16 @@ def _run_apify_search(actor, payload, token):
             if resp.status_code == 403 and _apify_hard_limit_tripped(resp.text):
                 _APIFY_LIMIT_TRIPPED = True
                 _warn("Apify monthly hard limit tripped", actor=actor, status=403)
+            else:
+                # apify_facebook runs with expect_events=False: warn, or a bad
+                # token or renamed actor goes unnoticed for weeks.
+                _warn("[Apify FB] actor HTTP error", actor=actor,
+                      status=resp.status_code, body=resp.text[:100])
             return None
         items = resp.json()
     except Exception as e:
         print(f"  [Apify FB] {actor} run failed: {e}")
+        _warn("[Apify FB] actor run failed", actor=actor, error=str(e)[:200])
         return None
     if not isinstance(items, list):
         print(f"  [Apify FB] {actor} unexpected response type: {type(items).__name__}")
@@ -3682,9 +3793,13 @@ def fetch_apify_facebook_events(days_ahead=14):
     for actor, payload in searches:
         got = _run_apify_search(actor, payload, token)
         if got is None:
+            # The two searches overlap little: one missing loses its events.
+            _mark_partial("apify_facebook", f"{actor} failed")
             if _APIFY_LIMIT_TRIPPED:
                 break
             continue
+        if len(got) >= payload["maxEvents"]:
+            _mark_partial("apify_facebook", f"{actor} hit the {payload['maxEvents']}-event cap")
         for it in got:
             key = isinstance(it, dict) and (it.get("id") or it.get("url"))
             if key and key in seen_ids:
@@ -3955,6 +4070,29 @@ def _post_time(p):
     return str(p.get("time") or p.get("timestamp") or p.get("date") or "")
 
 
+def _post_posted_on(p):
+    """When a post went up, in Victoria time, for the extraction prompt
+    ("Fri 2026-10-09 8:15 PM").
+
+    The actors give UTC ("2026-10-10T01:15:00.000Z") or epoch numbers; the
+    UTC date of anything posted after ~7 PM Central is tomorrow, and the
+    model resolves "tonight" and "tomorrow" against it, one day late."""
+    raw = p.get("time") or p.get("timestamp") or p.get("date") or ""
+    try:
+        if isinstance(raw, (int, float)) or str(raw).strip().isdigit():
+            n = float(raw)
+            # Milliseconds when it's too big to be seconds.
+            dt = datetime.fromtimestamp(n / 1000 if n > 1e11 else n, tz=timezone.utc)
+        else:
+            dt = datetime.fromisoformat(str(raw).strip().replace("Z", "+00:00"))
+    except (ValueError, OverflowError, OSError):
+        return str(raw)[:25]
+    if dt.tzinfo is None:
+        # No offset: can't say what local time it was, only the day.
+        return dt.strftime("%a %Y-%m-%d")
+    return _to_central(dt).strftime("%a %Y-%m-%d %-I:%M %p")
+
+
 def _flyers_for(posts, limit=FLYER_IMAGES_PER_ACCOUNT, fetch=None):
     """[(post number, data URL)] for the newest posts' first image.
 
@@ -3990,7 +4128,7 @@ def _extract_events_from_posts_via_ai(venue_name, posts):
     filled in by the caller.
     """
     api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key or not posts:
+    if not api_key or not posts or _OPENAI_DEAD:
         return []
 
     today = _WINDOW_START
@@ -4016,8 +4154,7 @@ def _extract_events_from_posts_via_ai(venue_name, posts):
         text = _trim_post_text(re.sub(r"\s+", " ", text)) if text else "(no caption)"
         if i in with_flyer:
             text += " [flyer image attached]"
-        post_date = (p.get("time") or p.get("timestamp") or p.get("date") or "")[:10]
-        lines.append(f"[{i}] (posted {post_date}) {text}")
+        lines.append(f"[{i}] (posted {_post_posted_on(p)}) {text}")
     if not lines:
         return []
     posts_blob = "\n".join(lines)
@@ -4056,11 +4193,31 @@ Flyer images: posts marked [flyer image attached] have their image after this te
         raw = _posts_ai_call(api_key, venue_name, {"role": "user", "content": content_parts}, timeout=90)
         if raw is not None:
             return raw
+        if _OPENAI_DEAD:
+            return []
         # A flyer the API can't read, or a slow image call, mustn't cost the
         # captions: ask again with the text alone, as before flyers.
         _warn("FB posts AI flyer call failed; retrying text only", venue=venue_name)
     raw = _posts_ai_call(api_key, venue_name, {"role": "user", "content": text_prompt}, timeout=60)
     return raw if raw is not None else []
+
+
+# Set when OpenAI says the key is bad or the account is out of quota: every
+# later call this run fails the same way, so the FB/IG post loops stop
+# paying Apify to scrape pages nobody can read.
+_OPENAI_DEAD = False
+
+
+def _openai_unusable(status, body):
+    return status == 401 or (status == 429 and "insufficient_quota" in (body or ""))
+
+
+def _set_openai_dead(status):
+    global _OPENAI_DEAD
+    if not _OPENAI_DEAD:
+        _OPENAI_DEAD = True
+        _warn("OpenAI key rejected or out of quota; skipping the rest of the FB/IG post scrapes",
+              status=status)
 
 
 def _posts_ai_call(api_key, venue_name, message, timeout):
@@ -4085,8 +4242,13 @@ def _posts_ai_call(api_key, venue_name, message, timeout):
             )
         return raw
     except requests.HTTPError as e:
-        status = e.response.status_code if e.response else "?"
-        _warn("FB posts AI HTTP error", venue=venue_name, status=str(status))
+        # `if e.response` is False for a 4xx/5xx Response: test for None.
+        resp = e.response
+        status = resp.status_code if resp is not None else "?"
+        body = (resp.text or "")[:100] if resp is not None else ""
+        _warn("FB posts AI HTTP error", venue=venue_name, status=str(status), body=body)
+        if _openai_unusable(status, body):
+            _set_openai_dead(status)
         return None
     except Exception as e:
         _warn("FB posts AI exception", venue=venue_name, error=str(e)[:200])
@@ -4203,6 +4365,9 @@ def fetch_apify_facebook_posts(days_ahead=14):
     for i, venue in enumerate(high_conf):
         if _APIFY_LIMIT_TRIPPED:
             venue_stats.append(f"{venue.get('name','?')}: SKIP (limit tripped)")
+            break
+        if _OPENAI_DEAD:
+            _note_source("apify_facebook_posts", f"OpenAI unusable; skipped {len(high_conf) - i} of {len(high_conf)} pages")
             break
         if _minutes_in() > SCRAPE_BUDGET_MIN:
             _note_source("apify_facebook_posts", f"stopped at the {SCRAPE_BUDGET_MIN}-minute scrape budget; "
@@ -4564,6 +4729,9 @@ def fetch_apify_instagram_posts(days_ahead=14):
         if _APIFY_LIMIT_TRIPPED:
             venue_stats.append(f"{venue.get('name','?')}: SKIP (limit tripped)")
             break
+        if _OPENAI_DEAD:
+            _note_source("apify_instagram_posts", f"OpenAI unusable; skipped {len(targets) - i} of {len(targets)} accounts")
+            break
         if _minutes_in() > SCRAPE_BUDGET_MIN:
             _note_source("apify_instagram_posts", f"stopped at the {SCRAPE_BUDGET_MIN}-minute scrape budget; "
                          f"skipped {len(targets) - i} of {len(targets)} accounts")
@@ -4739,8 +4907,9 @@ def main():
     # actually retries instead of inheriting the previous in-process state.
     # (No-op for the daily workflow since each run is a fresh process, but
     # matters for tests / local repeated runs.)
-    global _APIFY_LIMIT_TRIPPED
+    global _APIFY_LIMIT_TRIPPED, _OPENAI_DEAD
     _APIFY_LIMIT_TRIPPED = False
+    _OPENAI_DEAD = False
 
     # Set the global collection window. Every scraper reads _WINDOW_START/_END.
     global _WINDOW_START, _WINDOW_END
@@ -4763,7 +4932,7 @@ def main():
     # 1. Local YAML (backbone)
     print("📂 Local events...")
     yaml_path = os.path.join(args.local_dir, "local_events.yaml")
-    _local_started = datetime.now().isoformat(timespec="seconds")
+    _local_started = _stamp()
     try:
         _local = load_local_events(yaml_path, args.days, strict=True)
     except LocalEventsError as e:
@@ -4773,7 +4942,7 @@ def main():
         sys.exit(1)
     for _ev in _local:
         _ev.setdefault("_source", "local_events")
-    _local_finished = datetime.now().isoformat(timespec="seconds")
+    _local_finished = _stamp()
     _record_source_stat(
         "local_events", len(_local),
         "ok" if _local else "empty",
@@ -4852,7 +5021,7 @@ def main():
         except Exception as e:  # never fail the collect over gap filling
             print(f"  [Enrich] crashed: {e}")
             _report_exception("enrich_thin_events")
-    merged = fill_gaps(merged)
+    merged = fill_gaps(merged, templates=False)
 
     # 7. AI review — polish descriptions + assign icons via OpenAI
     # Far-ahead hand-added events wait until they're inside the window:
@@ -4868,10 +5037,16 @@ def main():
         due = lambda e: today_s <= e["date"] <= window_end
         kept = {id(e) for e in ai_review([e for e in merged if due(e)])}
         merged = [e for e in merged if id(e) in kept or not due(e)]
+    # Templates only for what the review didn't write (skipped, past the
+    # deadline, a failed batch, no key).
+    merged = fill_gaps(merged)
 
     # 5. Load extras. Hand-written New & Notable items (extras.yaml) come
     # first, then what Gemini found this run.
     extras = load_extras(os.path.join(args.local_dir, "extras.yaml"))
+    global _NOTABLE_FETCHED
+    _NOTABLE_FETCHED = False
+    notable_ran = False
     if not args.skip_web:
         print("\n✨ New & Notable (Gemini)...")
         try:
@@ -4882,6 +5057,7 @@ def main():
         manual = [n for n in (extras["new_and_notable"] or []) if isinstance(n, dict)]
         names = {str(n.get("name", "")).lower() for n in manual}
         extras["new_and_notable"] = manual + [n for n in found if n["name"].lower() not in names]
+        notable_ran = _NOTABLE_FETCHED or bool(found)
 
     # 6. Build output
     output = {
@@ -4912,10 +5088,16 @@ def main():
     candidates_output = {
         "last_updated": now_central().isoformat(timespec="seconds"),
         "events": merged,
-        # {source: ok|empty|error|skipped}: auto-publish only retires a
+        # {source: ok|partial|empty|error}: auto-publish only retires a
         # missing event when its source ran ok (server/autopublish.js).
         "sources": source_status(),
     }
+    # Auto-publish replaces the live New & Notable box with this list (plus
+    # its own recent items), so it's written only when the search actually
+    # came back: a skipped or failed step leaves the key out and the box as
+    # it is. extras.yaml's hand-written items ride along.
+    if notable_ran:
+        candidates_output["new_and_notable"] = extras["new_and_notable"]
     with open(candidates_path, "w") as f:
         json.dump(candidates_output, f, indent=2)
     print(f"  Candidates: {candidates_path}")
@@ -4931,7 +5113,7 @@ def main():
     )
     try:
         metadata_output = {
-            "last_run_at": datetime.now().isoformat(timespec="seconds"),
+            "last_run_at": _stamp(),
             "window_start": str(_WINDOW_START),
             "window_end": str(_WINDOW_END),
             "days_ahead": args.days,

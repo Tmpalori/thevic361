@@ -263,8 +263,9 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       const srcs = Array.isArray(priorSources[k]) ? priorSources[k] : [];
       if (srcs.some(s => NEVER_RETIRE_SOURCES.has(s))) continue;
       const n = Number(priorMissing[k]) || 0;
-      // A source that errored or came back empty this run says nothing
-      // about whether its events still exist.
+      // A source that errored, came back empty or ran only in part
+      // ("partial": a page failed, a search hit its cap) says nothing about
+      // whether its events still exist.
       const sourceOk = !runStatus || srcs.every(s => runStatus[s] === 'ok');
       const count = healthy && sourceOk && newRun ? n + 1 : n;
       if (count >= RETIRE_AFTER_MISSES && healthy && sourceOk) retired.push(ev);
