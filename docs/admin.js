@@ -1543,7 +1543,11 @@
               '<td>' + escapeHtml(o.business || '') + '<br><small>' + escapeHtml(o.email || '') + '</small></td>' +
               '<td>' + escapeHtml(sponsorDetail(o)) + logo + '</td>' +
               '<td>$' + escapeHtml(String(Math.round((o.amount || 0) / 100))) + '</td>' +
-              '<td>' + escapeHtml(SPONSOR_STATUS[o.status] || o.status) + '</td><td>' + btn + '</td></tr>';
+              // on_site false: a paid Vic's Pick whose event the pin can't
+              // find on the site (not approved yet, rejected, or edited).
+              '<td>' + (o.on_site === false
+                ? '<strong class="sponsor-not-live">Paid, not on the site yet</strong><br><small>Approve its event in Submissions</small>'
+                : escapeHtml(SPONSOR_STATUS[o.status] || o.status)) + '</td><td>' + btn + '</td></tr>';
           }).join('')
         : '<tr><td class="traffic-empty">No orders yet.</td></tr>';
       loadSponsorLogos(table);

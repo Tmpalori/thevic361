@@ -113,7 +113,7 @@
 
     <!-- ─── HOME TAB ─── -->
     <section id="tab-home" class="tab-panel is-active" role="tabpanel">
-      <p class="tab-intro">The site runs itself: events are collected Sunday and Wednesday nights and go live automatically. Check here for anything that needs you.</p>
+      <p class="tab-intro">The site runs itself: events are collected Sunday and Wednesday afternoons and go live automatically. Check here for anything that needs you.</p>
       <div id="home-error" class="empty-state empty-state--error" hidden></div>
       <div id="home-body" hidden>
         <div id="home-tiles" class="home-tiles"></div>
@@ -173,7 +173,7 @@
 
     <!-- ─── SUBMISSIONS TAB ─── -->
     <section id="tab-submissions" class="tab-panel" role="tabpanel" hidden>
-      <p class="tab-intro">Events people sent in through the Submit form. Approve good ones; approved events go live with the next automatic update, or press "Add approved to Events" and Save &amp; Publish to post them now.</p>
+      <p class="tab-intro">Events people sent in through the Submit form. The AI review publishes the good ones and leaves the rest here for you. Approving one publishes it right away and emails the submitter.</p>
       <div class="submissions-toolbar">
         <!-- Legacy per-tab config inputs. Hidden by default — the unified
              login flow shares the same session token with the picker tab. We
@@ -222,6 +222,7 @@
         No submissions in this status.
       </div>
       <div id="submissions-error" class="empty-state empty-state--error" hidden></div>
+      <div id="submissions-notice" class="empty-state" role="status" hidden></div>
       <div id="submissions-list" class="submissions-list"></div>
     </section>
 

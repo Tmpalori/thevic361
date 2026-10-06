@@ -5,7 +5,8 @@ Runs from .github/workflows/social-kit.yml after the kit is committed and
 deployed, and only when the SOCIAL_AUTOPOST repo variable is 1. Monday
 posts "this week", Thursday posts "this weekend" (as a Reel on Instagram
 when the kit has one; Reels reach people who don't follow us yet), and
-the other days post "today".
+the other days post "today". Thursday also posts "today" when it has a
+Vic's Pick (--if-featured), so a paid pick that day is always posted.
 
 Needs (GitHub Actions secrets):
   META_PAGE_ID        Facebook Page id
@@ -18,7 +19,8 @@ Needs (GitHub Actions secrets):
                       (optional; Facebook still posts without it)
 
 Instagram fetches images by URL, so the slides must be live on
-thevic361.com first; we wait for the deploy before posting.
+thevic361.com first; we wait for the deploy before posting. Instagram only
+accepts JPEG there, so it gets the kit's .jpg twins (slides_jpg).
 """
 import argparse
 import json
@@ -187,6 +189,8 @@ def main(argv=None, session=None):
     ap.add_argument("--kind", choices=["week", "weekend", "today"], required=True)
     ap.add_argument("--kit-dir", default=KIT_DIR)
     ap.add_argument("--no-wait", action="store_true", help="Skip waiting for the deploy (testing)")
+    ap.add_argument("--if-featured", action="store_true",
+                    help="Only post when the kit has a Vic's Pick (Thursday's extra 'today' post)")
     args = ap.parse_args(argv)
     session = session or requests.Session()
 
@@ -203,6 +207,9 @@ def main(argv=None, session=None):
     if not kit.get("events"):
         print(f"No events in the {args.kind} kit; not posting an empty list.")
         return 0
+    if args.if_featured and not kit.get("featured"):
+        print(f"No Vic's Pick in the {args.kind} kit; nothing extra to post.")
+        return 0
 
     looked_up = page_token(page_id, token, session)
     if looked_up != token and os.environ.get("GITHUB_ACTIONS"):
@@ -212,14 +219,17 @@ def main(argv=None, session=None):
     token = looked_up
     base = f"{SITE}/social/latest"
     urls = [f"{base}/{name}" for name in pick_slides(kit["slides"])]
+    # Instagram takes JPEG only; an older kit without the twins gets the PNGs.
+    ig_urls = [f"{base}/{name}" for name in pick_slides(kit.get("slides_jpg") or kit["slides"])]
     reel_url = f"{base}/{kit['reel']}" if kit.get("reel") else None
     if not args.no_wait:
-        # Cache-bust so Meta can't fetch yesterday's image at the same name.
-        wait_for_deploy(urls + ([reel_url] if reel_url else []), f"{base}/kit.json",
+        wait_for_deploy(list(dict.fromkeys(urls + ig_urls)) + ([reel_url] if reel_url else []), f"{base}/kit.json",
                         manifest["generated_for"], session, build=manifest.get("build"))
     if manifest.get("build"):
+        # Cache-bust so Meta can't fetch yesterday's image at the same name.
         v = f"?v={manifest['build']}"
         urls = [u + v for u in urls]
+        ig_urls = [u + v for u in ig_urls]
         reel_url = reel_url and reel_url + v
 
     # Posted ids per day + kind, so re-running a half-failed job doesn't post
@@ -271,14 +281,14 @@ def main(argv=None, session=None):
         except PostError as e:
             failed("Facebook", "facebook", e)
     if not ig_user:
-        print("IG_USER_ID not set; skipping Instagram.")
+        print("::warning::IG_USER_ID not set; skipping Instagram (Facebook only).")
     elif not already("Instagram", "instagram"):
         try:
             if reel_url:
                 ig_id = post_instagram_reel(ig_user, token, reel_url, kit["captions"]["instagram"], session)
                 print(f"Instagram: posted Reel {ig_id}")
             else:
-                ig_id = post_instagram(ig_user, token, urls, kit["captions"]["instagram"], session)
+                ig_id = post_instagram(ig_user, token, ig_urls, kit["captions"]["instagram"], session)
                 print(f"Instagram: posted {ig_id}")
             remember("instagram", ig_id)
         except PostError as e:

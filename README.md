@@ -152,8 +152,8 @@ weekly publish flow.
 - Public-facing `events.json` strips submitter PII and admin-only
   metadata before publish.
 
-See `RAILWAY.md` for full Railway deployment + env var details (including
-the new login + GitHub token variables).
+See `RAILWAY.md` for Railway setup and smoke tests, and AGENTS.md for every
+environment variable.
 
 ## Setup
 

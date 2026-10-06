@@ -8,6 +8,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
 import { applyCleanup, awaitingReview } from '../server/submissionReview.js';
+import { applyPlacements } from '../server/sponsors.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -77,7 +78,9 @@ describe('submission review: what the AI may change', () => {
   it('only rows nobody has touched are waiting', () => {
     expect(awaitingReview(row('a'))).toBe(true);
     expect(awaitingReview(row('a', { ai_review: { decision: 'flag' } }))).toBe(false);
-    expect(awaitingReview(row('a', { source: 'paid-feature' }))).toBe(false);
+    expect(awaitingReview(row('a', { source: 'paid-feature' }))).toBe(true);
+    expect(awaitingReview(row('a', { source: 'admin' }))).toBe(false);
+    expect(awaitingReview(row('a', { review_history: [{ action: 'submitted' }, { action: 'reminder' }] }))).toBe(true);
     expect(awaitingReview(row('a', { review_history: [{ action: 'submitted' }, { action: 'edit' }] }))).toBe(false);
     expect(awaitingReview(row('a', { status: 'approved' }))).toBe(false);
   });
@@ -88,10 +91,11 @@ describe('submission review: endpoints', () => {
     await startApp();
     await store.insert(row('s1'));
     await store.insert(row('s2', { source: 'paid-feature' }));
+    await store.insert(row('s3', { source: 'admin' }));
     expect((await pending('nope')).status).toBe(401);
     expect((await review([], '')).status).toBe(401);
     const body = await (await pending()).json();
-    expect(body.submissions.map(s => s.id)).toEqual(['s1']);
+    expect(body.submissions.map(s => [s.id, s.paid]).sort()).toEqual([['s1', false], ['s2', true]]);
     const text = JSON.stringify(body);
     for (const secret of ['pat@example.com', '555-1234', 'Doe', '1.2.3.4']) expect(text).not.toContain(secret);
   });
@@ -231,6 +235,172 @@ describe('submission review: publishing safely', () => {
     const ok = await fetch(baseUrl + '/api/admin/publish-events', { method: 'POST', headers: h,
       body: JSON.stringify({ events: now.events, based_on: now.last_updated }) });
     expect(ok.status).toBe(200);
+  });
+});
+
+async function adminAuth() {
+  const r = await fetch(baseUrl + '/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'a', password: 'b' }) });
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${(await r.json()).token}` };
+}
+const admin = async (id, body) => (await fetch(baseUrl + `/api/admin/submissions/${id}`, {
+  method: 'POST', headers: await adminAuth(), body: JSON.stringify(body) })).json();
+
+describe('admin approve and edit keep the site in step', () => {
+  const edit = (p) => ({ ...p, submitter_email: 'pat@example.com' });
+
+  it('approving a flagged submission by hand publishes it now and emails "you\'re live"', async () => {
+    await startApp();
+    await store.insert(row('s1'));
+    await review([{ id: 's1', decision: 'flag', reason: 'check it' }]);
+    const body = await admin('s1', { status: 'approved' });
+    expect(body).toMatchObject({ ok: true, published: true, live: true });
+    expect((await store.getPublished()).events.map(e => e.name)).toEqual(['FALL CRAFT FAIR!!!']);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: ['pat@example.com'], subject: "You're live: FALL CRAFT FAIR!!!" });
+  });
+
+  it('re-approving one rejected by mistake puts it back on the site', async () => {
+    await startApp();
+    await store.insert(row('s1'));
+    await review([{ id: 's1', decision: 'approve', cleaned: CLEAN }]);
+    expect((await admin('s1', { status: 'rejected' })).unpublished).toBe(true);
+    const back = await admin('s1', { status: 'approved' });
+    expect(back).toMatchObject({ published: true, live: true });
+    expect((await store.getPublished()).events.map(e => e.name)).toEqual(['Fall Craft Fair']);
+  });
+
+  it('a hand approval of a past event says it isn\'t live and sends nothing', async () => {
+    await startApp();
+    await store.insert(row('s1', { payload: { ...PAYLOAD, date: '2026-10-01' } }));
+    const body = await admin('s1', { status: 'approved' });
+    expect(body).toMatchObject({ published: true, live: false });
+    expect(sent).toHaveLength(0);
+  });
+
+  it('editing an approved submission updates the live event, and a reject afterwards still takes it down', async () => {
+    await startApp();
+    await store.insert(row('s1'));
+    await review([{ id: 's1', decision: 'approve', cleaned: CLEAN }]);
+    const saved = await store.get('s1');
+    const body = await admin('s1', { payload: edit({ ...saved.payload, name: 'Victoria Fall Craft Fair', date: '2026-10-11' }) });
+    expect(body.updated_live).toBe(true);
+    const pub = await store.getPublished();
+    expect(pub.events.map(e => [e.name, e.date])).toEqual([['Victoria Fall Craft Fair', '2026-10-11']]);
+    expect(pub.auto_publish.keys).toEqual(['2026-10-11|Victoria Fall Craft Fair|Community Center']);
+    expect(pub.events[0]).not.toHaveProperty('submitter_phone');
+
+    const off = await admin('s1', { status: 'rejected' });
+    expect(off.unpublished).toBe(true);
+    expect((await store.getPublished()).events).toEqual([]);
+  });
+
+  it('a reject still finds the live event under a key it had before an edit', async () => {
+    await startApp();
+    await store.insert(row('s1'));
+    await review([{ id: 's1', decision: 'approve', cleaned: CLEAN }]);
+    // The live list kept the old version (e.g. the in-place update failed).
+    const before = await store.getPublished();
+    const saved = await store.get('s1');
+    await admin('s1', { payload: edit({ ...saved.payload, name: 'Renamed Craft Fair' }) });
+    await store.setPublished(before);
+    const off = await admin('s1', { status: 'rejected' });
+    expect(off.unpublished).toBe(true);
+    expect((await store.getPublished()).events).toEqual([]);
+  });
+});
+
+describe('paid Vic\'s Picks in the review', () => {
+  const ORDER = (extra = {}) => ({
+    id: 'ord1', kind: 'featured', status: 'paid', email: 'pat@example.com', business: 'Pat Co', amount: 4900,
+    created_at: NOW.toISOString(), paid_at: NOW.toISOString(), submission_id: 'p1',
+    event: { date: '2026-10-10', name: 'FALL CRAFT FAIR!!!', time: '9:00 AM', venue: 'Community Center' }, ...extra
+  });
+  let notes;
+  const paidRow = (extra = {}) => row('p1', { source: 'paid-feature', submitter_name: 'Pat Co', ...extra });
+  async function startPaid(extra = {}) {
+    notes = [];
+    await startApp({
+      slack: { notify: m => notes.push(m), alert: () => {} },
+      stripeSecretKey: 'sk_test', stripeWebhookSecret: 'whsec_test',
+      stripe: { createCheckoutSession: async () => ({}), expireCheckoutSession: async () => ({}) }, ...extra
+    });
+  }
+
+  it('a clean paid pick goes live with the buyer\'s own words, pinned, and a Vic\'s Pick email', async () => {
+    await startPaid();
+    await store.saveSponsorOrder(ORDER());
+    await store.insert(paidRow());
+    const body = await (await review([{ id: 'p1', decision: 'approve', cleaned: CLEAN }])).json();
+    expect(body.done[0]).toMatchObject({ decision: 'approve', changes: [], live: true });
+    const feed = await (await fetch(baseUrl + '/events.json')).json();
+    expect(feed.events).toEqual([expect.objectContaining({ name: 'FALL CRAFT FAIR!!!', featured: true })]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].subject).toBe("Your Vic's Pick is live: FALL CRAFT FAIR!!!");
+    expect(sent[0].html).not.toContain('Make it a Vic’s Pick');
+    expect(notes.at(-1).text).toMatch(/paid Vic’s Pick/);
+  });
+
+  it('nothing paid for is turned away automatically; an exact copy of a live event is approved', async () => {
+    await startPaid();
+    await store.insert(paidRow());
+    await store.insert(row('p2', { source: 'paid-feature', payload: { ...PAYLOAD, name: 'Other Fair' } }));
+    const body = await (await review([{ id: 'p1', decision: 'reject', reason: 'spam: looks like an ad' },
+      { id: 'p2', decision: 'duplicate', reason: 'already live' }])).json();
+    expect(body.done.map(d => d.decision)).toEqual(['flag', 'approve']);
+    expect((await store.get('p1')).status).toBe('pending');
+    expect((await store.get('p1')).ai_review.reason).toMatch(/paid Vic’s Pick.*looks like an ad/);
+  });
+
+  it('reminds the owner in Slack when a paid pick close to its date is still unpublished, at most every few hours', async () => {
+    await startPaid();
+    const earlier = new Date(NOW.getTime() - 3600 * 1000).toISOString();
+    await store.insert(paidRow({ created_at: earlier, payload: { ...PAYLOAD, date: '2026-10-06' } }));
+    await store.insert(row('p2', { source: 'paid-feature', created_at: earlier, payload: { ...PAYLOAD, date: '2026-10-20' } }));
+    await store.insert(row('f1', { created_at: earlier, payload: { ...PAYLOAD, date: '2026-10-06' } }));
+    const first = await (await pending()).json();
+    const reminders = () => notes.filter(n => /Vic’s Pick isn’t on the site/.test(n.title));
+    expect(reminders()).toHaveLength(1);
+    expect(reminders()[0]).toMatchObject({ channel: 'sales' });
+    expect(reminders()[0].text).toMatch(/FALL CRAFT FAIR!!! · 2026-10-06/);
+    // Still waiting for the AI: the reminder doesn't count as the admin touching it.
+    expect(first.submissions.map(s => s.id)).toContain('p1');
+    await pending();
+    expect(reminders()).toHaveLength(1);
+  });
+
+  it('rejecting a paid pick in admin pings sales to refund it', async () => {
+    await startPaid();
+    await store.insert(paidRow());
+    await admin('p1', { status: 'rejected' });
+    expect(notes.at(-1)).toMatchObject({ channel: 'sales' });
+    expect(notes.at(-1).title).toMatch(/Paid Vic’s Pick marked rejected/);
+  });
+
+  it('the pin follows the submission when its date is fixed, and the Sponsors tab shows picks not on the site', async () => {
+    await startPaid();
+    await store.saveSponsorOrder(ORDER());
+    await store.insert(paidRow());
+    const h = await adminAuth();
+    let d = await (await fetch(baseUrl + '/api/admin/sponsors', { headers: h })).json();
+    expect(d.orders.find(o => o.id === 'ord1').on_site).toBe(false);
+
+    // Approved with the date fixed: the bought event can't match any more,
+    // but the pin follows the submission.
+    await admin('p1', { status: 'approved', payload: { ...PAYLOAD, date: '2026-10-11', submitter_email: 'pat@example.com' } });
+    d = await (await fetch(baseUrl + '/api/admin/sponsors', { headers: h })).json();
+    expect(d.orders.find(o => o.id === 'ord1').on_site).toBe(true);
+    const feed = await (await fetch(baseUrl + '/events.json')).json();
+    expect(feed.events).toEqual([expect.objectContaining({ date: '2026-10-11', featured: true })]);
+  });
+
+  it('applyPlacements pins by the submission shapes when the bought event no longer matches', () => {
+    const order = ORDER();
+    const ev = { date: '2026-10-11', name: 'Totally New Name', venue: 'Elsewhere' };
+    const payload = { events: [ev] };
+    expect(applyPlacements(payload, [order], { now: NOW }).events[0].featured).toBeUndefined();
+    const pins = new Map([['ord1', [ev]]]);
+    expect(applyPlacements(payload, [order], { now: NOW, pins }).events[0].featured).toBe(true);
   });
 });
 

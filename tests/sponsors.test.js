@@ -3,7 +3,7 @@
 // Sponsor checkout (server/sponsors.js). Stripe is a recording fake and
 // webhooks are signed locally with the test secret; nothing is charged.
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import crypto from 'node:crypto';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
@@ -544,8 +544,7 @@ describe('confirmation emails', () => {
       submitter_first_name: 'Pat', submitter_last_name: 'Lee', submitter_phone: '361-555-0100', icons: ['music'], free: true };
     const r = await fetch(baseUrl + '/api/submissions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     expect(r.status).toBe(201);
-    await new Promise(res => setTimeout(res, 20));
-    expect(mail.sent).toHaveLength(1);
+    await vi.waitFor(() => expect(mail.sent).toHaveLength(1), { timeout: 2000 });
     const m = mail.sent[0];
     expect(m.to).toEqual(['org@example.com']);
     expect(m.subject).toBe('We got your event submission');                // fixed: no sender-chosen text
@@ -569,7 +568,8 @@ describe('confirmation emails', () => {
       await fetch(baseUrl + '/api/submissions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...body, name: `Fall Fest ${i + 2}` }) });
     }
-    await new Promise(res => setTimeout(res, 20));
+    await vi.waitFor(() => expect(mail.sent).toHaveLength(3), { timeout: 2000 });
+    await new Promise(res => setTimeout(res, 50)); // room for a wrong fourth one
     expect(mail.sent).toHaveLength(3);
   });
 

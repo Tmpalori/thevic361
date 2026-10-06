@@ -95,11 +95,15 @@ const REPLACE_MIN_RATIO = 0.6;
 
 // Take one event off the published list (an approved submission the admin
 // rejected) and remember it as removed so auto-publish doesn't put it back.
+// `key` may be a list: the submission's key now plus the keys it was
+// published under before an edit, so an edited one still comes down.
 export async function unpublishEvent(store, key, now) {
+  const keys = new Set((Array.isArray(key) ? key : [key]).filter(Boolean));
   const prior = await store.getPublished();
   if (!prior || !Array.isArray(prior.events)) return false;
-  const events = prior.events.filter(ev => eventKeyOf(ev) !== key);
-  if (events.length === prior.events.length) return false;
+  const gone = prior.events.filter(ev => keys.has(eventKeyOf(ev))).map(eventKeyOf);
+  if (!gone.length) return false;
+  const events = prior.events.filter(ev => !keys.has(eventKeyOf(ev)));
   const state = prior.auto_publish || {};
   await store.setPublished({
     ...prior,
@@ -107,9 +111,48 @@ export async function unpublishEvent(store, key, now) {
     events,
     auto_publish: {
       ...state,
-      keys: (state.keys || []).filter(k => k !== key),
-      rejected: [...new Set([...(state.rejected || []), key])]
+      keys: (state.keys || []).filter(k => !keys.has(k)),
+      rejected: [...new Set([...(state.rejected || []), ...gone])]
     }
+  });
+  return true;
+}
+
+// The admin approved this event by hand: forget that it was removed before
+// (e.g. rejected by mistake), so auto-publish may list it again.
+export async function forgetRemoved(store, key) {
+  const prior = await store.getPublished();
+  const rejected = (prior && prior.auto_publish && prior.auto_publish.rejected) || [];
+  if (!rejected.includes(key)) return false;
+  await store.setPublished({ ...prior, auto_publish: { ...prior.auto_publish, rejected: rejected.filter(k => k !== key) } });
+  return true;
+}
+
+// An approved submission edited in the admin: swap its live event for the
+// edited one in place (same spot, auto-publish bookkeeping moved to the new
+// key), so the fix shows up now and a later un-approve finds it. False when
+// the old version isn't on the published list.
+export async function replacePublishedEvent(store, oldKey, next, now) {
+  const prior = await store.getPublished();
+  if (!prior || !Array.isArray(prior.events)) return false;
+  const idx = prior.events.findIndex(ev => eventKeyOf(ev) === oldKey);
+  if (idx === -1) return false;
+  const fresh = { ...prior.events[idx], ...publicFields(next) };
+  const newKey = eventKeyOf(fresh);
+  const events = prior.events.filter((ev, i) => i === idx || eventKeyOf(ev) !== newKey);
+  events[events.indexOf(prior.events[idx])] = fresh;
+  const state = prior.auto_publish || {};
+  await store.setPublished({
+    ...prior,
+    last_updated: now.toISOString(),
+    events,
+    ...(prior.auto_publish ? {
+      auto_publish: {
+        ...state,
+        keys: (state.keys || []).map(k => (k === oldKey ? newKey : k)),
+        rejected: (state.rejected || []).filter(k => k !== newKey)
+      }
+    } : {})
   });
   return true;
 }

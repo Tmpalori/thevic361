@@ -142,7 +142,7 @@ describe('submit form: errors you can see, phone formatting', () => {
   });
 
   it('accepts 7+ digit phones like the server does', () => {
-    const base = { name: 'Show', date: '2026-10-17', time: '7:00 PM', venue: 'V', address: 'A', description: 'D',
+    const base = { name: 'Show', date: '2026-10-17', time: '7:00 PM', venue: 'V', address: 'A', description: 'D', free: false,
       submitter_first_name: 'Pat', submitter_last_name: 'Lee', submitter_email: 'p@x.com' };
     expect(api.checkForm({ ...base, submitter_phone: '555-0123' })).toEqual({});
     expect(api.checkForm({ ...base, submitter_phone: '+64 9 123 4567' })).toEqual({});
@@ -153,7 +153,18 @@ describe('submit form: errors you can see, phone formatting', () => {
     const errs = api.checkForm({ name: 'Show', date: '2026-10-17', time: '7:00 PM', venue: 'V', address: 'A',
       description: 'D', submitter_first_name: 'Pat', submitter_last_name: '', submitter_email: 'nope', submitter_phone: '555-01' });
     expect(errs).toEqual({ submitter_last_name: 'Last name is required.', submitter_email: 'Email looks invalid.',
-      submitter_phone: 'Phone number looks invalid.' });
+      submitter_phone: 'Phone number looks invalid.', free: 'Choose free or paid.' });
+  });
+
+  it('makes the organizer choose free or paid (no default that lists a ticketed show as free)', () => {
+    const radios = [...document.querySelectorAll('input[name="free"]')];
+    expect(radios.some(r => r.checked)).toBe(false);
+    expect(api.collectForm().free).toBe(null);
+    expect(document.getElementById('sp-free').hidden).toBe(true);
+    document.querySelector('input[name="free"][value="false"]').checked = true;
+    expect(api.collectForm().free).toBe(false);
+    document.querySelector('input[name="free"][value="true"]').checked = true;
+    expect(api.collectForm().free).toBe(true);
   });
 
   it('outlines each problem field, names the problems by the button, and focuses the first', () => {
@@ -202,6 +213,7 @@ describe('submit form: live preview and site icons', () => {
     const time = document.querySelector('#submit-form [name="time"]');
     time.value = time.options[2].value;
     document.querySelector('input[name="icons"][value="music"]').checked = true;
+    document.querySelector('input[name="free"][value="true"]').checked = true;
     api.updatePreview();
     expect(document.getElementById('sp-day').textContent).toBe('Saturday');
     expect(document.getElementById('sp-date').textContent).toBe('October 17');
@@ -209,7 +221,7 @@ describe('submit form: live preview and site icons', () => {
     expect(document.getElementById('sp-name').innerHTML).toContain('&lt;b&gt;');
     expect(document.getElementById('sp-time').textContent).toBe(time.options[2].value);
     expect([...document.querySelectorAll('#sp-icons use')].map(u => u.getAttribute('href')))
-      .toEqual(['/icons.svg#i-music', '/icons.svg#i-free']);                          // Free is on by default
+      .toEqual(['/icons.svg#i-music', '/icons.svg#i-free']);
   });
 
   it('"Submit another" clears the preview and puts today back in the date', () => {
