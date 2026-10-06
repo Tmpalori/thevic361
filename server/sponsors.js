@@ -82,6 +82,11 @@ const PREFILL_CONTACT_MS = 7 * 24 * 3600 * 1000;
 const REPORT_CATCHUP_DAYS = 14;
 // Vic's Pick reports go out from 9 AM (Victoria time) the day after the event.
 const PICK_REPORT_HOUR = 9;
+// A "you're booked" email that didn't send (Resend down) is retried by the
+// periodic report run for this long after payment; the owner hears once it
+// has failed this many times.
+const CONFIRM_RETRY_DAYS = 7;
+const CONFIRM_ALERT_AFTER = 3;
 
 export function stripeConfig(env = process.env, overrides = {}) {
   const c = {
@@ -347,7 +352,12 @@ export function applyPlacements(payload, orders, { now, venues = [], pins = new 
 // only cards (wallets included), which settle at once; a slow payment that
 // still clears after the pick's day or the sponsor week is over is marked
 // 'late' (never fulfilled) for the owner to refund.
-const INSTANT_ONLY_DAYS = 5;
+// ACH takes up to 4 business days, which a weekend and a bank holiday
+// stretch to 7 calendar days; 10 leaves room for the weekly sponsor's
+// Monday newsletter (7:43 AM, before that day's settlements) too. A debit
+// that still clears after its week's issue went out gets a make-good alert
+// (processEvent) instead of the standard newsletter promise.
+export const INSTANT_ONLY_DAYS = 10;
 
 function orderDates(order) {
   if (order.kind === 'weekly' && order.week_start) return [order.week_start, addDays(order.week_start, 6)];
@@ -853,22 +863,47 @@ export function renderLogoTooLargePage({ siteUrl }) {
 export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenues, slack = null, mailer = null, mailAddress = '', getPayload = null }) {
   const supported = typeof store.listSponsorOrders === 'function';
   let cache = null;
+  // Bumped by every save. A read that started before a save neither fills
+  // the cache nor is shared with readers after it.
+  let gen = 0;
+  let ordersRun = null;
 
+  // Fails open (stale or empty list) because it feeds page views; anything
+  // that books a slot uses freshOrders instead. When the cache has run out,
+  // a burst of page views shares one read (and so one pins() lookup).
   async function orders() {
     if (!supported) return [];
     if (cache && Date.now() - cache.at < CACHE_MS) return cache.list;
+    if (!ordersRun || ordersRun.gen !== gen) {
+      const started = gen;
+      const run = { gen: started, promise: null };
+      run.promise = store.listSponsorOrders().then(list => {
+        if (gen === started) cache = { at: Date.now(), list };
+        return list;
+      }).finally(() => { if (ordersRun === run) ordersRun = null; });
+      ordersRun = run;
+    }
     try {
-      const list = await store.listSponsorOrders();
-      cache = { at: Date.now(), list };
-      return list;
+      return await ordersRun.promise;
     } catch (err) {
       console.warn('[sponsors] order list failed:', err.message);
       return cache ? cache.list : [];
     }
   }
 
+  // The list straight from the store, throwing on a database error: a
+  // booking that read an empty list would sell a week or day already sold.
+  async function freshOrders() {
+    cache = null;
+    if (!supported) return [];
+    const list = await store.listSponsorOrders();
+    cache = { at: Date.now(), list };
+    return list;
+  }
+
   async function save(order) {
     await store.saveSponsorOrder({ ...order, updated_at: nowIso() });
+    gen++;
     cache = null;
   }
 
@@ -883,26 +918,36 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
 
   // Order id -> the shapes its event may be live as (see pickMatches), for
   // live Vic's Picks that came with a submission. Cached with the orders.
-  async function pins(list) {
+  // This runs on the page-view path, so only picks that can still be shown
+  // or reported on are looked up (bought for a date no older than the
+  // report catch-up window), and concurrent requests share one lookup.
+  function pins(list) {
     if (cache && cache.list === list && cache.pins) return cache.pins;
+    const run = buildPins(list);
+    if (cache && cache.list === list) cache.pins = run;
+    return run;
+  }
+
+  async function buildPins(list) {
     const out = new Map();
-    const picks = list.filter(o => o.kind === 'featured' && o.event && o.submission_id && LIVE.has(o.status));
+    const oldest = addDays(localDateStr(nowFn()), -(REPORT_CATCHUP_DAYS + 2));
+    const picks = list.filter(o => o.kind === 'featured' && o.event && o.submission_id && LIVE.has(o.status) &&
+      String(o.event.date || '') >= oldest);
     if (picks.length) {
       let edits = [];
       try { edits = typeof store.listEventEdits === 'function' ? await store.listEventEdits() : []; } catch { /* none */ }
       const byKey = new Map(edits.map(e => [e.original_key, e.payload]));
-      for (const o of picks) {
+      await Promise.all(picks.map(async o => {
         try {
           const row = await store.get(o.submission_id);
-          if (!row || !row.payload) continue;
+          if (!row || !row.payload) return;
           const shapes = [row.payload];
           const edit = byKey.get(eventKeyOf(row.payload));
           if (edit) shapes.push({ ...row.payload, ...edit });
           out.set(o.id, shapes);
         } catch (err) { console.warn('[sponsors] pick submission lookup failed:', err.message); }
-      }
+      }));
     }
-    if (cache && cache.list === list) cache.pins = out;
     return out;
   }
 
@@ -947,15 +992,42 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
   }
 
   // "You're booked" email: what happens next and how to reach us. Once
-  // per order; a send that failed (Resend down) is tried again on the next
-  // webhook for the order.
+  // per order. A card checkout gets exactly one completed webhook, so a send
+  // that failed (Resend down) is retried by retryConfirmations, and the
+  // owner is alerted once it keeps failing. Callers hold the booking lock,
+  // since the order object is saved back whole. True when it was sent.
   async function sendConfirmation(order) {
-    if (!mailer || !mailer.enabled || (order.kind !== 'weekly' && order.kind !== 'featured') || order.confirmation_sent) return;
+    if (!mailer || !mailer.enabled || (order.kind !== 'weekly' && order.kind !== 'featured') || order.confirmation_sent) return false;
     const sent = await mailer.send(order.email, renderSponsorConfirmed(order, { siteUrl, address: mailAddress }), `vic361-sponsor-${order.id}`);
     if (sent) {
       order.confirmation_sent = nowIso();
       await save(order);
+      return true;
     }
+    order.confirmation_failures = (Number(order.confirmation_failures) || 0) + 1;
+    await save(order);
+    if (slack && order.confirmation_failures === CONFIRM_ALERT_AFTER) {
+      slack.alert(`sponsor-confirmation-failed:${order.id}`, `"You're booked" email to ${order.business} isn't sending`,
+        `${order.email} paid but hasn't had their confirmation after ${CONFIRM_ALERT_AFTER} tries. It keeps retrying for ${CONFIRM_RETRY_DAYS} days; check Resend, or email them yourself.`,
+        `${siteUrl}/admin.html`);
+    }
+    return false;
+  }
+
+  // Paid weekly sponsors and Vic's Picks still owed their confirmation
+  // (from the last CONFIRM_RETRY_DAYS, while the placement hasn't ended).
+  // Under the booking lock and from a fresh read, so it can't save over a
+  // refund or edit that landed meanwhile.
+  function retryConfirmations(now) {
+    if (!supported || !mailer || !mailer.enabled) return Promise.resolve(0);
+    return withBookingLock(async () => {
+      const since = now.getTime() - CONFIRM_RETRY_DAYS * 864e5;
+      const due = (await freshOrders()).filter(o => (o.kind === 'weekly' || o.kind === 'featured') && o.status === 'paid' &&
+        !o.confirmation_sent && o.paid_at && Date.parse(o.paid_at) >= since && !paidTooLate(o, now));
+      let sent = 0;
+      for (const o of due) if (await sendConfirmation(o)) sent++;
+      return sent;
+    });
   }
 
   // The end-of-week click report every weekly sponsor is promised. Goes to
@@ -965,9 +1037,16 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
   // onCron) and is safe to call from any daily scheduler too: overlapping
   // or repeated calls send nothing twice. A run that's missed catches up
   // for REPORT_CATCHUP_DAYS.
+  // Also the retry path for unsent confirmations: this runs every 15
+  // minutes (the review cron's onRun) and from the daily and Monday crons.
   let reportRun = null;
   function sendSponsorReports(now = nowFn()) {
-    if (!reportRun) reportRun = runSponsorReports(now).finally(() => { reportRun = null; });
+    if (!reportRun) {
+      reportRun = retryConfirmations(now)
+        .catch(err => console.warn('[sponsors] confirmation retry failed:', err.message))
+        .then(() => runSponsorReports(now))
+        .finally(() => { reportRun = null; });
+    }
     return reportRun;
   }
 
@@ -1243,11 +1322,18 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
 
   const findBy = (list, key, val) => (val ? list.find(o => o[key] === val) : null);
 
-  async function processEvent(event) {
+  // One webhook at a time, under the same lock as checkout bookings: Stripe
+  // can deliver an event twice at once (both would fulfil a pending order),
+  // and two weekly orders settling together must not both pass the
+  // "is this week already live?" check below.
+  function processEvent(event) {
+    return withBookingLock(() => handleEvent(event));
+  }
+
+  async function handleEvent(event) {
     const obj = (event && event.data && event.data.object) || {};
     if (!supported) return;
-    cache = null;
-    const list = await store.listSponsorOrders();
+    const list = await freshOrders();
     switch (event.type) {
       case 'checkout.session.completed':
       case 'checkout.session.async_payment_succeeded': {
@@ -1266,9 +1352,12 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
             (order.status === 'cancelled' && order.paid_at)) return;
         // Delayed payment methods complete the session before the money
         // arrives; async_payment_succeeded (or _failed) follows. Hold the
-        // week meanwhile so nobody else can buy it.
+        // week meanwhile so nobody else can buy it. Only an open checkout
+        // moves to 'processing': a retried or replayed completed event
+        // arriving after async_payment_failed (or expiry) would otherwise
+        // hold the slot forever, with no further event to release it.
         if (obj.payment_status !== 'paid' && obj.payment_status !== 'no_payment_required') {
-          if (event.type === 'checkout.session.completed' && order.status !== 'processing') {
+          if (event.type === 'checkout.session.completed' && (order.status === 'pending' || order.status === 'cancelled')) {
             await save({ ...order, status: 'processing', session_id: order.session_id || obj.id });
           }
           return;
@@ -1311,6 +1400,17 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
               `${siteUrl}/admin.html`);
           }
           return;
+        }
+        // A bank debit that cleared after its week's Monday issue went out:
+        // the sponsor spot in that newsletter is gone, so the owner owes a
+        // make-good and the confirmation doesn't promise it.
+        if (order.kind === 'weekly' && await newsletterSend(order.week_start)) {
+          order.newsletter_missed = nowIso();
+          if (slack) {
+            slack.alert(`sponsor-newsletter-missed:${order.id}`, `${order.business} paid after their week's newsletter went out`,
+              `${order.business} (${order.email}) paid by bank for the week of ${order.week_start}; it cleared after that Monday's newsletter was sent, so their block wasn't in it. It's live on the site now; offer them a make-good (e.g. a later issue) or a partial refund.`,
+              `${siteUrl}/admin.html`);
+          }
         }
         await save(order);
         await fulfil(order);
@@ -1555,8 +1655,12 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         // Re-read and save the hold under one lock, so a week booked seconds
         // ago (or right now, by someone else) is caught.
         const booked = await withBookingLock(async () => {
-          cache = null;
-          ctx.orders = await orders();
+          try {
+            ctx.orders = await freshOrders();
+          } catch (err) {
+            console.warn('[sponsors] order list failed while booking:', err.message);
+            return { errors: { _form: 'We couldn’t check what’s still available just now. Please try again in a minute.' }, status: 503 };
+          }
           const v = validateOrder(pkg.key, body, ctx);
           if (!v.ok) return { errors: v.errors };
           // Same clock as bookableWeeks, so the hold window lines up.
@@ -1575,7 +1679,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           await save(o);
           return { order: o, replaced };
         });
-        if (booked.errors) return fail(booked.errors);
+        if (booked.errors) return fail(booked.errors, booked.status);
         for (const x of booked.replaced) await expireSession(x);
         const order = booked.order;
         // A Vic’s Pick's price depends on its day (weekday vs Fri–Sun).
@@ -1719,7 +1823,8 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         } else if (action === 'edit' && order.kind === 'weekly' && EDITABLE.has(order.status)) {
           const out = await withBookingLock(() => editWeekly(order, req.body || {}));
           if (out.errors) return res.status(400).json({ ok: false, error: 'invalid', errors: out.errors, message: Object.values(out.errors).join(' ') });
-          if (out.moved) await sendConfirmation(out.order); // a double-booked sponsor's first confirmation
+          // A double-booked sponsor's first confirmation (locked: it saves the order).
+          if (out.moved) await withBookingLock(() => sendConfirmation(out.order));
         } else {
           return res.status(400).json({ ok: false, error: 'bad-action' });
         }
