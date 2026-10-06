@@ -155,13 +155,19 @@ def _domain_known(host, known):
     return host.endswith(KNOWN_LINK_SUFFIXES) or any(host == d or host.endswith("." + d) for d in known)
 
 
-def safety_doubt(ev, known):
+def safety_doubt(ev, known, paid=False):
     """Why an approval must wait for the owner, or None. Looks at what the
-    submitter typed, never at the AI's tidied version."""
+    submitter typed, never at the AI's tidied version. A paid Vic's Pick
+    skips the unknown-link check: the buyer paid through Stripe, so they're
+    known to us, and their link is usually their own small business's site,
+    which no list of known domains will have; holding it would break the
+    "usually within the hour" promise for nothing."""
     text = " ".join(str(ev.get(k) or "") for k in ("name", "description", "venue", "address"))
     hit = REVIEWER_TEXT_RE.search(text)
     if hit:
         return f"talks to the reviewer (“{hit.group(0)[:40]}”); check it isn't spam"
+    if paid:
+        return None
     hosts = [_host(u) for u in URL_RE.findall(text)]
     if ev.get("url"):
         hosts.insert(0, _host(ev["url"]))
@@ -281,7 +287,7 @@ def decide(submissions, live, api_key, known=None):
             # The rules' doubt, and the safety checks on what the submitter
             # typed, always win over an AI approval.
             if not rule and verdict == "approve":
-                doubt = safety_doubt(s["event"], known)
+                doubt = safety_doubt(s["event"], known, paid=bool(s.get("paid")))
                 if doubt:
                     rule = ("flag", doubt)
             decision = "approve" if verdict == "approve" and not rule else "flag"

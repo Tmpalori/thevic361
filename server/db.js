@@ -94,6 +94,26 @@ export function eventKeyOf(ev) {
   return [ev.date || '', ev.name || '', ev.venue || ''].join('|');
 }
 
+// Split an eventKeyOf key back into its parts, or null when it isn't one.
+// eventKeyOf doesn't escape '|', and real names carry it ("Foodies + New
+// Friends: Victoria | Dinner Meetup"), so the date ends at the first '|'
+// and the venue starts after the last; the name is everything between.
+export function parseEventKey(key) {
+  const s = String(key || '');
+  const first = s.indexOf('|');
+  const last = s.lastIndexOf('|');
+  if (first === -1 || last === first) return null;
+  const date = s.slice(0, first);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  return { date, name: s.slice(first + 1, last), venue: s.slice(last + 1) };
+}
+
+// JSON for a JSONB column. Postgres refuses a \u0000 anywhere in jsonb, so
+// one NUL in a scraped description would fail the whole publish; drop it.
+export function toJsonb(value) {
+  return JSON.stringify(value, (_k, v) => (typeof v === 'string' && v.includes('\u0000') ? v.replace(/\u0000/g, '') : v));
+}
+
 // Apply the admin event-edits overlay on top of a list of events. For each
 // event matching an edit's original_key (or current key), replace it with the
 // edited payload. New keys produced by an edit replace any existing event
@@ -126,6 +146,13 @@ function newToken() {
 }
 // Postgres keeps a bit over a year of traffic; older rows are pruned.
 const TRAFFIC_RETENTION_DAYS = 400;
+// Archived event pages are kept as long, then pruned: every public page
+// reads the archive (guides, venues), so it can't grow forever.
+export const ARCHIVE_RETENTION_DAYS = 400;
+
+function archiveCutoff() {
+  return new Date(Date.now() - ARCHIVE_RETENTION_DAYS * 86400000).toISOString().slice(0, 10);
+}
 
 class FileStore {
   constructor(file) {
@@ -231,6 +258,10 @@ class FileStore {
       const data = await this._read();
       for (const ev of events) {
         if (ev && ev.page) data.event_archive[ev.page] = ev;
+      }
+      const cutoff = archiveCutoff();
+      for (const [page, ev] of Object.entries(data.event_archive)) {
+        if (ev && /^\d{4}-\d{2}-\d{2}$/.test(ev.date || '') && ev.date < cutoff) delete data.event_archive[page];
       }
       await this._write(data);
     });
@@ -407,7 +438,8 @@ class FileStore {
 
   async listArchivedEvents() {
     const data = await this._read();
-    return Object.values(data.event_archive);
+    const cutoff = archiveCutoff();
+    return Object.values(data.event_archive).filter(ev => !(ev && ev.date) || !(ev.date < cutoff));
   }
 
   // Lightweight duplicate detector: same date + normalized name + venue, status
@@ -626,8 +658,8 @@ class PgStore {
     const r = await this.pool.query(q, [
       row.id, row.created_at, row.updated_at, row.status, row.source,
       row.submitter_kind, row.submitter_name, row.submitter_email,
-      row.submitter_ip, row.user_agent, row.payload, row.admin_notes,
-      JSON.stringify(row.review_history || [])
+      row.submitter_ip, row.user_agent, toJsonb(row.payload), row.admin_notes,
+      toJsonb(row.review_history || [])
     ]);
     return this._row(r.rows[0]);
   }
@@ -656,7 +688,7 @@ class PgStore {
     const args = [];
     for (const f of fields) {
       if (patch[f] !== undefined) {
-        args.push(['review_history', 'payload', 'ai_review'].includes(f) ? JSON.stringify(patch[f]) : patch[f]);
+        args.push(['review_history', 'payload', 'ai_review'].includes(f) ? toJsonb(patch[f]) : patch[f]);
         sets.push(`${f} = $${args.length}`);
       }
     }
@@ -682,7 +714,7 @@ class PgStore {
       VALUES (1, $1, NOW())
       ON CONFLICT (id) DO UPDATE
         SET payload = EXCLUDED.payload, updated_at = NOW();
-    `, [JSON.stringify(payload)]);
+    `, [toJsonb(payload)]);
     return payload;
   }
 
@@ -695,8 +727,10 @@ class PgStore {
         VALUES ($1, $2, $3, NOW())
         ON CONFLICT (page) DO UPDATE
           SET event_date = EXCLUDED.event_date, payload = EXCLUDED.payload, updated_at = NOW();
-      `, [ev.page, /^\d{4}-\d{2}-\d{2}$/.test(ev.date || '') ? ev.date : null, JSON.stringify(ev)]);
+      `, [ev.page, /^\d{4}-\d{2}-\d{2}$/.test(ev.date || '') ? ev.date : null, toJsonb(ev)]);
     }
+    // Publishes are a few a week: a fine time to drop pages past retention.
+    await this.pool.query('DELETE FROM event_archive WHERE event_date < CURRENT_DATE - $1::int', [ARCHIVE_RETENTION_DAYS]);
   }
 
   async recordTraffic(row) {
@@ -712,12 +746,17 @@ class PgStore {
     }
   }
 
+  // Grouped in SQL: a year of raw rows is hundreds of thousands, and the
+  // summary only needs counts. `n` is how many raw rows each one stands for
+  // (summarize in analytics.js weighs by it); the visitor hash is daily, so
+  // grouping by it keeps unique-visitor counts exact.
   async listTraffic(sinceDay) {
     await this.ready();
     const r = await this.pool.query(`
       SELECT to_char(day, 'YYYY-MM-DD') AS day, kind, path, visitor, ref_source, ref_host,
-             click_type, click_url, bot
+             click_type, click_url, bot, COUNT(*)::int AS n
       FROM traffic WHERE day >= $1::date
+      GROUP BY day, kind, path, visitor, ref_source, ref_host, click_type, click_url, bot
     `, [sinceDay]);
     return r.rows;
   }
@@ -816,7 +855,7 @@ class PgStore {
       INSERT INTO newsletter_sends (week_key, subject, recipients, failed, failed_emails, sent_at) VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
       ON CONFLICT (week_key) DO UPDATE SET subject = EXCLUDED.subject, recipients = EXCLUDED.recipients,
         failed = EXCLUDED.failed, failed_emails = EXCLUDED.failed_emails, sent_at = NOW()
-    `, [rec.week_key, rec.subject, rec.recipients, rec.failed, JSON.stringify(rec.failed_emails || [])]);
+    `, [rec.week_key, rec.subject, rec.recipients, rec.failed, toJsonb(rec.failed_emails || [])]);
   }
 
   async saveSponsorOrder(order) {
@@ -824,7 +863,7 @@ class PgStore {
     await this.pool.query(`
       INSERT INTO sponsor_orders (id, payload, created_at, updated_at) VALUES ($1, $2::jsonb, COALESCE($3::timestamptz, NOW()), NOW())
       ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()
-    `, [order.id, JSON.stringify(order), order.created_at || null]);
+    `, [order.id, toJsonb(order), order.created_at || null]);
   }
 
   async saveSponsorLogo(id, { contentType, data }) {
@@ -880,7 +919,10 @@ class PgStore {
 
   async listArchivedEvents() {
     await this.ready();
-    const r = await this.pool.query('SELECT payload FROM event_archive ORDER BY event_date DESC NULLS LAST');
+    const r = await this.pool.query(
+      'SELECT payload FROM event_archive WHERE event_date IS NULL OR event_date >= CURRENT_DATE - $1::int ORDER BY event_date DESC NULLS LAST',
+      [ARCHIVE_RETENTION_DAYS]
+    );
     return r.rows.map(row => row.payload);
   }
 
@@ -922,7 +964,7 @@ class PgStore {
         SET payload = EXCLUDED.payload,
             updated_at = NOW()
       RETURNING original_key, payload, created_at, updated_at;
-    `, [original_key, JSON.stringify(payload)]);
+    `, [original_key, toJsonb(payload)]);
     const row = r.rows[0];
     return {
       id: row.original_key,
@@ -942,10 +984,26 @@ export async function createStore(opts = {}) {
     const pool = new pg.Pool({
       connectionString: databaseUrl,
       // Railway Postgres ships SSL by default; allow self-signed certs.
-      ssl: databaseUrl.includes('sslmode=disable') ? false : { rejectUnauthorized: false }
+      ssl: databaseUrl.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+      // A hung database (not a refused one) must fail fast, so page views
+      // fall back to the bundled docs/events.json instead of piling up.
+      connectionTimeoutMillis: 5000,
+      query_timeout: 15000,
+      statement_timeout: 15000
     });
+    // A Postgres restart kills idle pooled clients and pg-pool emits
+    // 'error'; with no listener that throws and takes the server down.
+    // The pool replaces the client on the next query.
+    pool.on('error', err => console.warn('[db] idle client error:', err.message));
     const store = new PgStore(pool);
-    await store.ready();
+    // Boot doesn't need the database: pages fall back to the bundled
+    // events file, and ready() retries on the next query.
+    try {
+      await store.ready();
+    } catch (err) {
+      console.error('[db] database unavailable at boot:', err.message);
+      if (typeof opts.onUnavailable === 'function') opts.onUnavailable(err);
+    }
     return { kind: 'postgres', store, pool };
   }
   const file = opts.file || DEFAULT_FILE;

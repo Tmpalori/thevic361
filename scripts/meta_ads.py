@@ -6,7 +6,9 @@ Runs from .github/workflows/meta-ads.yml, so the token never leaves GitHub:
   status            what's running, its delivery/review state, and results
                     (today, yesterday, last 7 days); also checks the token
   report            yesterday + last 7 days to Slack (the daily run); quiet
-                    when nothing has spent in the last 7 days
+                    when nothing has spent in the last 7 days and nothing
+                    is on, else says so (a disabled account, a rejected ad
+                    or an ad that's on but spent $0)
   pause  <id>       pause a campaign, ad set or ad
   resume <id>       turn it back on
   budget <id> <$>   set an ad set's (or campaign's) daily budget, in dollars;
@@ -38,6 +40,11 @@ NEEDS = ("ads_read", "ads_management")
 
 class AdsError(RuntimeError):
     pass
+
+
+class NotSetUp(AdsError):
+    """Ads were never set up (the token sees no ad account and none is
+    named), so the daily run has nothing to report rather than a fault."""
 
 
 class Api:
@@ -98,7 +105,7 @@ def find_account(api, wanted=""):
     if len(accounts) == 1:
         return accounts[0], accounts
     if not accounts:
-        raise AdsError("The token sees no ad accounts. In Business settings → System users → your system user → "
+        raise NotSetUp("The token sees no ad accounts. In Business settings → System users → your system user → "
                        "Assign assets → Ad accounts, give it the ad account (Manage ad account), and make sure "
                        "the token has ads_read and ads_management.")
     names = ", ".join(f"{a.get('name')} ({a['id']})" for a in accounts)
@@ -188,14 +195,27 @@ def cmd_status(api, account, out):
 
 def cmd_report(api, account, out):
     spend7, week = summarize(insights(api, account["id"], "last_7d"))
-    if spend7 <= 0:
-        out.append("No ad spend in the last 7 days; no report.")
-        return None
-    _, yday = summarize(insights(api, account["id"], "yesterday"))
     campaigns, adsets, ads = structure(api, account["id"])
-    problems = [a for a in ads if a.get("effective_status") in ("DISAPPROVED", "WITH_ISSUES")]
-    text = "\n".join([f"📈 Meta ads: yesterday {yday}", f"Last 7 days: {week}"] +
-                     [f"⚠️ Ad *{a['name']}* is {a['effective_status'].lower()}: check it in Ads Manager" for a in problems])
+    problems = [f"⚠️ Ad *{a['name']}* is {a['effective_status'].lower()}: check it in Ads Manager"
+                for a in ads if a.get("effective_status") in ("DISAPPROVED", "WITH_ISSUES")]
+    # account_status 1 is ACTIVE; anything else (disabled, unsettled,
+    # closed) stops every ad. Missing means Meta didn't say.
+    if account.get("account_status") not in (None, 1):
+        problems.insert(0, f"⚠️ The ad account is disabled or on hold (status {account['account_status']}): "
+                           "check Ads Manager → Account overview")
+    if spend7 <= 0:
+        on = [a for a in ads if a.get("effective_status") == "ACTIVE"]
+        if not problems and not on:
+            out.append("No ad spend in the last 7 days and no ads on; no report.")
+            return None
+        # Zero spend with ads on, or a rejected ad / held account, is a
+        # stalled campaign, not a quiet week: say so.
+        head = "📉 Meta ads: $0 spent in the last 7 days" + (f" with {len(on)} ad{'s' if len(on) != 1 else ''} on" if on else "")
+        text = "\n".join([head] + problems)
+        out.append(text)
+        return text
+    _, yday = summarize(insights(api, account["id"], "yesterday"))
+    text = "\n".join([f"📈 Meta ads: yesterday {yday}", f"Last 7 days: {week}"] + problems)
     out.append(text)
     return text
 
@@ -224,7 +244,7 @@ def main(argv=None, session=None):
     ap.add_argument("target", nargs="?", default="")
     ap.add_argument("amount", nargs="?", default="")
     ap.add_argument("--force", action="store_true")
-    ap.add_argument("--scheduled", action="store_true", help="the daily run: setup problems don't fail it")
+    ap.add_argument("--scheduled", action="store_true", help="the daily run: ads not set up yet doesn't fail it")
     args = ap.parse_args(argv)
 
     token = os.environ.get("META_ADS_TOKEN", "").strip()
@@ -253,7 +273,10 @@ def main(argv=None, session=None):
             cmd_budget(api, args.target, dollars, args.force, out)
     except AdsError as e:
         print("\n".join(out))
-        if args.scheduled:
+        # Only "ads were never set up" is quiet on the daily run; a dead
+        # token or lost account access fails it so meta-ads.yml alerts
+        # Slack, instead of the daily report just stopping.
+        if args.scheduled and isinstance(e, NotSetUp):
             print(f"::warning::{e}")
             return 0
         print(f"::error::{e}")

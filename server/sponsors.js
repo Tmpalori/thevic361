@@ -52,7 +52,7 @@ import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
 import { normalizeEmail } from './newsletter.js';
 import { venueFor } from './guides.js';
-import { renderSponsorConfirmed, renderSponsorReport, newsletterCovers, pickWhere } from './notify.js';
+import { renderSponsorConfirmed, renderSponsorReport, renderSponsorTooLate, newsletterCovers, pickWhere } from './notify.js';
 import { botName, visitorHash } from './analytics.js';
 
 export { newsletterCovers, pickWhere };
@@ -332,15 +332,49 @@ export function applyPlacements(payload, orders, { now, venues = [], pins = new 
   return { ...payload, events, sponsor: weekly ? { ...weekly.sponsor, week: weekly.week_start } : (payload.sponsor || null) };
 }
 
+// ─── Slow payments ───────────────────────────────────────────────────────
+// Bank debits can take days to settle. Close to the date, checkout offers
+// only cards (wallets included), which settle at once; a slow payment that
+// still clears after the pick's day or the sponsor week is over is marked
+// 'late' (never fulfilled) for the owner to refund.
+const INSTANT_ONLY_DAYS = 5;
+
+function orderDates(order) {
+  if (order.kind === 'weekly' && order.week_start) return [order.week_start, addDays(order.week_start, 6)];
+  if (order.kind === 'featured' && order.event && order.event.date) return [order.event.date, order.event.date];
+  return null;
+}
+
+export function instantOnly(order, now) {
+  const d = orderDates(order);
+  return Boolean(d) && d[0] <= addDays(localDateStr(now), INSTANT_ONLY_DAYS);
+}
+
+export function paidTooLate(order, now) {
+  const d = orderDates(order);
+  return Boolean(d) && d[1] < localDateStr(now);
+}
+
 // ─── Sponsor click report ────────────────────────────────────────────────
 // Weekly sponsors are promised how many people clicked. Site clicks come
 // from the track beacon (docs/track.js sponsor_click with the button's
 // link); email clicks from the /go/s/<week> redirect. People are counted
 // once per day (the same visitor hash the Traffic tab uses), so a mail
 // scanner or a double tap doesn't inflate the number.
+// Compared by host (without www) and path only: the button's href is
+// sponsorLinkUrl(url), so the beacon's click_url carries utm_* tags (and the
+// browser may add a #hash) that the stored sponsor URL doesn't.
 function sameLink(a, b) {
-  const norm = u => String(u || '').trim().toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/\/+$/, '');
-  return Boolean(a) && norm(a) === norm(b);
+  const norm = u => {
+    const raw = String(u || '').trim();
+    try {
+      const x = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`);
+      return `${x.hostname.toLowerCase().replace(/^www\./, '')}${x.pathname.replace(/\/+$/, '')}`;
+    } catch {
+      return raw.toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/[?#].*$/, '').replace(/\/+$/, '');
+    }
+  };
+  return Boolean(a) && Boolean(b) && norm(a) === norm(b);
 }
 
 export function sponsorStats(order, rows, { recipients = 0 } = {}) {
@@ -730,6 +764,11 @@ export function renderThanksPage(order, { siteUrl, now = new Date() }) {
     msg = 'Your payment went through, but someone else booked that week moments before you. Sorry about that.';
     next = ['We’ll get in touch within 1 business day to move you to another open week or refund you in full, whichever you prefer.',
       'Nothing else is needed from you. If you already know which you’d like, contact us below.'];
+  } else if (order && order.status === 'late') {
+    // A bank payment that cleared after the date it paid for (webhook).
+    msg = 'Your bank payment cleared only after that date had passed, so we couldn’t run it. Sorry about that.';
+    next = ['We’re refunding you in full; Stripe shows it within a few business days.',
+      'Want another date instead? Contact us below and we’ll set it up.'];
   }
   const steps = next.length ? `<h2 class="section-heading">What happens next</h2><ol class="thanks-steps">${next.map(x => `<li>${x}</li>`).join('')}</ol>` : '';
   const body = `<h1 class="page-title">Thank you</h1><p class="page-lead">${msg}</p>${steps}
@@ -1050,6 +1089,23 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           customer_id: typeof obj.customer === 'string' ? obj.customer : null,
           payment_intent: typeof obj.payment_intent === 'string' ? obj.payment_intent : null
         });
+        // Settled after the date it paid for: nothing left to run, so no
+        // submission and no "you're booked". The owner refunds in Stripe
+        // (the restricted key can't); the buyer is told so.
+        if (paidTooLate(order, nowFn())) {
+          order.status = 'late';
+          await save(order);
+          await dropLogo(order);
+          if (slack) {
+            slack.alert(`sponsor-late:${order.id}`, `Refund ${order.business}: payment cleared after its date`,
+              `${order.business} (${order.email}) paid $${Math.round((order.amount || 0) / 100)} by bank for ${order.kind === 'weekly' ? `the week of ${order.week_start}` : `${order.event.name} (${order.event.date})`}, but it only cleared now. Nothing went live; they've been told they'll be refunded in full. Refund it in Stripe${order.payment_intent ? ` (${order.payment_intent})` : ''}.`,
+              'https://dashboard.stripe.com/payments');
+          }
+          if (mailer && mailer.enabled) {
+            await mailer.send(order.email, renderSponsorTooLate(order, { siteUrl, address: mailAddress }), `vic361-sponsor-late-${order.id}`);
+          }
+          return;
+        }
         // Someone else already paid for this week (e.g. this hold lapsed
         // first). Keep the money traceable and ask for a refund, but don't
         // put two sponsors in one slot.
@@ -1355,7 +1411,10 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
             mode: pkg.interval ? 'subscription' : 'payment',
             // No payment_method_types: Stripe shows the methods enabled in
             // the Dashboard. Slower methods (bank debits) keep the week held
-            // as "processing" until they settle; see the webhook.
+            // as "processing" until they settle; see the webhook. Within a
+            // few days of the date, cards only (`instantOnly`): a bank debit
+            // could settle after it.
+            ...(!pkg.interval && instantOnly(order, nowFn()) ? { payment_method_types: ['card'] } : {}),
             integration_identifier: INTEGRATION_ID,
             customer_email: order.email,
             client_reference_id: order.id,

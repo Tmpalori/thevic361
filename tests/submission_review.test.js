@@ -352,6 +352,38 @@ describe('paid Vic\'s Picks in the review', () => {
     expect((await store.get('p1')).ai_review.reason).toMatch(/paid Vic’s Pick.*looks like an ad/);
   });
 
+  it('the live email only promises the newsletter star when that week\'s issue was still ahead at purchase', async () => {
+    // Bought Monday Oct 5 for Saturday Oct 10: that week's issue already went out.
+    await startPaid();
+    await store.saveSponsorOrder(ORDER());
+    await store.insert(paidRow());
+    await review([{ id: 'p1', decision: 'approve', cleaned: CLEAN }]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).not.toMatch(/starred in/i);
+    expect(sent[0].html).not.toMatch(/starred in/i);
+    expect(sent[0].text).toMatch(/newsletter goes out before we could add it/);
+  });
+
+  it('the live email promises the star for a pick bought before its week\'s issue', async () => {
+    await startPaid();
+    const early = '2026-09-28T15:00:00Z';
+    await store.saveSponsorOrder(ORDER({ created_at: early, paid_at: early }));
+    await store.insert(paidRow({ created_at: early }));
+    await review([{ id: 'p1', decision: 'approve', cleaned: CLEAN }]);
+    expect(sent[0].text).toMatch(/starred in the Monday newsletter for the week of October 5/);
+  });
+
+  it('a refunded pick that goes live as a plain listing isn\'t told it\'s pinned', async () => {
+    await startPaid();
+    await store.saveSponsorOrder(ORDER({ status: 'refunded' }));
+    await store.insert(paidRow());
+    await review([{ id: 'p1', decision: 'approve', cleaned: CLEAN }]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].subject).not.toMatch(/Vic's Pick/);
+    expect(sent[0].text).not.toMatch(/pinned|starred/i);
+    expect(sent[0].html).not.toContain('Make it a Vic’s Pick');
+  });
+
   it('reminds the owner in Slack when a paid pick close to its date is still unpublished, at most every few hours', async () => {
     await startPaid();
     const earlier = new Date(NOW.getTime() - 3600 * 1000).toISOString();

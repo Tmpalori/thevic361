@@ -1,4 +1,5 @@
 """Tests for scripts/sweep_events.py, the post-publish event check."""
+import json
 import os
 import sys
 from unittest.mock import patch
@@ -279,3 +280,43 @@ def test_hide_batch_stays_under_the_server_limit_and_day_lists_go_first():
     assert len(capped) == sw.MAX_PER_RUN
     shown_first = [bool(events[i].get("overflow")) for i, _, _ in capped]
     assert shown_first == sorted(shown_first) and shown_first.count(False) == 7
+
+
+def _cands(tmp_path, events, made="2026-10-04T20:27:09-05:00"):
+    p = tmp_path / "candidates.json"
+    p.write_text(json.dumps({"last_updated": made, "events": [
+        {"date": d, "name": n, "venue": "Hall", "_source": "x"} for d, n in events]}))
+    return str(p)
+
+
+def test_wait_ignores_a_publish_that_did_not_bring_the_new_candidates(tmp_path):
+    # A submissions-only auto-publish (or an admin publish) in the deploy
+    # window bumps last_updated without the new candidates: keep waiting.
+    old = [{"date": "2026-10-10", "name": "Bingo", "venue": "Hall"}]
+    new = old + [{"date": "2026-10-10", "name": n, "venue": "Hall"} for n in ("Rodeo", "Fair", "Gala")]
+    answers = iter([
+        {"last_updated": "2026-10-05T01:00:00Z", "events": old},     # before the deploy
+        {"last_updated": "2026-10-05T01:30:00Z", "events": old},     # submission approved: newer, same list
+        {"last_updated": "2026-10-05T01:40:00Z", "events": new},     # boot auto-publish
+    ])
+    sleeps = []
+    # Swap was rejected in admin (never published); Past is already over.
+    path = _cands(tmp_path, [("2026-10-10", n) for n in ("Bingo", "Rodeo", "Fair", "Gala", "Swap")] +
+                  [("2026-10-01", "Past")])
+    assert sw.wait_for_publish(path, lambda: next(answers), sleep=sleeps.append, today="2026-10-06") is True
+    assert len(sleeps) == 2
+
+
+def test_wait_times_out_with_a_warning(tmp_path, capsys):
+    stale = {"last_updated": "2026-10-05T03:00:00Z", "events": []}
+    path = _cands(tmp_path, [("2026-10-10", "Rodeo"), ("2026-10-10", "Fair")])
+    assert sw.wait_for_publish(path, lambda: stale, sleep=lambda s: None, tries=3, today="2026-10-06") is False
+    assert "::warning::" in capsys.readouterr().out
+
+
+def test_wait_with_nothing_new_only_needs_the_newer_list(tmp_path):
+    live = {"last_updated": "2026-10-05T03:00:00Z", "events": [{"date": "2026-10-10", "name": "Bingo", "venue": "Hall"}]}
+    path = _cands(tmp_path, [("2026-10-10", "Bingo")])
+    assert sw.wait_for_publish(path, lambda: live, sleep=lambda s: None, tries=1, today="2026-10-06") is True
+    older = dict(live, last_updated="2026-10-04T00:00:00Z")
+    assert sw.wait_for_publish(path, lambda: older, sleep=lambda s: None, tries=1, today="2026-10-06") is False

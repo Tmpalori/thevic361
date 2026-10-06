@@ -62,10 +62,12 @@ export function keyedEvents(events, edits = []) {
 // What the public sees, still carrying the original key (for the hide
 // endpoint). Pages are assigned before filtering so hiding one event
 // never renumbers another's URL.
+// An entry's shown_key counts too: a Save & Publish of an edited event
+// stores the edited shape, so its original key becomes the shown key.
 export function visibleKeyed(published, edits = []) {
-  const { keys } = hiddenSets(published);
+  const { keys, shown } = hiddenSets(published);
   const all = keyedEvents(published && published.events, edits);
-  return keys.size ? all.filter(ev => !keys.has(ev[OKEY])) : all;
+  return keys.size ? all.filter(ev => !keys.has(ev[OKEY]) && !shown.has(ev[OKEY])) : all;
 }
 
 export function stripKeys(events) {
@@ -143,14 +145,18 @@ export function registerEventCheck(app, { store, requireAdmin, nowFn, secret, lo
   app.post('/api/admin/hidden/restore', requireAdmin, async (req, res) => {
     const key = String(req.body && req.body.key || '');
     const published = await store.getPublished();
-    if (!published || !entries(published).some(h => h.key === key)) return res.status(404).json({ ok: false, error: 'not-hidden' });
+    const entry = published && entries(published).find(h => h.key === key);
+    if (!entry) return res.status(404).json({ ok: false, error: 'not-hidden' });
     const today = localDateStr(nowFn());
     await store.setPublished({
       ...published,
       hidden: published.hidden.filter(h => h.key !== key),
       // Don't let the next check hide it again. Keys start with the date,
       // so past ones age out.
-      hidden_restored: [...new Set([...(published.hidden_restored || []), key])].filter(k => k.slice(0, 10) >= today)
+      // The shown key too: after a Save & Publish of an edit, it's the key the
+      // check sees.
+      hidden_restored: [...new Set([...(published.hidden_restored || []), key, entry.shown_key].filter(Boolean))]
+        .filter(k => k.slice(0, 10) >= today)
     });
     res.json({ ok: true, restored: key });
   });

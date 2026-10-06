@@ -300,7 +300,8 @@ describe('POST /api/admin/trigger-collect', () => {
       const tok = await loginToken();
       const r = await fetchJson('POST', '/api/admin/trigger-collect', {},
         { Authorization: 'Bearer ' + tok });
-      expect(r.status).toBe(401);
+      // 502, not 401: the admin treats a 401 as its own session expiring.
+      expect(r.status).toBe(502);
       expect(r.json.error).toBe('github-token-invalid');
       expect(r.json.github_status).toBe(401);
       // Friendly message must mention that Save & Publish is unaffected and

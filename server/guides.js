@@ -412,9 +412,12 @@ function seasonEvents(season, live, archived, today) {
 
 // Seasonal pages with at least one upcoming event. Being in season isn't
 // enough: a guide with nothing on it stays out of the nav and sitemap.
-export function activeSeasons(live, archived, now) {
+// Upcoming events come from the live list only (see seasonEvents), so the
+// archive isn't read: this runs on every public request, and walking the
+// whole archive once per season cost real CPU as it grew.
+export function activeSeasons(live, _archived, now) {
   const today = localDateStr(now);
-  return SEASONS.filter(s => seasonEvents(s, live, archived, today).upcoming.length);
+  return SEASONS.filter(s => (live || []).some(ev => ev && ev.page && ev.date >= today && seasonMatches(s, ev)));
 }
 
 export function renderSeasonPage(season, live, archived, { siteUrl, now, sponsor }) {
@@ -476,6 +479,8 @@ function eventInstants(ev) {
   const times = parseTimes(ev.time);
   if (!times[0]) return null;
   const start = new Date(`${ev.date}T${times[0]}:00${chicagoOffset(ev.date)}`);
+  // A malformed date would make toISOString throw on every view.
+  if (Number.isNaN(start.getTime())) return null;
   let end = times[1] ? new Date(`${ev.date}T${times[1]}:00${chicagoOffset(ev.date)}`) : null;
   if (!end || end <= start) {
     end = times[1] ? new Date(end.getTime() + 24 * 3600 * 1000) : new Date(start.getTime() + 2 * 3600 * 1000);

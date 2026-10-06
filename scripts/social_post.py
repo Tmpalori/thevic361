@@ -108,7 +108,7 @@ def wait_for_deploy(urls, kit_url, generated_for, session, timeout_s=600, sleep=
         time.sleep(sleep)
 
 
-def post_facebook(page_id, token, image_urls, caption, session):
+def post_facebook(page_id, token, image_urls, caption, session, before_publish=None):
     """Upload photos unpublished, then one feed post with all of them attached."""
     media = []
     for url in image_urls:
@@ -117,20 +117,24 @@ def post_facebook(page_id, token, image_urls, caption, session):
     params = {"message": caption, "access_token": token}
     for i, m in enumerate(media):
         params[f"attached_media[{i}]"] = json.dumps(m)
-    return _publish(f"{page_id}/feed", session, **params)
+    return _publish(f"{page_id}/feed", session, before_publish, **params)
 
 
-def _publish(path, session, **params):
+def _publish(path, session, before_publish=None, **params):
     """The call that makes the post live. A read timeout here means Meta may
     have posted it anyway, so it's Unconfirmed; any earlier timeout only
-    left unpublished photos or containers behind and is a plain failure."""
+    left unpublished photos or containers behind and is a plain failure.
+    before_publish runs first (main marks the slot pending on disk), so a
+    run killed during this call (cancel, step timeout) can't post twice."""
+    if before_publish:
+        before_publish()
     try:
         return _graph("POST", path, session, **params)["id"]
     except _SentButNoAnswer as e:
         raise Unconfirmed(str(e)) from None
 
 
-def post_instagram(ig_user_id, token, image_urls, caption, session, poll_sleep=5):
+def post_instagram(ig_user_id, token, image_urls, caption, session, poll_sleep=5, before_publish=None):
     """Carousel: one container per image, a carousel container, then publish."""
     children = []
     for url in image_urls:
@@ -149,11 +153,11 @@ def post_instagram(ig_user_id, token, image_urls, caption, session, poll_sleep=5
         time.sleep(poll_sleep)
     else:
         raise PostError("Instagram was still processing the carousel after 2 minutes.")
-    return _publish(f"{ig_user_id}/media_publish", session,
+    return _publish(f"{ig_user_id}/media_publish", session, before_publish,
                     creation_id=carousel["id"], access_token=token)
 
 
-def post_instagram_reel(ig_user_id, token, video_url, caption, session, poll_sleep=10):
+def post_instagram_reel(ig_user_id, token, video_url, caption, session, poll_sleep=10, before_publish=None):
     """Reel: one video container (also shown in the feed), then publish."""
     item = _graph("POST", f"{ig_user_id}/media", session, media_type="REELS", video_url=video_url,
                   caption=caption, share_to_feed="true", access_token=token)
@@ -167,7 +171,7 @@ def post_instagram_reel(ig_user_id, token, video_url, caption, session, poll_sle
         time.sleep(poll_sleep)
     else:
         raise PostError("Instagram was still processing the Reel after 6 minutes.")
-    return _publish(f"{ig_user_id}/media_publish", session,
+    return _publish(f"{ig_user_id}/media_publish", session, before_publish,
                     creation_id=item["id"], access_token=token)
 
 
@@ -245,6 +249,9 @@ def main(argv=None, session=None):
 
     def remember(platform, post_id):
         slot[platform] = post_id
+        remember_all()
+
+    def remember_all():
         # Keep two weeks of history.
         for k in sorted(posted)[:-30]:
             posted.pop(k, None)
@@ -271,11 +278,23 @@ def main(argv=None, session=None):
             failures.append(f"{label}: {e}; it may have posted anyway. Check {label} by hand; "
                             f"re-runs skip it until \"{platform}\" is removed from posted.json.")
         else:
+            # Meta answered with an error: nothing posted, so drop this
+            # run's pending mark and let a re-run try again.
+            if slot.get(platform) == PENDING:
+                slot.pop(platform)
+                remember_all()
             failures.append(f"{label}: {e}")
+
+    def pending(platform):
+        # Written to disk just before the publish call. If the job is
+        # cancelled or times out mid-call, the always() save step commits
+        # this, and re-runs warn instead of posting a second time.
+        return lambda: remember(platform, PENDING)
 
     if not already("Facebook", "facebook"):
         try:
-            fb_id = post_facebook(page_id, token, urls, kit["captions"]["facebook"], session)
+            fb_id = post_facebook(page_id, token, urls, kit["captions"]["facebook"], session,
+                                  before_publish=pending("facebook"))
             remember("facebook", fb_id)
             print(f"Facebook: posted {fb_id}")
         except PostError as e:
@@ -285,10 +304,12 @@ def main(argv=None, session=None):
     elif not already("Instagram", "instagram"):
         try:
             if reel_url:
-                ig_id = post_instagram_reel(ig_user, token, reel_url, kit["captions"]["instagram"], session)
+                ig_id = post_instagram_reel(ig_user, token, reel_url, kit["captions"]["instagram"], session,
+                                            before_publish=pending("instagram"))
                 print(f"Instagram: posted Reel {ig_id}")
             else:
-                ig_id = post_instagram(ig_user, token, ig_urls, kit["captions"]["instagram"], session)
+                ig_id = post_instagram(ig_user, token, ig_urls, kit["captions"]["instagram"], session,
+                                       before_publish=pending("instagram"))
                 print(f"Instagram: posted {ig_id}")
             remember("instagram", ig_id)
         except PostError as e:
