@@ -48,6 +48,7 @@ RELIGIOUS_REASONS = {"religious event", "church event", "worship service"}  # co
 # times stay flags: the fix is an edit, not a removal. AI findings are never
 # acted on.
 AUTO_HIDE = {"religious", "not_an_event", "duplicate", "cut_off"}
+MAX_PER_RUN = 10  # server/eventcheck.js refuses a larger batch
 # Hand-written events (curated: true, from local_events.yaml) were checked
 # by a person: church trunk-or-treats and nearby-town festivals are on the
 # list on purpose, and a name like "Movie Night: Friday the 13th" on a
@@ -201,6 +202,13 @@ def ai_findings(events, api_key):
     return out
 
 
+def cap_picks(events, picks):
+    """At most MAX_PER_RUN: the hide endpoint refuses a bigger batch outright,
+    which would hide nothing. Events on the day lists go first (stable order
+    otherwise); the rest stay in the report and wait for the next run."""
+    return sorted(picks, key=lambda p: bool(events[p[0]].get("overflow")))[:MAX_PER_RUN]
+
+
 def trusted(events, findings):
     """Drop findings a person already settled (curated events, CURATED_SKIP)."""
     return [f for f in findings if not (events[f[0]].get("curated") is True and f[1] in CURATED_SKIP)]
@@ -241,9 +249,15 @@ def _exact_twins(a, b):
             and ce._start_minutes(a.get("time")) == ce._start_minutes(b.get("time")))
 
 
+def _paid(e):
+    """A paid/hand-featured listing. An editor's pick (server/scoring.js) is
+    featured only because it scored well; it gets no protection here."""
+    return bool(e.get("featured")) and not e.get("editor_pick")
+
+
 def _detail(e):
     """How much a listing tells people; the richer duplicate is kept."""
-    return (bool(e.get("featured")), bool(e.get("url")), len(e.get("description") or ""), bool(e.get("time")))
+    return (_paid(e), bool(e.get("url")), len(e.get("description") or ""), bool(e.get("time")))
 
 
 def to_hide(events, rules):
@@ -257,12 +271,12 @@ def to_hide(events, rules):
             continue
         if kind == "cut_off":
             whole = _whole_listing(events, i)
-            if whole is None or events[i].get("featured"):
+            if whole is None or _paid(events[i]):
                 continue
             why = f"{why}; “{events[whole]['name']}” is listed there that day"
         if kind == "duplicate":
             j = _dup_of(events, i)
-            if j is None or events[i].get("featured") or events[j].get("featured"):
+            if j is None or _paid(events[i]) or _paid(events[j]):
                 continue
             if _library_twin(events[i], events[j]):
                 # The city calendar's copy has the real meeting place.
@@ -345,7 +359,9 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true", help="print instead of posting to Slack")
     args = ap.parse_args(argv)
 
-    resp = requests.get(f"{SITE}/events.json", timeout=30, headers={"User-Agent": "vic361-event-check"})
+    # ?all=1: every public event, including ones past their day's limit
+    # (server/scoring.js), which still have pages and appear in the guides.
+    resp = requests.get(f"{SITE}/events.json?all=1", timeout=30, headers={"User-Agent": "vic361-event-check"})
     resp.raise_for_status()
     events = upcoming(resp.json().get("events") or [], ce.now_central().date(), args.days)
 
@@ -355,6 +371,7 @@ def main(argv=None):
     ai = trusted(events, ai) if ai is not None else None
     secret = "" if args.dry_run else os.environ.get("EVENT_CHECK_SECRET", "").strip()
     picks, resolved = to_hide(events, rules)
+    picks = cap_picks(events, picks)
     hidden, restored, problem = hide(events, picks, secret)
     findings = combine(rules, ai)
     # A duplicate pair shows once: as the copy that was hidden.

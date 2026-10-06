@@ -338,3 +338,48 @@ def test_digest_reviews_only_the_next_two_weeks(tmp_path):
     p.write_text(json.dumps({"events": [{"date": (t + timedelta(days=n)).isoformat(), "name": f"E{n}"} for n in (1, 13, 40, 80)]}))
     assert [e["name"] for e in sd.load_candidates(str(p), all_days=True)[0]] == ["E1", "E13"]
     assert [e["name"] for e in sd.load_candidates(str(p))[0]] == ["E13"]
+
+
+# ─── Review fixes ───────────────────────────────────────────────────────────
+
+def test_a_failed_flyer_call_retries_with_text_only(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "fake")
+    monkeypatch.setattr(ce, "_fetch_image_data_url", lambda url, get=None: "data:image/png;base64,AAAA")
+    calls = []
+
+    def chat(api_key, messages, max_tokens, timeout=60):
+        calls.append(messages[0]["content"])
+        if isinstance(messages[0]["content"], list):
+            raise RuntimeError("400 invalid image")
+        return json.dumps([{"date": d(2), "weekday": "", "recurring": False, "name": "Trivia", "source_post_index": 1}])
+
+    monkeypatch.setattr(ce, "_openai_chat", chat)
+    out = ce._extract_events_from_posts_via_ai("Evan's", [{"text": "Trivia Wednesday", "displayUrl": "https://ig/1.jpg"}])
+    assert [e["name"] for e in out] == ["Trivia"]
+    assert isinstance(calls[0], list) and isinstance(calls[1], str)
+    assert "Flyer images:" not in calls[1]
+
+
+def test_deadline_skips_the_rest_of_the_ai_review(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.setattr(ce, "_RUN_STARTED", __import__("time").time() - (ce.COLLECT_DEADLINE_MIN + 1) * 60)
+    monkeypatch.setattr(ce, "_openai_chat", lambda *a, **k: pytest.fail("reviewed past the deadline"))
+    evs = [{"date": d(1), "name": "Fest", "venue": "X", "description": "raw", "icons": []}]
+    assert ce.ai_review(evs) == evs
+
+
+def test_ai_review_never_drops_a_hand_written_event(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    reply = [{"description": "x", "icons": [], "free": True, "keep": False},
+             {"description": "y", "icons": [], "free": True, "keep": False}]
+    monkeypatch.setattr(ce, "_openai_chat", lambda *a, **k: json.dumps(reply))
+    evs = [{"date": d(1), "name": "Kids Eat Free", "venue": "Golden Corral", "description": "", "icons": [], "curated": True},
+           {"date": d(1), "name": "Now Hiring", "venue": "X", "description": "", "icons": []}]
+    assert [e["name"] for e in ce.ai_review(evs)] == ["Kids Eat Free"]
+
+
+def test_organizer_accounts_are_not_places():
+    venues = json.load(open(os.path.join(os.path.dirname(__file__), "venues.json")))
+    ce._set_non_place_names(venues)
+    for name in ("victoria film society", "victoria tnr", "scenic root", "tabree nashay entertainment"):
+        assert name in ce._NON_PLACE_NAMES

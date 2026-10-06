@@ -59,6 +59,15 @@ GENERIC_VENUES = {"victoria", "victoria tx", "victoria texas", "downtown", "down
                   "tba", "tbd", "online", "various", "various locations", "texas", "tx"}
 
 
+def pick_rank(e):
+    """Paid Vic's Picks first, then editor's picks (server/scoring.js), then the rest."""
+    return 0 if e.get("featured") and not e.get("editor_pick") else 1 if e.get("featured") else 2
+
+
+def is_paid_pick(e):
+    return bool(e.get("featured")) and not e.get("editor_pick")
+
+
 def today_central():
     if ZoneInfo:
         return datetime.now(ZoneInfo("America/Chicago")).date()
@@ -104,7 +113,7 @@ def select_events(events, start, end):
         if start <= d <= end and ev.get("name"):
             out.setdefault(d, []).append(ev)
     for d in out:
-        out[d].sort(key=lambda e: (not e.get("featured"), _time_key(e.get("time"))))
+        out[d].sort(key=lambda e: (pick_rank(e), _time_key(e.get("time"))))
     return dict(sorted(out.items()))
 
 
@@ -382,7 +391,7 @@ def render_plain_slides(groups, start, end, kind, out_dir):
            font=_font(True, 64), fill=INK)
     d.text((72, 470), f"{total} things to do" if total else "Nothing listed yet", font=_font(False, 48), fill=MUTED)
     y = 600
-    for e in [e for evs in groups.values() for e in evs if e.get("featured")][:3] or \
+    for e in sorted([e for evs in groups.values() for e in evs if e.get("featured")], key=pick_rank)[:3] or \
              [e for evs in groups.values() for e in evs][:3]:
         for line in _wrap(d, f"• {e['name']}", _font(True, 40), W - 144)[:2]:
             d.text((72, y), line, font=_font(True, 40), fill=INK)
@@ -584,7 +593,9 @@ def main(argv=None):
         kit = {"slides": slides, "slides_jpg": jpeg_copies(args.out, slides),
                "captions": captions(groups, start, end, kind, handles),
                "events": sum(len(v) for v in groups.values()),
-               "featured": sum(1 for v in groups.values() for e in v if e.get("featured"))}
+               # Paid picks only: the Thursday "today" post exists so a paid
+               # pick that day is always posted, not for editor's picks.
+               "featured": sum(1 for v in groups.values() for e in v if is_paid_pick(e))}
         if kind == "weekend":
             reel = make_reel(args.out, slides)
             if reel:

@@ -312,3 +312,16 @@ def test_manifest_has_jpeg_twins_and_featured_count(tmp_path):
     (out / "today-9.jpg").write_bytes(b"x")
     sk.main(["--events-file", str(ev), "--today", "2026-10-08", "--out", str(out), "--kinds", "today"])
     assert not (out / "today-9.jpg").exists()
+
+
+def test_paid_picks_lead_editors_picks_and_only_paid_ones_count_for_thursday():
+    d = "2026-10-10"
+    events = [
+        {"date": d, "name": "Editor Pick", "time": "1:00 PM", "featured": True, "editor_pick": True},
+        {"date": d, "name": "Paid Pick", "time": "7:00 PM", "featured": True},
+        {"date": d, "name": "Plain", "time": "9:00 AM"},
+    ]
+    g = sk.select_events(events, date(2026, 10, 10), date(2026, 10, 10))
+    assert [e["name"] for e in g[date(2026, 10, 10)]] == ["Paid Pick", "Editor Pick", "Plain"]
+    assert sk.is_paid_pick(events[1]) and not sk.is_paid_pick(events[0])
+    assert sorted(events, key=sk.pick_rank)[0]["name"] == "Paid Pick"

@@ -130,6 +130,8 @@
     // so the operator can tell which checked rows are already live vs.
     // session-only picks.
     publishedKeys: new Set(),
+    // key -> { score, overflow, keep } for live events (server/scoring.js).
+    scoreInfo: new Map(),
     hiddenKeys: new Set(),   // live events the event check hid (server/eventcheck.js)
     filters: { search: '', category: '', venue: '', week: 'this' }
   };
@@ -548,6 +550,19 @@
         const srcPill = '<span class="src-pill src-pill--' + escapeHtml(src) +
           '" title="Source: ' + escapeHtml(sourceLabel(src)) + '">' +
           escapeHtml(sourceLabel(src)) + '</span>';
+        // A live event past its day's limit (15 Mon–Thu, 20 Fri–Sun) is off
+        // the day lists but keeps its page and its place in the guides.
+        const info = state.publishedKeys.has(k) && state.canKeep ? state.scoreInfo.get(k) : null;
+        const scorePill = !info ? ''
+          : info.pick
+          ? '<span class="src-pill src-pill--kept" title="Score ' + info.score + ': one of this day’s top events, so the site shows it as a Vic’s Pick. A paid Vic’s Pick takes its place.">Vic’s Pick (auto)</span>'
+          : info.keep
+          ? '<span class="src-pill src-pill--kept" title="Shown on its day whatever its score (you chose this).">Shown anyway</span>' +
+            '<button type="button" class="btn btn--outline event-row__keep-btn" data-act="keep-event" data-keep="0" data-key="' + escapeHtml(k) + '">Undo</button>'
+          : info.overflow
+          ? '<span class="src-pill src-pill--dropped" title="Score ' + info.score + ': not in this day’s top events, so it’s off the homepage, newsletter and day pages. It keeps its own page and stays in the guides.">Dropped · score ' + info.score + '</span>' +
+            '<button type="button" class="btn btn--outline event-row__keep-btn" data-act="keep-event" data-keep="1" data-key="' + escapeHtml(k) + '">Show anyway</button>'
+          : '';
         const publishedPill = state.hiddenKeys.has(k)
           ? '<span class="src-pill src-pill--hidden" title="Published, but the event check hid it from the site. Restore it on the Home tab.">Hidden by check</span>'
           : state.publishedKeys.has(k)
@@ -587,7 +602,7 @@
               '<input type="checkbox" data-key="' + escapeHtml(k) + '" ' + checked + '>' +
               '<div class="event-row__main">' +
                 '<p class="event-row__name">' + escapeHtml(ev.name || '(untitled)') +
-                  ' ' + srcPill + publishedPill + submitterMeta + '</p>' +
+                  ' ' + srcPill + publishedPill + scorePill + submitterMeta + '</p>' +
                 '<div class="event-row__meta">' +
                   (ev.time ? '<span>🕒 ' + escapeHtml(ev.time) + (ev.end_time ? ' – ' + escapeHtml(ev.end_time) : '') + '</span>' : '') +
                   (ev.venue ? '<span>📍 ' + escapeHtml(ev.venue) + '</span>' : '') +
@@ -624,6 +639,30 @@
         persistSelections();
         updateCounts();
         renderPicker();
+      });
+    });
+
+    listEl.querySelectorAll('button[data-act="keep-event"]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const k = btn.getAttribute('data-key');
+        const keep = btn.getAttribute('data-keep') === '1';
+        btn.disabled = true;
+        try {
+          const { res, json } = await adminFetch('/api/admin/keep-event', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: k, keep })
+          });
+          if (!res.ok || !json || !json.ok) throw new Error('HTTP ' + res.status);
+          setStatus(keep ? 'It’s back on its day.' : 'It’s scored like the rest again.', 'success');
+          // Re-reads scores; unsaved picks survive (they're kept as pending).
+          await loadPublishedAndSeedSelections();
+          renderPicker();
+        } catch (err) {
+          btn.disabled = false;
+          setStatus('Couldn’t change that event: ' + err.message, 'error');
+        }
       });
     });
 
@@ -720,6 +759,11 @@
       const events = Array.isArray(json.events) ? json.events : [];
       const keys = new Set(events.map(eventKey));
       state.publishedKeys = keys;
+      // "Show anyway" saves to the published store; with nothing published
+      // there yet (the bundled file is showing), there's nothing to save to.
+      state.canKeep = json.source === 'store';
+      state.scoreInfo = new Map(events.filter(ev => typeof ev.score === 'number')
+        .map(ev => [eventKey(ev), { score: ev.score, overflow: Boolean(ev.overflow), keep: Boolean(ev.keep), pick: Boolean(ev.editor_pick) }]));
       // Sent back with Save & Publish so the server can refuse if the live
       // list changed meanwhile (see /api/admin/publish-events).
       state.publishedVersion = json.last_updated || null;
@@ -1131,7 +1175,9 @@
     form.elements['url'].value = ev.url || '';
     syncEditUrlOpenLink();
     form.elements['free'].checked = Boolean(ev.free);
-    if (form.elements['featured']) form.elements['featured'].checked = Boolean(ev.featured);
+    // An editor's pick is featured only by its score (server/scoring.js);
+    // the box means a real Vic's Pick, so it starts unticked for one.
+    if (form.elements['featured']) form.elements['featured'].checked = Boolean(ev.featured && !ev.editor_pick);
     const haveIcons = new Set(Array.isArray(ev.icons) ? ev.icons : []);
     form.querySelectorAll('input[name="icons"]').forEach(cb => {
       cb.checked = haveIcons.has(cb.value);
@@ -1198,6 +1244,9 @@
       const k = eventKey(ev);
       if (k === originalKey) {
         const merged = { ...ev, ...edited };
+        // Ticked Vic's Pick: a real one now, not the score's (Save & Publish
+        // strips `featured` from editor's picks).
+        if (edited.featured) delete merged.editor_pick;
         const mk = eventKey(merged);
         if (!seen.has(mk)) { seen.add(mk); next.push(merged); }
         replaced = true;

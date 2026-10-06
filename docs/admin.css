@@ -602,6 +602,28 @@ code {
   border-color: rgba(255, 190, 100, 0.45);
   color: #ffc46b;
 }
+/* Scoring (server/scoring.js): live but past its day's limit, or shown anyway. */
+.src-pill--dropped {
+  background: rgba(120, 120, 140, 0.12);
+  border-color: rgba(120, 120, 140, 0.45);
+  color: #5c5c70;
+}
+[data-theme="dark"] .src-pill--dropped {
+  background: rgba(200, 200, 220, 0.12);
+  border-color: rgba(200, 200, 220, 0.4);
+  color: #c9c9d8;
+}
+.src-pill--kept {
+  background: rgba(75, 63, 209, 0.12);
+  border-color: rgba(75, 63, 209, 0.45);
+  color: #4b3fd1;
+}
+[data-theme="dark"] .src-pill--kept {
+  background: rgba(185, 166, 255, 0.14);
+  border-color: rgba(185, 166, 255, 0.45);
+  color: #b9a6ff;
+}
+.event-row__keep-btn { margin-left: 6px; padding: 0 10px; font-size: 12px; line-height: 1.8; vertical-align: middle; }
 .home-hidden__intro { color: var(--muted, #666); margin: 0 0 12px; }
 [data-theme="dark"] .src-pill--published {
   background: rgba(123, 226, 174, 0.14);

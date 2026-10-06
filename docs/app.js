@@ -169,8 +169,10 @@
         if (ampm === 'AM' && h === 12) h = 0;
         return h * 60 + min;
       }
-      // Featured (paid) events pin to the top of their day.
-      if (Boolean(a.featured) !== Boolean(b.featured)) return a.featured ? -1 : 1;
+      // Paid Vic's Picks pin to the top of their day, then editor's picks
+      // (pickRank in server/seo.js).
+      var ra = a.featured ? (a.editor_pick ? 1 : 0) : 2, rb = b.featured ? (b.editor_pick ? 1 : 0) : 2;
+      if (ra !== rb) return ra - rb;
       return toMins(ta) - toMins(tb);
     });
 

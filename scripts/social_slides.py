@@ -95,7 +95,9 @@ def cover_html(groups, start, end, kind):
     from social_kit import clean_venue  # a venue name, not a geocoder string
     events = [e for evs in groups.values() for e in evs]
     total = len(events)
-    picks = ([e for e in events if e.get("featured")] + [e for e in events if not e.get("featured")])[:3]
+    # Paid Vic's Picks first, then editor's picks, then the rest.
+    rank = lambda e: 0 if e.get("featured") and not e.get("editor_pick") else 1 if e.get("featured") else 2
+    picks = sorted(events, key=rank)[:3]
     rows = "".join(
         f'<div class="card pick" style="padding:18px 30px;border-radius:30px;box-shadow:10px 10px 0 {INK};transform:rotate({r}deg)"><div class="one disp" style="font-size:40px">{_icons(e, 42)} {esc(e["name"])}</div>'
         f'<div class="one" style="font-size:28px;font-weight:800;color:#554E7A;margin-top:6px">'
