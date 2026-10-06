@@ -79,10 +79,18 @@ export function newToken() {
 
 // ─── Resend client ───────────────────────────────────────────────────────
 
-export function createResend(apiKey, fetchImpl = globalThis.fetch) {
+// Resend calls give up after RESEND_TIMEOUT_MS. Without it a Resend that
+// accepts the connection and never answers holds the caller for undici's
+// 5-minute default: the sponsor confirmation, the reports and the weekly
+// batch all wait on it, and so would anything queued behind them.
+export const RESEND_TIMEOUT_MS = 15000;
+
+export function createResend(apiKey, fetchImpl = globalThis.fetch, { timeoutMs = RESEND_TIMEOUT_MS } = {}) {
   async function call(path, body, idempotencyKey, extraHeaders = {}) {
+    // One signal for the request and the body read below.
     const res = await fetchImpl(`${RESEND_API}${path}`, {
       method: 'POST',
+      signal: AbortSignal.timeout(timeoutMs),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -498,14 +506,25 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     let sent = 0;
     const failures = [];
     const failedEmails = [];
+    // Addresses Resend's permissive validation refused. Retrying them can't
+    // help (same address, same answer), so they don't count as failed:
+    // otherwise the week never reads "sent" and every Monday retries and
+    // alerts again. They're marked bounced (no future sends) and listed in
+    // one Slack note.
+    const refusedEmails = [];
     const attempt = resume ? `-r${Date.now()}` : force ? `-f${Date.now()}` : '';
     const base = resume ? (prior.recipients || 0) : 0;
     let waiting = subs.map(s => s.email);
+    // A resumed send renders from the resume day onward, so a pick starred
+    // in Monday's issue may be missing from probe.picks by Tuesday. The
+    // record keeps every pick any part of the week's send starred (the
+    // Vic's Pick report reads it).
+    const picks = resume && Array.isArray(prior.picks) ? [...new Set([...prior.picks, ...probe.picks])] : probe.picks;
     // Written before each chunk, with everyone not yet sent counted as
     // failed: if the process dies mid-send, the week reads "partly sent"
     // and Retry (or the next cron) goes only to the people still waiting.
     const progress = () => store.recordNewsletterSend({
-      week_key: key, subject: probe.subject, recipients: base + sent, picks: probe.picks,
+      week_key: key, subject: probe.subject, recipients: base + sent, picks,
       failed: failedEmails.length + waiting.length, failed_emails: [...failedEmails, ...waiting]
     });
     for (let i = 0; i < subs.length; i += BATCH_SIZE) {
@@ -526,11 +545,13 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       const who = crypto.createHash('sha256').update(chunk.map(s => s.email).join(',')).digest('hex').slice(0, 12);
       try {
         const out = await resend.batch(msgs, `vic361-${key}-${i / BATCH_SIZE}-${who}${attempt}`);
-        // Permissive validation: refused addresses come back by index and
-        // only they count as failed.
+        // Permissive validation: refused addresses come back by index; the
+        // rest of the chunk went out.
         const refused = new Map((out && Array.isArray(out.errors) ? out.errors : []).map(e => [Number(e.index), e.message]));
-        chunk.forEach((s, j) => { if (refused.has(j)) failedEmails.push(s.email); else sent++; });
-        if (refused.size) failures.push(`${refused.size} address(es) refused: ${[...refused.values()][0]}`);
+        chunk.forEach((s, j) => {
+          if (refused.has(j)) refusedEmails.push({ email: s.email, reason: String(refused.get(j) || '').slice(0, 200) });
+          else sent++;
+        });
       } catch (err) {
         if (err.status === 409) sent += chunk.length;
         else {
@@ -541,16 +562,29 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       waiting = waiting.slice(chunk.length);
     }
     const record = {
-      week_key: key, subject: probe.subject, picks: probe.picks,
+      week_key: key, subject: probe.subject, picks,
       recipients: base + sent,
       failed: failedEmails.length, failed_emails: failedEmails
     };
     await store.recordNewsletterSend(record);
+    if (refusedEmails.length) {
+      const emails = refusedEmails.map(r => r.email);
+      let marked = false;
+      try {
+        if (typeof store.markSubscribersBounced === 'function') { await store.markSubscribersBounced(emails); marked = true; }
+      } catch (err) { console.warn('[newsletter] marking refused addresses bounced failed:', err.message); }
+      if (slack) {
+        slack.alert(`newsletter-refused-${key}`, `Newsletter: Resend refused ${emails.length} address(es)`,
+          `${refusedEmails.slice(0, 20).map(r => `${r.email}: ${r.reason}`).join('\n')}${emails.length > 20 ? `\n…and ${emails.length - 20} more` : ''}\n` +
+          (marked ? 'They are marked bounced and get no more issues; re-import one to try it again.' : 'They could not be marked bounced, so the next send will try them again.'),
+          `${siteUrl}/admin.html`);
+      }
+    }
     if (slack) {
       if (failures.length) slack.alert(`newsletter-failed-${key}`, 'Newsletter send partly failed', `${sent} sent, ${record.failed} failed.\n${failures[0]}`, `${siteUrl}/admin.html`);
       else slack.notify({ title: '📧 Newsletter sent', fields: [['Recipients', sent], ['Subject', probe.subject], ['Events', probe.total]] });
     }
-    return { ok: failures.length === 0, ...record, errors: failures.slice(0, 3) };
+    return { ok: failures.length === 0, ...record, refused: refusedEmails.map(r => r.email), errors: failures.slice(0, 3) };
   }
 
   app.post('/api/subscribe', async (req, res) => {

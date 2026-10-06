@@ -45,13 +45,31 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # When the AI review was last reported down, so a dead OpenAI key or
+      # empty credit fails the run (and pings Slack) once every 6 hours,
+      # not every 15 minutes (scripts/review_submissions.py ai_down_alert).
+      - name: Restore state
+        uses: actions/cache/restore@v4
+        with:
+          path: .review-state
+          key: review-state-${{ github.run_id }}
+          restore-keys: review-state-
+
       - name: Review new submissions
         env:
+          AI_ALERT_STATE: .review-state/ai-alert.json
           SITE_URL: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           SUBMISSION_REVIEW_SECRET: ${{ secrets.SUBMISSION_REVIEW_SECRET || secrets.EVENT_CHECK_SECRET || secrets.NEWSLETTER_CRON_SECRET }}
         run: python3 scripts/review_submissions.py
+
+      - name: Save state
+        if: always() && hashFiles('.review-state/ai-alert.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .review-state
+          key: review-state-${{ github.run_id }}
 
       - name: Tell Slack it failed
         if: failure()
