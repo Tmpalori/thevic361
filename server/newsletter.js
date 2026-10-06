@@ -35,7 +35,10 @@ import {
 } from './seo.js';
 
 const RESEND_API = 'https://api.resend.com';
-const EMAIL_RE = /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[^\s@<>"',;]+$/;
+// Strict enough that Resend accepts every address we keep: no empty dot
+// segments ("bob@gmail..com", ".bob@"), domain labels of letters, digits
+// and inner hyphens, and a real TLD. Matched after lowercasing.
+const EMAIL_RE = /^[^\s@<>"',;.]+(?:\.[^\s@<>"',;.]+)*@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
 const BATCH_SIZE = 100;          // Resend batch limit
 const PER_DAY = 6;               // events per day in the email
 
@@ -71,13 +74,14 @@ export function newToken() {
 // ─── Resend client ───────────────────────────────────────────────────────
 
 export function createResend(apiKey, fetchImpl = globalThis.fetch) {
-  async function call(path, body, idempotencyKey) {
+  async function call(path, body, idempotencyKey, extraHeaders = {}) {
     const res = await fetchImpl(`${RESEND_API}${path}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {})
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+        ...extraHeaders
       },
       body: JSON.stringify(body)
     });
@@ -92,7 +96,10 @@ export function createResend(apiKey, fetchImpl = globalThis.fetch) {
   }
   return {
     send: (msg, key) => call('/emails', msg, key),
-    batch: (msgs, key) => call('/emails/batch', msgs, key)
+    // Batch validation is strict by default: one address Resend refuses
+    // fails all 100 messages. Permissive sends the rest and lists the
+    // refused ones in `errors` ({ index, message }).
+    batch: (msgs, key) => call('/emails/batch', msgs, key, { 'x-batch-validation': 'permissive' })
   };
 }
 
@@ -436,7 +443,21 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     return currentWeek(localDateStr(now))[0];
   }
 
-  async function sendWeekly({ force = false } = {}) {
+  // One send at a time in this process: the Monday cron and an admin
+  // Send/Retry can overlap, and both would read "not sent yet" and mail
+  // everyone. The second gets 'in-progress' instead.
+  let sending = false;
+  async function sendWeekly(opts = {}) {
+    if (sending) return { ok: false, error: 'in-progress', message: 'The newsletter is going out right now. Check back in a minute.' };
+    sending = true;
+    try {
+      return await sendWeeklyNow(opts);
+    } finally {
+      sending = false;
+    }
+  }
+
+  async function sendWeeklyNow({ force = false } = {}) {
     if (!config.enabled) return { ok: false, error: 'not-configured' };
     // CAN-SPAM: every marketing email needs a physical postal address.
     if (!config.address) return { ok: false, error: 'no-address', message: 'Set NEWSLETTER_ADDRESS (a mailing address) before sending.' };
@@ -468,7 +489,17 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     const failures = [];
     const failedEmails = [];
     const attempt = resume ? `-r${Date.now()}` : force ? `-f${Date.now()}` : '';
+    const base = resume ? (prior.recipients || 0) : 0;
+    let waiting = subs.map(s => s.email);
+    // Written before each chunk, with everyone not yet sent counted as
+    // failed: if the process dies mid-send, the week reads "partly sent"
+    // and Retry (or the next cron) goes only to the people still waiting.
+    const progress = () => store.recordNewsletterSend({
+      week_key: key, subject: probe.subject, recipients: base + sent,
+      failed: failedEmails.length + waiting.length, failed_emails: [...failedEmails, ...waiting]
+    });
     for (let i = 0; i < subs.length; i += BATCH_SIZE) {
+      await progress();
       const chunk = subs.slice(i, i + BATCH_SIZE);
       const msgs = chunk.map(s => {
         const unsubscribeUrl = `${siteUrl}/unsubscribe?token=${encodeURIComponent(s.token)}`;
@@ -479,18 +510,29 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
           headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
         };
       });
+      // Idempotency key per week + chunk + who's in it: a retried request
+      // can't double-send, and a 409 (key already used, by an earlier send
+      // of these same people within Resend's 24 hours) means they got it.
+      const who = crypto.createHash('sha256').update(chunk.map(s => s.email).join(',')).digest('hex').slice(0, 12);
       try {
-        // Idempotency key per week + chunk: a retried request can't double-send.
-        await resend.batch(msgs, `vic361-${key}-${i / BATCH_SIZE}${attempt}`);
-        sent += chunk.length;
+        const out = await resend.batch(msgs, `vic361-${key}-${i / BATCH_SIZE}-${who}${attempt}`);
+        // Permissive validation: refused addresses come back by index and
+        // only they count as failed.
+        const refused = new Map((out && Array.isArray(out.errors) ? out.errors : []).map(e => [Number(e.index), e.message]));
+        chunk.forEach((s, j) => { if (refused.has(j)) failedEmails.push(s.email); else sent++; });
+        if (refused.size) failures.push(`${refused.size} address(es) refused: ${[...refused.values()][0]}`);
       } catch (err) {
-        failures.push(err.message);
-        failedEmails.push(...chunk.map(s => s.email));
+        if (err.status === 409) sent += chunk.length;
+        else {
+          failures.push(err.message);
+          failedEmails.push(...chunk.map(s => s.email));
+        }
       }
+      waiting = waiting.slice(chunk.length);
     }
     const record = {
       week_key: key, subject: probe.subject,
-      recipients: sent + (resume ? (prior.recipients || 0) : 0),
+      recipients: base + sent,
       failed: failedEmails.length, failed_emails: failedEmails
     };
     await store.recordNewsletterSend(record);
@@ -710,8 +752,8 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
         slack.alert('newsletter-no-events', 'Newsletter skipped: nothing published for this week',
           'Publish this week\'s picks in admin, then send it from the Newsletter tab.', `${siteUrl}/admin.html`);
       }
-      // already-sent / no-events are normal outcomes for a cron, not failures.
-      res.status(out.ok || ['already-sent', 'no-events', 'no-subscribers'].includes(out.error) ? 200 : 500).json(out);
+      // already-sent / no-events / in-progress are normal outcomes for a cron, not failures.
+      res.status(out.ok || ['already-sent', 'no-events', 'no-subscribers', 'in-progress'].includes(out.error) ? 200 : 500).json(out);
     } catch (err) {
       if (slack) slack.alert('newsletter-cron', 'Newsletter send crashed', err.message);
       res.status(500).json({ ok: false, error: 'send-failed', message: err.message });

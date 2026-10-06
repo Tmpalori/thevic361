@@ -1025,7 +1025,7 @@ export async function createApp(opts = {}) {
   //
   // Failure-mode contract (consumed by the admin Sources tab):
   //   error: 'github-not-configured'  -> no token at all (503)
-  //   error: 'github-token-invalid'   -> 401 Bad credentials (token stale/revoked)
+  //   error: 'github-token-invalid'   -> 502; GitHub said 401 Bad credentials (token stale/revoked)
   //   error: 'dispatch-failed'        -> 403/404/etc, original github_status returned
   // In every case we include `actions_url` so the UI can offer a manual fallback,
   // and a `save_publish_unaffected: true` flag so the UI never implies that the
@@ -1055,7 +1055,7 @@ export async function createApp(opts = {}) {
       // this as a recognizable "token-invalid" state so the UI can render
       // friendly copy and a fallback link instead of a raw "Bad credentials".
       if (err.status === 401) {
-        return res.status(401).json({
+        return res.status(502).json({
           ok: false,
           error: 'github-token-invalid',
           github_status: 401,
@@ -1512,8 +1512,12 @@ export async function createApp(opts = {}) {
     const live = events.find(e => eventKeyOf(e) === key) || (paid ? events.find(e => sameEvent(row.payload, e)) : null);
     if (!live) return false;
     if (row.submitter_email) {
-      const mail = renderSubmissionLive(paid ? { ...row.payload, name: live.name, featured: true } : row.payload, {
-        siteUrl, address: newsletter.address, upgradeUrl: upgradeUrlFor(row), pick: paid,
+      // Only called pinned while its order still pins it (a refunded or
+      // hidden order no longer features the event); the newsletter line is
+      // worded from when it was bought (the paid row is created at payment).
+      const pinned = paid && Boolean(live.featured) && !live.editor_pick;
+      const mail = renderSubmissionLive(paid ? { ...row.payload, name: live.name, featured: pinned } : row.payload, {
+        siteUrl, address: newsletter.address, upgradeUrl: paid ? '' : upgradeUrlFor(row), pick: pinned, at: row.created_at,
         pageUrl: live.page ? `${siteUrl}${live.page}` : ''
       });
       await mailer.send(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
