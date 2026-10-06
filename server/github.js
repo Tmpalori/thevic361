@@ -21,13 +21,34 @@
 const DEFAULT_OWNER = 'Tmpalori';
 const DEFAULT_REPO = 'thevic361';
 const DEFAULT_BRANCH = 'main';
+// Every GitHub call gives up after this. A GitHub API that accepts the
+// connection and then hangs would otherwise hold the admin's Events tab and
+// Save & Publish for undici's 5-minute default, and the callers' local-file
+// fallbacks only run once a call fails.
+export const GITHUB_TIMEOUT_MS = 15000;
 
 export function createGithub(opts = {}) {
   const token = opts.token ?? process.env.GITHUB_TOKEN ?? process.env.GITHUB_PAT ?? null;
   const owner = opts.owner ?? process.env.GITHUB_OWNER ?? DEFAULT_OWNER;
   const repo = opts.repo ?? process.env.GITHUB_REPO ?? DEFAULT_REPO;
   const branch = opts.branch ?? process.env.GITHUB_BRANCH ?? DEFAULT_BRANCH;
-  const fetchImpl = opts.fetch || globalThis.fetch;
+  const rawFetch = opts.fetch || globalThis.fetch;
+  const timeoutMs = opts.timeoutMs ?? GITHUB_TIMEOUT_MS;
+
+  // The signal also covers reading the body. A timeout becomes a plain
+  // Error (code 'timeout', no .status: there was no HTTP answer).
+  async function fetchImpl(url, init = {}) {
+    try {
+      return await rawFetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (err) {
+      if (err && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+        const e = new Error(`github-timeout after ${timeoutMs} ms`);
+        e.code = 'timeout';
+        throw e;
+      }
+      throw err;
+    }
+  }
 
   function isConfigured() { return Boolean(token); }
 

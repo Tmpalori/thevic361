@@ -363,6 +363,22 @@ class FileStore {
     });
   }
 
+  // Addresses Resend refused outright (newsletter.js sendWeekly). Only
+  // active ones change: someone who unsubscribed stays unsubscribed.
+  async markSubscribersBounced(emails) {
+    const set = new Set(emails || []);
+    if (!set.size) return 0;
+    return this._withWrite(async () => {
+      const data = await this._read();
+      let n = 0;
+      for (const sub of data.subscribers) {
+        if (set.has(sub.email) && sub.status === 'active') { Object.assign(sub, { status: 'bounced', bounced_at: nowIso() }); n++; }
+      }
+      await this._write(data);
+      return n;
+    });
+  }
+
   async getSubscriberByToken(token) {
     if (!token) return null;
     const data = await this._read();
@@ -973,6 +989,16 @@ class PgStore {
     const r = await this.pool.query(
       `UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = NOW() WHERE token = $1`, [token]);
     return r.rowCount > 0;
+  }
+
+  // See FileStore.markSubscribersBounced. status is plain TEXT, so no
+  // migration; the date isn't kept here (the Slack note has it).
+  async markSubscribersBounced(emails) {
+    if (!emails || !emails.length) return 0;
+    await this.ready();
+    const r = await this.pool.query(
+      `UPDATE subscribers SET status = 'bounced' WHERE email = ANY($1::text[]) AND status = 'active'`, [emails]);
+    return r.rowCount;
   }
 
   async getSubscriberByToken(token) {

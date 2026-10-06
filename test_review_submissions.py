@@ -225,3 +225,89 @@ def test_site_outage_is_a_warning_not_a_failure_alert(monkeypatch, capsys):
     # A wrong secret still fails: that won't fix itself.
     monkeypatch.setattr(rs.requests, "get", lambda *a, **k: _Status(401))
     assert rs.main([]) == 1
+
+
+def _http_error(status, body):
+    resp = rs.requests.Response()
+    resp.status_code = status
+    resp._content = body.encode()
+    return rs.requests.HTTPError(f"{status} Client Error", response=resp)
+
+
+def _run_main(monkeypatch, chat, key="key", state=None, pending=None):
+    posts = []
+
+    class R:
+        def __init__(self, body):
+            self.body, self.status_code, self.ok = body, 200, True
+            self.headers = {"content-type": "application/json"}
+
+        def json(self):
+            return self.body
+
+        def raise_for_status(self):
+            pass
+
+    def get(url, headers=None, timeout=None):
+        if url.endswith("/pending"):
+            return R({"submissions": pending if pending is not None else [sub(1, ev("Fall Craft Fair"))]})
+        return R({"events": []})
+
+    def post(url, headers=None, json=None, timeout=None):
+        posts.append(json)
+        return R({"done": json["reviews"], "skipped": [], "published": True})
+
+    monkeypatch.setenv("SUBMISSION_REVIEW_SECRET", "s3cret")
+    monkeypatch.setenv("OPENAI_API_KEY", key)
+    if state:
+        monkeypatch.setenv("AI_ALERT_STATE", str(state))
+    else:
+        monkeypatch.delenv("AI_ALERT_STATE", raising=False)
+    monkeypatch.setattr(rs.requests, "get", get)
+    monkeypatch.setattr(rs.requests, "post", post)
+    with patch.object(rs.ce, "_openai_chat", side_effect=chat):
+        return rs.main([]), posts
+
+
+def test_a_dead_openai_key_fails_the_run_instead_of_exiting_quietly(monkeypatch):
+    rc, posts = _run_main(monkeypatch, _http_error(401, '{"error":{"code":"invalid_api_key"}}'))
+    assert rc == 1 and posts == []
+
+
+def test_used_up_credit_and_a_missing_key_fail_the_run_too(monkeypatch):
+    quota = _http_error(429, '{"error":{"type":"insufficient_quota","code":"insufficient_quota"}}')
+    assert _run_main(monkeypatch, quota)[0] == 1
+    assert _run_main(monkeypatch, None, key="")[0] == 1
+    # Nothing waiting: nothing to alert about.
+    assert _run_main(monkeypatch, None, key="", pending=[])[0] == 0
+
+
+def test_a_broken_account_stops_after_the_first_call_and_rule_decisions_still_go_through(monkeypatch):
+    calls = []
+
+    def chat(*a, **kw):
+        calls.append(1)
+        raise _http_error(401, "bad key")
+
+    church = sub(2, ev("Sunday Worship Service", venue="First Baptist Church"))
+    rc, posts = _run_main(monkeypatch, chat, pending=[sub(1, ev("Fall Craft Fair")), church, sub(3, ev("Pumpkin Patch"))])
+    assert rc == 1 and len(calls) == 1
+    assert [r["id"] for r in posts[0]["reviews"]] == ["s2"]
+
+
+def test_a_one_off_failure_or_rate_limit_still_waits_quietly_when_another_call_answers(monkeypatch):
+    chat = [_http_error(429, '{"error":{"code":"rate_limit_exceeded"}}'), json.dumps(answer())]
+    rc, posts = _run_main(monkeypatch, chat, pending=[sub(1, ev("Fall Craft Fair")), sub(2, ev("Pumpkin Patch"))])
+    assert rc == 0 and [r["id"] for r in posts[0]["reviews"]] == ["s2"]
+
+
+def test_the_dead_ai_alert_fires_once_then_waits_until_it_recovers(monkeypatch, tmp_path):
+    state = tmp_path / "s" / "ai-alert.json"
+    dead = _http_error(401, "bad key")
+    assert _run_main(monkeypatch, dead, state=state)[0] == 1
+    assert _run_main(monkeypatch, dead, state=state)[0] == 0      # already alerted
+    assert _run_main(monkeypatch, [json.dumps(answer())], state=state)[0] == 0
+    assert _run_main(monkeypatch, dead, state=state)[0] == 1      # a new outage alerts again
+    # And a long outage reminds every ALERT_EVERY_S.
+    saved = json.loads(state.read_text())
+    assert rs.ai_down_alert(str(state), "down", now=saved["alerted_at"] + rs.ALERT_EVERY_S + 1) is True

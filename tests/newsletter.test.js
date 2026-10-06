@@ -549,8 +549,9 @@ describe('send failures', () => {
     expect(calls[1].headers['x-batch-validation']).toBeUndefined();
   });
 
-  it('one address Resend refuses fails only itself, not the whole chunk', async () => {
+  it('an address Resend refuses fails only itself, is marked bounced, and the week reads sent', async () => {
     const calls = [];
+    const alerts = [];
     const resend = {
       send: async () => ({ id: 'x' }),
       batch: async (msgs) => {
@@ -559,13 +560,36 @@ describe('send failures', () => {
         return { data: msgs.filter((_, i) => i !== bad).map((_, i) => ({ id: `b${i}` })), errors: bad >= 0 ? [{ index: bad, message: 'Invalid `to` field' }] : [] };
       }
     };
-    await startApp({ resend });
+    await startApp({ resend, slack: { enabled: true, notify: async () => true, alert: async (key, title, text) => { alerts.push({ key, title, text }); } } });
+    const h = await auth();
     await store.importSubscribers(['a@example.com', 'b@example.com', 'c@example.com'], 'import');
     const first = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
-    expect(first).toMatchObject({ ok: false, recipients: 2, failed: 1, failed_emails: ['b@example.com'] });
-    const retry = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
-    expect(calls.at(-1)).toEqual(['b@example.com']);
-    expect(retry.recipients).toBe(2);
+    expect(first).toMatchObject({ ok: true, recipients: 2, failed: 0, failed_emails: [], refused: ['b@example.com'] });
+    // Kept on record: the subscriber row says bounced, and the owner is told who.
+    expect((await store.listSubscribers({})).find(s => s.email === 'b@example.com').status).toBe('bounced');
+    expect(alerts.filter(a => a.key === 'newsletter-refused-2026-10-05')).toHaveLength(1);
+    expect(alerts[0].text).toContain('b@example.com');
+    expect(alerts.some(a => a.key.startsWith('newsletter-failed'))).toBe(false);
+    const st = await (await fetch(baseUrl + '/api/admin/newsletter', { headers: h })).json();
+    expect(st).toMatchObject({ this_week_sent: true, this_week_failed: 0 });
+    // No retry of the refused address, this week or next.
+    const again = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
+    expect(again.error).toBe('already-sent');
+    expect(calls).toHaveLength(1);
+    expect((await store.listSubscribers({ status: 'active' })).map(s => s.email).sort()).toEqual(['a@example.com', 'c@example.com']);
+  });
+
+  it('a resumed send keeps the picks the first part of the week starred', async () => {
+    await startApp();
+    await store.importSubscribers(['a@example.com', 'b@example.com'], 'import');
+    // Monday's send starred a paid pick and missed b; by the retry that
+    // pick's day may be gone from the issue, so the resend's own picks lack it.
+    await store.recordNewsletterSend({ week_key: '2026-10-05', subject: 'x', recipients: 1, picks: ['order-monday'],
+      failed: 1, failed_emails: ['b@example.com'] });
+    const r = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
+    expect(r).toMatchObject({ ok: true, recipients: 2, failed: 0 });
+    expect(sent.batches.at(-1).msgs.map(m => m.to[0])).toEqual(['b@example.com']);
+    expect((await store.getNewsletterSend('2026-10-05')).picks).toContain('order-monday');
   });
 
   it('a 409 idempotency answer means that chunk already went out', async () => {
@@ -631,5 +655,24 @@ describe('send failures', () => {
     await startApp();
     const r = await fetch(baseUrl + '/api/newsletter/cron', { method: 'POST', headers: { 'X-Cron-Secret': Buffer.from('crön-secret1', 'latin1').toString('latin1') } });
     expect(r.status).toBe(401);
+  });
+});
+
+describe('Resend timeout', () => {
+  it('a Resend that accepts the connection and never answers is given up on', async () => {
+    const seen = [];
+    // Hangs until its signal aborts, like a stalled HTTP response.
+    const fetchImpl = (url, init) => new Promise((_, reject) => {
+      seen.push(init.signal);
+      if (!init.signal) return;
+      init.signal.addEventListener('abort', () => reject(init.signal.reason));
+    });
+    const r = createResend('re_x', fetchImpl, { timeoutMs: 30 });
+    const outcome = await Promise.race([
+      r.send({ to: ['a@example.com'] }).then(() => 'answered', err => `failed: ${err.name}`),
+      new Promise(res => setTimeout(() => res('still hanging'), 1000))
+    ]);
+    expect(outcome).toBe('failed: TimeoutError');
+    expect(seen[0]).toBeInstanceOf(AbortSignal);
   });
 });
