@@ -246,7 +246,76 @@ recurring:
     free: false
     url: "https://www.instagram.com/jwelchfarms/"
 
+  # ── Seasonal (from the Oct 2026 community events list; dates per their pages) ──
 
+  - name: "J Welch Farms Corn Maze"
+    day: "friday"
+    time: "6:00 PM – 10:00 PM"
+    venue: "J Welch Farms"
+    description: "Corn maze season. $20 per person, kids 2 and under free; mining rocks, potato cannon and paintballs extra. Leashed dogs welcome. 361-412-7677."
+    icons: [family, outdoors]
+    free: false
+    url: "https://www.instagram.com/jwelchfarms/"
+    start_date: "2026-10-02"
+    end_date: "2026-11-01"
+
+  - name: "J Welch Farms Corn Maze"
+    day: "saturday"
+    time: "11:00 AM – 10:00 PM"
+    venue: "J Welch Farms"
+    description: "Corn maze season. $20 per person, kids 2 and under free; mining rocks, potato cannon and paintballs extra. Leashed dogs welcome. 361-412-7677."
+    icons: [family, outdoors]
+    free: false
+    url: "https://www.instagram.com/jwelchfarms/"
+    start_date: "2026-10-02"
+    end_date: "2026-11-01"
+
+  - name: "J Welch Farms Corn Maze"
+    day: "sunday"
+    time: "10:00 AM – 3:00 PM"
+    venue: "J Welch Farms"
+    description: "Corn maze season. $20 per person, kids 2 and under free; mining rocks, potato cannon and paintballs extra. Leashed dogs welcome. 361-412-7677."
+    icons: [family, outdoors]
+    free: false
+    url: "https://www.instagram.com/jwelchfarms/"
+    start_date: "2026-10-02"
+    end_date: "2026-11-01"
+
+  - name: "Terror on Tate Road"
+    day: "friday"
+    time: ""
+    venue: "Outlaw Pass Family Fun Center"
+    address: "78 Tate Rd."
+    description: "Haunted attraction, Friday through Sunday nights in October. Tickets and hours at terrorontate.com."
+    icons: [family, outdoors]
+    free: false
+    url: "https://terrorontate.com/"
+    start_date: "2026-10-02"
+    end_date: "2026-10-31"
+
+  - name: "Terror on Tate Road"
+    day: "saturday"
+    time: ""
+    venue: "Outlaw Pass Family Fun Center"
+    address: "78 Tate Rd."
+    description: "Haunted attraction, Friday through Sunday nights in October. Tickets and hours at terrorontate.com."
+    icons: [family, outdoors]
+    free: false
+    url: "https://terrorontate.com/"
+    start_date: "2026-10-02"
+    end_date: "2026-10-31"
+
+  - name: "Terror on Tate Road"
+    day: "sunday"
+    time: ""
+    venue: "Outlaw Pass Family Fun Center"
+    address: "78 Tate Rd."
+    description: "Haunted attraction, Friday through Sunday nights in October. Tickets and hours at terrorontate.com."
+    icons: [family, outdoors]
+    free: false
+    url: "https://terrorontate.com/"
+    start_date: "2026-10-02"
+    end_date: "2026-10-31"
 
 
 # ─── ONE-TIME EVENTS ─────────────────────────────────────────────────────────
@@ -356,3 +425,1255 @@ events:
     free: false
     url: ""
     # ⚠️ UNVERIFIED — no source URL.
+
+  # ─── Fall 2026 – spring 2027 ─────────────────────────────────────────────
+  # From Tristen's screenshots and the community events list (Oct 5 2026).
+  # big: true puts an event in the homepage's "Coming up" list; town: marks
+  # a nearby-town event (only big ones go in). Most have no source link yet.
+
+  - date: "2026-10-06"
+    name: "United Baptist Church Community Connection Party"
+    time: "4:00 PM"
+    venue: "United Baptist Church"
+    description: "A community get-together hosted by United Baptist Church."
+    icons: [community, family]
+    free: true
+    url: ""
+
+  - date: "2026-10-07"
+    name: "Super Mario Galaxy Fire Prevention Show"
+    time: "6:30 PM"
+    venue: "Victoria Fine Arts Center"
+    address: "1002 Sam Houston Dr."
+    description: "Victoria Fire Department's fire prevention show for kids. Free tickets at the Fire Marshal's office, 2525 N. Main St."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-08"
+    name: "Dine to Donate for the Calhoun High School Band"
+    time: "3:00 PM – 10:00 PM"
+    venue: "Texas Roadhouse"
+    address: "4908 N. Navarro St."
+    description: "Show the flyer (dine in or to go) and Texas Roadhouse gives 20% of your food total to the Calhoun High School band."
+    icons: [food, community]
+    free: false
+    url: ""
+
+  - date: "2026-10-08"
+    name: "Henry Emiliano LIVE"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Evan's Fire Brick Oven Pizza"
+    address: "711 S. Bridge St."
+    description: "Live music at Evan's."
+    icons: [music, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-09"
+    name: "Cuero Turkeyfest"
+    time: ""
+    venue: "Downtown Cuero"
+    description: "Cuero's annual Turkeyfest, Friday through Sunday. Details on the Turkeyfest page."
+    icons: [community, food, family]
+    free: false
+    url: ""
+    town: "Cuero"
+    big: true
+
+  - date: "2026-10-09"
+    name: "Jessica Coleman Music LIVE"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Evan's Fire Brick Oven Pizza"
+    address: "711 S. Bridge St."
+    description: "Live music at Evan's."
+    icons: [music, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-10"
+    name: "Cuero Turkeyfest"
+    time: ""
+    venue: "Downtown Cuero"
+    description: "Day two of Cuero's annual Turkeyfest."
+    icons: [community, food, family]
+    free: false
+    url: ""
+    town: "Cuero"
+    big: true
+
+  - date: "2026-10-10"
+    name: "Zachary Grant LIVE"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Evan's Fire Brick Oven Pizza"
+    address: "711 S. Bridge St."
+    description: "Live music at Evan's."
+    icons: [music, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-10"
+    name: "Night Market: AHS Coven"
+    time: "6:00 PM"
+    venue: "6th Realm Haus"
+    description: "An American Horror Story: Coven themed night market."
+    icons: [shopping, arts]
+    free: false
+    url: ""
+
+  - date: "2026-10-10"
+    name: "CMC Run Against Cancer 5K"
+    time: ""
+    venue: "Citizens Medical Center"
+    description: "Citizens Medical Center's 5K. Registration and details online."
+    icons: [outdoors, community]
+    free: false
+    url: ""
+
+  - date: "2026-10-10"
+    name: "Wags-O-Ween Pet Event"
+    time: "4:00 PM – 6:00 PM"
+    venue: "Riverside Bark Park"
+    address: "201 Memorial Dr."
+    description: "Halloween fun for dogs and their people at the bark park."
+    icons: [outdoors, family]
+    free: true
+    url: ""
+
+  - date: "2026-10-10"
+    name: "JCPenney Kids Craft"
+    time: ""
+    venue: "JCPenney"
+    address: "Victoria Mall"
+    description: "Free kids craft at JCPenney."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-10"
+    name: "Weienerfest"
+    time: "10:00 AM – 4:00 PM"
+    venue: "217 Rios Rd."
+    description: "Weiner dog fun hosted by The 1824 Club. Registration and details on The 1824 Club's Facebook page."
+    icons: [community, family]
+    free: false
+    url: ""
+
+  - date: "2026-10-10"
+    name: "Family Fest & Trunk or Treat"
+    time: "4:00 PM – 6:00 PM"
+    venue: "First United Methodist Church"
+    description: "Family fest and trunk or treat at First United Methodist."
+    icons: [family, community, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-10"
+    name: "Titan Factory Direct Trunk or Treat"
+    time: "3:00 PM – 6:00 PM"
+    venue: "Titan Factory Direct"
+    description: "Trunk or treat. RSVP online."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-10"
+    name: "Faded Fest"
+    time: "6:00 PM"
+    venue: "Dodge City Saloon"
+    address: "205 N. Star Dr."
+    description: "Faded Fest at 205 N. Star Dr."
+    icons: [music, drinks]
+    free: false
+    url: ""
+
+  - date: "2026-10-10"
+    name: "Caturday Halloween Month"
+    time: "10:00 AM – 3:00 PM"
+    venue: "PetSmart"
+    description: "Victoria TNR's adoption event: kittens to meet and trick-or-treating for the kids. Every Saturday in October."
+    icons: [family, community, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-11"
+    name: "Cuero Turkeyfest"
+    time: ""
+    venue: "Downtown Cuero"
+    description: "Final day of Cuero's annual Turkeyfest."
+    icons: [community, food, family]
+    free: false
+    url: ""
+    town: "Cuero"
+    big: true
+
+  - date: "2026-10-11"
+    name: "Coming Out Shouldn't Be Spooky Celebration"
+    time: "3:00 PM – 7:00 PM"
+    venue: "Mitchell Event Annex"
+    description: "Vendors, games, a bounce house and drag performances."
+    icons: [community, family, arts]
+    free: false
+    url: ""
+
+  - date: "2026-10-12"
+    name: "Movie Night: Halloween"
+    time: "7:00 PM"
+    venue: "Moonshine Drinkery"
+    address: "103 W. Santa Rosa St."
+    description: "Victoria Film Society's October movie nights at Moonshine. Tonight: Halloween."
+    icons: [arts, drinks]
+    free: false
+    url: ""
+
+  - date: "2026-10-14"
+    name: "Trivia Night at Evan's"
+    time: "7:00 PM – 9:00 PM"
+    venue: "Evan's Fire Brick Oven Pizza"
+    address: "711 S. Bridge St."
+    description: "Trivia night at Evan's."
+    icons: [community, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-15"
+    name: "Symphonic Spooktacular"
+    time: "5:30 PM"
+    venue: "Victoria Fine Arts Center"
+    address: "1002 Sam Houston Dr."
+    description: "Victoria Symphony's Halloween concert. Pre-show activities start at 5:30 PM. Tickets online."
+    icons: [music, family, arts]
+    free: false
+    url: ""
+    big: true
+
+  - date: "2026-10-15"
+    name: "Handprint on a Plate Craft"
+    time: "10:00 AM – 11:15 AM"
+    venue: "Crossroads Art House"
+    address: "2914 N. Laurent St."
+    description: "Make a handprint keepsake plate. Designed for ages 0–4, all ages welcome. $40 per ceramic; register online."
+    icons: [family, arts]
+    free: false
+    url: ""
+
+  - date: "2026-10-15"
+    name: "Vida Café & Market x 1824 Club Pumpkin Event"
+    time: ""
+    venue: "Vida Café & Market"
+    description: "A pumpkin event with The 1824 Club. Info and tickets on Facebook."
+    icons: [community, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-15"
+    name: "Bourbon Society Mixer"
+    time: ""
+    venue: "Moonshine Drinkery"
+    address: "103 W. Santa Rosa St."
+    description: "Bourbon Society mixer at Moonshine."
+    icons: [drinks, community]
+    free: false
+    url: ""
+
+  - date: "2026-10-15"
+    name: "Henry Emiliano LIVE"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Evan's Fire Brick Oven Pizza"
+    address: "711 S. Bridge St."
+    description: "Live music at Evan's."
+    icons: [music, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-16"
+    name: "Yorktown Western Days"
+    time: ""
+    venue: "Downtown Yorktown"
+    description: "Yorktown's annual Western Days, Friday through Sunday."
+    icons: [community, family, food]
+    free: false
+    url: ""
+    town: "Yorktown"
+    big: true
+
+  - date: "2026-10-16"
+    name: "Jessica Coleman Music LIVE"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Evan's Fire Brick Oven Pizza"
+    address: "711 S. Bridge St."
+    description: "Live music at Evan's."
+    icons: [music, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-17"
+    name: "Yorktown Western Days"
+    time: ""
+    venue: "Downtown Yorktown"
+    description: "Day two of Yorktown Western Days."
+    icons: [community, family, food]
+    free: false
+    url: ""
+    town: "Yorktown"
+    big: true
+
+  - date: "2026-10-17"
+    name: "Uniting Hearts Music Festival"
+    time: "1:00 PM – 8:00 PM"
+    venue: "DeLeon Plaza"
+    address: "101 N. Main St."
+    description: "An afternoon-into-evening music festival downtown. Details online."
+    icons: [music, community]
+    free: false
+    url: ""
+    big: true
+
+  - date: "2026-10-17"
+    name: "Lowe's Kids Craft"
+    time: ""
+    venue: "Lowe's"
+    description: "Free kids workshop. Register online."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-17"
+    name: "Trunk or Treat by Denny's & La Quinta"
+    time: "6:00 PM – 8:00 PM"
+    venue: "Parking lot between Denny's and La Quinta"
+    description: "Trunk or treat in the lot between Denny's and La Quinta."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-17"
+    name: "Teen Murder Mystery: Bloodlines & Betrayal"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Leo J. Welder Center"
+    address: "214 N. Main St."
+    description: "A murder mystery night for ages 11–18. Free; register at civicrec.com."
+    icons: [family, arts, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-17"
+    name: "Halloween Havoc"
+    time: "1:00 PM – 5:00 PM"
+    venue: "2107 Lone Tree Rd."
+    description: "Halloween Havoc by Heathenz Entertainment."
+    icons: [family, community]
+    free: false
+    url: ""
+
+  - date: "2026-10-17"
+    name: "Riverside Oaks Trunk or Treat"
+    time: "4:00 PM – 7:00 PM"
+    venue: "Riverside Oaks"
+    description: "Trunk or treat at Riverside Oaks."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-17"
+    name: "Melissa Ann LIVE"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Evan's Fire Brick Oven Pizza"
+    address: "711 S. Bridge St."
+    description: "Live music at Evan's."
+    icons: [music, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-17"
+    name: "Caturday Halloween Month"
+    time: "10:00 AM – 3:00 PM"
+    venue: "PetSmart"
+    description: "Victoria TNR's adoption event: kittens to meet and trick-or-treating for the kids. Every Saturday in October."
+    icons: [family, community, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-18"
+    name: "Yorktown Western Days"
+    time: ""
+    venue: "Downtown Yorktown"
+    description: "Final day of Yorktown Western Days."
+    icons: [community, family, food]
+    free: false
+    url: ""
+    town: "Yorktown"
+    big: true
+
+  - date: "2026-10-19"
+    name: "Movie Night: Friday the 13th"
+    time: "7:00 PM"
+    venue: "Moonshine Drinkery"
+    address: "103 W. Santa Rosa St."
+    description: "Victoria Film Society's October movie nights at Moonshine. Tonight: Friday the 13th."
+    icons: [arts, drinks]
+    free: false
+    url: ""
+
+  - date: "2026-10-19"
+    name: "Kids Night at Texas Roadhouse"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Texas Roadhouse"
+    address: "4908 N. Navarro St."
+    description: "Kids night at Texas Roadhouse."
+    icons: [family, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-21"
+    name: "Froggy's Trivia Night: Halloween Edition"
+    time: "7:00 PM – 9:00 PM"
+    venue: "Froggy's Grub & Pub"
+    address: "5902 N. Navarro St."
+    description: "Halloween trivia. Free to play, teams of 2–6."
+    icons: [drinks, community, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-21"
+    name: "Townsquare Media's Boo Bash"
+    time: "5:00 PM – 9:00 PM"
+    venue: "DeLeon Plaza"
+    address: "101 N. Main St."
+    description: "Townsquare Media's Halloween Boo Bash downtown."
+    icons: [family, community]
+    free: true
+    url: ""
+    big: true
+
+  - date: "2026-10-22"
+    name: "Austin Attilio LIVE"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Evan's Fire Brick Oven Pizza"
+    address: "711 S. Bridge St."
+    description: "Live music at Evan's."
+    icons: [music, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-23"
+    name: "VPD & Navarro Walmart Trunk or Treat"
+    time: "6:00 PM – 7:30 PM"
+    venue: "Walmart (N. Navarro)"
+    description: "Trunk or treat with the Victoria Police Department."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-23"
+    name: "Furniture Hutt Trunk or Treat"
+    time: "5:00 PM – 7:00 PM"
+    venue: "Furniture Hutt"
+    address: "1505 N. Navarro St."
+    description: "Trunk or treat at Furniture Hutt."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-23"
+    name: "Victoria College Halloween Carnival"
+    time: "5:00 PM – 8:00 PM"
+    venue: "Victoria College"
+    description: "Victoria College's Halloween carnival."
+    icons: [family, community]
+    free: true
+    url: ""
+    big: true
+
+  - date: "2026-10-23"
+    name: "Mercy House Trunk or Treat"
+    time: "4:30 PM – 6:00 PM"
+    venue: "Mercy House"
+    address: "4409 John Stockbauer Dr."
+    description: "Trunk or treat at Mercy House."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-23"
+    name: "Zachary Grant LIVE"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Evan's Fire Brick Oven Pizza"
+    address: "711 S. Bridge St."
+    description: "Live music at Evan's."
+    icons: [music, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Happy Haunted Museum"
+    time: "3:00 PM"
+    venue: "Children's Discovery Museum"
+    address: "1205 Sam Houston Dr."
+    description: "A not-too-scary Halloween afternoon at the Children's Discovery Museum. $5 per person."
+    icons: [family]
+    free: false
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Zoo Brew"
+    time: "7:00 PM – 11:00 PM"
+    venue: "The Texas Zoo"
+    address: "110 Memorial Dr."
+    description: "Ages 21+. Details on the Texas Zoo's Facebook page."
+    icons: [drinks, outdoors]
+    free: false
+    url: ""
+    big: true
+
+  - date: "2026-10-24"
+    name: "McCoy's Kids Craft: Trick or Treat Bucket"
+    time: "10:00 AM – 2:00 PM"
+    venue: "McCoy's Building Supply"
+    description: "Kids make a trick or treat bucket."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Magic Tejano 95.5 Trunk or Treat"
+    time: "6:00 PM – 8:00 PM"
+    venue: "Pattie Dodson Health Center parking lot"
+    address: "2805 N. Navarro St."
+    description: "Trunk or treat with Magic Tejano 95.5."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Breckenridge Spooktacular Carnival"
+    time: "5:30 PM"
+    venue: "Breckenridge"
+    description: "Halloween carnival. Details on their Facebook page."
+    icons: [family]
+    free: false
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Kingdom Church Fall Fest & Trunk or Treat"
+    time: "6:00 PM – 8:00 PM"
+    venue: "Kingdom Church"
+    description: "Fall fest and trunk or treat."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Mid Coast Family Costume Day"
+    time: "2:00 PM – 4:00 PM"
+    venue: "Victoria Mall"
+    description: "Costume day at the mall with Mid Coast Family."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Bella Moo's Spooktacular Cookie Decorating Class"
+    time: ""
+    venue: "Bella Moo's"
+    description: "Halloween cookie decorating. $40 per person; limited space, register online."
+    icons: [family, food, arts]
+    free: false
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Holy Mountain Baptist Church Fall Festival"
+    time: "4:00 PM – 8:00 PM"
+    venue: "Holy Mountain Baptist Church"
+    address: "601 E. Red River St."
+    description: "Fall festival."
+    icons: [family, community]
+    free: true
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Goliad Scare on the Square"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Goliad Courthouse Square"
+    description: "Halloween on the square in Goliad. Details on their Facebook page."
+    icons: [family, community]
+    free: true
+    url: ""
+    town: "Goliad"
+    big: true
+
+  - date: "2026-10-24"
+    name: "First United Methodist Church Pumpkin Fest"
+    time: "10:00 AM – 2:00 PM"
+    venue: "First United Methodist Church"
+    description: "Pumpkin fest."
+    icons: [family, community]
+    free: true
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Trick or Treat Bag Workshop"
+    time: "2:00 PM – 3:30 PM"
+    venue: "Flocking Fabulous Iggy's"
+    description: "Kids decorate a trick or treat bag. Ages 5–12, $20 per child; limited spots, register online."
+    icons: [family, arts]
+    free: false
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Night at the Witches Grove: The Awakening"
+    time: "7:00 PM – 11:00 PM"
+    venue: "2806 N. Navarro St., Suite H"
+    description: "Market, tarot readings and more."
+    icons: [shopping, arts]
+    free: false
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Logan Gisler and the Well Diggers"
+    time: ""
+    venue: "Moonshine Drinkery"
+    address: "103 W. Santa Rosa St."
+    description: "Live music at Moonshine."
+    icons: [music, drinks]
+    free: false
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Jessica Coleman Music LIVE"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Evan's Fire Brick Oven Pizza"
+    address: "711 S. Bridge St."
+    description: "Live music at Evan's."
+    icons: [music, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-24"
+    name: "Caturday Halloween Month"
+    time: "10:00 AM – 3:00 PM"
+    venue: "PetSmart"
+    description: "Victoria TNR's adoption event: kittens to meet and trick-or-treating for the kids. Every Saturday in October."
+    icons: [family, community, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-26"
+    name: "Movie Night: A Nightmare on Elm Street"
+    time: "7:00 PM"
+    venue: "Moonshine Drinkery"
+    address: "103 W. Santa Rosa St."
+    description: "Victoria Film Society's October movie nights at Moonshine. Tonight: A Nightmare on Elm Street."
+    icons: [arts, drinks]
+    free: false
+    url: ""
+
+  - date: "2026-10-27"
+    name: "Mr. Gatti's Trunk or Treat"
+    time: "6:00 PM – 8:00 PM"
+    venue: "Mr. Gatti's Pizza"
+    description: "Trunk or treat at Mr. Gatti's."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-28"
+    name: "Trinity Episcopal Church Trunk or Treat"
+    time: "5:00 PM – 7:00 PM"
+    venue: "Trinity Episcopal Church"
+    description: "Trunk or treat."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-28"
+    name: "Golden Corral Trunk or Treat"
+    time: "6:00 PM – 8:00 PM"
+    venue: "Golden Corral"
+    description: "Trunk or treat at Golden Corral."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-28"
+    name: "ECI Trunk or Treat"
+    time: "5:30 PM"
+    venue: "Memorial Stadium"
+    description: "Trunk or treat at Memorial Stadium."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-28"
+    name: "Trivia Night at Evan's"
+    time: "7:00 PM – 9:00 PM"
+    venue: "Evan's Fire Brick Oven Pizza"
+    address: "711 S. Bridge St."
+    description: "Trivia night at Evan's."
+    icons: [community, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-29"
+    name: "Victoria Community Health Center Trunk or Treat"
+    time: "6:00 PM"
+    venue: "Victoria Community Health Center"
+    address: "4206 Retama Cir."
+    description: "Trunk or treat until the candy runs out."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-29"
+    name: "Victoria Electric Co-op Trunk or Treat"
+    time: "6:00 PM"
+    venue: "Victoria Electric Cooperative"
+    description: "Trunk or treat."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-29"
+    name: "Big Back Food Truck Trunk or Treat"
+    time: "5:00 PM – 9:00 PM"
+    venue: "Big Back Food Truck"
+    address: "2114 Houston Hwy"
+    description: "Trunk or treat at the Big Back food truck."
+    icons: [family, food, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-29"
+    name: "Avir Health Group Indoor Trick or Treating"
+    time: "6:00 PM – 8:00 PM"
+    venue: "Avir Health Group"
+    address: "1301 Mallette Dr."
+    description: "Indoor trick or treating."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-29"
+    name: "Austin Attilio LIVE"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Evan's Fire Brick Oven Pizza"
+    address: "711 S. Bridge St."
+    description: "Live music at Evan's."
+    icons: [music, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-30"
+    name: "Riverside Church Family Fest"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Riverside Church"
+    description: "Family fest."
+    icons: [family, community]
+    free: true
+    url: ""
+
+  - date: "2026-10-30"
+    name: "Calaveras & Cocktails"
+    time: "6:00 PM"
+    venue: "The Nave Museum"
+    address: "306 W. Commercial St."
+    description: "Día de los Muertos evening at The Nave. More info and tickets on their website."
+    icons: [arts, drinks]
+    free: false
+    url: ""
+
+  - date: "2026-10-30"
+    name: "Faith Family Church Fall Fest"
+    time: "6:00 PM – 8:00 PM"
+    venue: "Faith Family Church"
+    description: "Fall fest."
+    icons: [family, community]
+    free: true
+    url: ""
+
+  - date: "2026-10-30"
+    name: "1824 Club Spooktacular Halloween Party"
+    time: "7:30 PM"
+    venue: "Moonshine Drinkery"
+    address: "103 W. Santa Rosa St."
+    description: "The 1824 Club x Moonshine Halloween party with a costume contest ($15 entry)."
+    icons: [drinks, community]
+    free: false
+    url: ""
+
+  - date: "2026-10-31"
+    name: "Boo-Fest"
+    time: "5:00 PM – 8:00 PM"
+    venue: "Downtown Port Lavaca"
+    description: "Family-friendly Halloween bash: treats, bounce house, games, a costume contest at 7 (ages 0–6, 7–12, 13–99) and an outdoor movie at 8."
+    icons: [family, community]
+    free: true
+    url: ""
+    town: "Port Lavaca"
+    big: true
+
+  - date: "2026-10-31"
+    name: "Zoo Boo"
+    time: "12:00 PM – 7:00 PM"
+    venue: "The Texas Zoo"
+    address: "110 Memorial Dr."
+    description: "Halloween at the zoo. Pricing online."
+    icons: [family, outdoors]
+    free: false
+    url: ""
+    big: true
+
+  - date: "2026-10-31"
+    name: "Victoria Malloween"
+    time: "6:00 PM"
+    venue: "Victoria Mall"
+    description: "Trick or treating at the mall."
+    icons: [family, free]
+    free: true
+    url: ""
+    big: true
+
+  - date: "2026-10-31"
+    name: "Día de los Muertos Community Event"
+    time: "12:00 PM – 4:00 PM"
+    venue: "The Nave Museum"
+    address: "306 W. Commercial St."
+    description: "Free Día de los Muertos community afternoon at The Nave."
+    icons: [arts, family, free]
+    free: true
+    url: ""
+    big: true
+
+  - date: "2026-10-31"
+    name: "Farmers' Market Boo Bash"
+    time: "9:00 AM – 1:00 PM"
+    venue: "Pattie Dodson Health Center parking lot"
+    address: "2805 N. Navarro St."
+    description: "Halloween at the farmers market."
+    icons: [shopping, food, family]
+    free: true
+    url: ""
+
+  - date: "2026-10-31"
+    name: "Salty Heifer Trunk or Treat & Halloween Party"
+    time: "4:00 PM"
+    venue: "Salty Heifer Bar"
+    description: "Kids trunk or treat at 4 PM, then an adult Halloween party until 1 AM."
+    icons: [family, drinks]
+    free: false
+    url: ""
+
+  - date: "2026-10-31"
+    name: "Beaner's Ink Trunk or Treat"
+    time: "5:00 PM – 8:00 PM"
+    venue: "Beaner's Ink"
+    address: "2806 N. Navarro St."
+    description: "Trunk or treat."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-31"
+    name: "American Legion Trunk or Treat"
+    time: "6:00 PM – 7:45 PM"
+    venue: "American Legion"
+    description: "Trunk or treat."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-31"
+    name: "Mothercluckers Market"
+    time: "10:00 AM – 4:00 PM"
+    venue: "Mothercluckers"
+    description: "Market day."
+    icons: [shopping]
+    free: true
+    url: ""
+
+  - date: "2026-10-31"
+    name: "Crown and Creed Halloween Bash"
+    time: "5:00 PM – 8:00 PM"
+    venue: "Crown and Creed Barber Lounge"
+    description: "Halloween bash. More info on Facebook."
+    icons: [family, community]
+    free: true
+    url: ""
+
+  - date: "2026-10-31"
+    name: "Kids in Costume Eat Free"
+    time: ""
+    venue: "Golden Corral"
+    description: "Kids in costume eat free on Halloween."
+    icons: [family, food]
+    free: false
+    url: ""
+
+  - date: "2026-10-31"
+    name: "Florecita's Trunk or Treat"
+    time: "6:00 PM – 8:00 PM"
+    venue: "Florecita's"
+    description: "Trunk or treat."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-31"
+    name: "First Baptist Church Hallelujah Fest"
+    time: "4:00 PM – 6:00 PM"
+    venue: "First Baptist Church"
+    address: "301 N. Glass St."
+    description: "Hallelujah Fest."
+    icons: [family, community, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-31"
+    name: "Vickers Fall Fest"
+    time: "10:00 AM – 2:00 PM"
+    venue: "Vickers"
+    description: "Fall fest."
+    icons: [family, community]
+    free: true
+    url: ""
+
+  - date: "2026-10-31"
+    name: "Halloween Candy at Pizza Hut"
+    time: ""
+    venue: "Pizza Hut (Zac Lentz Pkwy)"
+    description: "Candy for the kids, and something for the adults too."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-10-31"
+    name: "Halloween Party with El Camino"
+    time: ""
+    venue: "Moonshine Drinkery"
+    address: "103 W. Santa Rosa St."
+    description: "Halloween night party with El Camino."
+    icons: [music, drinks]
+    free: false
+    url: ""
+
+  - date: "2026-10-31"
+    name: "Caturday Halloween Month"
+    time: "10:00 AM – 3:00 PM"
+    venue: "PetSmart"
+    description: "Victoria TNR's adoption event: kittens to meet and trick-or-treating for the kids. Every Saturday in October."
+    icons: [family, community, free]
+    free: true
+    url: ""
+
+  - date: "2026-11-01"
+    name: "Día de los Muertos Ofrenda & Coco Movie"
+    time: "5:00 PM – 9:00 PM"
+    venue: "DeLeon Plaza"
+    address: "101 N. Main St."
+    description: "A community ofrenda and a showing of Coco. You can bring a framed picture of a lost loved one for the ofrenda."
+    icons: [family, arts, free]
+    free: true
+    url: ""
+    big: true
+
+  - date: "2026-11-02"
+    name: "Kids Night at Texas Roadhouse"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Texas Roadhouse"
+    address: "4908 N. Navarro St."
+    description: "Kids night at Texas Roadhouse."
+    icons: [family, food]
+    free: false
+    url: ""
+
+  - date: "2026-11-06"
+    name: "Hot Rod Riot"
+    time: ""
+    venue: "Riverside Park"
+    address: "405 Memorial Dr."
+    description: "Hot Rod Riot at Riverside Park, Friday and Saturday. All info online."
+    icons: [community, outdoors]
+    free: false
+    url: ""
+    big: true
+
+  - date: "2026-11-06"
+    name: "Fall for Succulents with Scenic Root"
+    time: "6:00 PM"
+    venue: "Aero Crafters"
+    address: "309 E. Crestwood Dr."
+    description: "Succulent workshop with Scenic Root. $60 per person; register on Scenic Root's Facebook page."
+    icons: [arts, drinks]
+    free: false
+    url: ""
+
+  - date: "2026-11-06"
+    name: "Girls Night Out Clean Comedy Show"
+    time: "7:00 PM"
+    venue: "Victoria Fine Arts Center"
+    address: "1002 Sam Houston Dr."
+    description: "A clean comedy show."
+    icons: [arts]
+    free: false
+    url: ""
+
+  - date: "2026-11-07"
+    name: "Hot Rod Riot"
+    time: ""
+    venue: "Riverside Park"
+    address: "405 Memorial Dr."
+    description: "Day two of Hot Rod Riot at Riverside Park."
+    icons: [community, outdoors]
+    free: false
+    url: ""
+    big: true
+
+  - date: "2026-11-07"
+    name: "Hasta Los Huesos Fest"
+    time: "1:00 PM – 9:00 PM"
+    venue: "DeLeon Plaza"
+    address: "101 N. Main St."
+    description: "Hasta Los Huesos Fest downtown. More info online."
+    icons: [music, community, food]
+    free: false
+    url: ""
+    big: true
+
+  - date: "2026-11-07"
+    name: "Home Depot Kids Workshop: Dump Truck"
+    time: ""
+    venue: "The Home Depot"
+    description: "Free kids workshop. Register online."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-11-07"
+    name: "Metal Show"
+    time: ""
+    venue: "Dodge City Saloon"
+    address: "205 N. Star Dr."
+    description: "A metal show at Dodge City Saloon."
+    icons: [music, drinks]
+    free: false
+    url: ""
+
+  - date: "2026-11-14"
+    name: "Crossroads BBQ & Brew"
+    time: ""
+    venue: "Downtown Victoria"
+    description: "BBQ and beer downtown. Tickets and info online."
+    icons: [food, drinks, music]
+    free: false
+    url: ""
+    big: true
+
+  - date: "2026-11-14"
+    name: "Christmas at the Crossroads Vendor Market"
+    time: "10:00 AM – 5:00 PM"
+    venue: "597 Haynes Rd."
+    description: "Holiday vendor market."
+    icons: [shopping]
+    free: true
+    url: ""
+    big: true
+
+  - date: "2026-11-14"
+    name: "Lowe's Kids Craft: Holiday Engine"
+    time: ""
+    venue: "Lowe's"
+    description: "Free kids workshop. Register online."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-11-16"
+    name: "Kids Night at Texas Roadhouse"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Texas Roadhouse"
+    address: "4908 N. Navarro St."
+    description: "Kids night at Texas Roadhouse."
+    icons: [family, food]
+    free: false
+    url: ""
+
+  - date: "2026-11-21"
+    name: "Home Depot Kids Workshop: Christmas Car Ornament"
+    time: ""
+    venue: "The Home Depot"
+    description: "Free kids workshop. Register online."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-12-04"
+    name: "Port Lavaca Christmas Parade"
+    time: ""
+    venue: "Downtown Port Lavaca"
+    description: "Port Lavaca's Christmas parade."
+    icons: [family, community, free]
+    free: true
+    url: ""
+    town: "Port Lavaca"
+    big: true
+
+  - date: "2026-12-05"
+    name: "Crossroads Pickle Festival"
+    time: "12:00 PM – 7:00 PM"
+    venue: "Gary Moses Victoria Community Center"
+    address: "2905 E. North St."
+    description: "The first Crossroads Pickle Festival: the Pickle Patch marketplace, pickle competitions, the Crisp & Chrome car show, a pageant, a talent search, a kids zone and more. Pickle Party 8–11 PM. $10 general admission, $25 VIP."
+    icons: [food, family, community]
+    free: false
+    url: "https://www.tabreenashay.com/crossroads-pickle-festival"
+    big: true
+
+  - date: "2026-12-05"
+    name: "Victoria Christmas Tree Lighting & Parade"
+    time: "5:00 PM"
+    venue: "DeLeon Plaza"
+    address: "101 N. Main St."
+    description: "Victoria's Christmas tree lighting and parade."
+    icons: [family, community, free]
+    free: true
+    url: ""
+    big: true
+
+  - date: "2026-12-05"
+    name: "Merry & Frosted"
+    time: ""
+    venue: "Gardenhouse Coffee & Espresso Bar"
+    description: "An afternoon of cookie decorating and games. Wear your favorite sweater."
+    icons: [food, family]
+    free: false
+    url: ""
+
+  - date: "2026-12-05"
+    name: "Home Depot Kids Workshop: Holiday Train"
+    time: ""
+    venue: "The Home Depot"
+    description: "Free kids workshop. Register online."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-12-05"
+    name: "McCoy's Kids Craft: Wooden Ornament"
+    time: "10:00 AM – 2:00 PM"
+    venue: "McCoy's Building Supply"
+    description: "Kids make a wooden ornament."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-12-07"
+    name: "Kids Night at Texas Roadhouse"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Texas Roadhouse"
+    address: "4908 N. Navarro St."
+    description: "Kids night at Texas Roadhouse."
+    icons: [family, food]
+    free: false
+    url: ""
+
+  - date: "2026-12-11"
+    name: "Merry on Main"
+    time: "6:00 PM – 10:00 PM"
+    venue: "Downtown Victoria"
+    description: "Christmas on Main Street downtown."
+    icons: [family, community, shopping]
+    free: true
+    url: ""
+    big: true
+
+  - date: "2026-12-11"
+    name: "Cuero Christmas in Downtown"
+    time: "6:00 PM – 10:00 PM"
+    venue: "Downtown Cuero"
+    description: "Christmas in downtown Cuero, Friday and Saturday."
+    icons: [family, community]
+    free: true
+    url: ""
+    town: "Cuero"
+    big: true
+
+  - date: "2026-12-12"
+    name: "Cuero Christmas in Downtown"
+    time: "12:00 PM – 10:00 PM"
+    venue: "Downtown Cuero"
+    description: "Day two of Christmas in downtown Cuero."
+    icons: [family, community]
+    free: true
+    url: ""
+    town: "Cuero"
+    big: true
+
+  - date: "2026-12-12"
+    name: "Christmas at the Bayfront"
+    time: "8:00 AM – 5:00 PM"
+    venue: "Bayfront Peninsula"
+    description: "Port Lavaca's Christmas at the Bayfront. More info online."
+    icons: [family, community, shopping]
+    free: true
+    url: ""
+    town: "Port Lavaca"
+    big: true
+
+  - date: "2026-12-12"
+    name: "Lowe's Kids Craft: Holiday Trolley Car"
+    time: ""
+    venue: "Lowe's"
+    description: "Free kids workshop. Register online."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2026-12-21"
+    name: "Kids Night at Texas Roadhouse"
+    time: "6:00 PM – 9:00 PM"
+    venue: "Texas Roadhouse"
+    address: "4908 N. Navarro St."
+    description: "Kids night at Texas Roadhouse."
+    icons: [family, food]
+    free: false
+    url: ""
+
+  - date: "2027-01-02"
+    name: "Home Depot Kids Workshop: Claw Machine Bank"
+    time: ""
+    venue: "The Home Depot"
+    description: "Free kids workshop. Register online."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2027-01-09"
+    name: "Victoria Fan Fest"
+    time: "11:00 AM"
+    venue: "Victoria Community Center"
+    address: "2905 E. North St."
+    description: "Victoria Fan Fest."
+    icons: [community, family, arts]
+    free: false
+    url: ""
+    big: true
+
+  - date: "2027-01-16"
+    name: "Lowe's Kids Craft: Winter Play Lodge"
+    time: ""
+    venue: "Lowe's"
+    description: "Free kids workshop. Register online."
+    icons: [family, free]
+    free: true
+    url: ""
+
+  - date: "2027-03-20"
+    name: "Kiwanis Club's Kidz Fest"
+    time: ""
+    venue: "DeLeon Plaza"
+    address: "101 N. Main St."
+    description: "The Kiwanis Club's Kidz Fest downtown. Info online."
+    icons: [family, community]
+    free: true
+    url: ""
+    big: true

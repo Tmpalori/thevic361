@@ -416,6 +416,19 @@ export function decodeEntities(str) {
   });
 }
 
+// Where an event is. Most are in Victoria; a few big nearby-town events
+// (Cuero Turkeyfest, Port Lavaca's Boo-Fest) carry `town` from
+// local_events.yaml so pages, calendar files and schema say the right town.
+export function townOf(ev) {
+  return String((ev && ev.town) || '').trim() || 'Victoria';
+}
+
+// "Nearby · Cuero" tag on list items for events outside Victoria. docs/app.js
+// renders the same.
+function nearbyBadge(ev) {
+  return ev.town ? `<span class="badge badge--nearby">Nearby · ${escHtml(townOf(ev))}</span> ` : '';
+}
+
 // Venue line under an event name: "Venue · street address", without
 // repeating the address when the venue field already is one.
 export function placeText(ev) {
@@ -544,11 +557,11 @@ export function eventJsonLd(ev, siteUrl) {
     eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
     location: {
       '@type': 'Place',
-      name: ev.venue || 'Victoria, TX',
+      name: ev.venue || `${townOf(ev)}, TX`,
       address: {
         '@type': 'PostalAddress',
         ...(ev.address ? { streetAddress: ev.address } : {}),
-        addressLocality: 'Victoria',
+        addressLocality: townOf(ev),
         addressRegion: 'TX',
         addressCountry: 'US'
       }
@@ -594,6 +607,7 @@ export function renderEventItem(ev) {
     `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
     '<div class="event-details">' +
       (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
+      nearbyBadge(ev) +
       (ev.time ? `<span class="event-time">${escHtml(formatTime(ev.time))}</span> ` : '') +
       `<span class="event-name"><a href="${escHtml(ev.page)}">${escHtml(ev.name)}</a></span>` +
       (place ? `<span class="event-venue">${escHtml(place)}</span>` : '') +
@@ -856,7 +870,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   // "from 10:00 AM to 3:00 PM at The PumpHouse", not "at 10:00 AM – 3:00 PM at …".
   const timePart = !time ? '' : / – /.test(time) ? ` from ${time.replace(' – ', ' to ')}` : `, ${time},`;
   const lead = `${ev.name} ${ev.date < today ? 'was' : 'is'} on ${when}${timePart}` +
-    `${where ? ` at ${where}` : ''} in Victoria, TX.` + (ev.free === true ? ' Free to attend.' : '');
+    `${where ? ` at ${where}` : ''} in ${townOf(ev)}, TX.` + (ev.free === true ? ' Free to attend.' : '');
   // With no source link there are no "event details" to point at.
   const cost = ev.free === true ? 'Free'
     : src ? 'See event details'
@@ -870,7 +884,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   const heading = withVenue && withVenue.length <= 60 ? withVenue : `${ev.name} · ${shortDate}`;
   const sameDay = sortEvents(events.filter(o => o.date === ev.date && o.page !== ev.page)).slice(0, 6);
   const description = (ev.description ? ev.description + ' ' : '') +
-    `${when}${where ? ` at ${where}` : ''}, Victoria, TX.`;
+    `${when}${where ? ` at ${where}` : ''}, ${townOf(ev)}, TX.`;
   const body = `
     <p class="breadcrumbs"><a href="/">This week</a> › ${escHtml(ev.name)}</p>
     <h1 class="page-title">${escHtml(ev.name)}</h1>
@@ -1062,6 +1076,44 @@ export function renderNotFoundPage({ siteUrl, kind = 'page' }) {
 // the first byte already has the content. docs/app.js re-renders the same
 // list on load (and still powers the admin preview), so nothing changes
 // for visitors with JS.
+// "Coming up": big events after this week, so people can plan (and
+// subscribe) weeks ahead. An event counts when local_events.yaml marks it
+// `big` or it's a Vic's Pick. Server-rendered only; app.js re-renders the
+// week grid, not this.
+const COMING_UP_DAYS = 90;
+const COMING_UP_MAX = 8;
+
+export function comingUpEvents(events, today) {
+  const week = currentWeek(today);
+  const last = addDays(today, COMING_UP_DAYS);
+  return sortEvents((events || []).filter(ev => ev.date > week[6] && ev.date <= last && (ev.big === true || ev.featured)))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    // One line per event: a multi-day festival shows its first day.
+    .filter((ev, i, arr) => arr.findIndex(o => o.name === ev.name && (o.town || '') === (ev.town || '')) === i)
+    .slice(0, COMING_UP_MAX);
+}
+
+export function renderComingUp(events, today) {
+  const list = comingUpEvents(events, today);
+  if (!list.length) return '';
+  const items = list.map(ev => {
+    const venue = placeText(ev).split(' · ')[0];
+    // "Downtown Cuero · Nearby", not "Downtown Cuero · Nearby · Cuero".
+    const nearby = !ev.town ? '' : venue.toLowerCase().includes(townOf(ev).toLowerCase()) ? 'Nearby' : `Nearby · ${townOf(ev)}`;
+    const where = [venue, nearby].filter(Boolean).join(' · ');
+    return `<li class="coming-item"><a href="${escHtml(ev.page)}">` +
+      `<span class="coming-date">${escHtml(formatDay(ev.date, { weekday: 'short', month: 'short', day: 'numeric' }))}</span>` +
+      `<span class="coming-name">${escHtml(ev.name)}</span>` +
+      (where ? `<span class="coming-where">${escHtml(where)}</span>` : '') +
+      '</a></li>';
+  }).join('');
+  return `<section class="coming-up" id="coming-up" aria-labelledby="coming-up-heading">
+        <h2 class="section-heading" id="coming-up-heading">Coming up</h2>
+        <p class="coming-sub">Big events worth planning for.</p>
+        <ul class="coming-list" role="list">${items}</ul>
+      </section>`;
+}
+
 export function renderHome(template, events, { siteUrl, now, signupHtml = null }) {
   const today = localDateStr(now);
   const week = currentWeek(today);
@@ -1083,6 +1135,10 @@ export function renderHome(template, events, { siteUrl, now, signupHtml = null }
     // Function replacements: event text can contain "$'" or "$&", which a
     // string replacement would expand into chunks of the page.
     .replace('<p class="loading-message">Loading events...</p>', () => renderDays(week, events, today))
+    .replace('<!--COMING_UP-->', () => renderComingUp(events, today))
+    // A long week pushes "Coming up" far down; this jumps there.
+    .replace('<!--COMING_UP_LINK-->', () => comingUpEvents(events, today).length
+      ? '<a class="btn btn--outline" href="#coming-up">Coming up ↓</a>' : '')
     .replace('<!--NAV-->', () => navHtml('/'))
     .replace('</head>', () => ld.map(jsonLd).join('\n') + '\n</head>');
 }
