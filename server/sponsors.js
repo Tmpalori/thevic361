@@ -98,6 +98,41 @@ export function picksTaken(dateStr, orders, nowMs) {
       (o.status === 'pending' && nowMs - Date.parse(o.created_at) < HOLD_MS))).length;
 }
 
+// Admin calendar: every sponsorship slot for `weeks` weeks from this
+// Monday. Each week has the weekly-sponsor slot; each day its Vic’s Pick
+// spots with who holds them. state: 'booked' (paid / live), 'processing'
+// (slow payment settling), 'held' (checkout open right now), 'open'.
+function slotState(o, nowMs) {
+  if (LIVE.has(o.status)) return 'booked';
+  if (o.status === 'processing') return 'processing';
+  if (o.status === 'pending' && nowMs - Date.parse(o.created_at) < HOLD_MS) return 'held';
+  return null;
+}
+
+export function sponsorCalendar(now, orders, weeks = 8) {
+  const nowMs = now.getTime();
+  const today = localDateStr(now);
+  const monday = currentWeek(today)[0];
+  const short = { month: 'short', day: 'numeric' };
+  const active = (orders || []).map(o => ({ o, state: slotState(o, nowMs) })).filter(x => x.state);
+  return Array.from({ length: weeks }, (_, w) => {
+    const start = addDays(monday, 7 * w);
+    const weekly = active.find(x => x.o.kind === 'weekly' && x.o.week_start === start);
+    const days = Array.from({ length: 7 }, (_, d) => {
+      const date = addDays(start, d);
+      const a = pickAvailability(date, orders, now);
+      const picks = active.filter(x => x.o.kind === 'featured' && x.o.event && x.o.event.date === date)
+        .map(x => ({ id: x.o.id, business: x.o.business || '', event: x.o.event.name || '', state: x.state }));
+      return { date, past: date < today, weekend: a.weekend, cap: a.cap, taken: a.taken, left: a.left, price: a.price, picks };
+    });
+    return {
+      start, label: `${formatDay(start, short)} – ${formatDay(addDays(start, 6), short)}`,
+      weekly: weekly ? { id: weekly.o.id, business: weekly.o.business || '', state: weekly.state } : null,
+      days
+    };
+  });
+}
+
 export function pickAvailability(dateStr, orders, now) {
   const weekend = isWeekendDate(dateStr);
   const cap = weekend ? VICS_PICK.weekendCap : VICS_PICK.weekdayCap;
@@ -838,7 +873,8 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         supported,
         orders: list.filter(o => o.status !== 'expired' && o.status !== 'failed' && !(o.status === 'pending' &&
           nowFn().getTime() - Date.parse(o.created_at) > 24 * 3600 * 1000)),
-        weeks: bookableWeeks(nowFn(), list)
+        weeks: bookableWeeks(nowFn(), list),
+        calendar: sponsorCalendar(nowFn(), list)
       });
     });
 

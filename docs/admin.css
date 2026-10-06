@@ -1250,3 +1250,28 @@ code {
 .home-check__mark { font-size: 1.1rem; line-height: 1.4; }
 .home-check__state { color: var(--admin-muted); font-size: 0.85rem; margin-left: 4px; }
 .home-check__fix { margin: 4px 0 0; color: var(--admin-muted); font-size: 0.9rem; line-height: 1.45; word-break: break-word; }
+
+/* Sponsorship calendar (Sponsors tab) */
+.sponsor-cal { display: grid; gap: 14px; margin-bottom: 12px; }
+.cal-week { border: 1px solid var(--admin-border); border-radius: 10px; padding: 10px; }
+.cal-week__head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; margin-bottom: 8px; font-size: .9rem; }
+.cal-weekly { font-size: .82rem; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--admin-border); }
+.cal-weekly--booked { background: rgba(34, 139, 90, .14); border-color: rgba(34, 139, 90, .45); }
+.cal-weekly--held, .cal-weekly--processing { background: rgba(200, 120, 20, .14); border-color: rgba(200, 120, 20, .45); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(110px, 1fr)); gap: 6px; overflow-x: auto; }
+.cal-day { border: 1px solid var(--admin-border); border-radius: 8px; padding: 6px 8px; font-size: .8rem; min-height: 86px; }
+.cal-day--weekend { background: rgba(75, 63, 209, .05); }
+.cal-day--past { opacity: .45; }
+.cal-day--full { border-color: rgba(34, 139, 90, .6); }
+.cal-day__head { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 4px; }
+.cal-price { font-weight: 600; opacity: .7; }
+.cal-dots { display: flex; gap: 4px; margin: 2px 0; }
+.cal-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; opacity: .55; vertical-align: middle; }
+.cal-dot--booked { background: #228b5a; border-color: #228b5a; opacity: 1; }
+.cal-dot--held { background: #d68a1f; border-color: #d68a1f; opacity: 1; }
+.cal-count { font-size: .75rem; opacity: .75; }
+.cal-names { margin: 4px 0 0; padding-left: 14px; font-size: .75rem; }
+.cal-names em { opacity: .7; }
+.cal-key { white-space: nowrap; margin-left: 6px; }
+.cal-key .cal-dot { margin: 0 2px 0 8px; }
+

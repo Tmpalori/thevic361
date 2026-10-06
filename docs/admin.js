@@ -1532,11 +1532,34 @@
           }).join('')
         : '<tr><td class="traffic-empty">No orders yet.</td></tr>';
     }
-    const weeks = document.getElementById('sponsors-weeks');
-    if (weeks) {
-      weeks.innerHTML = d.weeks.map(w => '<tr><td>' + escapeHtml(w.label) + '</td><td>' +
-        (w.available ? 'Open' : 'Booked') + '</td></tr>').join('');
-    }
+    const cal = document.getElementById('sponsors-calendar');
+    if (cal && Array.isArray(d.calendar)) cal.innerHTML = d.calendar.map(renderCalendarWeek).join('');
+  }
+
+  // One week of the sponsorship calendar: the weekly sponsor slot, then a
+  // cell per day with its Vic's Pick spots (filled dots = taken) and who.
+  const SLOT_LABEL = { booked: 'paid', processing: 'payment processing', held: 'being paid for' };
+  function renderCalendarWeek(w) {
+    const weekly = w.weekly
+      ? '<span class="cal-weekly cal-weekly--' + escapeHtml(w.weekly.state) + '">Weekly sponsor: <strong>' + escapeHtml(w.weekly.business) + '</strong> (' + escapeHtml(SLOT_LABEL[w.weekly.state] || w.weekly.state) + ')</span>'
+      : '<span class="cal-weekly cal-weekly--open">Weekly sponsor: open</span>';
+    const days = w.days.map(day => {
+      const dots = [];
+      for (let i = 0; i < day.cap; i++) {
+        const p = day.picks[i];
+        dots.push('<span class="cal-dot' + (p ? ' cal-dot--' + escapeHtml(p.state === 'booked' ? 'booked' : 'held') : '') + '"></span>');
+      }
+      const names = day.picks.map(p => '<li title="' + escapeHtml(p.event) + '">' + escapeHtml(p.business || p.event) +
+        (p.state !== 'booked' ? ' <em>(' + escapeHtml(SLOT_LABEL[p.state] || p.state) + ')</em>' : '') + '</li>').join('');
+      const label = new Date(day.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+      return '<div class="cal-day' + (day.past ? ' cal-day--past' : '') + (day.left === 0 ? ' cal-day--full' : '') + (day.weekend ? ' cal-day--weekend' : '') + '">' +
+        '<div class="cal-day__head">' + escapeHtml(label) + '<span class="cal-price">' + escapeHtml(day.price) + '</span></div>' +
+        '<div class="cal-dots" aria-label="' + escapeHtml(day.taken + ' of ' + day.cap + ' Vic’s Picks taken') + '">' + dots.join('') + '</div>' +
+        '<div class="cal-count">' + (day.left === 0 ? 'Sold out' : escapeHtml(day.left + ' open')) + '</div>' +
+        (names ? '<ul class="cal-names">' + names + '</ul>' : '') + '</div>';
+    }).join('');
+    return '<section class="cal-week"><div class="cal-week__head"><strong>' + escapeHtml(w.label) + '</strong>' + weekly + '</div>' +
+      '<div class="cal-grid">' + days + '</div></section>';
   }
 
   async function loadSponsors() {

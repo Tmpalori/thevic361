@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import crypto from 'node:crypto';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
-import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks, pickAvailability, isWeekendDate, renderPreview } from '../server/sponsors.js';
+import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks, pickAvailability, isWeekendDate, renderPreview, sponsorCalendar } from '../server/sponsors.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -464,6 +464,38 @@ describe('free submissions point to the paid upgrade', () => {
     expect(html).toContain("aren't guaranteed a spot");
     expect(html).toContain('href="/advertise/checkout?package=featured"');
     expect(html).toContain('id="thanks-promo-link"');
+  });
+});
+
+describe('admin sponsorship calendar', () => {
+  it('shows every slot for 8 weeks: the weekly sponsor and each day’s Vic’s Picks with who holds them', () => {
+    const o = (extra) => ({ id: Math.random().toString(36), created_at: NOW.toISOString(), ...extra });
+    const orders = [
+      o({ kind: 'weekly', status: 'paid', week_start: '2026-10-12', business: 'Acme Tacos' }),
+      o({ kind: 'featured', status: 'paid', business: 'Titan', event: { date: '2026-10-10', name: 'Pumpkin Patch' } }),
+      o({ kind: 'featured', status: 'pending', business: 'Weber', event: { date: '2026-10-10', name: 'Oktoberfest' } }),
+      o({ kind: 'featured', status: 'pending', business: 'Stale', event: { date: '2026-10-10', name: 'Old' },
+          created_at: new Date(NOW.getTime() - 3 * 3600e3).toISOString() }),
+      o({ kind: 'featured', status: 'refunded', business: 'Gone', event: { date: '2026-10-10', name: 'X' } })
+    ];
+    const cal = sponsorCalendar(NOW, orders);
+    expect(cal).toHaveLength(8);
+    expect(cal[0].start).toBe('2026-10-05');                 // starts this week
+    expect(cal[0].weekly).toBeNull();
+    expect(cal[1].weekly).toMatchObject({ business: 'Acme Tacos', state: 'booked' });
+    const sat = cal[0].days.find(d => d.date === '2026-10-10');
+    expect(sat).toMatchObject({ weekend: true, cap: 4, taken: 2, left: 2, price: '$89', past: false });
+    expect(sat.picks.map(p => [p.business, p.state])).toEqual([['Titan', 'booked'], ['Weber', 'held']]);
+    expect(cal[0].days.find(d => d.date === '2026-10-06')).toMatchObject({ past: true, cap: 3, price: '$49' });
+  });
+
+  it('comes back from the admin API', async () => {
+    await startApp();
+    const login = await fetch(baseUrl + '/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'a', password: 'b' }) });
+    const token = (await login.json()).token;
+    const d = await (await fetch(baseUrl + '/api/admin/sponsors', { headers: { Authorization: `Bearer ${token}` } })).json();
+    expect(d.calendar).toHaveLength(8);
+    expect(d.calendar[0].days).toHaveLength(7);
   });
 });
 
