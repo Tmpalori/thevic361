@@ -175,3 +175,32 @@ def test_network_errors_carry_no_token():
     with pytest.raises(ma.AdsError) as e:
         ma.Api(TOKEN, Boom()).call("GET", "me")
     assert TOKEN not in str(e.value) and e.value.__cause__ is None
+
+
+def test_an_ad_that_started_today_is_not_a_stalled_campaign():
+    # last_7d ends yesterday, so a new ad shows $0 there while it spends.
+    import datetime as dt
+
+    class StartedToday(FakeMeta):
+        def __init__(self, today_spend, created):
+            super().__init__(spend="0")
+            self.today_spend, self.created = today_spend, created
+
+        def request(self, method, url, **k):
+            if url.endswith("/ads"):
+                return Resp({"data": [{"id": "5", "name": "Video", "adset_id": "999",
+                                       "effective_status": "ACTIVE", "created_time": self.created}]})
+            if url.endswith("/insights") and (k.get("params") or {}).get("date_preset") == "today":
+                return Resp({"data": [{"spend": self.today_spend, "reach": "300", "inline_link_clicks": "7"}]})
+            return super().request(method, url, **k)
+
+    now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+0000")
+    assert ma.main(["report"], session=StartedToday("4.10", now)) == 0
+    assert len(sent) == 1 and sent[0][0].startswith("📈 Meta ads: today so far $4.10 spent")
+    sent.clear()
+    # Made today, nothing delivered yet: quiet, not a $0 alarm.
+    assert ma.main(["report"], session=StartedToday("0", now)) == 0
+    assert sent == []
+    # Running for weeks with nothing spent is still reported.
+    assert ma.main(["report"], session=StartedToday("0", "2026-09-01T09:00:00-0500")) == 0
+    assert len(sent) == 1 and "$0 spent in the last 7 days" in sent[0][0]

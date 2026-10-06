@@ -1,7 +1,7 @@
 # Meta ads — read and manage The Vic 361's ads (scripts/meta_ads.py).
 #
 # Daily: yesterday's and the last 7 days' results to Slack (activity
-# channel); quiet when nothing has spent and no ad is on, but $0 spent with
+# channel); quiet when nothing has spent and no ad is on; an ad that started today reports today's spend; $0 spent with
 # an ad on, a rejected ad or a disabled account is reported. A dead token
 # or lost account access fails the run and alerts Slack. By hand (Actions → Meta Ads →
 # Run workflow, or `gh workflow run meta-ads.yml -f command=status`):

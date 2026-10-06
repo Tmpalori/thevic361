@@ -25,6 +25,7 @@ The token goes in the Authorization header, never a URL, and errors never
 include it.
 """
 import argparse
+import datetime as dt
 import os
 import sys
 
@@ -153,7 +154,7 @@ def structure(api, account_id):
     fields = "id,name,effective_status"
     campaigns = api.all(f"{account_id}/campaigns", fields=fields + ",objective,daily_budget")
     adsets = api.all(f"{account_id}/adsets", fields=fields + ",campaign_id,daily_budget,optimization_goal")
-    ads = api.all(f"{account_id}/ads", fields=fields + ",adset_id,ad_review_feedback")
+    ads = api.all(f"{account_id}/ads", fields=fields + ",adset_id,ad_review_feedback,created_time")
     return campaigns, adsets, ads
 
 
@@ -193,6 +194,16 @@ def cmd_status(api, account, out):
         out.append(f"{label}: {line}")
 
 
+def _age_days(created, now=None):
+    """Days since a Graph created_time ('2026-10-06T09:12:00-0500'); a
+    missing or unreadable time counts as old."""
+    try:
+        t = dt.datetime.strptime(str(created), "%Y-%m-%dT%H:%M:%S%z")
+    except ValueError:
+        return 99
+    return ((now or dt.datetime.now(dt.timezone.utc)) - t).total_seconds() / 86400
+
+
 def cmd_report(api, account, out):
     spend7, week = summarize(insights(api, account["id"], "last_7d"))
     campaigns, adsets, ads = structure(api, account["id"])
@@ -207,6 +218,18 @@ def cmd_report(api, account, out):
         on = [a for a in ads if a.get("effective_status") == "ACTIVE"]
         if not problems and not on:
             out.append("No ad spend in the last 7 days and no ads on; no report.")
+            return None
+        # "last_7d" ends yesterday, so an ad that started today shows $0
+        # there while it's already spending: report today instead.
+        spend_today, today = summarize(insights(api, account["id"], "today"))
+        if spend_today > 0:
+            text = "\n".join([f"📈 Meta ads: today so far {today}"] + problems)
+            out.append(text)
+            return text
+        # An ad made in the last 2 days may not have delivered yet; that's
+        # not a stalled campaign.
+        if not problems and on and all(_age_days(a.get("created_time")) < 2 for a in on):
+            out.append("Ads just started; no spend reported yet, no report.")
             return None
         # Zero spend with ads on, or a rejected ad / held account, is a
         # stalled campaign, not a quiet week: say so.
