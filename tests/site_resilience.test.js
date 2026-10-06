@@ -179,6 +179,20 @@ describe('event URLs that move or go away', () => {
     expect(r.headers.get('location')).toBe('/events/2026-10-10-quilt-guild-of-greater-victoria-show');
   });
 
+  it('a moved event redirect is not cached forever, so moving it back cannot loop', async () => {
+    await start();
+    const jazz = { date: '2026-10-10', name: 'Jazz Nite', venue: 'La Cantina', time: '7:00 PM', description: 'Live jazz.' };
+    await post('/api/admin/publish-events', { events: [jazz] });
+    await settle();
+    await post('/api/admin/event-edits', { original_key: key(jazz), payload: { ...jazz, name: 'Jazz Night' } });
+    await settle();
+    for (const suffix of ['', '.ics', '.png']) {
+      const r = await get(`/events/2026-10-10-jazz-nite${suffix}`);
+      expect(r.status, suffix).toBe(301);
+      expect(r.headers.get('cache-control'), suffix).toBe('no-cache');
+    }
+  });
+
   it('a removed event stays gone after its date and off the venue page', async () => {
     let now = NOW;
     await start({ now: () => now }, { venues: [{ name: 'Riverside Library', category: 'Library' }] });

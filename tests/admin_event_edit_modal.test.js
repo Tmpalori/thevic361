@@ -118,6 +118,16 @@ describe('admin event edit modal — interactions', () => {
     expect(checked).toEqual(['free', 'music']);
   });
 
+  it('does not force a start time on an event that never had one', () => {
+    const form = document.getElementById('event-edit-form');
+    api.openEventEditModal({ date: '2026-04-27', name: 'Untimed', venue: 'Barn', description: 'd', time: '' });
+    expect(form.elements['time'].required).toBe(false);
+    expect(form.querySelector('[data-time-required]').hidden).toBe(true);
+    api.openEventEditModal({ date: '2026-04-27', name: 'Timed', venue: 'Barn', description: 'd', time: '7 PM' });
+    expect(form.elements['time'].required).toBe(true);
+    expect(form.querySelector('[data-time-required]').hidden).toBe(false);
+  });
+
   it('readEditFormPayload returns the trimmed payload from the form', () => {
     api.openEventEditModal({
       date: '2026-04-27', name: '  JP  ', venue: 'Barn',

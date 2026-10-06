@@ -816,6 +816,10 @@ code {
   background: var(--admin-surface);
   color: var(--admin-text);
 }
+/* A field the server rejected on save. */
+.submission-edit .is-invalid {
+  border-color: var(--admin-danger);
+}
 
 /* ─── THEME TOGGLE ─── */
 .theme-toggle {

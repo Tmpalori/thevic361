@@ -226,3 +226,45 @@ def test_meta_workflows_pass_the_graph_version_and_slack_names_a_refused_one(nam
     assert out == "named v23.0"
     with open(os.path.join(os.path.dirname(WF), "..", "scripts", script)) as f:
         assert "set_output(\"alert\"" in f.read()
+
+
+# ─── weekly-collect push retry ──────────────────────────────────────────────
+
+def _collect_push_loop():
+    script = step(load("weekly-collect.yml")["jobs"]["collect"], "Commit and push")["run"]
+    return script[script.index("for i in"):script.index("done")]
+
+
+def test_weekly_collect_push_retry_aborts_a_failed_rebase():
+    # Without the abort, one conflict left a rebase in progress and every
+    # retry failed at once, losing the paid collect.
+    loop = _collect_push_loop()
+    assert "git rebase --abort" in loop
+    assert loop.index("git pull --rebase") < loop.index("git rebase --abort") < loop.index("sleep")
+
+
+def test_weekly_collect_keeps_its_files_when_main_changed_them(tmp_path):
+    # A merge touched candidates.json during the collect.
+    origin, other, mine = tmp_path / "origin.git", tmp_path / "other", tmp_path / "mine"
+    _git(tmp_path, "init", "-q", "--bare", "-b", "main", str(origin))
+    _git(tmp_path, "clone", "-q", str(origin), str(other))
+    for f in ("candidates.json", "enrichment_cache.json"):
+        (other / f).write_text('{"v": "base"}\n')
+    _git(other, "add", ".")
+    _git(other, "commit", "-qm", "base")
+    _git(other, "push", "-q", "origin", "HEAD:main")
+    _git(tmp_path, "clone", "-q", str(origin), str(mine))
+    (other / "candidates.json").write_text('{"v": "merged pr"}\n')
+    _git(other, "commit", "-qam", "pr")
+    _git(other, "push", "-q", "origin", "HEAD:main")
+    (mine / "candidates.json").write_text('{"v": "this collect"}\n')
+    script = step(load("weekly-collect.yml")["jobs"]["collect"], "Commit and push")["run"]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _exe(bin_dir / "sleep", "#!/bin/sh\nexit 0\n")
+    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", GIT_CONFIG_GLOBAL=os.devnull)
+    r = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", script], cwd=mine, env=env,
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    _git(other, "pull", "-q", "--rebase", "origin", "main")
+    assert '"this collect"' in (other / "candidates.json").read_text()

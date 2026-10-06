@@ -97,6 +97,31 @@ def test_cut_off_names_beside_the_whole_listing_are_hidden():
     assert "Once Upon A Plant: Maas Edition" in picks[0][2]
 
 
+def test_a_cut_off_name_beside_an_unrelated_event_at_the_venue_stays():
+    # Another event at the bar that night is not the cut-off one's full
+    # listing; hiding on that pulls the only copy.
+    events = [ev("Live Music with Jake and the", time="8:00 PM", venue="Moonshine Drinkery", page="/events/a"),
+              ev("Trivia Night", time="6:00 PM", venue="Moonshine Drinkery", page="/events/b")]
+    found = sw.rule_findings(events)
+    assert (0, "cut_off") in kinds(found)
+    assert sw.to_hide(events, found)[0] == []
+    # The real full listing still gets the cut-off copy hidden.
+    events.append(ev("Live Music with Jake and the Fatman", time="8:00 PM", venue="Moonshine Drinkery",
+                     page="/events/c"))
+    picks, _ = sw.to_hide(events, sw.rule_findings(events))
+    assert [(i, k) for i, k, _ in picks] == [(0, "cut_off")]
+
+
+def test_a_vague_venue_is_no_proof_of_the_same_place():
+    # "Victoria" is inside "Victoria Public Library" but names no place.
+    events = [ev("Story Time with the", venue="Victoria", page="/events/a"),
+              ev("Story Time with Ms. Ann", venue="Victoria Public Library", page="/events/b")]
+    assert sw.to_hide(events, sw.rule_findings(events))[0] == []
+    events = [ev("Story Time with the", venue="Victoria Public Library", page="/events/a"),
+              ev("Story Time with Ms. Ann", venue="Downtown Victoria", page="/events/b")]
+    assert sw.to_hide(events, sw.rule_findings(events))[0] == []
+
+
 def test_library_copy_of_a_city_calendar_program_is_hidden():
     # Live 2026-10-06/07: the same program at the library (its default
     # venue) and at its real place from the city calendar.

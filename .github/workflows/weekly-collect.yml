@@ -189,8 +189,14 @@ jobs:
           git commit -m "🏙️ Update candidates $(date +'%Y-%m-%d')"
           # main can move during the ~25 min collect (a merge, the social
           # kit's commit). Rebase and retry instead of losing this run.
+          # -X theirs keeps this run's freshly generated files if a merge
+          # touched them meanwhile (in a rebase "theirs" is the commit being
+          # replayed). A failed rebase is aborted before the next try, or
+          # every retry dies on "rebase in progress" and the paid collect is
+          # lost.
           for i in 1 2 3; do
-            git pull --rebase origin main && git push && exit 0
+            git pull --rebase -X theirs origin main && git push && exit 0
+            git rebase --abort 2>/dev/null || true
             sleep $((i * 10))
           done
           exit 1

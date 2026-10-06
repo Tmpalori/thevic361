@@ -25,8 +25,9 @@
  * `hidden_restored`, so the next check doesn't hide it again.
  *
  * Safety: the hide endpoint needs the shared secret, only hides events that
- * are live and upcoming, never hides a paid Vic's Pick, and refuses more than MAX_PER_RUN at once, so a bad
- * rule can't empty the week.
+ * are live and upcoming, never hides a paid Vic's Pick (checked against the
+ * live sponsor orders; when they can't be read it hides nothing), and
+ * refuses more than MAX_PER_RUN at once, so a bad rule can't empty the week.
  */
 
 import crypto from 'node:crypto';
@@ -92,7 +93,13 @@ function secretOk(given, want) {
   return w.length > 0 && g.length === w.length && crypto.timingSafeEqual(g, w);
 }
 
-export function registerEventCheck(app, { store, requireAdmin, nowFn, secret, loadVisibleKeyed }) {
+// placements: (payload) => payload with the paid placements applied, read
+// strictly (throws when the sponsor orders can't be read). A paid Vic's Pick
+// is `featured` only at read time (sponsors.applyPlacements), never in the
+// stored list, so without this the guard below never sees one, and only
+// the script's own copy of /events.json (which drops placements when the
+// order read fails, and misses a pick sold after it fetched) protects it.
+export function registerEventCheck(app, { store, requireAdmin, nowFn, secret, loadVisibleKeyed, placements = null }) {
   app.post('/api/event-check/hide', async (req, res) => {
     if (!secretOk(req.get('x-cron-secret'), secret)) return res.status(401).json({ ok: false, error: 'unauthorized' });
     const asks = Array.isArray(req.body && req.body.hide) ? req.body.hide : null;
@@ -100,7 +107,16 @@ export function registerEventCheck(app, { store, requireAdmin, nowFn, secret, lo
     try {
       const published = await store.getPublished();
       if (!published) return res.status(409).json({ ok: false, error: 'nothing-published' });
-      const visible = await loadVisibleKeyed();
+      let visible = await loadVisibleKeyed();
+      if (placements) {
+        try {
+          visible = ((await placements({ events: visible })) || {}).events || visible;
+        } catch (err) {
+          // Can't tell which events were paid for: hide nothing this run.
+          console.error('[event-check] sponsor orders unreadable, not hiding:', err.message);
+          return res.status(503).json({ ok: false, error: 'orders-unavailable', message: 'Sponsor orders could not be read; nothing hidden.' });
+        }
+      }
       const today = localDateStr(nowFn());
       const restored = new Set(published.hidden_restored || []);
       const add = [];
