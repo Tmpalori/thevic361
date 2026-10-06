@@ -20,6 +20,7 @@ function bootDom() {
   delete window.__vic361Submit;
   // Stub fetch so init() doesn't try to talk to a real /api/config.
   window.fetch = async () => ({ ok: false, json: async () => null });
+  window.scrollTo = () => {}; // jsdom doesn't implement it
   // eslint-disable-next-line no-eval
   (0, eval)(JS);
   return window.__vic361Submit;
@@ -115,19 +116,44 @@ describe('submit form: errors you can see, phone formatting', () => {
   let api;
   beforeEach(() => { api = bootDom(); });
 
-  it('formats US phone numbers as you type and leaves international ones alone', () => {
-    expect(['3', '361', '3615', '361555', '3615550', '3615550100', '13615550100', '(361)5550100', '361-555-0100']
-      .map(api.formatPhone)).toEqual(['(3', '(361', '(361) 5', '(361) 555', '(361) 555-0', '(361) 555-0100',
-      '(361) 555-0100', '(361) 555-0100', '(361) 555-0100']);
+  it('formats full US phone numbers and leaves international ones alone', () => {
+    expect(['3615550100', '13615550100', '(361)5550100', '361-555-0100', '1 361 555 0100']
+      .map(api.formatPhone)).toEqual(Array(5).fill('(361) 555-0100'));
     expect(api.formatPhone('+44 20 7946 0958')).toBe('+44 20 7946 0958');
     expect(api.formatPhone('')).toBe('');
+  });
+
+  it('leaves short local numbers and partial input as typed (no made-up area code)', () => {
+    for (const v of ['555-0123', '5550123', '361', '361555', '36155501001']) expect(api.formatPhone(v)).toBe(v);
+  });
+
+  it('keeps extensions', () => {
+    for (const v of ['(361) 555-0100 x12', '(361) 555-0100 ext. 4', '361-555-0100 #7', '3615550100x']) {
+      expect(api.formatPhone(v)).toBe(v);
+    }
+  });
+
+  it('live formatting does not eat a space typed after the number', () => {
+    const phone = document.getElementById('f-sub-phone');
+    const type = v => { phone.value = v; phone.setSelectionRange(v.length, v.length); phone.dispatchEvent(new Event('input', { bubbles: true })); };
+    type('3615550100'); expect(phone.value).toBe('(361) 555-0100');
+    type('(361) 555-0100 '); expect(phone.value).toBe('(361) 555-0100 ');
+    type('(361) 555-0100 x1'); expect(phone.value).toBe('(361) 555-0100 x1');
+  });
+
+  it('accepts 7+ digit phones like the server does', () => {
+    const base = { name: 'Show', date: '2026-10-17', time: '7:00 PM', venue: 'V', address: 'A', description: 'D',
+      submitter_first_name: 'Pat', submitter_last_name: 'Lee', submitter_email: 'p@x.com' };
+    expect(api.checkForm({ ...base, submitter_phone: '555-0123' })).toEqual({});
+    expect(api.checkForm({ ...base, submitter_phone: '+64 9 123 4567' })).toEqual({});
+    expect(api.checkForm({ ...base, submitter_phone: '555-012' })).toEqual({ submitter_phone: 'Phone number looks invalid.' });
   });
 
   it('catches missing and bad fields before sending, with the server’s wording', () => {
     const errs = api.checkForm({ name: 'Show', date: '2026-10-17', time: '7:00 PM', venue: 'V', address: 'A',
       description: 'D', submitter_first_name: 'Pat', submitter_last_name: '', submitter_email: 'nope', submitter_phone: '555-01' });
     expect(errs).toEqual({ submitter_last_name: 'Last name is required.', submitter_email: 'Email looks invalid.',
-      submitter_phone: 'Phone number looks incomplete.' });
+      submitter_phone: 'Phone number looks invalid.' });
   });
 
   it('outlines each problem field, names the problems by the button, and focuses the first', () => {
@@ -139,6 +165,22 @@ describe('submit form: errors you can see, phone formatting', () => {
     expect(fe.hidden).toBe(false);
     expect(fe.textContent).toBe('Please fix: Phone number is required. Start time is required.');
     expect(document.activeElement.name).toBe('submitter_phone');
+  });
+
+  it('ties each message to its field for screen readers and clears it on fix', () => {
+    api.showErrors({ submitter_email: 'Email looks invalid.' });
+    const input = document.querySelector('[name="submitter_email"]');
+    const msg = document.getElementById(input.getAttribute('aria-describedby'));
+    expect(input.getAttribute('aria-describedby')).toBe('err-submitter_email');
+    expect(msg.textContent).toBe('Email looks invalid.');
+    expect(document.getElementById('form-error').getAttribute('role')).toBe('alert');
+    input.value = 'p@x.com';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(input.hasAttribute('aria-describedby')).toBe(false);
+    expect(input.hasAttribute('aria-invalid')).toBe(false);
+    api.showErrors({ submitter_email: 'Email looks invalid.' });
+    document.getElementById('submit-another').click();
+    expect(input.hasAttribute('aria-describedby')).toBe(false);
   });
 });
 
@@ -168,6 +210,20 @@ describe('submit form: live preview and site icons', () => {
     expect(document.getElementById('sp-time').textContent).toBe(time.options[2].value);
     expect([...document.querySelectorAll('#sp-icons use')].map(u => u.getAttribute('href')))
       .toEqual(['/icons.svg#i-music', '/icons.svg#i-free']);                          // Free is on by default
+  });
+
+  it('"Submit another" clears the preview and puts today back in the date', () => {
+    const set = (n, v) => { document.querySelector(`#submit-form [name="${n}"]`).value = v; };
+    set('name', 'Fall Fest'); set('date', '2026-10-17'); set('venue', 'De Leon Plaza');
+    api.updatePreview();
+    expect(document.getElementById('sp-name').textContent).toBe('Fall Fest');
+    document.getElementById('submit-another').click();
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    expect(document.getElementById('f-date').value).toBe(today);
+    expect(document.getElementById('sp-name').textContent).toBe('Your event name');
+    expect(document.getElementById('sp-venue').textContent).toBe('Venue');
+    expect(document.getElementById('sp-day').textContent).toBe(d.toLocaleDateString('en-US', { weekday: 'long' }));
   });
 });
 

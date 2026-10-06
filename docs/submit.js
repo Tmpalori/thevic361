@@ -20,21 +20,27 @@
   // form the field was often off-screen, so "fix the highlighted fields"
   // pointed at nothing visible. Now the field is outlined, the message near
   // the button names the problems, and the page scrolls to the first one.
+  // The message is tied to its field (aria-describedby) so a screen reader
+  // reads the reason, not just "invalid".
   function showFieldError(name, msg) {
     const el = document.querySelector(`[data-error-for="${name}"]`);
-    if (el) el.textContent = msg || '';
+    if (el) { el.textContent = msg || ''; el.id = 'err-' + name; }
     const input = document.querySelector(`#submit-form [name="${name}"]`);
-    if (input) input.setAttribute('aria-invalid', 'true');
+    if (input) {
+      input.setAttribute('aria-invalid', 'true');
+      if (el) input.setAttribute('aria-describedby', el.id);
+    }
   }
   function clearFieldError(name) {
     const el = document.querySelector(`[data-error-for="${name}"]`);
     if (el) el.textContent = '';
     const input = document.querySelector(`#submit-form [name="${name}"]`);
-    if (input) input.removeAttribute('aria-invalid');
+    if (input) { input.removeAttribute('aria-invalid'); input.removeAttribute('aria-describedby'); }
   }
   function clearFieldErrors() {
     $$('.field-error').forEach(el => { el.textContent = ''; });
     $$('#submit-form [aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
+    $$('#submit-form [aria-describedby^="err-"]').forEach(el => el.removeAttribute('aria-describedby'));
     const fe = $('#form-error');
     if (fe) { fe.textContent = ''; fe.hidden = true; }
   }
@@ -65,20 +71,20 @@
     if (!errors.submitter_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.submitter_email.trim())) {
       errors.submitter_email = 'Email looks invalid.';
     }
-    if (!errors.submitter_phone && (body.submitter_phone.match(/\d/g) || []).length < 10) {
-      errors.submitter_phone = 'Phone number looks incomplete.';
+    // 7+ digits, like the server: local and short international numbers are fine.
+    if (!errors.submitter_phone && (body.submitter_phone.match(/\d/g) || []).length < 7) {
+      errors.submitter_phone = 'Phone number looks invalid.';
     }
     return errors;
   }
 
-  // (361) 555-0123 as you type. Leaves international numbers (+44…) alone.
+  // A full US number becomes (361) 555-0123. Anything else (7-digit local,
+  // international +44…, or an extension like "x12") is left as typed.
   function formatPhone(value) {
-    if (/^\s*\+(?!1)/.test(value)) return value;
+    if (/^\s*\+(?!1)/.test(value) || /[a-z#]/i.test(value)) return value;
     let d = value.replace(/\D/g, '');
     if (d.length === 11 && d[0] === '1') d = d.slice(1);
-    if (d.length > 10) return value;
-    if (d.length < 4) return d.length ? `(${d}` : '';
-    if (d.length < 7) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+    if (d.length !== 10) return value;
     return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
   }
   function showFormError(msg) {
@@ -277,6 +283,10 @@
       const thanks = $('#thanks-card');
       const form = $('#submit-form');
       if (form) form.reset();
+      // reset() fires no input events and empties the date, so put today
+      // back and redraw the preview.
+      setDefaultDate();
+      updatePreview();
       clearFieldErrors();
       if (window.turnstile && window.turnstile.reset) window.turnstile.reset();
       setTurnstileToken(null);
@@ -326,6 +336,18 @@
     }
   }
 
+  // Pre-fill date with today (local) so users don't have to pick a year first.
+  function setDefaultDate() {
+    const dateEl = $('#f-date');
+    if (dateEl && !dateEl.value) {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      dateEl.value = `${y}-${m}-${day}`;
+    }
+  }
+
   async function init() {
     populateTimeSelects();
     const form = $('#submit-form');
@@ -339,23 +361,16 @@
     setTimeout(updatePreview, 0);
     const phone = $('#f-sub-phone');
     if (phone) {
-      // Format while typing at the end; always tidy it when they leave.
+      // Format while typing at the end (but not on a trailing space, so
+      // " x12" can be typed); always tidy it when they leave.
       phone.addEventListener('input', () => {
-        if (phone.selectionStart === phone.value.length) phone.value = formatPhone(phone.value);
+        if (phone.selectionStart === phone.value.length && !/\s$/.test(phone.value)) phone.value = formatPhone(phone.value);
       });
       phone.addEventListener('blur', () => { phone.value = formatPhone(phone.value); });
     }
     wireResetForAnother();
 
-    // Pre-fill date with today (local) so users don't have to pick a year first.
-    const dateEl = $('#f-date');
-    if (dateEl && !dateEl.value) {
-      const d = new Date();
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      dateEl.value = `${y}-${m}-${day}`;
-    }
+    setDefaultDate();
 
     const cfg = await loadConfig();
     if (cfg && cfg.turnstile_site_key) {
