@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore, } from '../server/db.js';
 import { withPages } from '../server/seo.js';
-import { renderWeekly, renderWelcomeEmail, normalizeEmail, signupSource, renderSubscribePage, darkSafe } from '../server/newsletter.js';
+import { renderWeekly, renderWelcomeEmail, normalizeEmail, signupSource, renderSubscribePage, darkSafe, createResend } from '../server/newsletter.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -127,6 +127,16 @@ describe('newsletter content', () => {
     expect(normalizeEmail('  Me@Example.COM ')).toBe('me@example.com');
     expect(normalizeEmail('nope')).toBeNull();
     expect(normalizeEmail('a@b.co"><script>')).toBeNull();
+  });
+
+  it('rejects addresses Resend would refuse (dots in the wrong place, bad domain labels)', () => {
+    for (const bad of ['bob@gmail..com', '.bob@gmail.com', 'bob.@gmail.com', 'a..b@gmail.com', 'bob@.gmail.com',
+      'bob@gmail.com.', 'bob@-gmail.com', 'bob@gmail-.com', 'bob@gmail.c', 'bob@gm_ail.com', 'bob@gmail.123']) {
+      expect(normalizeEmail(bad), bad).toBeNull();
+    }
+    for (const good of ['first.last+tag@sub.example.co.uk', 'a_b-c@my-site.example', 'x@xn--bcher-kva.example']) {
+      expect(normalizeEmail(good), good).toBe(good);
+    }
   });
 });
 
@@ -447,7 +457,7 @@ describe('sending', () => {
     expect(msgs[0].headers['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
     expect(msgs[0].headers['List-Unsubscribe']).not.toBe(msgs[1].headers['List-Unsubscribe']);
     expect(msgs[0].html).toContain('Acme Tacos');
-    expect(sent.batches[0].key).toBe('vic361-2026-10-05-0');
+    expect(sent.batches[0].key).toMatch(/^vic361-2026-10-05-0-[0-9a-f]{12}$/);
 
     const again = await post('/api/admin/newsletter/send', {}, h);
     expect(again.status).toBe(409);
@@ -522,6 +532,91 @@ describe('send failures', () => {
     expect(retry.status).toBe(200);
     const after = await (await fetch(baseUrl + '/api/admin/newsletter', { headers: h })).json();
     expect(after).toMatchObject({ this_week_sent: true, this_week_failed: 0, this_week_recipients: 2 });
+  });
+
+  it('asks Resend for permissive batch validation, and reads per-message errors', async () => {
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, headers: init.headers });
+      return { ok: true, status: 200, json: async () => ({ data: [{ id: 'e0' }], errors: [{ index: 1, message: 'Invalid `to` field' }] }) };
+    };
+    const r = createResend('re_x', fetchImpl);
+    const out = await r.batch([{ to: ['a@example.com'] }, { to: ['b@example.com'] }], 'k1');
+    expect(calls[0].headers['x-batch-validation']).toBe('permissive');
+    expect(calls[0].headers['Idempotency-Key']).toBe('k1');
+    expect(out.errors).toEqual([{ index: 1, message: 'Invalid `to` field' }]);
+    await r.send({ to: ['a@example.com'] });
+    expect(calls[1].headers['x-batch-validation']).toBeUndefined();
+  });
+
+  it('one address Resend refuses fails only itself, not the whole chunk', async () => {
+    const calls = [];
+    const resend = {
+      send: async () => ({ id: 'x' }),
+      batch: async (msgs) => {
+        calls.push(msgs.map(m => m.to[0]));
+        const bad = msgs.findIndex(m => m.to[0] === 'b@example.com');
+        return { data: msgs.filter((_, i) => i !== bad).map((_, i) => ({ id: `b${i}` })), errors: bad >= 0 ? [{ index: bad, message: 'Invalid `to` field' }] : [] };
+      }
+    };
+    await startApp({ resend });
+    await store.importSubscribers(['a@example.com', 'b@example.com', 'c@example.com'], 'import');
+    const first = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
+    expect(first).toMatchObject({ ok: false, recipients: 2, failed: 1, failed_emails: ['b@example.com'] });
+    const retry = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
+    expect(calls.at(-1)).toEqual(['b@example.com']);
+    expect(retry.recipients).toBe(2);
+  });
+
+  it('a 409 idempotency answer means that chunk already went out', async () => {
+    const resend = {
+      send: async () => ({ id: 'x' }),
+      batch: async () => { const e = new Error('Resend /emails/batch HTTP 409: invalid_idempotent_request'); e.status = 409; throw e; }
+    };
+    await startApp({ resend });
+    await store.importSubscribers(['a@example.com', 'b@example.com'], 'import');
+    const first = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
+    expect(first).toMatchObject({ ok: true, recipients: 2, failed: 0 });
+  });
+
+  it('overlapping sends go out once', async () => {
+    let release;
+    const gate = new Promise(r => { release = r; });
+    const calls = [];
+    const resend = {
+      send: async () => ({ id: 'x' }),
+      batch: async (msgs) => { calls.push(msgs.length); await gate; return { data: msgs.map((_, i) => ({ id: `b${i}` })) }; }
+    };
+    await startApp({ resend });
+    const h = await auth();
+    await store.importSubscribers(['a@example.com', 'b@example.com'], 'import');
+    const one = post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' });
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    const two = await post('/api/admin/newsletter/send', {}, h);
+    expect(two.status).toBe(409);
+    expect((await two.json()).error).toBe('in-progress');
+    release();
+    expect((await (await one).json()).ok).toBe(true);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('records who is still waiting before each chunk, so a crash mid-send resumes with only them', async () => {
+    const emails = Array.from({ length: 150 }, (_, i) => `p${String(i).padStart(3, '0')}@example.com`);
+    const seen = [];
+    const resend = {
+      send: async () => ({ id: 'x' }),
+      batch: async (msgs) => {
+        const rec = await store.getNewsletterSend('2026-10-05');
+        seen.push(rec ? rec.failed_emails.length : null);
+        if (seen.length === 2) throw Object.assign(new Error('process killed'), { crash: true });
+        return { data: msgs.map((_, i) => ({ id: `b${i}` })) };
+      }
+    };
+    await startApp({ resend });
+    await store.importSubscribers(emails, 'import');
+    await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' });
+    // Before chunk 1 everyone is waiting; before chunk 2 only its 50 are.
+    expect(seen).toEqual([150, 50]);
   });
 
   it('refuses to send without a mailing address', async () => {

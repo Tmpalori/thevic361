@@ -11,6 +11,7 @@ import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks, pickAvaila
   newsletterCovers, sponsorStats, sponsorLandingUrl, renderThanksPage } from '../server/sponsors.js';
 import { promises as fs } from 'node:fs';
 import { renderSubmissionReceived, renderSponsorConfirmed } from '../server/notify.js';
+import { sponsorLinkUrl } from '../server/seo.js';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
@@ -344,6 +345,55 @@ describe('Stripe best practices', () => {
     await webhook({ type: 'checkout.session.async_payment_succeeded', data: { object: { id: s.id, client_reference_id: s.params.client_reference_id, payment_status: 'paid', amount_total: 30000 } } });
     [order] = await store.listSponsorOrders();
     expect(order.status).toBe('paid');
+  });
+
+  it('a bank payment that settles after the pick\'s date isn\'t booked: no submission, no "you\'re booked", a refund alert and an apology', async () => {
+    let clock = NOW;
+    const sent = [];
+    const alerts = [];
+    await startApp({ now: () => clock, resendApiKey: 're_test', newsletterAddress: '1 Main St',
+      resend: { send: async (msg, key) => { sent.push({ ...msg, key }); return { id: 'e' }; }, batch: async () => ({ data: [] }) },
+      slack: { enabled: true, notify: async () => true, alert: async (key, title, text) => { alerts.push({ key, title, text }); } } });
+    await form({ package: 'featured', event_name: 'Fall Festival', date: '2026-10-10', time: '10 AM', venue: 'De Leon Plaza',
+      address: '101 N Main St', description: 'Food, music, rides.', business: 'Main Street', email: 'ms@example.com' });
+    const s = sessions[0];
+    await completed(s, { payment_status: 'unpaid' });
+    clock = new Date('2026-10-13T15:00:00Z'); // the next Tuesday
+    await webhook({ type: 'checkout.session.async_payment_succeeded', data: { object: { id: s.id, client_reference_id: s.params.client_reference_id, payment_status: 'paid', amount_total: 8900, payment_intent: 'pi_1' } } });
+    const [order] = await store.listSponsorOrders();
+    expect(order.status).toBe('late');
+    expect(order.submission_id).toBeFalsy();
+    expect((await store.list({})).filter(x => x.source === 'paid-feature')).toHaveLength(0);
+    expect(sent.some(m => /booked/i.test(m.subject))).toBe(false);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toMatch(/refund/i);
+    expect(alerts.some(a => /refund/i.test(`${a.title} ${a.text}`))).toBe(true);
+    const thanks = await (await fetch(`${baseUrl}/advertise/thanks?order=${order.id}`)).text();
+    expect(thanks).toMatch(/refund/i);
+    // A repeat of the webhook changes nothing.
+    await webhook({ type: 'checkout.session.async_payment_succeeded', data: { object: { id: s.id, client_reference_id: s.params.client_reference_id, payment_status: 'paid', amount_total: 8900 } } });
+    expect((await store.listSponsorOrders())[0].status).toBe('late');
+    expect(sent).toHaveLength(1);
+  });
+
+  it('a weekly payment that settles after its week ended is not booked either', async () => {
+    let clock = NOW;
+    await startApp({ now: () => clock });
+    await form(weekly('alpha')); // week of Oct 26
+    const s = sessions[0];
+    await completed(s, { payment_status: 'unpaid' });
+    clock = new Date('2026-11-02T15:00:00Z'); // the Monday after that week
+    await webhook({ type: 'checkout.session.async_payment_succeeded', data: { object: { id: s.id, client_reference_id: s.params.client_reference_id, payment_status: 'paid', amount_total: 30000 } } });
+    expect((await store.listSponsorOrders())[0].status).toBe('late');
+  });
+
+  it('only instant payment methods are offered when the date is days away', async () => {
+    await startApp();
+    await form({ package: 'featured', event_name: 'Fall Festival', date: '2026-10-10', time: '10 AM', venue: 'De Leon Plaza',
+      address: '101 N Main St', description: 'Food, music, rides.', business: 'Main Street', email: 'ms@example.com' });
+    expect(sessions[0].params.payment_method_types).toEqual(['card']);
+    await form(weekly('alpha')); // week of Oct 26: weeks away, so the Dashboard's methods
+    expect(sessions[1].params.payment_method_types).toBeUndefined();
   });
 
   it('uses a catalog price when the client can make one, and falls back to inline pricing', async () => {
@@ -933,6 +983,21 @@ describe('sponsor promises (review fixes)', () => {
     expect(sponsorStats(order, rows, { recipients: 40 })).toMatchObject({
       site_clicks: 3, site_people: 2, email_clicks: 1, email_people: 1, site_visitors: 1, newsletter_recipients: 40
     });
+  });
+
+  it('counts site clicks on the utm-tagged button link the site really renders', () => {
+    // The button's href is sponsorLinkUrl(url), so the beacon's click_url
+    // carries utm_* tags (and maybe a www or trailing slash) the stored URL lacks.
+    const order = weeklyOrder();
+    const tagged = sponsorLinkUrl(order.sponsor.url);
+    expect(tagged).toContain('utm_source=');
+    const rows = [
+      { day: '2026-09-29', kind: 'click', click_type: 'sponsor_click', click_url: tagged, path: '/', visitor: 'v1' },
+      { day: '2026-09-30', kind: 'click', click_type: 'sponsor_click', click_url: 'https://www.acme.example/#top', path: '/', visitor: 'v2' },
+      { day: '2026-09-30', kind: 'click', click_type: 'sponsor_click', click_url: 'https://acme.example.evil.test/?utm_source=thevic361', path: '/', visitor: 'v3' },
+      { day: '2026-09-30', kind: 'click', click_type: 'sponsor_click', click_url: 'https://acme.example/other-page', path: '/', visitor: 'v4' }
+    ];
+    expect(sponsorStats(order, rows)).toMatchObject({ site_clicks: 2, site_people: 2 });
   });
 
   it('the Monday cron emails last week’s sponsor their click report, once', async () => {
