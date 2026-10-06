@@ -99,14 +99,14 @@
         <fieldset class="field field-fieldset">
           <legend>Categories</legend>
           <div class="chip-row" id="f-icons">
-            <label class="chip"><input type="checkbox" name="icons" value="music"><span>🎵 Music</span></label>
-            <label class="chip"><input type="checkbox" name="icons" value="food"><span>🍔 Food</span></label>
-            <label class="chip"><input type="checkbox" name="icons" value="drinks"><span>🍺 Drinks</span></label>
-            <label class="chip"><input type="checkbox" name="icons" value="family"><span>🧑‍🧑‍🧒 Family</span></label>
-            <label class="chip"><input type="checkbox" name="icons" value="arts"><span>🎨 Arts</span></label>
-            <label class="chip"><input type="checkbox" name="icons" value="shopping"><span>🛍️ Shopping</span></label>
-            <label class="chip"><input type="checkbox" name="icons" value="outdoors"><span>🏃 Outdoors</span></label>
-            <label class="chip"><input type="checkbox" name="icons" value="community"><span>📣 Community</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="music"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-music"></use></svg>Music</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="food"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-food"></use></svg>Food</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="drinks"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-drinks"></use></svg>Drinks</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="family"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-family"></use></svg>Family</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="arts"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-arts"></use></svg>Arts</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="shopping"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-shopping"></use></svg>Shopping</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="outdoors"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-outdoors"></use></svg>Outdoors</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="community"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-community"></use></svg>Community</span></label>
           </div>
         </fieldset>
 
@@ -117,6 +117,24 @@
             <label class="radio"><input type="radio" name="free" value="false"><span>Paid / ticketed</span></label>
           </div>
         </fieldset>
+
+        <!-- Live preview: how the event will look on the list (submit.js). -->
+        <section class="sub-preview" aria-labelledby="sub-preview-h">
+          <h2 id="sub-preview-h" class="sub-preview-h">Preview: how it’ll look on the list</h2>
+          <div class="sp-day">
+            <div class="sp-day__head"><span class="sp-day__name" id="sp-day">Your event’s day</span><span class="sp-day__date" id="sp-date"></span></div>
+            <div class="sp-event">
+              <div class="sp-icons" id="sp-icons"></div>
+              <div class="sp-body">
+                <span class="sp-time" id="sp-time" hidden></span>
+                <span class="sp-name" id="sp-name">Your event name</span>
+                <span class="sp-venue" id="sp-venue">Venue</span>
+                <span class="sp-free" id="sp-free">Free</span>
+                <div class="sp-desc" id="sp-desc">Your description shows here.</div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <fieldset class="field field-fieldset">
           <legend>You are…</legend>

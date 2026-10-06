@@ -110,3 +110,64 @@ describe('submit.js — collectForm()', () => {
     expect(out.company).toBe('AcmeBots');
   });
 });
+
+describe('submit form: errors you can see, phone formatting', () => {
+  let api;
+  beforeEach(() => { api = bootDom(); });
+
+  it('formats US phone numbers as you type and leaves international ones alone', () => {
+    expect(['3', '361', '3615', '361555', '3615550', '3615550100', '13615550100', '(361)5550100', '361-555-0100']
+      .map(api.formatPhone)).toEqual(['(3', '(361', '(361) 5', '(361) 555', '(361) 555-0', '(361) 555-0100',
+      '(361) 555-0100', '(361) 555-0100', '(361) 555-0100']);
+    expect(api.formatPhone('+44 20 7946 0958')).toBe('+44 20 7946 0958');
+    expect(api.formatPhone('')).toBe('');
+  });
+
+  it('catches missing and bad fields before sending, with the server’s wording', () => {
+    const errs = api.checkForm({ name: 'Show', date: '2026-10-17', time: '7:00 PM', venue: 'V', address: 'A',
+      description: 'D', submitter_first_name: 'Pat', submitter_last_name: '', submitter_email: 'nope', submitter_phone: '555-01' });
+    expect(errs).toEqual({ submitter_last_name: 'Last name is required.', submitter_email: 'Email looks invalid.',
+      submitter_phone: 'Phone number looks incomplete.' });
+  });
+
+  it('outlines each problem field, names the problems by the button, and focuses the first', () => {
+    api.showErrors({ submitter_phone: 'Phone number is required.', time: 'Start time is required.' });
+    expect(document.querySelector('[name="submitter_phone"]').getAttribute('aria-invalid')).toBe('true');
+    expect(document.querySelector('[name="time"]').getAttribute('aria-invalid')).toBe('true');
+    expect(document.querySelector('[data-error-for="submitter_phone"]').textContent).toBe('Phone number is required.');
+    const fe = document.getElementById('form-error');
+    expect(fe.hidden).toBe(false);
+    expect(fe.textContent).toBe('Please fix: Phone number is required. Start time is required.');
+    expect(document.activeElement.name).toBe('submitter_phone');
+  });
+});
+
+describe('submit form: live preview and site icons', () => {
+  let api;
+  beforeEach(() => { api = bootDom(); });
+
+  it('uses the site’s drawn icons instead of emoji', () => {
+    const chips = [...document.querySelectorAll('#f-icons .chip')];
+    expect(chips).toHaveLength(8);
+    chips.forEach(c => expect(c.querySelector('use').getAttribute('href')).toMatch(/^\/icons\.svg#i-/));
+    expect(document.getElementById('f-icons').textContent).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+  });
+
+  it('shows the listing as they type it', () => {
+    const set = (n, v) => { document.querySelector(`#submit-form [name="${n}"]`).value = v; };
+    set('name', '<b>Fall Fest</b>'); set('date', '2026-10-17'); set('venue', 'De Leon Plaza');
+    set('description', 'Music and food.');
+    const time = document.querySelector('#submit-form [name="time"]');
+    time.value = time.options[2].value;
+    document.querySelector('input[name="icons"][value="music"]').checked = true;
+    api.updatePreview();
+    expect(document.getElementById('sp-day').textContent).toBe('Saturday');
+    expect(document.getElementById('sp-date').textContent).toBe('October 17');
+    expect(document.getElementById('sp-name').textContent).toBe('<b>Fall Fest</b>');   // text, not HTML
+    expect(document.getElementById('sp-name').innerHTML).toContain('&lt;b&gt;');
+    expect(document.getElementById('sp-time').textContent).toBe(time.options[2].value);
+    expect([...document.querySelectorAll('#sp-icons use')].map(u => u.getAttribute('href')))
+      .toEqual(['/icons.svg#i-music', '/icons.svg#i-free']);                          // Free is on by default
+  });
+});
+
