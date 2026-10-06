@@ -596,6 +596,17 @@ export function withPages(events) {
       for (const k of ['name', 'venue', 'address', 'description', 'time']) {
         if (typeof ev[k] === 'string') clean[k] = decodeEntities(ev[k]);
       }
+      // The submit form and the admin edit modal store the end separately
+      // (end_time); shown nowhere, the page said "7 PM" and Add to calendar
+      // invented a 9 PM end. Joined into the displayed time it reaches the
+      // page, lists, JSON-LD endDate and .ics/Google Calendar alike. Display
+      // only: slugs and keys don't use the time, and sorting reads the start.
+      // A time that already is a range keeps its own end. docs/app.js
+      // timeText() does the same for the bundled list.
+      const end = typeof ev.end_time === 'string' ? decodeEntities(ev.end_time).trim() : '';
+      if (end && clean.time && parseTimes(clean.time).length === 1 && parseTimes(end).length === 1) {
+        clean.time = `${clean.time.trim()} – ${end}`;
+      }
       const fixed = typeof ev.url === 'string' ? FIXED_URLS[ev.url.trim().replace(/\/$/, '')] : undefined;
       if (fixed !== undefined) clean.url = fixed;
       if (isListingUrl(ev.url) || isMismatchedUrl(ev.url, ev.name)) clean.url = '';
@@ -1150,6 +1161,13 @@ const NOT_FOUND = {
     lead: 'The link may be out of date. Browse every venue, or see what’s on this week:',
     links: [['/venues', 'All venues'], ['/', "This week's events"]]
   },
+  // The event archive couldn't be read (database outage): a 503, not a
+  // "gone", so crawlers and readers come back.
+  unavailable: {
+    h1: "We can't load that event right now",
+    lead: 'Please try again in a minute. Meanwhile, here’s what’s on now:',
+    links: [['/', "See this week's events"], ['/this-weekend', 'This weekend']]
+  },
   page: {
     h1: "We couldn't find that page",
     lead: 'The link may be mistyped or out of date. Try one of these:',
@@ -1164,7 +1182,8 @@ export function renderNotFoundPage({ siteUrl, kind = 'page' }) {
     <p class="page-lead">${escHtml(copy.lead)}</p>
     <p class="page-actions">${copy.links.map(([href, label], i) =>
       `<a class="btn ${i ? 'btn--outline' : 'btn--primary'}" href="${href}">${escHtml(label)}</a>`).join(' ')}</p>`;
-  return layout({ siteUrl, path: '/404', nav: null, noindex: true, title: `Not found | ${SITE_NAME}`, description: 'Page not found.', body });
+  const title = kind === 'unavailable' ? 'Try again shortly' : 'Not found';
+  return layout({ siteUrl, path: '/404', nav: null, noindex: true, title: `${title} | ${SITE_NAME}`, description: kind === 'unavailable' ? 'Temporarily unavailable.' : 'Page not found.', body });
 }
 
 // Homepage: inject this week's events + JSON-LD into docs/index.html so

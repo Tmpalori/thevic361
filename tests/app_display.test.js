@@ -31,6 +31,15 @@ describe('docs/app.js matches the server renderer', () => {
     expect(app.renderEvent({ name: 'X', date: '2026-10-07', time: '06:00PM' })).toContain('<span class="event-time">6:00 PM</span>');
   });
 
+  it('shows a separate end time as a range, like withPages', () => {
+    const app = boot('');
+    const ev = { name: 'Gala', date: '2026-10-09', time: '7:00 PM', end_time: '11:30 PM' };
+    expect(app.renderEvent(ev)).toContain(`<span class="event-time">${serverFormatTime(withPages([ev])[0].time)}</span>`);
+    expect(app.renderEvent(ev)).toContain('7:00 PM – 11:30 PM');
+    // Already a range (the server joined it): not joined twice.
+    expect(app.renderEvent({ ...ev, time: '7:00 PM – 11:30 PM' })).toContain('<span class="event-time">7:00 PM – 11:30 PM</span>');
+  });
+
   it('folds past days exactly like the server', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 7, 12)); // Wednesday, local time

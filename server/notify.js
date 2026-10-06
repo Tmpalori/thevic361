@@ -37,8 +37,8 @@ export function pickWhere(dateStr, at) {
 
 // Resend's answer for a request it will never accept, whatever we retry:
 // 400 and 422 are a malformed or refused message ("bob@gmail.com." as the
-// recipient). Auth (401/403), rate (429), idempotency (409) and server
-// errors can clear up, so they stay retryable.
+// recipient). Auth (401/403), rate (429) and server errors can clear up,
+// so they stay retryable; deliver() counts an idempotency 409 as sent.
 export const isPermanentSendError = err => Boolean(err) && (err.status === 400 || err.status === 422);
 
 export function createMailer({ resend, config }) {
@@ -54,6 +54,17 @@ export function createMailer({ resend, config }) {
       }, idempotencyKey);
       return 'sent';
     } catch (err) {
+      // 409 on an idempotency key: Resend already accepted a message under
+      // it (a send that timed out here but went out), now with different
+      // content (the event was renamed meanwhile). Counting that as failed
+      // retried it every 15 minutes for a day and then sent it twice. Same
+      // as the newsletter. A request still in flight under the key
+      // (concurrent_idempotent_requests) may yet fail, so that one retries.
+      if (err && err.status === 409 && idempotencyKey &&
+          err.code !== 'concurrent_idempotent_requests' && !/concurrent_idempotent_requests/.test(String(err.message))) {
+        console.warn(`[notify] "${mail.subject}" already sent under its idempotency key; counting it as sent`);
+        return 'sent';
+      }
       console.warn(`[notify] "${mail.subject}" to a customer failed:`, err.message);
       return isPermanentSendError(err) ? 'refused' : 'failed';
     }

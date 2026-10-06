@@ -19,7 +19,7 @@ import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter, resolveEditKey } from './db.js';
+import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter, resolveEditKey, withPublishedLock } from './db.js';
 import { validateSubmission, validateEventEdit, checkBotSignals } from './validate.js';
 import { verifyTurnstile } from './turnstile.js';
 import { createRateLimiter, ipKey } from './rateLimit.js';
@@ -239,18 +239,33 @@ export async function createApp(opts = {}) {
     }
   }
 
+  const railwayEnv = opts.railwayEnvironment ?? process.env.RAILWAY_ENVIRONMENT_NAME;
+  // ready() had to create the subscribers or sponsor_orders table: in
+  // production that's a new, empty database (a recreated Postgres service
+  // or volume), and the list, orders, approvals and edits are gone unless
+  // restored from a backup (AGENTS.md, Backups). PR environments and local
+  // runs start empty on purpose.
+  const onTablesCreated = tables => {
+    if (railwayEnv !== 'production') return;
+    console.error('[db] production database had no', tables.join(', '), 'table: created empty');
+    slack.alert('db-fresh', 'Production database looks new and empty',
+      `The server had to create the ${tables.join(' and ')} table${tables.length > 1 ? 's' : ''}, so this database has no subscribers or sponsor orders. ` +
+      'If DATABASE_URL now points at a recreated Postgres, restore the latest Railway backup (AGENTS.md, Backups) before the Monday newsletter.');
+  };
   const storeBundle = opts.storeBundle ?? await createStore({
     databaseUrl: opts.databaseUrl,
     file: opts.storageFile,
+    onTablesCreated,
     onUnavailable: err => slack.alert('db-boot', 'Database unreachable at boot',
       `${err.message}\nThe site is up on the bundled events.json and retries the database on the next request.`)
   });
   const store = storeBundle.store;
+  // An injected Postgres store (tests) gets the same hook.
+  if (store && 'onTablesCreated' in store && !store.onTablesCreated) store.onTablesCreated = onTablesCreated;
   // Production on the JSON file store means DATABASE_URL resolved empty (a
   // renamed or re-provisioned Postgres service): everything looks fine, and
   // every subscriber, submission and paid order written meanwhile is lost
   // on the next deploy (Railway's disk is ephemeral). Loud, not silent.
-  const railwayEnv = opts.railwayEnvironment ?? process.env.RAILWAY_ENVIRONMENT_NAME;
   const missingDatabase = railwayEnv === 'production' && storeBundle.kind !== 'postgres';
   const NO_DATABASE = 'Production is running without its database (DATABASE_URL is missing or empty), so new subscribers, submissions and orders are kept on a disk that is wiped on the next deploy. Fix the DATABASE_URL reference in Railway.';
   if (missingDatabase) {
@@ -824,12 +839,14 @@ export async function createApp(opts = {}) {
       });
       // A "Show anyway" (kept) key follows the event to its new name/date.
       try {
-        const published = await store.getPublished();
-        const newKey = eventKeyOf(v.data);
-        const old = new Set([original_key, target, previousKey].filter(k => k && k !== newKey));
-        if (published && Array.isArray(published.kept) && published.kept.some(k => old.has(k))) {
-          await store.setPublished({ ...published, kept: [...new Set(published.kept.map(k => (old.has(k) ? newKey : k)))] });
-        }
+        await withPublishedLock(store, async () => {
+          const published = await store.getPublished();
+          const newKey = eventKeyOf(v.data);
+          const old = new Set([original_key, target, previousKey].filter(k => k && k !== newKey));
+          if (published && Array.isArray(published.kept) && published.kept.some(k => old.has(k))) {
+            await store.setPublished({ ...published, kept: [...new Set(published.kept.map(k => (old.has(k) ? newKey : k)))] });
+          }
+        });
       } catch (err) {
         console.warn('[admin] kept key not moved:', err.message);
       }
@@ -900,59 +917,69 @@ export async function createApp(opts = {}) {
       return res.status(503).json({ ok: false, error: 'store-unavailable',
         message: "The database didn't answer, so nothing was published. Your changes are kept; try again in a minute." });
     };
-    let current;
-    try { current = await store.getPublished(); } catch (err) { return storeDown(err); }
-    if (typeof body.based_on === 'string' && body.based_on) {
-      if (current && current.last_updated && current.last_updated !== body.based_on) {
-        return res.status(409).json({ ok: false, error: 'stale',
-          message: 'New events went live since you opened this page. The list has been reloaded with your changes kept; check it and publish again.' });
-      }
-    }
-
-    // Carry-forward top-level extras (new_and_notable, sponsor, …) so an
-    // events-only Save & Publish doesn't drop them. Priority order:
-    //   1. body.extras (caller explicitly provided them)
-    //   2. last published payload from the store
-    //   3. bundled docs/events.json on disk
-    const PROTECTED_KEYS = new Set(['last_updated', 'events']);
-    const extras = {};
-    const explicit = (body.extras && typeof body.extras === 'object' && !Array.isArray(body.extras))
-      ? body.extras : null;
-    if (explicit) {
-      for (const [k, v] of Object.entries(explicit)) {
-        if (!PROTECTED_KEYS.has(k)) extras[k] = v;
-      }
-    } else {
-      // Previously published first (read above).
-      let prior = current;
-      if (!prior) {
-        // Fall back to the bundled snapshot.
-        try { prior = await readJsonFile(EVENTS_FILE); }
-        catch (_) { prior = null; }
-      }
-      if (prior && typeof prior === 'object') {
-        for (const [k, v] of Object.entries(prior)) {
-          if (!PROTECTED_KEYS.has(k)) extras[k] = v;
+    // From the version check to the write under the published-payload lock,
+    // so an auto-publish or approval can't land between them and be undone.
+    // Null when a response was already sent.
+    const payload = await withPublishedLock(store, async () => {
+      let current;
+      try { current = await store.getPublished(); } catch (err) { storeDown(err); return null; }
+      if (typeof body.based_on === 'string' && body.based_on) {
+        if (current && current.last_updated && current.last_updated !== body.based_on) {
+          res.status(409).json({ ok: false, error: 'stale',
+            message: 'New events went live since you opened this page. The list has been reloaded with your changes kept; check it and publish again.' });
+          return null;
         }
       }
-    }
 
-    const payload = Object.assign({}, extras, {
-      last_updated: new Date().toISOString(),
-      events
-    });
+      // Carry-forward top-level extras (new_and_notable, sponsor, …) so an
+      // events-only Save & Publish doesn't drop them. Priority order:
+      //   1. body.extras (caller explicitly provided them)
+      //   2. last published payload from the store
+      //   3. bundled docs/events.json on disk
+      const PROTECTED_KEYS = new Set(['last_updated', 'events']);
+      const extras = {};
+      const explicit = (body.extras && typeof body.extras === 'object' && !Array.isArray(body.extras))
+        ? body.extras : null;
+      if (explicit) {
+        for (const [k, v] of Object.entries(explicit)) {
+          if (!PROTECTED_KEYS.has(k)) extras[k] = v;
+        }
+      } else {
+        // Previously published first (read above).
+        let prior = current;
+        if (!prior) {
+          // Fall back to the bundled snapshot.
+          try { prior = await readJsonFile(EVENTS_FILE); }
+          catch (_) { prior = null; }
+        }
+        if (prior && typeof prior === 'object') {
+          for (const [k, v] of Object.entries(prior)) {
+            if (!PROTECTED_KEYS.has(k)) extras[k] = v;
+          }
+        }
+      }
 
-    // Step 1 — local persistence. This is what makes the Railway public site
-    // reflect the new picks regardless of GitHub state.
-    try {
-      await store.setPublished(payload);
-      archiveEvents(events);
-    } catch (err) {
-      console.error('[admin] local publish save failed:', err.message);
-      return res.status(500).json({
-        ok: false, error: 'local-publish-failed', message: err.message
+      const payload = Object.assign({}, extras, {
+        last_updated: new Date().toISOString(),
+        events
       });
-    }
+
+      // Step 1 — local persistence. This is what makes the Railway public site
+      // reflect the new picks regardless of GitHub state.
+      try {
+        await store.setPublished(payload);
+        archiveEvents(events);
+      } catch (err) {
+        console.error('[admin] local publish save failed:', err.message);
+        res.status(500).json({
+          ok: false, error: 'local-publish-failed', message: err.message
+        });
+        return null;
+      }
+      return payload;
+    });
+    if (!payload) return;
+
 
     const result = {
       ok: true,
@@ -1103,12 +1130,16 @@ export async function createApp(opts = {}) {
       return res.status(400).json({ ok: false, error: 'bad-key' });
     }
     try {
-      const published = await store.getPublished();
-      if (!published) return res.status(404).json({ ok: false, error: 'nothing-published' });
-      const today = localDateStr(nowFn());
-      const kept = new Set((Array.isArray(published.kept) ? published.kept : []).filter(k => String(k).slice(0, 10) >= today));
-      if (keep) kept.add(key); else kept.delete(key);
-      await store.setPublished({ ...published, kept: [...kept] });
+      const done = await withPublishedLock(store, async () => {
+        const published = await store.getPublished();
+        if (!published) return false;
+        const today = localDateStr(nowFn());
+        const kept = new Set((Array.isArray(published.kept) ? published.kept : []).filter(k => String(k).slice(0, 10) >= today));
+        if (keep) kept.add(key); else kept.delete(key);
+        await store.setPublished({ ...published, kept: [...kept] });
+        return true;
+      });
+      if (!done) return res.status(404).json({ ok: false, error: 'nothing-published' });
       res.json({ ok: true, key, keep });
     } catch (err) {
       console.error('[admin] keep-event failed:', err.message);
@@ -1621,7 +1652,23 @@ export async function createApp(opts = {}) {
   // off the site (settleArchive marked it _removed), whatever its date, and
   // for an upcoming event that's only in the archive, so an old copy can't
   // pass for a live listing. Other past events keep their archive pages.
+  // { unavailable: true } when the archive couldn't be read: a database
+  // outage answered a bare 500 (and a "Site error" alert on top of the
+  // db-read one) for every past event link while live pages kept working.
   async function findEvent(payload, page, now) {
+    try {
+      return await findEventIn(payload, page, now);
+    } catch (err) {
+      console.warn('[events] archive read failed:', err.message);
+      return { unavailable: true };
+    }
+  }
+  function sendUnavailable(res, ctx, html = true) {
+    res.set('Retry-After', '120');
+    if (!html) return res.status(503).set('Cache-Control', 'no-store').type('text/plain').send('Temporarily unavailable');
+    return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'unavailable' }), 503);
+  }
+  async function findEventIn(payload, page, now) {
     const isLive = p => payload.events.some(e => e.page === p);
     const live = payload.events.find(e => e.page === page);
     if (live) return { ev: live };
@@ -1650,7 +1697,8 @@ export async function createApp(opts = {}) {
   // Add-to-calendar file. Registered before /events/:slug, which would
   // otherwise treat "<slug>.ics" as a slug.
   app.get('/events/:slug.ics', pageHandler(async (req, res, payload, ctx) => {
-    const { ev, gone, moved } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    const { ev, gone, moved, unavailable } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    if (unavailable) return sendUnavailable(res, ctx, false);
     if (moved) return res.redirect(301, `${moved}.ics`);
     if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), gone ? 410 : 404);
     res.set('Content-Disposition', `attachment; filename="${String(req.params.slug).replace(/[^a-z0-9-]/gi, '') || 'event'}.ics"`);
@@ -1661,7 +1709,8 @@ export async function createApp(opts = {}) {
   // of what's drawn>, so the long cache is safe: an edited event gets a new
   // URL, and Facebook re-fetches it. Also registered before /events/:slug.
   app.get('/events/:slug.png', pageHandler(async (req, res, payload, ctx) => {
-    const { ev, gone, moved } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    const { ev, gone, moved, unavailable } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    if (unavailable) return sendUnavailable(res, ctx, false);
     if (moved) return res.redirect(301, `${moved}.png`);
     if (!ev) return res.status(gone ? 410 : 404).type('text/plain').send('Not found');
     let png;
@@ -1677,7 +1726,8 @@ export async function createApp(opts = {}) {
   }));
 
   app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
-    const { ev, gone, moved } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    const { ev, gone, moved, unavailable } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    if (unavailable) return sendUnavailable(res, ctx);
     if (moved) return res.redirect(301, moved);
     if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), gone ? 410 : 404);
     const venue = venueFor(ev, venues);
@@ -1967,6 +2017,21 @@ export async function createApp(opts = {}) {
         problems.stale = `No new events collected in ${age} days. The collector or auto-publish may be broken: check the Weekly Collect workflow.`;
       }
     }
+    // A list that sent to people last time and now has nobody active: the
+    // database was replaced or wiped (Monday's issue would quietly go to 0
+    // recipients). Mass unsubscribes don't get to 0 in a week.
+    if (pub && typeof store.countSubscribers === 'function' && typeof store.listNewsletterSends === 'function') {
+      try {
+        const [counts, sends] = await Promise.all([store.countSubscribers(), store.listNewsletterSends(1)]);
+        const last = sends && sends[0];
+        if (!(Number(counts && counts.active) > 0) && last && Number(last.recipients) > 0) {
+          problems.subscribers = `The newsletter has 0 active subscribers, but the last issue (${last.week_key}) went to ${last.recipients}. ` +
+            'The database may have been replaced or wiped: restore the latest Railway backup (AGENTS.md, Backups).';
+        }
+      } catch (err) {
+        console.warn('[health] subscriber check failed:', err.message);
+      }
+    }
     const t = now.getTime();
     for (const [key, text] of Object.entries(problems)) {
       const last = healthState.get(key);
@@ -2131,7 +2196,7 @@ export async function createApp(opts = {}) {
   });
 
   await archiveReady;
-  return { app, store, storeBundle, slack, scheduler, submissionReview };
+  return { app, store, storeBundle, slack, scheduler, submissionReview, healthCheck };
 }
 
 // Start the server when invoked directly. Importing this module (e.g. from

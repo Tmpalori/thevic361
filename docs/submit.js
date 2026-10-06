@@ -10,7 +10,9 @@
   'use strict';
 
   const API_BASE = ''; // same-origin
-  const FORM_LOAD_TS = Date.now();
+  // Reset by "Submit another", so the next event's timer starts when its
+  // blank form appears, not when the page first loaded.
+  let formLoadTs = Date.now();
   let turnstileToken = null;
 
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -210,7 +212,7 @@
       submitter_email: get('submitter_email'),
       submitter_phone: get('submitter_phone'),
       company: get('company'),
-      elapsed_ms: Date.now() - FORM_LOAD_TS,
+      elapsed_ms: Date.now() - formLoadTs,
       turnstile_token: turnstileToken
     };
   }
@@ -292,6 +294,7 @@
       const thanks = $('#thanks-card');
       const form = $('#submit-form');
       if (form) form.reset();
+      formLoadTs = Date.now();
       // reset() fires no input events and empties the date, so put today
       // back and redraw the preview.
       setDefaultDate();
@@ -396,7 +399,7 @@
   // Test hook — exposes the form collector + token setter for jsdom tests.
   if (typeof window !== 'undefined') {
     window.__vic361Submit = {
-      collectForm, setTurnstileToken, FORM_LOAD_TS, buildTimeOptions, populateTimeSelects,
+      collectForm, setTurnstileToken, buildTimeOptions, populateTimeSelects,
       checkForm, showErrors, formatPhone, updatePreview
     };
   }

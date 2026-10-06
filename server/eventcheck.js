@@ -31,7 +31,7 @@
 
 import crypto from 'node:crypto';
 import { localDateStr, withPages, addDays } from './seo.js';
-import { eventKeyOf, applyEventEdits } from './db.js';
+import { eventKeyOf, applyEventEdits, withPublishedLock } from './db.js';
 
 export const MAX_PER_RUN = 10;
 const ARCHIVE_DAYS = 400;
@@ -127,11 +127,13 @@ export function registerEventCheck(app, { store, requireAdmin, nowFn, secret, lo
       if (add.length) {
         // Re-read right before writing so a publish that landed meanwhile
         // isn't overwritten with the older copy.
-        const latest = (await store.getPublished()) || published;
-        const cutoff = addDays(today, -ARCHIVE_DAYS);
-        const have = new Set(entries(latest).map(h => h.key));
-        const keep = entries(latest).filter(h => h.date >= cutoff);
-        await store.setPublished({ ...latest, hidden: [...keep, ...add.filter(a => !have.has(a.key))] });
+        await withPublishedLock(store, async () => {
+          const latest = (await store.getPublished()) || published;
+          const cutoff = addDays(today, -ARCHIVE_DAYS);
+          const have = new Set(entries(latest).map(h => h.key));
+          const keep = entries(latest).filter(h => h.date >= cutoff);
+          await store.setPublished({ ...latest, hidden: [...keep, ...add.filter(a => !have.has(a.key))] });
+        });
       }
       res.json({ ok: true, hidden: add, skipped });
     } catch (err) {
@@ -149,20 +151,24 @@ export function registerEventCheck(app, { store, requireAdmin, nowFn, secret, lo
 
   app.post('/api/admin/hidden/restore', requireAdmin, async (req, res) => {
     const key = String(req.body && req.body.key || '');
-    const published = await store.getPublished();
-    const entry = published && entries(published).find(h => h.key === key);
-    if (!entry) return res.status(404).json({ ok: false, error: 'not-hidden' });
-    const today = localDateStr(nowFn());
-    await store.setPublished({
-      ...published,
-      hidden: published.hidden.filter(h => h.key !== key),
-      // Don't let the next check hide it again. Keys start with the date,
-      // so past ones age out.
-      // The shown key too: after a Save & Publish of an edit, it's the key the
-      // check sees.
-      hidden_restored: [...new Set([...(published.hidden_restored || []), key, entry.shown_key].filter(Boolean))]
-        .filter(k => k.slice(0, 10) >= today)
+    const restored = await withPublishedLock(store, async () => {
+      const published = await store.getPublished();
+      const entry = published && entries(published).find(h => h.key === key);
+      if (!entry) return false;
+      const today = localDateStr(nowFn());
+      await store.setPublished({
+        ...published,
+        hidden: published.hidden.filter(h => h.key !== key),
+        // Don't let the next check hide it again. Keys start with the date,
+        // so past ones age out.
+        // The shown key too: after a Save & Publish of an edit, it's the key the
+        // check sees.
+        hidden_restored: [...new Set([...(published.hidden_restored || []), key, entry.shown_key].filter(Boolean))]
+          .filter(k => k.slice(0, 10) >= today)
+      });
+      return true;
     });
+    if (!restored) return res.status(404).json({ ok: false, error: 'not-hidden' });
     res.json({ ok: true, restored: key });
   });
 }
