@@ -25,13 +25,26 @@ accepts JPEG there, so it gets the kit's .jpg twins (slides_jpg).
 import argparse
 import json
 import os
+import re
 import sys
 import time
 
 import requests
 
 SITE = os.environ.get("SITE_URL", "https://www.thevic361.com").rstrip("/")
-GRAPH = f"https://graph.facebook.com/{os.environ.get('GRAPH_API_VERSION', 'v23.0')}"
+# One place for the Graph API version. The GRAPH_API_VERSION repo variable
+# (passed in social-kit.yml) overrides it, so moving off a version Meta
+# retires needs no code change; empty (variable unset) means the default.
+GRAPH_VERSION = os.environ.get("GRAPH_API_VERSION", "").strip() or "v23.0"
+GRAPH_VERSION = GRAPH_VERSION if GRAPH_VERSION.startswith("v") else f"v{GRAPH_VERSION}"
+GRAPH = f"https://graph.facebook.com/{GRAPH_VERSION}"
+# Meta errors worth another try: rate limits (4, 17, 341), "unknown/
+# temporary" (1, 2), and Instagram failing to fetch the image (9004, 9007),
+# plus anything flagged is_transient or a 5xx. Without a retry one blip
+# fails the day's post, and the cron fallback skips itself because the
+# site's scheduler already ran the job.
+TRANSIENT_CODES = {1, 2, 4, 17, 341, 9004, 9007}
+RETRY_DELAYS = (5, 20)  # seconds; bounded so the post step stays well inside its timeout
 KIT_DIR = os.path.join(os.path.dirname(__file__), "..", "docs", "social", "latest")
 MAX_CAROUSEL = 10  # Instagram's carousel limit (Facebook allows more, but keep them in sync)
 
@@ -49,6 +62,23 @@ class _SentButNoAnswer(PostError):
     """A POST timed out waiting for the answer: Meta may have acted on it."""
 
 
+class _Transient(PostError):
+    """An error Meta says to retry (see TRANSIENT_CODES)."""
+
+
+def version_problem(err):
+    """A message naming the Graph version when Meta refuses it (retired or
+    unknown), or None. Otherwise it reads like a token problem."""
+    if not isinstance(err, dict):
+        return None
+    msg = str(err.get("message") or "")
+    if err.get("code") in (12, 2635) or re.search(r"(deprecated|unsupported|unknown|invalid)\W+(api\W+)?version",
+                                                  msg, re.I):
+        return (f"Meta refused Graph API {GRAPH_VERSION} (retired or unsupported?). Set the "
+                f"GRAPH_API_VERSION repo variable to a current version, e.g. v24.0.")
+    return None
+
+
 PENDING = "pending"  # posted.json marker for an Unconfirmed post
 
 
@@ -59,7 +89,22 @@ def pick_slides(slides, limit=MAX_CAROUSEL):
     return [slides[0]] + list(slides[1:limit - 1]) + [slides[-1]]
 
 
-def _graph(method, path, session, **params):
+def _graph(method, path, session, _retry=True, **params):
+    """One Graph call. Calls safe to repeat (unpublished photo uploads,
+    container creates, status reads) are retried on transient errors; a
+    repeat only leaves an unused photo or container behind. _publish passes
+    _retry=False: a second publish could post twice."""
+    for delay in (RETRY_DELAYS if _retry else ()) + (None,):
+        try:
+            return _graph_once(method, path, session, dict(params))
+        except (_Transient, _SentButNoAnswer) as e:
+            if delay is None:
+                raise
+            print(f"{e}; retrying in {delay}s")
+            time.sleep(delay)
+
+
+def _graph_once(method, path, session, params):
     # GET parameters go in the query string; Graph ignores a GET body, so
     # the fields would never arrive. The token goes in a header instead, so
     # it never shows up in a URL (requests puts the URL in its errors).
@@ -75,7 +120,7 @@ def _graph(method, path, session, **params):
     except requests.RequestException as e:
         # Only the error type: the message can carry the URL. `from None`
         # keeps the original out of any traceback too.
-        cls = _SentButNoAnswer if isinstance(e, requests.ReadTimeout) and method == "POST" else PostError
+        cls = _SentButNoAnswer if isinstance(e, requests.ReadTimeout) and method == "POST" else _Transient
         raise cls(f"{method} {path} failed: {type(e).__name__}") from None
     try:
         body = r.json()
@@ -83,7 +128,13 @@ def _graph(method, path, session, **params):
         body = {"raw": r.text[:300]}
     if r.status_code >= 400 or (isinstance(body, dict) and body.get("error")):
         err = body.get("error", body) if isinstance(body, dict) else body
-        raise PostError(f"{method} {path} failed: {json.dumps(err)[:300]}")
+        problem = version_problem(err)
+        if problem:
+            raise PostError(problem)
+        transient = r.status_code >= 500 or isinstance(err, dict) and (
+            err.get("is_transient") is True or err.get("code") in TRANSIENT_CODES
+            or err.get("error_subcode") in TRANSIENT_CODES)
+        raise (_Transient if transient else PostError)(f"{method} {path} failed: {json.dumps(err)[:300]}")
     return body
 
 
@@ -129,7 +180,7 @@ def _publish(path, session, before_publish=None, **params):
     if before_publish:
         before_publish()
     try:
-        return _graph("POST", path, session, **params)["id"]
+        return _graph("POST", path, session, _retry=False, **params)["id"]
     except _SentButNoAnswer as e:
         raise Unconfirmed(str(e)) from None
 
@@ -317,7 +368,19 @@ def main(argv=None, session=None):
 
     for f in failures:
         print(f"::error::{f}")
+    if any(GRAPH_VERSION in f and "GRAPH_API_VERSION" in f for f in failures):
+        # social-kit.yml's Slack alert says this instead of its generic text.
+        set_output("alert", f"🚨 Social posts failed: Meta refused Graph API {GRAPH_VERSION}. "
+                            "Set the GRAPH_API_VERSION repo variable to a current version.")
     return 1 if failures else 0
+
+
+def set_output(name, value):
+    """A step output for the workflow (single line), when run in Actions."""
+    path = os.environ.get("GITHUB_OUTPUT")
+    if path:
+        with open(path, "a") as f:
+            f.write(f"{name}={value.replace(chr(10), ' ')}\n")
 
 
 if __name__ == "__main__":

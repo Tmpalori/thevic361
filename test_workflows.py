@@ -208,3 +208,21 @@ def test_fallback_crons_fire_at_the_slot_in_both_cdt_and_cst(tmp_path, wf, cdt, 
     # runs are never gated.
     assert run_gate(tmp_path, wf, cst, WINTER, ran=True) == "run=false"
     assert run_gate(tmp_path, wf, "", WINTER, ran=True, event="workflow_dispatch") == "run=true"
+
+
+@pytest.mark.parametrize("name,job,post,script", [("meta-ads.yml", "ads", "Meta ads", "meta_ads.py"),
+                                                  ("social-kit.yml", "build", "Post to Facebook + Instagram",
+                                                   "social_post.py")])
+def test_meta_workflows_pass_the_graph_version_and_slack_names_a_refused_one(name, job, post, script):
+    # A retired Graph version must be fixable from the repo variable, and
+    # the alert must say so instead of blaming the token.
+    steps = load(name)["jobs"][job]
+    call = step(steps, post)
+    assert call["env"]["GRAPH_API_VERSION"] == "${{ vars.GRAPH_API_VERSION || 'v23.0' }}"
+    alert = step(steps, "Tell Slack it failed")
+    assert alert["env"]["ALERT"] == "${{ steps.%s.outputs.alert }}" % call["id"]
+    out = subprocess.run(["bash", "-c", 'printf "%s" "' + alert["run"].split('"')[1] + '"'],
+                         env={"ALERT": "named v23.0"}, capture_output=True, text=True).stdout
+    assert out == "named v23.0"
+    with open(os.path.join(os.path.dirname(WF), "..", "scripts", script)) as f:
+        assert "set_output(\"alert\"" in f.read()
