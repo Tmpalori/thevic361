@@ -72,6 +72,35 @@
       .replace(/([\dM])\s*(?:[–—-]+|\bto\b)\s*(?=\d)/g, '$1 – ');
   }
 
+  // Start of an event in minutes after midnight (9999 without a time, so
+  // those sort last): the same reading as parseTimes in server/seo.js, so
+  // the browser re-render keeps the server's order. Minutes are optional
+  // ("7 PM", "10am - 3pm"; admin-typed times aren't normalized), and a
+  // range sharing one am/pm ("7-9 PM") starts at its bare leading time,
+  // flipped to the other half of the day when that would pass the end.
+  var SHARED_RANGE = /(^|[^\d:])(\d{1,2})(?::(\d{2}))?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b/i;
+  function timeMins(time) {
+    var t = String(time || '');
+    var re = /(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?/gi, m, end = -1;
+    while ((m = re.exec(t))) {
+      // "7:75 PM" or "13pm" isn't a time.
+      if (parseInt(m[1], 10) > 12 || parseInt(m[2] || '0', 10) > 59) continue;
+      end = (parseInt(m[1], 10) % 12 + (m[3].toLowerCase() === 'p' ? 12 : 0)) * 60 + parseInt(m[2] || '0', 10);
+      break;
+    }
+    if (end < 0) return 9999;
+    var r = SHARED_RANGE.exec(t);
+    var first = /(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m/i.exec(t);
+    if (r && first && first.index > r.index + r[1].length &&
+        parseInt(r[2], 10) <= 12 && parseInt(r[3] || '0', 10) <= 59) {
+      var h = parseInt(r[2], 10) % 12 + (end >= 720 ? 12 : 0);
+      var mins = parseInt(r[3] || '0', 10);
+      if (h * 60 + mins > end) h = (h + 12) % 24;
+      return h * 60 + mins;
+    }
+    return end;
+  }
+
   // Sponsor clicks carry utm_* tags for the sponsor's own analytics, like
   // sponsorLinkUrl() in server/seo.js. href is already safeHref()-checked.
   function sponsorLink(url) {
@@ -160,30 +189,11 @@
     var eventsForDay = events.filter(function (e) { return e.date === dateStr; });
     // Sort by time ascending (events without time go last)
     eventsForDay.sort(function(a, b) {
-      var ta = a.time || 'ZZ', tb = b.time || 'ZZ';
-      // Normalize AM/PM times for comparison
-      function toMins(t) {
-        var m = t.match(/(\d+):(\d+)\s*(AM|PM)/i);
-        if (!m) return 9999;
-        var h = parseInt(m[1]), min = parseInt(m[2]), ampm = m[3].toUpperCase();
-        if (ampm === 'PM' && h !== 12) h += 12;
-        if (ampm === 'AM' && h === 12) h = 0;
-        var end = h * 60 + min;
-        // "7:00 - 9:00 PM" shares the end's AM/PM: sort by the start, like
-        // parseTimes in server/seo.js (flipped when it would pass the end).
-        var r = t.match(/^\s*(\d{1,2}):(\d{2})\s*(?:-|–|—|to)\s*\d{1,2}:\d{2}\s*(AM|PM)/i);
-        if (r && parseInt(r[1]) <= 12) {
-          var s = (parseInt(r[1]) % 12) * 60 + parseInt(r[2]) + (end >= 720 ? 720 : 0);
-          if (s > end) s = (s + 720) % 1440;
-          return s;
-        }
-        return end;
-      }
       // Paid Vic's Picks pin to the top of their day, then editor's picks
       // (pickRank in server/seo.js).
       var ra = a.featured ? (a.editor_pick ? 1 : 0) : 2, rb = b.featured ? (b.editor_pick ? 1 : 0) : 2;
       if (ra !== rb) return ra - rb;
-      return toMins(ta) - toMins(tb);
+      return timeMins(a.time) - timeMins(b.time);
     });
 
     var bodyHtml;
@@ -567,6 +577,7 @@
       safeHref: safeHref,
       sponsorLink: sponsorLink,
       formatTime: formatTime,
+      timeMins: timeMins,
       renderEvent: renderEvent,
       renderSponsor: renderSponsor
     };
@@ -587,6 +598,11 @@
       }
     });
   }
+
+  // The server fills the footer year in; this covers the raw page it falls
+  // back to when rendering fails.
+  var yearEl = document.querySelector('[data-year]');
+  if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 
   // Run on DOM ready
   if (document.readyState === 'loading') {

@@ -49,6 +49,20 @@ function textWidth(s, size, font = 'Fredoka') {
   return em * size * (font === 'Nunito' ? 1.06 : 1);
 }
 
+// The bundled fonts have no emoji glyphs and system fonts are off, so an
+// emoji in a name ("Well Appointed Wednesdays 🍷 🍺") would draw as empty
+// boxes. Drop pictographs and the joiners, variation selectors, keycap marks,
+// skin tones and flag letters that build emoji sequences before measuring.
+const EMOJI_RE = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u{FE0F}\u{FE0E}\u{200D}\u{20E3}]/gu;
+export function stripEmoji(s) {
+  return String(s == null ? '' : s).replace(EMOJI_RE, '').replace(/\s+/g, ' ').trim();
+}
+
+// Bump when the drawing changes in a way the drawn fields don't capture (like
+// the emoji strip), so shared pages get a new og:image URL and Facebook's
+// cached copy of the old card is replaced.
+export const CARD_RENDER_VERSION = 2;
+
 function ellipsize(s, size, max, font) {
   if (textWidth(s, size, font) <= max) return s;
   let out = s;
@@ -116,7 +130,7 @@ export function eventCardSvg(ev) {
     y += 68;
   }
 
-  const name = fitName(String(ev.name || '').trim(), max, y);
+  const name = fitName(stripEmoji(ev.name), max, y);
   y = firstBaseline(y, name.size);
   name.lines.forEach((line, i) => {
     if (i) y += lineHeight(name.size);
@@ -125,7 +139,7 @@ export function eventCardSvg(ev) {
 
   // "7 PM · Moonshine Drinkery · Free" under the name.
   const meta = [formatTime(ev.time), placeText(ev).split(' · ')[0], ev.free === true ? 'Free' : '']
-    .filter(Boolean).join(' · ');
+    .map(stripEmoji).filter(Boolean).join(' · ');
   if (meta) {
     y += META_GAP;
     parts.push(`<text x="${left}" y="${y}" font-family="Nunito" font-weight="800" font-size="36" fill="${MUTED}">${esc(ellipsize(meta, 36, max, 'Nunito'))}</text>`);
@@ -143,7 +157,7 @@ ${parts.join('\n')}
 // Changes whenever anything drawn on the card changes, so the page can put
 // it in the image URL and Facebook's cached preview updates with it.
 export function eventCardVersion(ev) {
-  const drawn = [ev.name, ev.date, ev.time, ev.venue, ev.address, ev.featured === true, ev.free === true];
+  const drawn = [CARD_RENDER_VERSION, ev.name, ev.date, ev.time, ev.venue, ev.address, ev.featured === true, ev.free === true];
   return createHash('sha1').update(JSON.stringify(drawn)).digest('hex').slice(0, 10);
 }
 

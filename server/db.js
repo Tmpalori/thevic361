@@ -154,10 +154,14 @@ export function applyEventEdits(events, edits) {
 // edited key; stored under that, it never matched the original event and
 // the correction silently didn't show. Follow edited keys back to the
 // original one (a few hops for rows stored the old way), unless an edit
-// row already exists under the key as given.
-export function resolveEditKey(edits, key) {
+// row already exists under the key as given, or the published list stores
+// an event under it (`storedKeys`): Save & Publish writes the edited shape,
+// so after one the edited key *is* the stored identity, and an edit sent
+// back to the original key would never match the live event.
+export function resolveEditKey(edits, key, storedKeys = null) {
   const rows = Array.isArray(edits) ? edits : [];
   if (rows.some(e => e && e.original_key === key)) return key;
+  if (storedKeys && storedKeys.has(key)) return key;
   let target = key;
   const seen = new Set([key]);
   for (let hop = 0; hop < EDIT_CHAIN_HOPS; hop++) {

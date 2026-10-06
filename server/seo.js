@@ -532,19 +532,47 @@ const FIXED_URLS = {
 
 const tieKey = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
+// The suffix an event's earlier page used (`_page`, from the archive: see
+// reservePages in server/index.js), when it still fits its base: 1 for the
+// base page, N for `-N`. A rename or a new date changes the base, so the
+// old page doesn't fit and settleArchive 301s it instead.
+function reservedNumber(page, base) {
+  if (typeof page !== 'string' || !page.startsWith(`/events/${base}`)) return 0;
+  const rest = page.slice(`/events/${base}`.length);
+  if (!rest) return 1;
+  const m = /^-(\d+)$/.exec(rest);
+  return m && Number(m[1]) >= 2 ? Number(m[1]) : 0;
+}
+
 function pageNumbers(list) {
   const bases = list.map(ev => `${ev.date}-${slugify(ev.name) || 'event'}`);
   const groups = new Map();
   bases.forEach((b, i) => groups.set(b, [...(groups.get(b) || []), i]));
-  const n = new Array(list.length).fill(1);
+  const n = new Array(list.length).fill(0);
   for (const idx of groups.values()) {
-    if (idx.length < 2) continue;
+    if (idx.length < 2) { n[idx[0]] = 1; continue; }
     const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
     idx.sort((i, j) => (timeKey(list[i]) - timeKey(list[j])) ||
       cmp(tieKey(list[i].venue), tieKey(list[j].venue)) ||
       cmp(tieKey(list[i].name), tieKey(list[j].name)) ||
       cmp(String(list[i].time || ''), String(list[j].time || '')) || (i - j));
-    idx.forEach((i, rank) => { n[i] = rank + 1; });
+    // A page already handed out stays with its event: links in the
+    // newsletter and on social media point there. Without this a later
+    // same-name event that sorts first took the base URL and the first
+    // event moved to -2 with nothing pointing the old link at it. The
+    // rest get the first free number, in rank order.
+    const taken = new Set();
+    for (const i of idx) {
+      const r = reservedNumber(list[i]._page, bases[i]);
+      if (r && !taken.has(r)) { n[i] = r; taken.add(r); }
+    }
+    let next = 1;
+    for (const i of idx) {
+      if (n[i]) continue;
+      while (taken.has(next)) next++;
+      n[i] = next;
+      taken.add(next);
+    }
   }
   return { bases, n };
 }
@@ -564,7 +592,8 @@ export function withPages(events) {
       const fixed = typeof ev.url === 'string' ? FIXED_URLS[ev.url.trim().replace(/\/$/, '')] : undefined;
       if (fixed !== undefined) clean.url = fixed;
       if (isListingUrl(ev.url) || isMismatchedUrl(ev.url, ev.name)) clean.url = '';
-      return Object.assign({}, ev, clean, { page: `/events/${n === 1 ? base : `${base}-${n}`}` });
+      const { _page: _reserved, ...rest } = ev;
+      return Object.assign(rest, clean, { page: `/events/${n === 1 ? base : `${base}-${n}`}` });
     });
 }
 
@@ -1166,7 +1195,10 @@ export function renderComingUp(events, today) {
     // "Downtown Cuero · Nearby", not "Downtown Cuero · Nearby · Cuero".
     const nearby = !ev.town ? '' : venue.toLowerCase().includes(townOf(ev).toLowerCase()) ? 'Nearby' : `Nearby · ${townOf(ev)}`;
     const where = [venue, nearby].filter(Boolean).join(' · ');
-    return `<li class="coming-item"><a href="${escHtml(ev.page)}">` +
+    // A paid pick weeks out shows only here until its week starts; tag it
+    // so its views count toward the buyer's "Shown in lists" figure.
+    const ad = ev.featured && !ev.editor_pick ? adAttr(ev.sponsor_order) : '';
+    return `<li class="coming-item"${ad}><a href="${escHtml(ev.page)}">` +
       `<span class="coming-date">${escHtml(formatDay(ev.date, { weekday: 'short', month: 'short', day: 'numeric' }))}</span>` +
       `<span class="coming-name">${escHtml(ev.name)}</span>` +
       (where ? `<span class="coming-where">${escHtml(where)}</span>` : '') +
@@ -1211,6 +1243,9 @@ export function renderHome(template, events, { siteUrl, now, signupHtml = null }
     .replace('<!--COMING_UP_LINK-->', () => comingUpEvents(events, today).length
       ? '<a class="btn btn--outline" href="#coming-up">Coming up ↓</a>' : '')
     .replace('<!--NAV-->', () => navHtml('/'))
+    // The template's footer year is only a fallback; every other page's
+    // footer computes its year (footerHtml), so the homepage must too.
+    .replace(/<span data-year>\d{4}<\/span>/, () => `<span data-year>${today.slice(0, 4)}</span>`)
     .replace('</head>', () => ld.map(jsonLd).join('\n') + '\n</head>');
 }
 

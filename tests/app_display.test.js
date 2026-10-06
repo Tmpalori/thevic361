@@ -6,7 +6,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { formatTime as serverFormatTime, renderDays, withPages } from '../server/seo.js';
+import { formatTime as serverFormatTime, renderDays, withPages, parseTimes } from '../server/seo.js';
 
 const APP_JS = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'app.js'), 'utf8');
 
@@ -68,6 +68,52 @@ describe('docs/app.js matches the server renderer', () => {
     const html = document.getElementById('events-container').innerHTML;
     expect(html.indexOf('Early Set')).toBeGreaterThan(-1);
     expect(html.indexOf('Early Set')).toBeLessThan(html.indexOf('Late Show'));
+  });
+
+  it('reads start times like parseTimes, minutes optional', () => {
+    const app = boot('');
+    const serverMins = t => {
+      const s = parseTimes(t)[0];
+      if (!s) return 9999;
+      const [h, m] = s.split(':').map(Number);
+      return h * 60 + m;
+    };
+    for (const t of ['7 PM', '7pm', '10am - 3pm', '12 p.m.', '12 AM', '7:00 PM', '7-9 PM', '11-1 PM', '7:30 – 9:30pm',
+      'Doors 6 PM, show 7-9 PM', '13pm', '7:75 PM, 8 PM', '10:00AM – 11:00AM', 'All day', '', undefined]) {
+      expect(app.timeMins(t), String(t)).toBe(serverMins(t));
+    }
+    expect(app.timeMins('7 PM')).toBe(19 * 60);
+    expect(app.timeMins('10am - 3pm')).toBe(10 * 60);
+  });
+
+  it('sorts a time without minutes in its place, not at the end of the day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 7, 12));
+    const events = [
+      { date: '2026-10-07', name: 'Late Show', time: '9:00 PM' },
+      { date: '2026-10-07', name: 'Typed By Hand', time: '7 PM' },
+      { date: '2026-10-07', name: 'Market Day', time: '10am - 3pm' },
+      { date: '2026-10-07', name: 'Dinner Set', time: '8:00 PM' }
+    ];
+    let done;
+    const ready = new Promise(r => { done = r; });
+    boot('', () => Promise.resolve({ ok: true, json: () => { setTimeout(done, 0); return Promise.resolve({ events }); } }));
+    await ready;
+    await new Promise(r => setTimeout(r, 0));
+    const html = document.getElementById('events-container').innerHTML;
+    const order = ['Market Day', 'Typed By Hand', 'Dinner Set', 'Late Show'].map(n => html.indexOf(n));
+    expect(order.every(i => i > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it('fills in the footer year', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2027, 0, 2, 12));
+    document.body.innerHTML = '<footer><span data-year>2026</span></footer><div id="events-container"></div>';
+    delete window.__vic361App;
+    window.fetch = () => new Promise(() => {});
+    (0, eval)(APP_JS);
+    expect(document.querySelector('[data-year]').textContent).toBe('2027');
   });
 
   it('marks the sponsor link as paid and tags it for the sponsor', () => {

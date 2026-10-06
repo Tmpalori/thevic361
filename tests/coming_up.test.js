@@ -76,6 +76,23 @@ describe('coming up', () => {
     expect(renderComingUp([], TODAY)).toBe('');
   });
 
+  it('tags paid picks for impression counting, never editor’s picks or big events', () => {
+    const html = renderComingUp(withPages([
+      { date: '2026-10-24', name: 'Paid Pick', venue: 'Moonshine', featured: true, sponsor_order: 'ord-12345678' },
+      { date: '2026-10-25', name: 'Editor Pick', venue: 'X', featured: true, editor_pick: true, big: true, sponsor_order: 'ord-87654321' },
+      { date: '2026-10-26', name: 'Big Fest', venue: 'Y', big: true }
+    ]), TODAY);
+    expect(html).toContain('<li class="coming-item" data-ad="ord-12345678"><a href="/events/2026-10-24-paid-pick">');
+    expect(html).not.toContain('ord-87654321');
+    expect(html.match(/data-ad=/g)).toHaveLength(1);
+  });
+
+  it('computes the homepage footer year', () => {
+    const template = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'index.html'), 'utf8');
+    const page = renderHome(template, [], { siteUrl: SITE, now: new Date('2027-01-01T18:00:00Z') });
+    expect(page).toContain('&copy; <span data-year>2027</span> The Vic 361');
+  });
+
   it('fills the homepage slot, and the real template has the slot', () => {
     const tpl = '<head></head><!--NAV--><!--COMING_UP_LINK--><p class="loading-message">Loading events...</p><!--COMING_UP-->';
     const page = renderHome(tpl, EVENTS, { siteUrl: SITE, now: NOW });

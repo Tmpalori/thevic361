@@ -459,6 +459,31 @@ describe('auto-publish retires only reliable misses', () => {
     expect(await names()).not.toContain('Comedy Night');
   });
 
+  it('never retires an approved submission the collector does not list, and retires nothing when submissions are unreadable', async () => {
+    const sub = { date: '2026-10-09', name: 'Church Fish Fry', time: '5:00 PM', venue: 'St. Mary', description: 'Fish.', icons: ['food'] };
+    await start({ candidates: { last_updated: 'r1', events: [...filler, comedy], sources: ok } });
+    await store.insert({ id: 's1', status: 'approved', source: 'submission', created_at: NOW.toISOString(), updated_at: NOW.toISOString(), payload: sub });
+    await runNow();
+    expect((await store.getPublished()).auto_publish.keys).toContain('2026-10-09|Church Fish Fry|St. Mary');
+    for (const from of ['r2', 'r3', 'r4']) {
+      await write(from, [comedy]);
+      const r = await runNow();
+      expect(r).toMatchObject({ retired: 0, added: 0 });
+    }
+    expect(await names()).toContain('Church Fish Fry');
+    expect((await store.getPublished()).auto_publish.missing).toEqual({});
+
+    // Comedy Night misses one run; on the second the submissions read fails:
+    // nothing comes down, the submission included.
+    await write('r5', []);
+    await runNow();
+    vi.spyOn(store, 'list').mockRejectedValue(new Error('db down'));
+    await write('r6', []);
+    expect((await runNow()).retired).toBe(0);
+    expect(await names()).toEqual(expect.arrayContaining(['Church Fish Fry', 'Comedy Night']));
+    vi.restoreAllMocks();
+  });
+
   it('a find in between starts the count over', async () => {
     await start({ candidates: { last_updated: 'r1', events: [...filler, comedy], sources: ok } });
     await runNow();
