@@ -305,6 +305,29 @@ export function bookableWeeks(now, orders) {
   });
 }
 
+// ─── Sponsor logo ────────────────────────────────────────────────────────
+// The checkout page shrinks the logo in the browser (canvas) and sends it as
+// a data URL in a hidden field, so the server needs no upload library. Only
+// PNG, JPEG and WebP (checked by their first bytes, not the label): SVG can
+// carry script, so it's not accepted.
+const LOGO_MAX_BYTES = 300 * 1024;
+export const LOGO_PATH = /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/;
+
+export function parseLogo(dataUrl) {
+  const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || '').trim());
+  if (!m) return { error: 'Logo must be a PNG, JPG or WebP image.' };
+  const data = Buffer.from(m[2], 'base64');
+  if (!data.length) return { error: 'That logo file looks empty.' };
+  if (data.length > LOGO_MAX_BYTES) return { error: 'Logo is too large. Try a smaller image (under 300 KB).' };
+  const sig = {
+    png: data[0] === 0x89 && data.slice(1, 4).toString() === 'PNG',
+    jpeg: data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff,
+    webp: data.slice(0, 4).toString() === 'RIFF' && data.slice(8, 12).toString() === 'WEBP'
+  };
+  if (!sig[m[1]]) return { error: 'That file isn’t a valid image.' };
+  return { contentType: `image/${m[1]}`, data };
+}
+
 // ─── Form validation ─────────────────────────────────────────────────────
 
 function clean(v, max) {
@@ -331,6 +354,11 @@ export function validateOrder(kind, input, { now, orders, venues }) {
     else if (!week.available) errors.week = 'That week was just booked. Pick another.';
     order.week_start = week ? week.start : '';
     order.sponsor = { name: business, text, cta, url, address };
+    if (input.logo_data) {
+      const logo = parseLogo(input.logo_data);
+      if (logo.error) errors.logo = logo.error;
+      else order.logo = logo;   // saved separately; never stored on the order
+    }
   } else if (kind === 'featured') {
     const v = validateSubmission({
       name: input.event_name, date: input.date, time: input.time, venue: input.venue,
@@ -452,6 +480,10 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
       field({ name: 'text', label: 'Sponsor message', value: v.text, error: e.text, max: 160, rows: 3, hint: 'Up to 160 characters. Shown under your name.' }) +
       field({ name: 'url', label: 'Website or page', value: v.url, error: e.url, max: 300 }) +
       field({ name: 'cta', label: 'Button text', value: v.cta, error: e.cta, max: 24, required: false, hint: 'Optional, e.g. "Order now". Default: Learn more.' }) +
+      `<div class="co-field"><label for="f-logo">Logo</label><input type="file" id="f-logo" accept="image/png,image/jpeg,image/webp">` +
+      `<input type="hidden" name="logo_data" id="f-logo-data" value="${escHtml(v.logo_data || '')}">` +
+      `<small class="co-hint">Optional. PNG, JPG or WebP; a wide logo on a plain background looks best. Shown on your sponsor block.</small>` +
+      (e.logo ? `<small class="co-error">${escHtml(e.logo)}</small>` : '') + '</div>' +
       field({ name: 'address', label: 'Address', value: v.address, error: e.address, max: 120, required: false, hint: 'Optional.' });
   } else {
     fields = field({ name: 'event_name', label: 'Event name', value: v.event_name, error: e.name, max: 200 }) +
@@ -484,12 +516,52 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
     (function () {
       var f = document.querySelector('.co-form'), box = document.getElementById('co-preview'), t;
       if (!f || !box || !window.fetch) return;
+      var logoData = document.getElementById('f-logo-data');
+      // The logo is shown in the preview from the browser's copy; it isn't
+      // sent with every preview request.
+      function showLogo() {
+        var block = box.querySelector('.sponsor-block');
+        if (!block) return;
+        var img = block.querySelector('.sponsor-logo');
+        if (!logoData || !logoData.value) { if (img) img.remove(); return; }
+        if (!img) {
+          img = document.createElement('img');
+          img.className = 'sponsor-logo'; img.alt = 'Your logo';
+          block.insertBefore(img, block.querySelector('.sponsor-name') || block.firstChild);
+        }
+        img.src = logoData.value;
+      }
       function refresh() {
         var data = new URLSearchParams(new FormData(f));
+        data.delete('logo_data');
         fetch('/advertise/preview', { method: 'POST', body: data })
           .then(function (r) { return r.ok ? r.text() : null; })
-          .then(function (html) { if (html !== null) box.innerHTML = html; })
+          .then(function (html) { if (html !== null) { box.innerHTML = html; showLogo(); } })
           .catch(function () { /* the server-rendered preview stays */ });
+      }
+      // Shrink the logo in the browser (max 480x240) so it's small to send.
+      var logoInput = document.getElementById('f-logo');
+      if (logoInput && logoData) {
+        logoInput.addEventListener('change', function () {
+          var file = logoInput.files && logoInput.files[0];
+          if (!file) { logoData.value = ''; showLogo(); return; }
+          var reader = new FileReader();
+          reader.onload = function () {
+            var im = new Image();
+            im.onload = function () {
+              var s = Math.min(1, 480 / im.width, 240 / im.height);
+              var c = document.createElement('canvas');
+              c.width = Math.max(1, Math.round(im.width * s)); c.height = Math.max(1, Math.round(im.height * s));
+              c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+              logoData.value = c.toDataURL('image/png');
+              showLogo();
+            };
+            im.onerror = function () { logoData.value = ''; alert('That file isn’t an image we can use. Try a PNG or JPG.'); };
+            im.src = reader.result;
+          };
+          reader.readAsDataURL(file);
+        });
+        showLogo();
       }
       f.addEventListener('input', function () { clearTimeout(t); t = setTimeout(refresh, 350); });
       f.addEventListener('change', refresh);
@@ -798,6 +870,17 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       } catch (err) { next(err); }
     });
 
+    app.get('/sponsor-logo/:id', async (req, res, next) => {
+      try {
+        const path = `/sponsor-logo/${req.params.id}`;
+        if (!LOGO_PATH.test(path) || typeof store.getSponsorLogo !== 'function') return res.status(404).end();
+        const logo = await store.getSponsorLogo(req.params.id);
+        if (!logo) return res.status(404).end();
+        res.set({ 'Content-Type': logo.contentType, 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' })
+          .send(Buffer.from(logo.data));
+      } catch (err) { next(err); }
+    });
+
     // Open Vic’s Pick spots and the price for a date (the checkout preview
     // and anyone wiring a calendar can use it).
     app.get('/api/vics-pick/availability', async (req, res, next) => {
@@ -830,7 +913,12 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           if (!v.ok) return { errors: v.errors };
           // Same clock as bookableWeeks, so the hold window lines up.
           const priced = pkg.key === 'featured' ? pickPackage(v.order.event.date) : pkg;
-          const o = { ...v.order, id: newId(), status: 'pending', amount: priced.amount, created_at: nowFn().toISOString() };
+          const { logo, ...fields } = v.order;
+          const o = { ...fields, id: newId(), status: 'pending', amount: priced.amount, created_at: nowFn().toISOString() };
+          if (logo && typeof store.saveSponsorLogo === 'function') {
+            await store.saveSponsorLogo(o.id, logo);
+            o.sponsor = { ...o.sponsor, logo: `/sponsor-logo/${o.id}` };
+          }
           await save(o);
           return { order: o };
         });

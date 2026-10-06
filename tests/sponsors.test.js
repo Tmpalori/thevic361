@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import crypto from 'node:crypto';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
-import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks, pickAvailability, isWeekendDate, renderPreview, sponsorCalendar } from '../server/sponsors.js';
+import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks, pickAvailability, isWeekendDate, renderPreview, sponsorCalendar, parseLogo } from '../server/sponsors.js';
 import { promises as fs } from 'node:fs';
 import { renderSubmissionReceived, renderSponsorConfirmed } from '../server/notify.js';
 import os from 'node:os';
@@ -559,6 +559,51 @@ describe('confirmation emails', () => {
     expect(sub.html).not.toContain('<b>Show</b>');
     const w = renderSponsorConfirmed({ kind: 'weekly', business: 'A', week_start: '2026-10-12', sponsor: { name: 'A', text: 'Hi', url: 'javascript:alert(1)' } }, { siteUrl: 'https://x' });
     expect(w.html).not.toContain('javascript:');
+  });
+});
+
+describe('weekly sponsor logo', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  it('accepts real PNG/JPEG/WebP only, and not too big', () => {
+    expect(parseLogo(PNG)).toMatchObject({ contentType: 'image/png' });
+    expect(parseLogo('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=').error).toMatch(/PNG, JPG or WebP/);
+    expect(parseLogo('data:image/png;base64,' + Buffer.from('<script>alert(1)</script>').toString('base64')).error).toMatch(/valid image/);
+    const big = Buffer.alloc(301 * 1024); big[0] = 0x89; big.write('PNG', 1);
+    expect(parseLogo('data:image/png;base64,' + big.toString('base64')).error).toMatch(/too large/);
+  });
+
+  it('is saved apart from the order, served as an image, and shown on the live sponsor block', async () => {
+    await startApp();
+    const week = bookableWeeks(NOW, []).find(w => w.available).start;
+    const r = await form({ package: 'weekly', week, business: 'Acme Tacos', text: 'Best tacos.', url: 'acme.example',
+      email: 'acme@example.com', logo_data: PNG });
+    expect(r.status).toBe(303);
+    const order = (await store.listSponsorOrders())[0];
+    expect(order.sponsor.logo).toBe(`/sponsor-logo/${order.id}`);
+    expect(JSON.stringify(order)).not.toContain('iVBOR');                 // bytes aren't on the order
+    const img = await fetch(baseUrl + order.sponsor.logo);
+    expect(img.headers.get('content-type')).toBe('image/png');
+    expect(img.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(Buffer.from(await img.arrayBuffer()).slice(1, 4).toString()).toBe('PNG');
+    expect((await fetch(baseUrl + '/sponsor-logo/nope')).status).toBe(404);
+    expect((await fetch(baseUrl + '/sponsor-logo/..%2Fsecret')).status).toBe(404);
+  });
+
+  it('a bad logo is reported on the form, not charged', async () => {
+    await startApp();
+    const week = bookableWeeks(NOW, []).find(w => w.available).start;
+    const r = await form({ package: 'weekly', week, business: 'Acme', text: 'Hi.', url: 'acme.example',
+      email: 'a@example.com', logo_data: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' });
+    expect(r.status).toBe(400);
+    expect(await r.text()).toContain('Logo must be a PNG, JPG or WebP image.');
+    expect(sessions).toHaveLength(0);
+  });
+
+  it('the checkout form offers a logo upload for weekly sponsors only', async () => {
+    await startApp();
+    expect(await (await fetch(baseUrl + '/advertise/checkout?package=weekly')).text()).toContain('id="f-logo"');
+    expect(await (await fetch(baseUrl + '/advertise/checkout?package=featured')).text()).not.toContain('id="f-logo"');
   });
 });
 

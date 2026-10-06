@@ -184,7 +184,11 @@ export async function createApp(opts = {}) {
   sponsors.registerWebhook(app);
 
   app.use(express.json({ limit: '64kb' }));
-  app.use(express.urlencoded({ extended: false, limit: '64kb' }));
+  // The sponsor checkout form can carry a logo (a data URL, shrunk in the
+  // browser), so it alone gets a bigger limit.
+  const smallForms = express.urlencoded({ extended: false, limit: '64kb' });
+  const checkoutForm = express.urlencoded({ extended: false, limit: '600kb' });
+  app.use((req, res, next) => (req.path === '/advertise/checkout' ? checkoutForm : smallForms)(req, res, next));
 
   // ─── Public config (site key only — never expose secret) ───
   app.get('/api/config', (req, res) => {

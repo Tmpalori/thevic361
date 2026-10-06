@@ -91,7 +91,9 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
     const week = start ? formatDay(start, { weekday: 'long', month: 'long', day: 'numeric' }) : 'your week';
     const s = order.sponsor || {};
     const href = safeUrl(s.url);
+    const logo = /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(s.logo || '') ? `${siteUrl}${s.logo}` : '';
     const block = box(`<div style="font-size:11px;font-weight:bold;letter-spacing:.5px;">THIS WEEK'S SPONSOR</div>` +
+      (logo ? `<div style="margin:8px 0 2px;"><img src="${escHtml(logo)}" alt="" style="display:block;max-height:60px;max-width:200px;height:auto;border:0;"></div>` : '') +
       `<div style="font-size:20px;font-weight:bold;margin:4px 0;">${escHtml(s.name || business)}</div>` +
       (s.text ? `<div>${escHtml(s.text)}</div>` : '') +
       (href ? `<div style="margin-top:8px;"><a href="${escHtml(href)}" style="color:${C.accent};font-weight:bold;">${escHtml(s.cta || 'Learn more')} →</a></div>` : ''));
