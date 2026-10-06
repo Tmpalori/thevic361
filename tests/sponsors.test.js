@@ -225,29 +225,27 @@ describe('featured event', () => {
   });
 });
 
-describe('venue partner', () => {
-  it('subscription features every event at the venue until it is cancelled', async () => {
+describe('venue partner (retired)', () => {
+  it('is no longer for sale, but an existing subscription keeps working until it is cancelled', async () => {
     await startApp();
+    // A subscription bought before the package was retired (saved before any
+    // request, since orders are cached for a minute).
+    await store.saveSponsorOrder({ id: 'old-partner', kind: 'partner', status: 'active', venue_slug: 'aero-crafters',
+      venue_name: 'Aero Crafters', business: 'Aero Crafters', email: 'aero@example.com', amount: 15000,
+      subscription_id: 'sub_123', created_at: '2026-09-01T00:00:00Z' });
+    // Can't buy a new one: checkout sends them back to /advertise.
     const r = await form({ package: 'partner', venue: 'aero-crafters', business: 'Aero Crafters', email: 'aero@example.com' });
     expect(r.status).toBe(303);
-    const s = sessions[0];
-    expect(s.params.mode).toBe('subscription');
-    expect(s.params.line_items[0].price_data.recurring).toEqual({ interval: 'month' });
-    await completed(s, { subscription: 'sub_123' });
+    expect(r.headers.get('location')).toBe('/advertise');
+    expect(sessions).toHaveLength(0);
+    expect((await fetch(baseUrl + '/advertise/checkout?package=partner', { redirect: 'manual' })).headers.get('location')).toBe('/advertise');
+    expect(await (await fetch(baseUrl + '/advertise')).text()).not.toContain('Venue partner');
 
+    // One bought before it was retired is still honored.
     const featuredNames = async () => (await publicEvents()).events.filter(e => e.featured).map(e => e.name);
-    expect(await featuredNames()).toEqual(['Friday Live Music']);
-
-    // A second purchase for the same venue is refused.
-    expect((await form({ package: 'partner', venue: 'aero-crafters', business: 'Aero', email: 'a@example.com' })).status).toBe(400);
-
-    await webhook({ type: 'customer.subscription.updated', data: { object: { id: 'sub_123', status: 'past_due' } } });
-    expect(await featuredNames()).toEqual([]);
-    await webhook({ type: 'customer.subscription.updated', data: { object: { id: 'sub_123', status: 'active' } } });
     expect(await featuredNames()).toEqual(['Friday Live Music']);
     await webhook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_123', status: 'canceled' } } });
     expect(await featuredNames()).toEqual([]);
-    expect((await store.listSponsorOrders())[0].status).toBe('cancelled');
   });
 });
 
@@ -447,7 +445,6 @@ describe('Vic’s Pick: price by day, daily limits, preview', () => {
     expect(html).toContain('sponsor-block');
     expect(html).toContain('Acme Tacos');
     expect(html).toContain('Best tacos &lt;b&gt;ever&lt;/b&gt;');
-    expect(renderPreview('partner', {}, {})).toContain('Vic’s Pick');
   });
 
   it('the advertise page says where each option shows, its limits, and shows examples', async () => {
@@ -456,7 +453,7 @@ describe('Vic’s Pick: price by day, daily limits, preview', () => {
     expect(html).toContain('$49 Mon–Thu · $89 Fri–Sun');
     expect(html).toContain('Only 3 a day Mon–Thu and 4 a day Fri–Sun');
     expect(html).toContain('Where it shows:');
-    expect((html.match(/ad-package__preview/g) || []).length).toBe(3);
+    expect((html.match(/ad-package__preview/g) || []).length).toBe(2);
     expect(html).toContain('Preview yours and book');
   });
 });

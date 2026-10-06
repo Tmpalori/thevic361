@@ -877,21 +877,6 @@ export const AD_PACKAGES = [
     ]
   },
   {
-    key: 'partner',
-    name: 'Venue partner',
-    price: '$150 / month',
-    amount: 15000,
-    interval: 'month',
-    blurb: 'Every event at your venue is a Vic’s Pick for as long as you stay subscribed.',
-    where: 'Every event at your venue, every week: pinned to the top of its day with the Vic’s Pick badge.',
-    limit: 'Cancel any time; it ends on its own.',
-    points: [
-      'Every event at your venue marked as a Vic’s Pick, every week',
-      'Pinned at the top of each day on the site and its event pages',
-      'Starred in the newsletter and our social posts, plus a monthly click report'
-    ]
-  },
-  {
     key: 'featured',
     name: 'Vic’s Pick',
     price: '$49 Mon–Thu · $89 Fri–Sun',
@@ -933,7 +918,7 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {} }
   return layout({
     siteUrl, path: '/advertise',
     title: `Advertise | ${SITE_NAME}`,
-    description: 'Sponsor The Vic 361 newsletter, become a venue partner, or feature your event to reach people looking for things to do in Victoria, TX.',
+    description: 'Sponsor The Vic 361 for a week or make your event a Vic’s Pick to reach people looking for things to do in Victoria, TX.',
     body
   });
 }

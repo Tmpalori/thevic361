@@ -7,9 +7,12 @@
  *     block replaces the sponsor slot on every page, in /events.json, and in
  *     that Monday's newsletter. One sponsor per week; a week someone is
  *     paying for right now is held for the life of the Checkout session.
- *   - Venue partner ($150/month, Stripe subscription): every event at their
- *     venue is a Vic’s Pick (featured) while the subscription is active. Cancelling
- *     in Stripe ends it automatically (customer.subscription.* webhooks).
+ *   - Venue partner (retired Oct 2026, no longer sold): a $150/month Stripe
+ *     subscription that made every event at the venue a Vic’s Pick. It
+ *     flooded busy days past the Vic’s Pick limits and undercut the per-event
+ *     price, so it's off /advertise and checkout. Subscriptions bought before
+ *     then are still honored (applyPlacements) until they're cancelled in
+ *     Stripe (customer.subscription.* webhooks).
  *   - Vic’s Pick event (one-time; $49 Mon–Thu, $89 Fri–Sun): the event lands
  *     in the submissions queue (so a person still checks it before it's
  *     listed) and is pinned as Featured as soon as it, or a matching
@@ -292,14 +295,6 @@ export function validateOrder(kind, input, { now, orders, venues }) {
     else if (!week.available) errors.week = 'That week was just booked. Pick another.';
     order.week_start = week ? week.start : '';
     order.sponsor = { name: business, text, cta, url, address };
-  } else if (kind === 'partner') {
-    const venue = venues.find(v => v.slug === input.venue);
-    if (!venue) errors.venue = 'Pick your venue.';
-    else if ((orders || []).some(o => o.kind === 'partner' && o.venue_slug === venue.slug && LIVE.has(o.status))) {
-      errors.venue = 'That venue is already a partner. Email us if this is a mistake.';
-    }
-    order.venue_slug = venue ? venue.slug : '';
-    order.venue_name = venue ? venue.name : '';
   } else if (kind === 'featured') {
     const v = validateSubmission({
       name: input.event_name, date: input.date, time: input.time, venue: input.venue,
@@ -379,13 +374,6 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
     });
     return `<p class="co-preview-where">Shown on every page of thevic361.com for your week, and at the top of that Monday’s newsletter.</p>${block}`;
   }
-  if (pkgKey === 'partner') {
-    const venue = (venues || []).find(x => x.slug === v.venue);
-    const name = venue ? venue.name : 'Your venue';
-    const ev = { name: 'Every event at ' + name, time: 'Every week', venue: name, featured: true,
-      description: 'Each one pinned to the top of its day as a Vic’s Pick, for as long as you’re a partner.' };
-    return `<p class="co-preview-where">How each of your events shows on the site, every week:</p>${dayCard('', [previewItem(ev)])}`;
-  }
   // Vic’s Pick: the event as it will look, pinned above the rest of its day.
   const date = /^\d{4}-\d{2}-\d{2}$/.test(val('date')) ? val('date') : '';
   const ev = {
@@ -413,7 +401,6 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
 export function samplePreviews() {
   return {
     weekly: renderPreview('weekly', { business: 'Your Business', text: 'One or two sentences about what you offer, shown all week.', cta: 'Learn more' }),
-    partner: renderPreview('partner', {}),
     featured: renderPreview('featured', { event_name: 'Your Event Name', time: '7:00 PM', venue: 'Your Venue', description: 'A line or two about your event.' })
   };
 }
@@ -430,11 +417,6 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
       field({ name: 'url', label: 'Website or page', value: v.url, error: e.url, max: 300 }) +
       field({ name: 'cta', label: 'Button text', value: v.cta, error: e.cta, max: 24, required: false, hint: 'Optional, e.g. "Order now". Default: Learn more.' }) +
       field({ name: 'address', label: 'Address', value: v.address, error: e.address, max: 120, required: false, hint: 'Optional.' });
-  } else if (pkg.key === 'partner') {
-    const opts = venues.map(x => ({ value: x.slug, label: x.name })).sort((a, b) => a.label.localeCompare(b.label));
-    fields = selectField({ name: 'venue', label: 'Your venue', options: opts, value: v.venue, error: e.venue }) +
-      field({ name: 'business', label: 'Business name', value: v.business, error: e.business, max: 80 }) +
-      '<p class="co-hint">Venue not listed? Email us and we\'ll add it.</p>';
   } else {
     fields = field({ name: 'event_name', label: 'Event name', value: v.event_name, error: e.name, max: 200 }) +
       field({ name: 'date', label: 'Date', type: 'date', value: v.date, error: e.date }) +
