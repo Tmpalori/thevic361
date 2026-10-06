@@ -447,7 +447,7 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0 
 
 // ─── Routes ──────────────────────────────────────────────────────────────
 
-export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true, withNav = async html => html, onCron = null }) {
+export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, getSendPayload = getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true, withNav = async html => html, onCron = null }) {
   const subscribeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10 });
   const confirmLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 3 });
   const supported = typeof store.addSubscriber === 'function';
@@ -487,7 +487,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     // the people who didn't get it. Force resends to everyone.
     if (prior && !force && !priorFailed.length) return { ok: false, error: 'already-sent', sent: prior };
     const resume = Boolean(prior && !force && priorFailed.length);
-    const payload = await getPublicPayload();
+    const payload = await getSendPayload();
     let subs = await store.listSubscribers({ status: 'active' });
     if (resume) {
       const retry = new Set(priorFailed);
@@ -512,7 +512,11 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     // alerts again. They're marked bounced (no future sends) and listed in
     // one Slack note.
     const refusedEmails = [];
-    const attempt = resume ? `-r${Date.now()}` : force ? `-f${Date.now()}` : '';
+    // Only a forced resend (to everyone, on purpose) gets a fresh key. A
+    // resume reuses the first try's key, so a chunk Resend queued but
+    // answered after our 15 s timeout gets a 409 (counted as sent) instead
+    // of going to those people twice.
+    const attempt = force ? `-f${Date.now()}` : '';
     const base = resume ? (prior.recipients || 0) : 0;
     let waiting = subs.map(s => s.email);
     // A resumed send renders from the resume day onward, so a pick starred
@@ -539,12 +543,13 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
           headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
         };
       });
-      // Idempotency key per week + chunk + who's in it: a retried request
-      // can't double-send, and a 409 (key already used, by an earlier send
-      // of these same people within Resend's 24 hours) means they got it.
-      const who = crypto.createHash('sha256').update(chunk.map(s => s.email).join(',')).digest('hex').slice(0, 12);
+      // Idempotency key per week + who's in the chunk (not its position: a
+      // resume puts the same people at chunk 0): a retried request can't
+      // double-send, and a 409 (key already used, by an earlier send of
+      // these same people within Resend's 24 hours) means they got it.
+      const who = crypto.createHash('sha256').update(chunk.map(s => s.email).join(',')).digest('hex').slice(0, 16);
       try {
-        const out = await resend.batch(msgs, `vic361-${key}-${i / BATCH_SIZE}-${who}${attempt}`);
+        const out = await resend.batch(msgs, `vic361-${key}-${who}${attempt}`);
         // Permissive validation: refused addresses come back by index; the
         // rest of the chunk went out.
         const refused = new Map((out && Array.isArray(out.errors) ? out.errors : []).map(e => [Number(e.index), e.message]));

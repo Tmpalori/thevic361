@@ -831,8 +831,12 @@ export function renderThanksPage(order, { siteUrl, now = new Date() }) {
   } else if (order && order.status === 'conflict') {
     // Two buyers paid for the same week (the first hold lapsed while the
     // other paid). The owner gets a Slack alert to refund or move them.
-    msg = 'Your payment went through, but someone else booked that week moments before you. Sorry about that.';
-    next = ['We’ll get in touch within 1 business day to move you to another open week or refund you in full, whichever you prefer.',
+    // A Vic's Pick day can end up the same way (webhook day-cap check).
+    const unit = order.kind === 'featured' ? 'day' : 'week';
+    msg = order.kind === 'featured'
+      ? 'Your payment went through, but that day’s Vic’s Pick spots filled up moments before you. Sorry about that.'
+      : 'Your payment went through, but someone else booked that week moments before you. Sorry about that.';
+    next = [`We’ll get in touch within 1 business day to move you to another open ${unit} or refund you in full, whichever you prefer.`,
       'Nothing else is needed from you. If you already know which you’d like, contact us below.'];
   } else if (order && order.status === 'late') {
     // A bank payment that cleared after the date it paid for (webhook).
@@ -859,6 +863,9 @@ export function renderLogoTooLargePage({ siteUrl }) {
 }
 
 // ─── Wiring ──────────────────────────────────────────────────────────────
+
+// Pause before a strict (newsletter) order read's second try.
+const STRICT_RETRY_MS = 2000;
 
 export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenues, slack = null, mailer = null, mailAddress = '', getPayload = null }) {
   const supported = typeof store.listSponsorOrders === 'function';
@@ -951,7 +958,22 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     return out;
   }
 
-  async function apply(payload) {
+  // strict: the newsletter send. Page views fail open (an empty list for
+  // a moment is better than an error page), but a Monday issue built that
+  // way went out without the paid weekly sponsor and starred picks and was
+  // recorded as sent. Strict reads the orders fresh, tries once more after
+  // a short pause, then throws, so the send fails and the scheduler retries
+  // it (5, 15, 30 minutes, then an alert).
+  async function apply(payload, { strict = false } = {}) {
+    if (strict) {
+      let list;
+      try { list = await freshOrders(); } catch (err) {
+        console.warn('[sponsors] order list failed, retrying once:', err.message);
+        await new Promise(r => setTimeout(r, STRICT_RETRY_MS));
+        list = await freshOrders();
+      }
+      return applyPlacements(payload, list, { now: nowFn(), venues: getVenues(), pins: await pins(list) });
+    }
     try {
       const list = await orders();
       return applyPlacements(payload, list, { now: nowFn(), venues: getVenues(), pins: await pins(list) });
@@ -1434,6 +1456,24 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
               `${siteUrl}/admin.html`);
           }
           return;
+        }
+        // The same for a Vic's Pick day: a hold the buyer backed out of
+        // (cancelled, or expired) stopped counting, so others may have filled
+        // the day before this payment arrived from a still-open tab. Count
+        // the day without this order; at the cap, it's a conflict too.
+        if (order.kind === 'featured' && order.event && order.event.date) {
+          const others = list.filter(o => o.id !== order.id);
+          const a = pickAvailability(order.event.date, others, nowFn());
+          if (a.taken >= a.cap) {
+            order.status = 'conflict';
+            await save(order);
+            if (slack) {
+              slack.alert(`sponsor-conflict:${order.id}`, `Vic’s Pick day ${order.event.date} is over its cap`,
+                `${order.business} (${order.email}) paid for a Vic’s Pick on ${order.event.date} (${order.event.name}), but its ${a.cap} spots were already taken. Nothing went live: move them to an open day or refund them in Stripe.`,
+                `${siteUrl}/admin.html`);
+            }
+            return;
+          }
         }
         // A bank debit that cleared after its week's Monday issue went out:
         // the sponsor spot in that newsletter is gone, so the owner owes a

@@ -457,7 +457,7 @@ describe('sending', () => {
     expect(msgs[0].headers['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
     expect(msgs[0].headers['List-Unsubscribe']).not.toBe(msgs[1].headers['List-Unsubscribe']);
     expect(msgs[0].html).toContain('Acme Tacos');
-    expect(sent.batches[0].key).toMatch(/^vic361-2026-10-05-0-[0-9a-f]{12}$/);
+    expect(sent.batches[0].key).toMatch(/^vic361-2026-10-05-[0-9a-f]{16}$/);
 
     const again = await post('/api/admin/newsletter/send', {}, h);
     expect(again.status).toBe(409);
@@ -506,7 +506,9 @@ describe('send failures', () => {
     const retry = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
     expect(retry.ok).toBe(true);
     expect(calls[calls.length - 1].to.sort()).toEqual(['a@example.com', 'b@example.com']);
-    expect(calls[calls.length - 1].key).not.toBe(calls[0].key);
+    // The same key as the first try: had Resend queued that chunk and only
+    // answered late, this retry gets a 409 instead of sending it twice.
+    expect(calls[calls.length - 1].key).toBe(calls[0].key);
 
     const again = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
     expect(again.error).toBe('already-sent');
@@ -674,5 +676,60 @@ describe('Resend timeout', () => {
     ]);
     expect(outcome).toBe('failed: TimeoutError');
     expect(seen[0]).toBeInstanceOf(AbortSignal);
+  });
+});
+
+describe('resumed chunks keep their idempotency key', () => {
+  it('a chunk Resend accepted but answered too late is not sent twice on the retry', async () => {
+    const accepted = new Map(); // key -> recipients Resend queued
+    const delivered = [];
+    let slow = true;
+    const resend = {
+      send: async () => ({ id: 'x' }),
+      batch: async (msgs, key) => {
+        if (accepted.has(key)) { const e = new Error('Resend 409 idempotent'); e.status = 409; throw e; }
+        accepted.set(key, true);
+        delivered.push(...msgs.map(m => m.to[0]));
+        if (slow) throw new Error('The operation was aborted due to timeout');
+        return { data: msgs.map((_, i) => ({ id: `b${i}` })) };
+      }
+    };
+    await startApp({ resend });
+    await store.importSubscribers(['a@example.com', 'b@example.com'], 'import');
+    const first = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
+    expect(first.failed).toBe(2);
+    slow = false;
+    const retry = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
+    expect(retry).toMatchObject({ ok: true, failed: 0, recipients: 2 });
+    expect(delivered.sort()).toEqual(['a@example.com', 'b@example.com']);
+  });
+});
+
+describe('paid placements in the issue', () => {
+  const PAID = { id: 'wk-paid-0001', kind: 'weekly', status: 'paid', amount: 30000, week_start: '2026-10-05',
+    created_at: '2026-09-20T00:00:00Z', business: 'Paid Bakery', email: 'bake@example.com',
+    sponsor: { name: 'Paid Bakery', text: 'Fresh bread.', cta: 'Visit', url: 'https://bakery.example' } };
+
+  it('a failed order read is retried, and an issue is never sent without the paid sponsor', async () => {
+    await startApp();
+    await store.importSubscribers(['a@example.com'], 'import');
+    await store.saveSponsorOrder(PAID);
+    const real = store.listSponsorOrders.bind(store);
+    let fails = 1;
+    store.listSponsorOrders = async () => { if (fails-- > 0) throw new Error('statement timeout'); return real(); };
+    const r = await (await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' })).json();
+    expect(r.ok).toBe(true);
+    expect(sent.batches[0].msgs[0].html).toContain('Paid Bakery');
+  });
+
+  it('when the orders stay unreadable the send fails (and is retried later) instead of going out without them', async () => {
+    await startApp();
+    await store.importSubscribers(['a@example.com'], 'import');
+    await store.saveSponsorOrder(PAID);
+    store.listSponsorOrders = async () => { throw new Error('statement timeout'); };
+    const r = await post('/api/newsletter/cron', {}, { 'X-Cron-Secret': 'cron-secret' });
+    expect(r.status).toBeGreaterThanOrEqual(500);
+    expect(sent.batches).toHaveLength(0);
+    expect(await store.getNewsletterSend('2026-10-05')).toBeFalsy();
   });
 });

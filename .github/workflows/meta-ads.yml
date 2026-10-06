@@ -102,7 +102,11 @@ jobs:
         run: pip install requests
 
       - name: Meta ads
+        id: ads
         env:
+          # Repo variable, so a retired API version is a settings change;
+          # the script's default (v23.0) applies when it's unset.
+          GRAPH_API_VERSION: ${{ vars.GRAPH_API_VERSION || 'v23.0' }}
           META_ADS_TOKEN: ${{ secrets.META_ADS_TOKEN || secrets.META_PAGE_TOKEN }}
           META_ADS_TOKEN_SOURCE: ${{ secrets.META_ADS_TOKEN && 'ads' || 'page' }}
           META_AD_ACCOUNT_ID: ${{ vars.META_AD_ACCOUNT_ID }}
@@ -120,4 +124,7 @@ jobs:
         if: failure() && (github.event_name == 'schedule' || inputs.scheduled)
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
-        run: python3 scripts/slack_notify.py "🚨 Meta ads daily check failed (token or ad account access?)" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Set by meta_ads.py when Meta refused the API version, so the
+          # alert names the version instead of blaming the token.
+          ALERT: ${{ steps.ads.outputs.alert }}
+        run: python3 scripts/slack_notify.py "${ALERT:-🚨 Meta ads daily check failed (token or ad account access?)}" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

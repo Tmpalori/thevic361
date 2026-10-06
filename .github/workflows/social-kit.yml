@@ -181,6 +181,9 @@ jobs:
           (github.event_name == 'workflow_dispatch' && !inputs.scheduled && inputs.post)
         env:
           PYTHONUNBUFFERED: 1
+          # Repo variable, so a retired Graph version is a settings change;
+          # the script's default (v23.0) applies when it's unset.
+          GRAPH_API_VERSION: ${{ vars.GRAPH_API_VERSION || 'v23.0' }}
           META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
           META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
@@ -239,4 +242,6 @@ jobs:
         if: failure() || cancelled()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
-        run: python3 scripts/slack_notify.py "🚨 Social kit (build or Facebook/Instagram post) failed" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Set by social_post.py when Meta refused the Graph version.
+          ALERT: ${{ steps.post.outputs.alert }}
+        run: python3 scripts/slack_notify.py "${ALERT:-🚨 Social kit (build or Facebook/Instagram post) failed}" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

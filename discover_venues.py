@@ -678,9 +678,11 @@ def merge_venues(
     discovered_high: list[dict],
     existing_venues: list[dict] | None = None,
 ) -> list[dict]:
-    """Merge seed + existing + new HIGH discoveries into one venue list.
+    """Merge existing + seed + new HIGH discoveries into one venue list.
 
-    Seed venues are never dropped. Discovered HIGH venues are added when their
+    An existing venues.json record wins over the legacy seed for the same
+    venue; the seed only fills fields it's missing. Seed venues are never
+    dropped. Discovered HIGH venues are added when their
     dedupe key is new. Re-runs are idempotent: existing entries' enrichment
     fields are refreshed from the latest discovery, but the seed metadata
     (notes, confidence) is preserved.
@@ -709,9 +711,13 @@ def merge_venues(
         by_key[k] = dict(v)
         order.append(k)
 
-    for v in seed or []:
-        _add(v)
+    # venues.json first: it's the hand-curated list (tier, confidence, the
+    # right facebook_page). The legacy facebook_venues.json seed only fills
+    # fields it lacks; added first, the stale seed record won and the
+    # curated values were written over.
     for v in existing_venues or []:
+        _add(v)
+    for v in seed or []:
         _add(v)
     for v in discovered_high or []:
         _add(v)
@@ -772,7 +778,19 @@ def discover_and_update(
 
     existing_primary = _load_json(venues_path, None)
     if existing_primary is None:
+        if os.path.exists(venues_path):
+            # The file is there but unreadable (a bad hand edit). Merging
+            # from nothing would rewrite it from the legacy seed and lose
+            # every curated venue, so stop and leave the files alone.
+            _warn("[discover] venues.json exists but can't be parsed; nothing written",
+                  stage="venues_json_unreadable")
+            summary["aborted"] = "venues.json unreadable"
+            return summary
         existing_primary = []
+    elif not isinstance(existing_primary, list):
+        _warn("[discover] venues.json is not a list; nothing written", stage="venues_json_unreadable")
+        summary["aborted"] = "venues.json not a list"
+        return summary
 
     # 1. Always (re)write the legacy backup so transitional collectors keep
     #    seeing the old file even after we cut over to venues.json.

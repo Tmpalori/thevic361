@@ -281,6 +281,13 @@ def to_hide(events, rules):
         # to pull it. It stays in the report and goes to sales instead.
         if _paid(events[i]):
             continue
+        # An approved community submission (submitted: true) was let through
+        # by the owner by hand, often over the very rule that flags it here
+        # ("rules say: ..." in the review), and the submitter was told it's
+        # live. Report it, never hide it, like a curated event. (A duplicate
+        # is checked on the copy that would be hidden, below.)
+        if kind != "duplicate" and events[i].get("submitted") is True:
+            continue
         if kind == "cut_off":
             whole = _whole_listing(events, i)
             if whole is None:
@@ -300,6 +307,8 @@ def to_hide(events, rules):
                 why = f"same as “{events[keeper]['name']}” at {events[keeper].get('venue') or 'no venue'}, which has more detail"
             else:
                 continue
+            if events[loser].get("submitted") is True:
+                continue  # the copy to hide is an approved submission: report only
             resolved[i] = loser
             i = loser
         if i not in seen and events[i].get("page"):
@@ -418,13 +427,19 @@ def fetch_live():
 def wait_for_publish(candidates_path, fetch=fetch_live, sleep=time.sleep, tries=30, interval=30, today=None):
     """Wait until the live list holds these candidates (after a collect).
 
-    A newer live last_updated alone isn't proof: a submissions-only
-    auto-publish or an admin publish during the deploy bumps it too, and
-    the site exposes nothing that names the candidates it published. So the
-    first answer is the before picture, and the wait ends once the list is
-    newer than the candidates and holds some of the upcoming candidates it
-    didn't have then (half, at most 3: a few may never appear, rejected in
-    admin or merged into a near-twin). With nothing new, newer is enough.
+    The proof is the live collected_at (server/index.js): the last_updated
+    of the candidates.json auto-publish last put live. Once it's at or after
+    these candidates' last_updated, they're live, whatever the list holds:
+    hidden, rejected or merged candidates never show up, so counting keys
+    can wait out the full timeout on a list that went live before the first
+    fetch and raise a false "didn't go live" alert.
+
+    Fallback for a site that doesn't send collected_at: a newer live
+    last_updated alone isn't proof (a submissions-only auto-publish or an
+    admin publish bumps it too), so the first answer is the before picture,
+    and the wait ends once the list is newer than the candidates and holds
+    some of the upcoming candidates it didn't have then (half, at most 3).
+    With nothing new, newer is enough.
     True when they're live; False (with a warning) after tries x interval.
     """
     with open(candidates_path) as f:
@@ -436,6 +451,15 @@ def wait_for_publish(candidates_path, fetch=fetch_live, sleep=time.sleep, tries=
     for i in range(tries):
         try:
             live = fetch()
+            collected = _when(live.get("collected_at"))
+            if made and collected:
+                if collected >= made:
+                    print(f"Live list is from the collect made {collected} (candidates made {made}).")
+                    return True
+                print(f"waiting: live list is from the collect made {collected}, candidates made {made}")
+                if i < tries - 1:
+                    sleep(interval)
+                continue
             live_keys = {_key(e) for e in live.get("events") or []}
             if new is None:
                 new = keys - live_keys

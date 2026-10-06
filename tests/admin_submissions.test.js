@@ -152,7 +152,33 @@ describe('admin Submissions tab — DOM', () => {
     }
     // End time is prefilled from the payload.
     expect(html).toContain('value="10:00 PM"');
+    // The date is a date picker, so a day that doesn't exist can't be typed.
+    expect(html).toMatch(/<input[^>]*type="date"[^>]*data-edit="date"/);
     submissions._state.editing.clear();
+  });
+
+  it('typed-but-unsaved edits survive another card being opened or the list re-rendering', () => {
+    const submissions = window.__vic361Submissions;
+    const mk = (id, name) => ({ id, status: 'pending', source: 'submission', submitter_kind: 'organizer',
+      submitter_name: 'Jane', submitter_email: 'j@x.com',
+      payload: { name, date: '2026-11-12', time: '7:00 PM', venue: 'Venue', address: '1 Main', description: 'Hi', icons: [] } });
+    submissions._state.submissions = [mk('a', 'First Event'), mk('b', 'Second Event')];
+    submissions._state.editing.add('a');
+    submissions.render();
+    const cardA = () => document.querySelector('.submission-card[data-id="a"]');
+    cardA().querySelector('[data-edit="name"]').value = 'First Event (fixed)';
+    cardA().querySelector('[data-edit="description"]').value = 'Typed, not saved.';
+    document.querySelector('.submission-card[data-id="b"] button[data-act="edit"]').click();
+    expect(cardA().querySelector('[data-edit="name"]').value).toBe('First Event (fixed)');
+    expect(cardA().querySelector('[data-edit="description"]').value).toBe('Typed, not saved.');
+    submissions.render(); // Refresh, or another card's approve
+    expect(cardA().querySelector('[data-edit="name"]').value).toBe('First Event (fixed)');
+    // Cancel drops the draft.
+    cardA().querySelector('button[data-act="cancel-edit"]').click();
+    cardA().querySelector('button[data-act="edit"]').click();
+    expect(cardA().querySelector('[data-edit="name"]').value).toBe('First Event');
+    submissions._state.editing.clear();
+    submissions._state.submissions = [];
   });
 });
 

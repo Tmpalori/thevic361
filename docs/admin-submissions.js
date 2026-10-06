@@ -24,7 +24,12 @@
     token: '',
     status: 'pending',
     submissions: [],
-    editing: new Set()
+    editing: new Set(),
+    // id -> { field: value } typed into an open edit form and not saved
+    // yet. render() rebuilds every card, so without this another card's
+    // save, approve or reject, Refresh, or opening a second edit form
+    // silently put this one back to the stored values.
+    drafts: {}
   };
 
   // Resolve which API base URL + bearer token to use for /api/admin/* calls.
@@ -154,7 +159,9 @@
   // the save handler uses, so the admin always sees what they're editing.
   const EDIT_FIELDS = [
     { key: 'name',        label: 'Event name',           type: 'input',    placeholder: 'Event name' },
-    { key: 'date',        label: 'Date',                 type: 'input',    placeholder: 'YYYY-MM-DD' },
+    // type=date: the browser only offers days that exist (the server
+    // rejects 2026-11-31 too).
+    { key: 'date',        label: 'Date',                 type: 'input',    inputType: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'time',        label: 'Start time',           type: 'input',    placeholder: 'e.g. 7:00 PM' },
     { key: 'end_time',    label: 'End time',             type: 'input',    placeholder: 'e.g. 10:00 PM (optional)' },
     { key: 'venue',       label: 'Venue',                type: 'input',    placeholder: 'Venue name' },
@@ -166,16 +173,16 @@
     { key: 'submitter_phone',      label: 'Submitter phone',      type: 'input', placeholder: 'Phone number' }
   ];
 
-  function renderEditField(f, p) {
+  function renderEditField(f, p, draft) {
     const id = 'sub-edit-' + f.key + '-' + Math.random().toString(36).slice(2, 8);
-    const val = escapeHtml(p[f.key] || '');
+    const val = escapeHtml(draft && Object.prototype.hasOwnProperty.call(draft, f.key) ? draft[f.key] : (p[f.key] || ''));
     const ph = escapeHtml(f.placeholder || '');
     const label = '<label class="submission-edit__label" for="' + id + '">' +
       escapeHtml(f.label) + '</label>';
     const control = f.type === 'textarea'
       ? '<textarea id="' + id + '" data-edit="' + f.key + '" rows="' + (f.rows || 3) +
           '" placeholder="' + ph + '">' + val + '</textarea>'
-      : '<input id="' + id + '" data-edit="' + f.key + '" value="' + val +
+      : '<input id="' + id + '"' + (f.inputType ? ' type="' + f.inputType + '"' : '') + ' data-edit="' + f.key + '" value="' + val +
           '" placeholder="' + ph + '">';
     return '<div class="submission-edit__field">' + label + control + '</div>';
   }
@@ -217,7 +224,7 @@
       ? '<div class="submission-edit">' +
           '<p class="submission-edit__title">Editing submission · ' +
             escapeHtml(p.name || '(untitled)') + '</p>' +
-          EDIT_FIELDS.map(f => renderEditField(f, p)).join('') +
+          EDIT_FIELDS.map(f => renderEditField(f, p, state.drafts[row.id])).join('') +
           '<div class="submission-card__actions">' +
             '<button data-act="save" class="btn btn--primary">Save edits</button>' +
             '<button data-act="cancel-edit" class="btn btn--outline">Cancel</button>' +
@@ -260,10 +267,23 @@
     );
   }
 
+  // Keep what's typed in every open edit form before the cards are rebuilt.
+  function saveDrafts(list) {
+    list.querySelectorAll('.submission-card').forEach(card => {
+      const id = card.getAttribute('data-id');
+      const fields = card.querySelectorAll('[data-edit]');
+      if (!id || !fields.length || !state.editing.has(id)) return;
+      const draft = {};
+      fields.forEach(el => { draft[el.getAttribute('data-edit')] = el.value; });
+      state.drafts[id] = draft;
+    });
+  }
+
   function render() {
     const list = $('#submissions-list');
     const empty = $('#submissions-empty');
     if (!list) return;
+    saveDrafts(list);
     if (!state.submissions.length) {
       list.innerHTML = '';
       if (empty) empty.hidden = false;
@@ -332,7 +352,7 @@
       state.editing.add(id); render(); return;
     }
     if (act === 'cancel-edit') {
-      state.editing.delete(id); render(); return;
+      state.editing.delete(id); delete state.drafts[id]; render(); return;
     }
     if (act === 'save') {
       const updates = {};
@@ -357,6 +377,7 @@
       const updated = await patch(id, { payload: merged });
       if (updated) {
         state.editing.delete(id);
+        delete state.drafts[id];
         const idx = state.submissions.findIndex(s => s.id === id);
         if (idx !== -1) state.submissions[idx] = updated;
         render();
