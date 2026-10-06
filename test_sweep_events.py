@@ -167,3 +167,13 @@ def test_report_splits_hidden_from_flags():
     assert lines[0].startswith("*Hidden automatically*")
     assert "Church Fish Fry" in lines[1]
     assert lines[2] == "*To look at:*" and "Monday Bingo" in lines[3]
+
+
+def test_ai_reasons_name_events_instead_of_index_numbers():
+    events = [ev("Victoria Texas Historic Mystery"), ev("Spooky Season: Victoria Historic Ghost Mystery")]
+    answer = '[{"i": 0, "kind": "other", "why": "Same ghost tour as index 1, same plaza; not index 7"}]'
+    with patch.object(sw.ce, "_openai_chat", return_value=answer) as chat:
+        out = sw.ai_findings(events, "sk-test")
+    assert out == [(0, "other", "Same ghost tour as “Spooky Season: Victoria Historic Ghost Mystery”, same plaza; not another listing")]
+    assert "never by their index number" in chat.call_args[0][1][0]["content"]
+

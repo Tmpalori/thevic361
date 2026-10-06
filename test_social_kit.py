@@ -37,7 +37,7 @@ def test_captions():
     caps = sk.captions(sk.select_events(EVENTS, start, end), start, end, "weekend")
     fb = caps["facebook"]
     assert fb.startswith("This weekend in Victoria, TX (Oct 9–11): 3 events")
-    assert "• 9 PM Paid Show @ B" in fb
+    assert "⭐ 9 PM Paid Show @ B" in fb   # featured (paid) events are starred
     assert "• 8 AM Market @ Square (free)" in fb
     assert "https://www.thevic361.com/this-weekend" in fb
     assert "link in bio" in caps["instagram"]
@@ -68,7 +68,7 @@ def test_today_caption_and_venue_tags():
     assert "FRIDAY" not in caps["facebook"]
     assert "https://www.thevic361.com/today" in caps["facebook"]
     assert "@navemuseum @aerocrafters" in caps["instagram"]
-    assert "@" not in caps["facebook"].replace("• ", "").split("Full list")[1]
+    assert "@" not in caps["facebook"].split("See all")[1]
 
 
 def test_outreach_lists_each_venue_once(tmp_path):
@@ -112,19 +112,15 @@ def test_branded_slides_markup():
     import social_slides as ss
     from datetime import date as _d
     ev = lambda name, day, **kw: {"name": name, "date": day, "time": "7:00 PM", "venue": "Weber <Brewing>", "icons": ["music", "nope"], **kw}
-    groups = {_d(2026, 10, 9): [ev(f"Show {i}", "2026-10-09") for i in range(12)],
+    groups = {_d(2026, 10, 9): [ev(f"Show <{i}>", "2026-10-09") for i in range(12)],
               _d(2026, 10, 10): [ev("Pumpkin Patch", "2026-10-10", featured=True, free=True)]}
     names, doc = ss.slides_html(groups, _d(2026, 10, 9), _d(2026, 10, 11), "weekend")
-    # Cover, 12 Friday events split evenly 4/4/4, Saturday, call to action.
-    assert names == [f"weekend-{n}.png" for n in range(1, 7)]
-    assert doc.count('<section class="slide"') == 6
-    assert doc.count("(part ") == 3
-    assert "Weber &lt;Brewing&gt;" in doc and "<Brewing>" not in doc   # escaped
+    assert names == ["weekend-1.png", "weekend-2.png", "weekend-3.png"]
+    assert "Show &lt;0&gt;" in doc and "<0>" not in doc               # escaped
     assert '#i-music' in doc and '#i-nope' not in doc                  # only known icons
     assert "#FF7A3D" in doc and "#B9A6FF" in doc                       # Friday sunset, Saturday lilac (site colors)
-    assert "★ Vic’s Pick" in doc and ">Free<" in doc
-    assert "thevic361.com/subscribe" in doc
-    assert "30 things to do" not in doc and "13 things to do" in doc
+    assert "+ 10 more" in doc                                          # 12 Friday events: 2 shown
+    assert "thevic361.com/subscribe" in doc and "13 things to do" in doc
 
 
 def test_branded_render_falls_back_without_chrome(tmp_path, monkeypatch):
@@ -156,4 +152,27 @@ def test_outreach_slack_is_short_and_actionable(tmp_path):
     assert "No Socials Hall" not in msg                  # nothing to tag, so not listed
     assert lines[-1] == "…and 4 more: <https://www.thevic361.com/social/latest/outreach.txt|full list>"
     assert sk.outreach_slack({date(2026, 10, 9): [{"name": "x", "venue": "No Socials Hall"}]}, venues_path=str(vf)) == ""
+
+
+def test_captions_tease_two_per_day_sponsored_first():
+    d = date(2026, 10, 9)
+    evs = [{"date": "2026-10-09", "name": f"Show {i}", "time": f"{i + 1} PM", "venue": "Bar"} for i in range(6)]
+    evs.append({"date": "2026-10-09", "name": "Sponsored Gala", "time": "9 PM", "venue": "Hall", "featured": True})
+    caps = sk.captions(sk.select_events(evs, d, d), d, d, "today")
+    fb = caps["facebook"]
+    assert "⭐ 9 PM Sponsored Gala @ Hall" in fb          # sponsored first, marked
+    assert "• 1 PM Show 0 @ Bar" in fb and "Show 1" not in fb
+    assert "+ 5 more" in fb
+    assert "👉 See all 7: https://www.thevic361.com/today" in fb
+    assert "👉 See all 7: link in bio" in caps["instagram"]
+
+
+def test_posts_have_at_most_three_slides():
+    import social_slides as ss
+    groups = {date(2026, 10, d): [{"name": f"E{d}{i}", "date": f"2026-10-{d:02d}", "time": "7 PM"} for i in range(9)]
+              for d in range(5, 12)}
+    names, doc = ss.slides_html(groups, date(2026, 10, 5), date(2026, 10, 11), "week")
+    assert names == ["week-1.png", "week-2.png", "week-3.png"]
+    assert doc.count("+ 7 more") == 7                      # every day: 2 shown, the rest teased
+    assert "All 63 events" in doc and "are on" in doc
 

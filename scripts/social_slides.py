@@ -20,7 +20,6 @@ import tempfile
 W, H = 1080, 1350
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 DOCS = os.path.join(ROOT, "docs")
-PER_SLIDE = 5  # rows are up to ~180px with a two-line name; 5 always fit the card
 
 # Same palette and per-weekday colors as docs/style.css and the newsletter.
 INK, CREAM, PURPLE, SUN = "#1F1A3D", "#FFF4D6", "#4B3FD1", "#FFC93C"
@@ -112,7 +111,7 @@ def cover_html(groups, start, end, kind):
     <div class="disp" style="font-size:46px;color:{PURPLE}">{esc(count)}</div>
   </div>
   <div class="picks" style="display:grid;gap:22px;margin-top:34px">{rows}</div>
-  <div style="text-align:right;margin-top:30px"><span class="pill" style="background:{SUN};font-size:36px;box-shadow:8px 8px 0 {INK}">Swipe for the full list →</span></div>
+  <div style="text-align:right;margin-top:30px"><span class="pill" style="background:{SUN};font-size:36px;box-shadow:8px 8px 0 {INK}">Swipe for a peek →</span></div>
 </div>
 </section>"""
 
@@ -127,74 +126,73 @@ def _day_label(e, kind):
     return day + (_short_time(e.get("time")) or "")
 
 
-def _event_row(e, first):
-    """Time in a fixed left column (like the site's lists); name (up to two
-    lines), then venue, icons and Vic's Pick / Free tags on one line."""
-    time = _short_time(e.get("time"))
-    tags = ""
-    if e.get("featured"):
-        tags += '<span class="tag" style="background:#FF7A3D">★ Vic’s Pick</span>'
-    if e.get("free"):
-        tags += '<span class="tag" style="background:#3DBE8B">Free</span>'
-    time_pill = (f'<span class="pill" style="font-size:26px;padding:2px 14px;border-width:4px">{esc(time)}</span>'
-                 if time else "")
-    venue = f'<span class="one" style="min-width:0">{esc(e["venue"])}</span>' if e.get("venue") else ""
-    sep = "" if first else "border-top:4px dashed #E8D9AE;"
-    return (f'<div class="row" style="display:grid;grid-template-columns:150px 1fr;gap:18px;padding:18px 34px;{sep}">'
-            f'<div style="padding-top:4px">{time_pill}</div>'
-            f'<div style="min-width:0"><div class="disp clamp2" style="font-size:40px">{esc(e["name"])}</div>'
-            f'<div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:27px;font-weight:800;color:#554E7A">'
-            f'{_icons(e, 34)}{venue}{tags}</div></div></div>')
+DIGEST_PER_DAY = 2       # a sneak peek per day; the site has the rest
+DIGEST_TODAY = 6         # "today" has a single day, so it can show a few more
 
 
-def day_html(day, evs, kind, part=None):
-    """One day, styled like the site's day cards: weekday color band, date
-    pill, then the events (time, icons, Vic's Pick / Free tags, venue)."""
+def _digest_day(day, evs, per_day, first, compact=False):
+    """One day in the sneak-peek slide: weekday chip, up to per_day events
+    (Vic's Picks / sponsored first; select_events sorts them to the top),
+    then "+ N more". compact shrinks it so a full week (7 days) fits."""
     color = DAY_COLORS[day.weekday()]
-    rows = "".join(_event_row(e, i == 0) for i, e in enumerate(evs))
-    more = f' <span style="font-size:30px;opacity:.7">(part {part})</span>' if part else ""
+    name_px, time_px, more_px, pad = (29, 24, 24, 9) if compact else (33, 28, 28, 16)
+    items = "".join(
+        f'<div class="one" style="font-size:{name_px}px;font-weight:900;line-height:1.25">'
+        f'{"<span style=color:#FF7A3D>★</span> " if e.get("featured") else ""}'
+        f'<span style="font-family:Fredoka;font-weight:700;color:#554E7A;font-size:{time_px}px">{esc(_short_time(e.get("time")))}</span> '
+        f'{esc(e["name"])}</div>'
+        for e in evs[:per_day])
+    more = (f'<div style="font-family:Fredoka;font-weight:700;font-size:{more_px}px;color:{PURPLE};line-height:1.3">'
+            f'+ {len(evs) - per_day} more</div>') if len(evs) > per_day else ""
+    sep = "" if first else "border-top:4px dashed #E8D9AE;"
+    chip = (f'<div style="background:{color};border:4px solid {INK};border-radius:18px;text-align:center;padding:{2 if compact else 6}px 0">'
+            f'<div class="disp" style="font-size:{28 if compact else 34}px">{esc(day.strftime("%a").upper())}</div>'
+            f'<div style="font-family:Fredoka;font-weight:700;font-size:{20 if compact else 24}px">{esc(day.strftime("%b ") + str(day.day))}</div></div>')
+    return (f'<div style="display:grid;grid-template-columns:{124 if compact else 150}px 1fr;gap:20px;align-items:start;padding:{pad}px 28px;{sep}">'
+            f'{chip}<div style="min-width:0">{items}{more}</div></div>')
+
+
+def digest_html(groups, start, end, kind):
+    """Slide 2: the sneak peek. Every day of the kit with a couple of events
+    each, so people see the range, then go to the site for the rest."""
+    per_day = DIGEST_TODAY if kind == "today" else DIGEST_PER_DAY
+    compact = len(groups) > 4  # a full week: 7 days must fit the card
+    days = "".join(_digest_day(d, evs, per_day, i == 0, compact) for i, (d, evs) in enumerate(groups.items()))
+    total = sum(len(v) for v in groups.values())
     return f"""<section class="slide"><div class="dots"></div>
 <div style="position:absolute;left:64px;right:64px;top:48px;display:flex;justify-content:space-between;align-items:center">
   {_brand(small=True)}<div class="pill" style="font-size:28px">{esc(KICKER[kind])}</div>
 </div>
-<div class="card" style="position:absolute;left:64px;right:78px;top:160px;max-height:1050px">
-  <div style="background:{color};border-bottom:6px solid {INK};padding:26px 40px;display:flex;align-items:center;gap:22px">
-    <span class="disp" style="font-size:76px">{esc(day.strftime('%A'))}</span>
-    <span class="pill" style="font-size:32px">{esc(day.strftime('%B ') + str(day.day))}</span>{more}
-  </div>
-  {rows}
-</div>
-<div class="foot"><span style="color:{PURPLE}">thevic361.com</span><span style="font-size:28px;color:#554E7A">Details &amp; more every day →</span></div>
+<div class="disp" style="position:absolute;left:64px;top:140px;font-size:60px">A peek at {"today" if kind == "today" else "the list"} <span style="font-size:40px;color:{PURPLE}">({total} in all)</span></div>
+<div class="card" style="position:absolute;left:64px;right:78px;top:228px;max-height:1010px">{days}</div>
+<div class="foot"><span style="color:{PURPLE}">See them all at thevic361.com</span><span style="font-size:30px">→</span></div>
 </section>"""
 
 
-def cta_html():
+def cta_html(total=0):
+    """Slide 3: send them to the site for everything, then the newsletter."""
+    see_all = f"All {total} events" if total else "The full list"
     return f"""<section class="slide" style="background:{PURPLE}"><div class="sky" style="opacity:.95"></div>
 <div style="position:absolute;left:72px;right:72px;top:80px;color:#fff">
   {_brand(color="#fff")}
-  <div class="disp" style="font-size:118px;margin-top:70px">Get the list<br><span style="color:{SUN}">free</span> every<br>Monday.</div>
-  <div style="font-size:44px;font-weight:800;margin-top:30px;opacity:.95">Victoria’s best events, in your inbox.</div>
-  <div class="pill" style="margin-top:56px;font-size:52px;background:{SUN};color:{INK};box-shadow:10px 10px 0 {INK}">thevic361.com/subscribe</div>
-  <div style="font-size:34px;font-weight:800;margin-top:54px;opacity:.9">Hosting something? Submit it free at thevic361.com/submit</div>
+  <div class="disp" style="font-size:104px;margin-top:64px">{esc(see_all)}<br>{"are" if total else "is"} on <span style="color:{SUN}">the site.</span></div>
+  <div class="pill" style="margin-top:44px;font-size:56px;background:{SUN};color:{INK};box-shadow:10px 10px 0 {INK}">thevic361.com</div>
+  <div style="font-size:44px;font-weight:800;margin-top:60px;opacity:.95">📬 Get the list <span style="color:{SUN}">free</span> every Monday:<br>thevic361.com/subscribe</div>
+  <div style="font-size:32px;font-weight:800;margin-top:40px;opacity:.85">Hosting something? Submit it free at thevic361.com/submit</div>
 </div>
 </section>"""
 
 
 def slides_html(groups, start, end, kind):
-    """(file names, full HTML document) for one kit: cover, day slides, CTA."""
-    parts, names = [cover_html(groups, start, end, kind)], [f"{kind}-1.png"]
-    for day, evs in groups.items():
-        # Even split (12 events: 4/4/4, not 5/5/2), at most PER_SLIDE each.
-        n_chunks = max(1, -(-len(evs) // PER_SLIDE))
-        size = -(-len(evs) // n_chunks) if evs else 0
-        chunks = [evs[i:i + size] for i in range(0, len(evs), size)] if evs else [[]]
-        for n, chunk in enumerate(chunks, 1):
-            if not chunk:
-                continue
-            parts.append(day_html(day, chunk, kind, part=n if len(chunks) > 1 else None))
-            names.append(f"{kind}-{len(names) + 1}.png")
-    parts.append(cta_html())
-    names.append(f"{kind}-{len(names) + 1}.png")
+    """(file names, full HTML document) for one kit: three slides, a teaser
+    not the whole list: cover with highlights, the day-by-day peek, and the
+    call to see everything on the site."""
+    total = sum(len(v) for v in groups.values())
+    parts = [cover_html(groups, start, end, kind)]
+    if groups:
+        parts.append(digest_html(groups, start, end, kind))
+    parts.append(cta_html(total))
+    names = [f"{kind}-{n}.png" for n in range(1, len(parts) + 1)]
     doc = f"""<!doctype html><html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@700;800;900&display=block" rel="stylesheet">
 <style>{CSS}</style></head><body><svg style="display:none">{_symbols()}</svg>{''.join(parts)}</body></html>"""
