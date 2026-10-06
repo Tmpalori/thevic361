@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import crypto from 'node:crypto';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
-import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks } from '../server/sponsors.js';
+import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks, pickAvailability, isWeekendDate, renderPreview } from '../server/sponsors.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -196,7 +196,8 @@ describe('featured event', () => {
       address: '101 N Main St', description: 'Food, music, rides.', business: 'Main Street', email: 'ms@example.com'
     });
     expect(r.status).toBe(303);
-    expect(sessions[0].params.line_items[0].price_data.unit_amount).toBe(4900);
+    // Saturday: weekend Vic’s Pick price.
+    expect(sessions[0].params.line_items[0].price_data.unit_amount).toBe(8900);
     await completed(sessions[0]);
 
     const subs = await store.list({});
@@ -383,3 +384,89 @@ describe('Stripe client', () => {
     expect(calls[2].init.body).toContain('lookup_key=vic361_partner_15000_month');
   });
 });
+
+describe('Vic’s Pick: price by day, daily limits, preview', () => {
+  const pick = (date, extra = {}) => form({
+    package: 'featured', event_name: `Show on ${date}`, date, time: '7 PM', venue: 'Aero Crafters',
+    address: '309 E Crestwood Dr', description: 'Live music.', business: 'Aero', email: 'a@example.com', ...extra
+  });
+  const order = (date, status, minutesAgo = 0) => store.saveSponsorOrder({
+    id: `o-${date}-${Math.random()}`, kind: 'featured', status, amount: 4900,
+    created_at: new Date(NOW.getTime() - minutesAgo * 60000).toISOString(),
+    event: { date, name: 'Taken', time: '7 PM', venue: 'X' }
+  });
+
+  it('weekdays are $49, Fri–Sun $89, with its own Stripe product name', async () => {
+    expect([isWeekendDate('2026-10-08'), isWeekendDate('2026-10-09'), isWeekendDate('2026-10-11'), isWeekendDate('2026-10-12')])
+      .toEqual([false, true, true, false]);
+    await startApp();
+    expect((await pick('2026-10-08')).status).toBe(303);   // Thursday
+    expect((await pick('2026-10-09')).status).toBe(303);   // Friday
+    expect(sessions.map(x => x.params.line_items[0].price_data.unit_amount)).toEqual([4900, 8900]);
+    expect(sessions[1].params.line_items[0].price_data.product_data.name).toContain('Fri–Sun');
+    const amounts = (await store.listSponsorOrders()).map(o => o.amount).sort();
+    expect(amounts).toEqual([4900, 8900]);
+  });
+
+  it('a weekday holds 3 picks and a weekend day 4; live checkouts count, expired ones don’t', async () => {
+    await startApp();
+    await order('2026-10-08', 'paid'); await order('2026-10-08', 'paid');
+    await order('2026-10-08', 'pending', 5);        // someone paying right now
+    await order('2026-10-08', 'pending', 120);      // abandoned long ago
+    await order('2026-10-08', 'refunded');
+    const full = await pick('2026-10-08');
+    expect(full.status).toBe(400);
+    expect(await full.text()).toContain('sold out (3 a day)');
+
+    for (let i = 0; i < 3; i++) await order('2026-10-10', 'paid');
+    expect((await pick('2026-10-10')).status).toBe(303);            // 4th Saturday spot
+    const sat = await (await fetch(baseUrl + '/api/vics-pick/availability?date=2026-10-10')).json();
+    expect(sat).toMatchObject({ ok: true, weekend: true, cap: 4, taken: 4, left: 0, price: '$89' });
+    expect((await pick('2026-10-10')).status).toBe(400);
+    const thu = await (await fetch(baseUrl + '/api/vics-pick/availability?date=2026-10-08')).json();
+    expect(thu).toMatchObject({ weekend: false, cap: 3, left: 0, price: '$49' });
+    expect((await fetch(baseUrl + '/api/vics-pick/availability?date=soon')).status).toBe(400);
+  });
+
+  it('shows a live preview with the site’s own markup before payment', async () => {
+    await startApp();
+    const page = await (await fetch(baseUrl + '/advertise/checkout?package=featured&event_name=Pumpkin%20%3CPatch%3E&date=2026-10-10&venue=Titan&business=Me')).text();
+    expect(page).toContain('Preview: exactly how it’ll look');
+    expect(page).toContain('event-entry event-entry--featured');            // same markup as the site
+    expect(page).toContain('Pumpkin &lt;Patch&gt;');                        // prefilled and escaped
+    expect(page).toContain('Saturday, Oct 10: $89');
+    expect(page).toContain('4 of 4 Vic’s Pick spots left');
+    expect(page).toContain('value="Me"');                                    // business prefilled
+    expect(page.indexOf('co-preview')).toBeLessThan(page.indexOf('Continue to payment'));
+
+    const r = await fetch(baseUrl + '/advertise/preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ package: 'weekly', business: 'Acme Tacos', text: 'Best tacos <b>ever</b>', cta: 'Order' }).toString()
+    });
+    const html = await r.text();
+    expect(html).toContain('sponsor-block');
+    expect(html).toContain('Acme Tacos');
+    expect(html).toContain('Best tacos &lt;b&gt;ever&lt;/b&gt;');
+    expect(renderPreview('partner', {}, {})).toContain('Vic’s Pick');
+  });
+
+  it('the advertise page says where each option shows, its limits, and shows examples', async () => {
+    await startApp();
+    const html = await (await fetch(baseUrl + '/advertise')).text();
+    expect(html).toContain('$49 Mon–Thu · $89 Fri–Sun');
+    expect(html).toContain('Only 3 a day Mon–Thu and 4 a day Fri–Sun');
+    expect(html).toContain('Where it shows:');
+    expect((html.match(/ad-package__preview/g) || []).length).toBe(3);
+    expect(html).toContain('Preview yours and book');
+  });
+});
+
+describe('free submissions point to the paid upgrade', () => {
+  it('the submit page says free isn’t guaranteed and links to a Vic’s Pick', async () => {
+    const html = await fs.readFile(path.join(process.cwd(), 'docs', 'submit.html'), 'utf8');
+    expect(html).toContain("aren't guaranteed a spot");
+    expect(html).toContain('href="/advertise/checkout?package=featured"');
+    expect(html).toContain('id="thanks-promo-link"');
+  });
+});
+

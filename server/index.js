@@ -29,7 +29,7 @@ import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys } from './eventcheck.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
-import { stripeConfig, createStripe, createSponsors } from './sponsors.js';
+import { stripeConfig, createStripe, createSponsors, samplePreviews } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
 import { createAutoPublish } from './autopublish.js';
@@ -1172,7 +1172,7 @@ export async function createApp(opts = {}) {
   }
 
   app.get('/advertise', pageHandler(async (req, res, payload, ctx) => {
-    sendHtml(res, renderAdvertisePage({ ...ctx, checkout: stripeCfg.enabled }));
+    sendHtml(res, renderAdvertisePage({ ...ctx, checkout: stripeCfg.enabled, previews: samplePreviews() }));
   }));
 
   // Contact form → Slack; replaces publishing an email address.

@@ -246,3 +246,15 @@ body {
 .btn--outline { background: #fff; border-color: var(--ink); }
 .btn--outline:hover { background: #FFC93C; border-color: var(--ink); }
 .submit-error { border: 2.5px solid var(--submit-danger); border-radius: 12px; }
+
+/* Free vs guaranteed: point to the Vic's Pick upgrade. */
+.submit-promo {
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 1rem;
+  border: 2px dashed var(--submit-primary, #4B3FD1);
+  border-radius: 12px;
+  line-height: 1.45;
+  font-size: 0.95rem;
+}
+.submit-promo a { font-weight: 800; }
+

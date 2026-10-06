@@ -1683,3 +1683,22 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
 .sub-picks { margin-bottom: var(--space-4, 1rem); }
 .sub-again { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-6, 1.5rem); }
 
+
+/* /advertise: one row per package, details beside an example of the
+   placement (rendered with the site's own markup). */
+.ad-packages--rows { grid-template-columns: 1fr; }
+.ad-package--row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: var(--space-5); align-items: start; }
+@media (max-width: 720px) { .ad-package--row { grid-template-columns: 1fr; } }
+.ad-where, .ad-limit { font-size: var(--text-sm); margin: 0 0 var(--space-3); }
+.ad-limit { font-weight: 800; color: var(--color-text-muted); margin-top: var(--space-3); }
+.ad-package .ad-buy { margin-top: var(--space-2); }
+.ad-preview-label, .co-preview-h { font-family: var(--font-display); font-weight: 700; font-size: var(--text-sm); text-transform: uppercase; letter-spacing: .04em; color: var(--color-text-muted); margin: 0 0 var(--space-2); }
+.ad-package__preview .sponsor-section, .co-preview .sponsor-section { margin: 0; }
+.ad-package__preview .day-section, .co-preview .day-section { margin: 0; }
+
+/* Checkout preview */
+.co-preview { border: 2px dashed var(--color-divider); border-radius: 16px; padding: var(--space-4); background: var(--color-bg); }
+.co-preview-where { font-size: var(--text-sm); color: var(--color-text-muted); margin: 0 0 var(--space-3); }
+.co-preview-price { margin: 0 0 var(--space-2); }
+.co-preview-dim { opacity: .45; }
+.co-preview a[href="#preview"] { pointer-events: none; }

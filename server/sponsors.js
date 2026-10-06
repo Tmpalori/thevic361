@@ -10,9 +10,14 @@
  *   - Venue partner ($150/month, Stripe subscription): every event at their
  *     venue is a Vic’s Pick (featured) while the subscription is active. Cancelling
  *     in Stripe ends it automatically (customer.subscription.* webhooks).
- *   - Vic’s Pick event ($49, one-time): the event lands in the submissions
- *     queue (so a person still checks it before it's listed) and is pinned
- *     as Featured as soon as it, or a matching collector event, is live.
+ *   - Vic’s Pick event (one-time; $49 Mon–Thu, $89 Fri–Sun): the event lands
+ *     in the submissions queue (so a person still checks it before it's
+ *     listed) and is pinned as Featured as soon as it, or a matching
+ *     collector event, is live. Limited per day (VICS_PICK caps) so the top
+ *     of a day stays special; a day that's full can't be bought.
+ *
+ * Every checkout form shows a live preview of the placement (the same
+ * markup the site uses) before anyone is sent to pay.
  *
  * Placements are applied when the public payload is read (see
  * applyPlacements), never written into the published events, so Save &
@@ -30,7 +35,8 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import {
-  AD_PACKAGES, SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, addDays, formatDay, layout
+  AD_PACKAGES, SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, addDays, formatDay, layout,
+  renderEventItem, sponsorHtml
 } from './seo.js';
 import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso } from './db.js';
@@ -62,6 +68,39 @@ export function stripeConfig(env = process.env, overrides = {}) {
 
 export function packageFor(key) {
   return AD_PACKAGES.find(p => p.key === key) || null;
+}
+
+// ─── Vic’s Pick pricing and capacity ─────────────────────────────────────
+// "Weekend" is Fri–Sun, the site's own "This weekend". Caps are per day.
+export const VICS_PICK = { weekdayAmount: 4900, weekendAmount: 8900, weekdayCap: 3, weekendCap: 4 };
+
+export function isWeekendDate(dateStr) {
+  const dow = new Date(`${dateStr}T12:00:00Z`).getUTCDay(); // 0 Sun … 6 Sat
+  return dow === 5 || dow === 6 || dow === 0;
+}
+
+// The Stripe product/price for a Vic’s Pick on that date (weekend picks are
+// their own catalog price, so receipts and reports tell them apart).
+export function pickPackage(dateStr) {
+  const base = packageFor('featured');
+  if (!isWeekendDate(dateStr)) return { ...base, amount: VICS_PICK.weekdayAmount };
+  return { ...base, key: 'featured_weekend', name: `${base.name} (Fri–Sun)`, amount: VICS_PICK.weekendAmount };
+}
+
+// Spots used on a date: paid or settling orders, plus checkouts still being
+// paid (held like weekly sponsor weeks, so a day can't be oversold).
+export function picksTaken(dateStr, orders, nowMs) {
+  return (orders || []).filter(o => o.kind === 'featured' && o.event && o.event.date === dateStr &&
+    (LIVE.has(o.status) || o.status === 'processing' ||
+      (o.status === 'pending' && nowMs - Date.parse(o.created_at) < HOLD_MS))).length;
+}
+
+export function pickAvailability(dateStr, orders, now) {
+  const weekend = isWeekendDate(dateStr);
+  const cap = weekend ? VICS_PICK.weekendCap : VICS_PICK.weekdayCap;
+  const taken = picksTaken(dateStr, orders, now.getTime());
+  const amount = weekend ? VICS_PICK.weekendAmount : VICS_PICK.weekdayAmount;
+  return { date: dateStr, weekend, cap, taken, left: Math.max(0, cap - taken), amount, price: `$${amount / 100}` };
 }
 
 // ─── Stripe client ───────────────────────────────────────────────────────
@@ -272,6 +311,10 @@ export function validateOrder(kind, input, { now, orders, venues }) {
       const today = localDateStr(now);
       if (ev.date < today) errors.date = 'That date has passed.';
       else if (ev.date > addDays(today, FEATURE_DAYS_AHEAD)) errors.date = `Pick a date in the next ${FEATURE_DAYS_AHEAD} days.`;
+      else if (!pickAvailability(ev.date, orders, now).left) {
+        const a = pickAvailability(ev.date, orders, now);
+        errors.date = `Vic’s Picks for ${formatDay(ev.date, { weekday: 'long', month: 'short', day: 'numeric' })} are sold out (${a.cap} a day). Pick another day, or submit the event free.`;
+      }
     }
     order.event = ev;
   } else {
@@ -299,6 +342,80 @@ function selectField({ name, label, options, value, error }) {
     '<option value="">Choose…</option>' +
     options.map(o => `<option value="${escHtml(o.value)}"${o.value === value ? ' selected' : ''}${o.disabled ? ' disabled' : ''}>${escHtml(o.label)}</option>`).join('') +
     `</select>${error ? `<small class="co-error">${escHtml(error)}</small>` : ''}</div>`;
+}
+
+// ─── Live preview ────────────────────────────────────────────────────────
+// What the buyer gets, drawn with the site's own markup (renderEventItem,
+// sponsorHtml) from what they've typed so far. Rendered into the checkout
+// page and refreshed from POST /advertise/preview as they type, so there's
+// one renderer and the preview can't drift from the real thing.
+
+const SAMPLE_OTHERS = [
+  { name: 'Other events that day', time: '6:00 PM', venue: 'Listed below yours' },
+  { name: '…and the rest of the day’s list', time: '8:00 PM', venue: '' }
+];
+
+function dayCard(dateStr, items) {
+  const head = dateStr
+    ? `<h2 class="day-name">${escHtml(formatDay(dateStr, { weekday: 'long' }))}</h2><span class="day-date">${escHtml(formatDay(dateStr, { month: 'long', day: 'numeric' }))}</span>`
+    : '<h2 class="day-name">Your event’s day</h2>';
+  return `<section class="day-section co-preview-day"><div class="day-header">${head}</div>` +
+    `<ul class="event-list" role="list">${items.join('')}</ul></section>`;
+}
+
+function previewItem(ev) {
+  return renderEventItem({ ...ev, page: '#preview' }).replace(/<a href="#preview">/g, '<a href="#preview" tabindex="-1" onclick="return false">');
+}
+
+export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } = {}) {
+  const val = k => clean(v[k], 2000);
+  if (pkgKey === 'weekly') {
+    const block = sponsorHtml({
+      name: clean(v.business, 80) || 'Your business',
+      text: clean(v.text, 160) || 'Your one or two sentences about your business go here.',
+      cta: clean(v.cta, 24) || 'Learn more',
+      url: safeUrl(normalizeUrl(clean(v.url, 300))) || '#',
+      address: clean(v.address, 120)
+    });
+    return `<p class="co-preview-where">Shown on every page of thevic361.com for your week, and at the top of that Monday’s newsletter.</p>${block}`;
+  }
+  if (pkgKey === 'partner') {
+    const venue = (venues || []).find(x => x.slug === v.venue);
+    const name = venue ? venue.name : 'Your venue';
+    const ev = { name: 'Every event at ' + name, time: 'Every week', venue: name, featured: true,
+      description: 'Each one pinned to the top of its day as a Vic’s Pick, for as long as you’re a partner.' };
+    return `<p class="co-preview-where">How each of your events shows on the site, every week:</p>${dayCard('', [previewItem(ev)])}`;
+  }
+  // Vic’s Pick: the event as it will look, pinned above the rest of its day.
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(val('date')) ? val('date') : '';
+  const ev = {
+    name: clean(v.event_name, 200) || 'Your event name',
+    time: clean(v.time, 60) || '7:00 PM',
+    venue: clean(v.venue, 200) || 'Your venue',
+    description: clean(v.description, 300) || 'Your description shows here.',
+    featured: true
+  };
+  const others = SAMPLE_OTHERS.map(o => previewItem(o).replace('class="event-entry"', 'class="event-entry co-preview-dim"'));
+  let price = `<strong>$${VICS_PICK.weekdayAmount / 100}</strong> Mon–Thu · <strong>$${VICS_PICK.weekendAmount / 100}</strong> Fri–Sun. Pick a date to see open spots.`;
+  if (date && now) {
+    const a = pickAvailability(date, orders, now);
+    const day = formatDay(date, { weekday: 'long', month: 'short', day: 'numeric' });
+    price = a.left
+      ? `<strong>${escHtml(day)}: ${a.price}</strong> · ${a.left} of ${a.cap} Vic’s Pick spots left`
+      : `<strong class="co-error">${escHtml(day)} is sold out</strong> (${a.cap} Vic’s Picks a day). Pick another day.`;
+  }
+  return `<p class="co-preview-price">${price}</p>` +
+    `<p class="co-preview-where">Pinned at the top of its day on the site and its event page, starred in that week’s newsletter and our social posts:</p>` +
+    dayCard(date, [previewItem(ev), ...others]);
+}
+
+// Example placements for the /advertise page.
+export function samplePreviews() {
+  return {
+    weekly: renderPreview('weekly', { business: 'Your Business', text: 'One or two sentences about what you offer, shown all week.', cta: 'Learn more' }),
+    partner: renderPreview('partner', {}),
+    featured: renderPreview('featured', { event_name: 'Your Event Name', time: '7:00 PM', venue: 'Your Venue', description: 'A line or two about your event.' })
+  };
 }
 
 export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values = {}, errors = {} }) {
@@ -337,10 +454,29 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
       <input type="hidden" name="package" value="${escHtml(pkg.key)}">
       <div class="hp-field" aria-hidden="true"><label>Company <input name="company" tabindex="-1" autocomplete="off"></label></div>
       ${fields}
+      <section class="co-preview" aria-labelledby="co-preview-h">
+        <h2 id="co-preview-h" class="co-preview-h">Preview: exactly how it’ll look</h2>
+        <div id="co-preview" aria-live="polite">${renderPreview(pkg.key, v, { now, orders, venues })}</div>
+      </section>
       ${field({ name: 'email', label: 'Email for your receipt', type: 'email', value: v.email, error: e.email, max: 254 })}
       <button class="btn btn--primary" type="submit">Continue to payment</button>
       <p class="co-hint">Secure payment by Stripe. ${pkg.interval ? 'Cancel any time from your receipt email.' : ''}</p>
-    </form>`;
+    </form>
+    <script>
+    (function () {
+      var f = document.querySelector('.co-form'), box = document.getElementById('co-preview'), t;
+      if (!f || !box || !window.fetch) return;
+      function refresh() {
+        var data = new URLSearchParams(new FormData(f));
+        fetch('/advertise/preview', { method: 'POST', body: data })
+          .then(function (r) { return r.ok ? r.text() : null; })
+          .then(function (html) { if (html !== null) box.innerHTML = html; })
+          .catch(function () { /* the server-rendered preview stays */ });
+      }
+      f.addEventListener('input', function () { clearTimeout(t); t = setTimeout(refresh, 350); });
+      f.addEventListener('change', refresh);
+    })();
+    </script>`;
   return layout({
     siteUrl, path: '/advertise/checkout', nav: '/advertise', noindex: true,
     title: `${pkg.name} | ${SITE_NAME}`, description: `Buy ${pkg.name} on ${SITE_NAME}.`, body
@@ -598,7 +734,33 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       try {
         const pkg = packageFor(req.query.package);
         if (!config.enabled || !pkg) return res.redirect(302, '/advertise');
-        sendHtml(res, renderCheckoutPage(pkg, { siteUrl, now: nowFn(), orders: await orders(), venues: getVenues() }), 200, 'no-store');
+        // Prefill from the query (the free submit form links here with the
+        // event it just sent); only the form's own fields are taken.
+        const PREFILL = ['event_name', 'date', 'time', 'venue', 'address', 'description', 'url', 'business', 'email'];
+        const values = Object.fromEntries(PREFILL.filter(k => typeof req.query[k] === 'string').map(k => [k, req.query[k].slice(0, 2000)]));
+        sendHtml(res, renderCheckoutPage(pkg, { siteUrl, now: nowFn(), orders: await orders(), venues: getVenues(), values }), 200, 'no-store');
+      } catch (err) { next(err); }
+    });
+
+    const previewLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 600 });
+    app.post('/advertise/preview', async (req, res, next) => {
+      try {
+        const body = req.body || {};
+        const pkg = packageFor(body.package);
+        if (!pkg) return res.status(400).type('text/plain').send('Unknown package');
+        if (!previewLimiter.check(req.ip || req.socket.remoteAddress).ok) return res.status(429).type('text/plain').send('Slow down');
+        res.set('Cache-Control', 'no-store').type('html')
+          .send(renderPreview(pkg.key, body, { now: nowFn(), orders: await orders(), venues: getVenues() }));
+      } catch (err) { next(err); }
+    });
+
+    // Open Vic’s Pick spots and the price for a date (the checkout preview
+    // and anyone wiring a calendar can use it).
+    app.get('/api/vics-pick/availability', async (req, res, next) => {
+      try {
+        const date = String(req.query.date || '');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ ok: false, error: 'date=YYYY-MM-DD required' });
+        res.set('Cache-Control', 'no-store').json({ ok: true, ...pickAvailability(date, await orders(), nowFn()) });
       } catch (err) { next(err); }
     });
 
@@ -623,17 +785,20 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           const v = validateOrder(pkg.key, body, ctx);
           if (!v.ok) return { errors: v.errors };
           // Same clock as bookableWeeks, so the hold window lines up.
-          const o = { ...v.order, id: newId(), status: 'pending', amount: pkg.amount, created_at: nowFn().toISOString() };
+          const priced = pkg.key === 'featured' ? pickPackage(v.order.event.date) : pkg;
+          const o = { ...v.order, id: newId(), status: 'pending', amount: priced.amount, created_at: nowFn().toISOString() };
           await save(o);
           return { order: o };
         });
         if (booked.errors) return fail(booked.errors);
         const order = booked.order;
+        // A Vic’s Pick's price depends on its day (weekday vs Fri–Sun).
+        const priced = pkg.key === 'featured' ? pickPackage(order.event.date) : pkg;
         let lineItem = {
           quantity: 1,
           price_data: {
-            currency: 'usd', unit_amount: pkg.amount,
-            product_data: { name: `${SITE_NAME}: ${pkg.name}` },
+            currency: 'usd', unit_amount: priced.amount,
+            product_data: { name: `${SITE_NAME}: ${priced.name}` },
             recurring: pkg.interval ? { interval: pkg.interval } : undefined
           }
         };
@@ -641,7 +806,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         // a catalog hiccup never blocks a sale.
         if (typeof stripe.ensurePrice === 'function') {
           try {
-            lineItem = { quantity: 1, price: await stripe.ensurePrice(pkg) };
+            lineItem = { quantity: 1, price: await stripe.ensurePrice(priced) };
           } catch (err) {
             console.warn('[sponsors] catalog price unavailable, using inline price:', err.message);
           }

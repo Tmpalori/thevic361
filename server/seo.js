@@ -868,10 +868,12 @@ export const AD_PACKAGES = [
     price: '$300 / week',
     amount: 30000,
     blurb: 'Pick a week and write your message; it goes live on its own that Monday.',
+    where: 'Every page of thevic361.com for a whole week, plus the top of that Monday’s newsletter.',
+    limit: 'One sponsor a week, so you’re the only one.',
     points: [
-      'Top sponsor block in the Monday newsletter',
-      'Sponsor block on every page of thevic361.com for the week',
-      'Click report at the end of the week'
+      'Your name, message and button on every page of the site, all week',
+      'The sponsor spot at the top of the Monday newsletter',
+      'A click report at the end of the week'
     ]
   },
   {
@@ -881,37 +883,48 @@ export const AD_PACKAGES = [
     amount: 15000,
     interval: 'month',
     blurb: 'Every event at your venue is a Vic’s Pick for as long as you stay subscribed.',
+    where: 'Every event at your venue, every week: pinned to the top of its day with the Vic’s Pick badge.',
+    limit: 'Cancel any time; it ends on its own.',
     points: [
       'Every event at your venue marked as a Vic’s Pick, every week',
       'Pinned at the top of each day on the site and its event pages',
-      'Monthly click report'
+      'Starred in the newsletter and our social posts, plus a monthly click report'
     ]
   },
   {
     key: 'featured',
     name: 'Vic’s Pick',
-    price: '$49 / event',
+    price: '$49 Mon–Thu · $89 Fri–Sun',
     amount: 4900,
     blurb: 'Tell us about your event. Once it\'s listed, it\'s pinned to the top of its day.',
+    where: 'Your event at the top of its day with the Vic’s Pick badge, on the site, its event page, that week’s newsletter and our social posts.',
+    limit: 'Only 3 a day Mon–Thu and 4 a day Fri–Sun, so book early.',
     points: [
-      'Pinned at the top of its day on the site',
-      'Called out in the newsletter that week',
+      'Guaranteed listing, pinned at the top of its day on the site',
+      'Starred in that week’s newsletter and featured first in our social posts',
       'Best for concerts, fundraisers, openings, and festivals'
     ]
   }
 ];
 
-export function renderAdvertisePage({ siteUrl, checkout = false }) {
+// previews: { [package key]: html } sample placements from
+// server/sponsors.js samplePreviews(), the same renderer the checkout uses.
+export function renderAdvertisePage({ siteUrl, checkout = false, previews = {} }) {
   const body = `
     <h1 class="page-title">Advertise on The Vic 361</h1>
-    <p class="page-lead">Reach people in Victoria, TX who are actively looking for something to do this week. Sponsor the newsletter, partner as a venue, or feature a single event.</p>
-    <div class="ad-packages">
+    <p class="page-lead">Reach people in Victoria, TX who are actively looking for something to do this week. Here’s exactly what each option gets you and where it shows.</p>
+    <div class="ad-packages ad-packages--rows">
       ${AD_PACKAGES.map(p => `
-      <section class="ad-package">
-        <h2>${escHtml(p.name)}</h2>
-        <p class="ad-price">${escHtml(p.price)}</p>
-        <ul>${p.points.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul>
-        ${checkout ? `<a class="btn btn--primary ad-buy" href="/advertise/checkout?package=${escHtml(p.key)}">Buy now</a>` : ''}
+      <section class="ad-package ad-package--row" id="${escHtml(p.key)}">
+        <div class="ad-package__info">
+          <h2>${escHtml(p.name)}</h2>
+          <p class="ad-price">${escHtml(p.price)}</p>
+          <p class="ad-where"><strong>Where it shows:</strong> ${escHtml(p.where)}</p>
+          <ul>${p.points.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul>
+          <p class="ad-limit">${escHtml(p.limit)}</p>
+          ${checkout ? `<a class="btn btn--primary ad-buy" href="/advertise/checkout?package=${escHtml(p.key)}">Preview yours and book →</a>` : ''}
+        </div>
+        ${previews[p.key] ? `<div class="ad-package__preview" aria-label="Example of a ${escHtml(p.name)}"><p class="ad-preview-label">Example</p>${previews[p.key]}</div>` : ''}
       </section>`).join('')}
     </div>
     <h2 class="section-heading">${checkout ? 'Questions?' : 'Get started'}</h2>
