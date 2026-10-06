@@ -184,7 +184,82 @@ describe('auto-publish', () => {
     });
     await new Promise(r => setTimeout(r, 100));
     expect((await live()).events.map(e => e.name)).not.toContain('Bingo Night');
-    expect((await store.getPublished()).auto_publish.rules).toBe(2);
+    expect((await store.getPublished()).auto_publish.rules).toBe(3);
+  });
+
+  it("updates events it published with the collector's newer copy, never hand-made, edited, hidden or submitted ones", async () => {
+    const key = ev => [ev.date, ev.name, ev.venue].join('|');
+    // As live on 2026-10-05, published from the 2026-09-28 candidates.
+    const party = { date: '2026-10-06', name: 'Community Connection Party', time: '04:00 PM',
+      venue: '3102 Miori Ln., Victoria, TX, United States, Texas 77901', address: '3102 Miori Ln',
+      url: 'https://allevents.in/victoria/community-connection-party/200030386823634', description: 'Party.' };
+    const comedy = { date: '2026-10-09', name: 'Next Stop Comedy at LA CANTINA!', time: '9:00 PM',
+      venue: 'La Cantina Tacos & Tequila', address: '', url: '', description: 'Stand-up.' };
+    const quilt = { date: '2026-10-15', name: 'Sugar Skull Embroidery with Quilt Guild of Greate', time: '5:30PM – 6:30PM',
+      venue: 'Victoria Public Library', address: '302 N. Main St.', url: 'https://victoriapl.librarycalendar.com/event/copy-adult-program-9348' };
+    const edited = { date: '2026-10-07', name: 'Trivia', time: '7:00 PM', venue: 'Shooters', url: '' };
+    const hiddenOne = { date: '2026-10-08', name: 'Karaoke', time: '9:00 PM', venue: '402 E North St', url: '' };
+    const handAdded = { date: '2026-10-10', name: 'Hand Pick', time: '6:00 PM', venue: 'Somewhere', url: '' };
+    const submitted = { date: '2026-10-11', name: 'Fall Craft Fair', time: '9:00 AM', venue: 'Community Center', description: 'Their words.' };
+    const fresh = {
+      last_updated: '2026-10-07T20:30:00-05:00',
+      events: [
+        { ...party, venue: '3102 Miori Ln.', address: '3102 Miori Ln.', _source: 'allevents' },
+        { ...comedy, address: '212 S. Main St.', url: 'https://www.eventbrite.com/e/next-stop-comedy-123', _source: 'apify_eventbrite' },
+        { ...quilt, name: 'Sugar Skull Embroidery with Quilt Guild of Greater Victoria', _source: 'library' },
+        { ...edited, url: 'https://x.example/trivia' },
+        { ...hiddenOne, venue: '', address: '402 E North St', url: 'https://x.example/karaoke' },
+        { ...handAdded, url: 'https://x.example/hand' },
+        { ...submitted, description: 'Collector words.', url: 'https://x.example/fair' }
+      ]
+    };
+    await start({
+      candidates: fresh,
+      published: {
+        last_updated: '2026-10-05T00:00:00Z',
+        events: [party, comedy, quilt, edited, hiddenOne, handAdded, submitted],
+        hidden: [{ key: key(hiddenOne), page: '/events/2026-10-08-karaoke', date: hiddenOne.date, reason: 'test' }],
+        auto_publish: { from: 'older', rules: 2, keys: [party, comedy, quilt, edited, hiddenOne, submitted].map(key) }
+      }
+    });
+    await store.upsertEventEdit({ original_key: key(edited), payload: { ...edited, time: '8:00 PM' } });
+    await store.insert({ id: 's1', status: 'approved', source: 'submission', created_at: NOW.toISOString(), updated_at: NOW.toISOString(), payload: submitted });
+
+    const r = await runNow();
+    expect(r).toMatchObject({ updated: 4, added: 0, retired: 0 });
+    const pub = await store.getPublished();
+    const byDate = Object.fromEntries(pub.events.map(e => [e.date, e]));
+    expect(byDate['2026-10-06']).toMatchObject({ name: 'Community Connection Party', venue: '3102 Miori Ln.', address: '3102 Miori Ln.' });
+    expect(byDate['2026-10-09']).toMatchObject({ address: '212 S. Main St.', url: 'https://www.eventbrite.com/e/next-stop-comedy-123' });
+    expect(byDate['2026-10-15'].name).toBe('Sugar Skull Embroidery with Quilt Guild of Greater Victoria');
+    // Admin-edited, hand-added and submitted events are untouched.
+    expect(byDate['2026-10-07']).toEqual(edited);
+    expect(byDate['2026-10-10']).toEqual(handAdded);
+    expect(byDate['2026-10-11']).toEqual(submitted);
+    // The hidden one gets the link but keeps its key, so it stays hidden.
+    expect(byDate['2026-10-08']).toMatchObject({ venue: '402 E North St', url: 'https://x.example/karaoke' });
+    expect((await live()).events.map(e => e.name)).not.toContain('Karaoke');
+    // Bookkeeping follows the new keys: nothing reads as "removed by the admin".
+    expect(pub.auto_publish.keys).toEqual(expect.arrayContaining(pub.events.filter(e => e !== byDate['2026-10-07'] && e !== byDate['2026-10-10'] && e !== byDate['2026-10-11']).map(key)));
+    expect(pub.auto_publish.rejected).toEqual([]);
+    expect(pub.auto_publish.keys).not.toContain(key(party));
+
+    // The next run with the same events changes nothing and re-adds nothing.
+    await fs.writeFile(path.join(tmpDir, 'candidates.json'), JSON.stringify({ ...fresh, last_updated: 'next' }));
+    const again = await runNow();
+    expect(again).toMatchObject({ updated: 0, added: 0, retired: 0, skipped_removed: 0 });
+    expect((await store.getPublished()).events).toHaveLength(7);
+    await new Promise(r => setTimeout(r, 50)); // let the archive write finish before cleanup
+  });
+
+  it('only takes a new name when the published one was cut off', async () => {
+    const { cutOff } = await import('../server/autopublish.js');
+    expect(cutOff('Healthy South Texas Cooking Well Exploring Cultur', 'Healthy South Texas Cooking Well Exploring Cultures')).toBe(true);
+    expect(cutOff('Healthy South Texas - Cooking Well Exploring Cult', 'Healthy South Texas Cooking Well Exploring Cultures')).toBe(true);
+    expect(cutOff('Scenic Root — Once Upon...', 'Scenic Root — Once Upon A Plant')).toBe(true);
+    expect(cutOff('Tejas Fest', 'Tejas Fest 2026')).toBe(false);
+    expect(cutOff('Fall Festival', 'Victoria Fall Festival')).toBe(false);
+    expect(cutOff('Long Name Here', 'Long Name')).toBe(false);
   });
 
   it('publishes New & Notable from the collector and keeps recent earlier finds for three weeks', async () => {

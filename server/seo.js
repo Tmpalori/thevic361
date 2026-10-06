@@ -395,7 +395,11 @@ export function placeText(ev) {
 const LISTING_URL = [
   /eventbrite\.[a-z.]+\/(b|d)\//i,
   /allevents\.in\/[^/]+\/?(all|this-weekend|today|tomorrow|[a-z-]+-events)?\/?(\?|#|$)/i,
-  /facebook\.com\/events\/?(explore|search|discover)?\/?(\?|#|$)/i
+  /facebook\.com\/events\/?(explore|search|discover)?\/?(\?|#|$)/i,
+  // The city calendar's home or a made-up "detail" view (one event is
+  // Calendar.aspx?EID=<n>); a Perfect Game search. Same as collect_events.py.
+  /victoriatx\.gov\/calendar(\.aspx)?\/?(?![^#]*\bEID=\d)(\?|#|$)/i,
+  /perfectgame\.org\/events\/default\.aspx/i
 ];
 export function isListingUrl(url) {
   return typeof url === 'string' && LISTING_URL.some(re => re.test(url.trim()));

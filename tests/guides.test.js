@@ -99,10 +99,22 @@ describe('venue pages', () => {
   });
 
   it('the library gets a page and the ballet page excludes Theatre Victoria shows', async () => {
-    await startApp({ archive: [{ date: '2026-10-08', name: 'Little Shop', venue: 'Theatre Victoria' }] });
+    await startApp({ archive: [{ date: '2026-10-01', name: 'Little Shop', venue: 'Theatre Victoria' }] });
     expect((await get('/venues/victoria-public-library')).status).toBe(200);
     expect((await get('/venues/victoria-ballet-theatre')).text).not.toContain('Little Shop');
     expect((await get('/venues/theatre-victoria')).text).toContain('Little Shop');
+  });
+
+  it("doesn't list an archived page as upcoming once the event left the live list (renamed or taken down)", async () => {
+    await startApp({ archive: [
+      { date: '2026-10-09', name: 'Friday Live Musi', venue: 'Aero Crafters' },   // old, cut-off name
+      { date: '2026-10-01', name: 'Last Week Jam', venue: 'Aero Crafters' }
+    ] });
+    const page = (await get('/venues/aero-crafters')).text;
+    expect(page).toContain('Friday Live Music');
+    expect(page).not.toContain('Friday Live Musi<');
+    expect(page).toContain('Last Week Jam');   // past events still come from the archive
+    expect((await get('/venues')).text).toContain('1 upcoming');
   });
 
   it('noindexes venues with nothing listed and 404s unknown or organizer slugs', async () => {

@@ -8,7 +8,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
 import {
-  parseTimes, dateRange, withPages, slugify, safeUrl, eventJsonLd, localDateStr
+  parseTimes, dateRange, withPages, slugify, safeUrl, eventJsonLd, localDateStr, isListingUrl
 } from '../server/seo.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -70,6 +70,16 @@ function ldBlocks(html) {
 }
 
 describe('seo helpers', () => {
+  it("treats the city calendar's home, made-up detail views and search pages as no link", () => {
+    // Live 2026-10: Gemini's Wags-O-Ween / Stroller Barre links redirect to the calendar home.
+    for (const u of ['https://www.victoriatx.gov/calendar?view=detail&id=12089', 'https://www.victoriatx.gov/calendar',
+      'https://www.victoriatx.gov/Calendar.aspx', 'https://www.perfectgame.org/Events/Default.aspx?city=Victoria&state=TX']) {
+      expect(isListingUrl(u)).toBe(true);
+    }
+    expect(isListingUrl('https://www.victoriatx.gov/Calendar.aspx?EID=3974')).toBe(false);
+    expect(isListingUrl('https://allevents.in/victoria/tejas-fest-2026/200030008232138')).toBe(false);
+  });
+
   it('parses start and end times from free-form strings', () => {
     expect(parseTimes('7:00 PM')).toEqual(['19:00']);
     expect(parseTimes('10:00AM – 11:00AM')).toEqual(['10:00', '11:00']);

@@ -29,6 +29,11 @@ def test_rules_turn_away_church_events_and_exact_copies_but_only_flag_doubts():
     assert rs.rule_decision(ev("fall craft fair!", venue="community center"), live)[0] == "duplicate"
     assert rs.rule_decision(ev("Fall Craft Fair", date="2026-10-11"), live) is None
     assert rs.rule_decision(ev("Pumpkin Patch Opening"), live) is None
+    # Only the description sounds religious: flagged for a person, never
+    # auto-rejected. Secular uses of the words pass.
+    assert rs.rule_decision(ev("Community Night", description="An evening of praise and worship."), live)[0] == "flag"
+    assert rs.rule_decision(ev("Creedence Clearwater Revival Tribute"), live) is None
+    assert rs.rule_decision(ev("Blood Drive", venue="Methodist Hospital"), live) is None
 
 
 def test_ai_approval_goes_through_with_only_tidied_fields():
