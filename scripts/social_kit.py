@@ -175,9 +175,9 @@ def captions(groups, start, end, kind, handles=None):
     # Same call to action as the ad, the slides and the site: the newsletter.
     see_all = f"👉 See all {total}: " if total else "👉 Full list: "
     fb = "\n".join([head, ""] + body + [f"{see_all}{SITE}{path}",
-                                          f"📬 Get the list free every Monday: {SITE}/subscribe", "", HASHTAGS])
+                                          f"Get the list free every Monday: {SITE}/subscribe", "", HASHTAGS])
     ig = "\n".join([head, ""] + body + [f"{see_all}link in bio (thevic361.com)",
-                                          "📬 Get the list free every Monday: link in bio", ""]
+                                          "Get the list free every Monday: link in bio", ""]
                     + ([" ".join(tags), ""] if tags else []) + [HASHTAGS])
     return {"facebook": fb.strip() + "\n", "instagram": ig.strip() + "\n"}
 

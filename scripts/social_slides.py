@@ -177,7 +177,7 @@ def cta_html(total=0):
   {_brand(color="#fff")}
   <div class="disp" style="font-size:104px;margin-top:64px">{esc(see_all)}<br>{"are" if total else "is"} on <span style="color:{SUN}">the site.</span></div>
   <div class="pill" style="margin-top:44px;font-size:56px;background:{SUN};color:{INK};box-shadow:10px 10px 0 {INK}">thevic361.com</div>
-  <div style="font-size:44px;font-weight:800;margin-top:60px;opacity:.95">📬 Get the list <span style="color:{SUN}">free</span> every Monday:<br>thevic361.com/subscribe</div>
+  <div style="font-size:44px;font-weight:800;margin-top:60px;opacity:.95">Get the list <span style="color:{SUN}">free</span> every Monday:<br>thevic361.com/subscribe</div>
   <div style="font-size:32px;font-weight:800;margin-top:40px;opacity:.85">Hosting something? Submit it free at thevic361.com/submit</div>
 </div>
 </section>"""
