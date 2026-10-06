@@ -57,6 +57,20 @@ const EVENTS_FILE = path.join(DOCS_DIR, 'events.json');
 const VENUES_FILE = path.join(REPO_ROOT, 'venues.json');
 const WEEKLY_COLLECT_WORKFLOW = 'weekly-collect.yml';
 
+const BASE_CSP = "frame-ancestors 'self'; object-src 'none'; base-uri 'self'";
+
+// The admin page keeps its session token in localStorage, so it gets a
+// script CSP: only its own files and its inline theme snippet (allowed by
+// hash, computed here so editing the snippet can't silently break it) may
+// run. It loads no analytics, pixel or Turnstile.
+async function adminPageCsp() {
+  let html = '';
+  try { html = await fsp.readFile(path.join(DOCS_DIR, 'admin.html'), 'utf8'); } catch (_) { /* no admin page */ }
+  const hashes = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map(m => ` 'sha256-${crypto.createHash('sha256').update(m[1]).digest('base64')}'`);
+  return `script-src 'self'${hashes.join('')}; ${BASE_CSP}`;
+}
+
 async function readJsonFile(file) {
   const raw = await fsp.readFile(file, 'utf8');
   return JSON.parse(raw);
@@ -105,17 +119,23 @@ export async function createApp(opts = {}) {
     next();
   });
 
-  // Baseline security headers. No full script CSP yet: the site relies on
-  // inline scripts plus Google Analytics and Turnstile, so the CSP
-  // only locks down framing, plugins and <base> hijacking for now.
+  // Baseline security headers. Public pages get no script CSP: they rely on
+  // inline scripts (GA bootstrap, JSON-LD, page scripts in seo.js and
+  // sponsors.js), inline onload/onclick handlers, Google Analytics, the Meta
+  // Pixel and Turnstile, so a useful script-src needs per-response nonces
+  // and no inline handlers first. Their CSP only locks down framing,
+  // plugins and <base> hijacking; the admin page gets script-src too.
+  app.disable('x-powered-by');
+  const adminCsp = await adminPageCsp();
   app.use((req, res, next) => {
+    const isAdminPage = req.path === '/admin.html' || req.path === '/admin';
     res.set({
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'X-Frame-Options': 'SAMEORIGIN',
       'Strict-Transport-Security': 'max-age=31536000',
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-      'Content-Security-Policy': "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+      'Content-Security-Policy': isAdminPage ? adminCsp : BASE_CSP
     });
     next();
   });
@@ -159,7 +179,7 @@ export async function createApp(opts = {}) {
 
   // Note crawler hits on public pages for the admin Traffic tab. Registered
   // before every route so it sees the server-rendered pages too.
-  if (typeof store.recordTraffic === 'function') app.use(crawlerMiddleware(store));
+  if (typeof store.recordTraffic === 'function') app.use(crawlerMiddleware(store, () => (opts.now || (() => new Date()))()));
 
   const submitLimiter = opts.submitLimiter || createRateLimiter({
     windowMs: 60 * 1000, max: 5
@@ -1131,12 +1151,23 @@ export async function createApp(opts = {}) {
     return r.ok;
   }
 
+  // Cron secrets, one per endpoint: NEWSLETTER_CRON_SECRET (newsletter
+  // send), EVENT_CHECK_SECRET (hide events), SUBMISSION_REVIEW_SECRET
+  // (approve and publish submissions). The fallbacks below (and the same
+  // chain in event-check.yml / submission-review.yml) keep setups made
+  // before the later two existed working, but then one leaked value grants
+  // all three, so the setup checklist flags a shared secret.
+  const eventCheckSecret = opts.eventCheckSecret ??
+    (process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || '');
+  const submissionReviewSecret = opts.submissionReviewSecret ??
+    (process.env.SUBMISSION_REVIEW_SECRET || process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || '');
+
   // ─── Newsletter (Resend; see server/newsletter.js) ───
   // Event check (server/eventcheck.js): hide what the weekly check is sure
   // about, restore from admin Home.
   registerEventCheck(app, {
     store, requireAdmin, nowFn: () => (opts.now || (() => new Date()))(),
-    secret: opts.eventCheckSecret ?? (process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || ''),
+    secret: eventCheckSecret,
     loadVisibleKeyed: async () => visibleFrom((await store.getPublished()) || {})
   });
 
@@ -1360,7 +1391,7 @@ export async function createApp(opts = {}) {
   registerSubmissionReview(app, {
     store, slack, siteUrl,
     nowFn: () => (opts.now || (() => new Date()))(),
-    secret: opts.submissionReviewSecret ?? (process.env.SUBMISSION_REVIEW_SECRET || process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || ''),
+    secret: submissionReviewSecret,
     autoApprove: opts.submissionAutoApprove ?? process.env.SUBMISSION_AUTOAPPROVE !== '0',
     publish: () => autoPublish.run({ force: true, quiet: true, submissionsOnly: true }),
     onApproved: notifyLive
@@ -1384,6 +1415,7 @@ export async function createApp(opts = {}) {
   app.get('/api/admin/setup', requireAdmin, async (req, res) => {
     const env = process.env;
     const ghSecrets = `https://github.com/${github.owner}/${github.repo}/settings/secrets/actions`;
+    const cronSecrets = [newsletter.cronSecret, eventCheckSecret, submissionReviewSecret].filter(Boolean);
     const checks = [
       { key: 'database', label: 'Database', ok: storeBundle.kind === 'postgres', level: 'required',
         fix: 'Add a Postgres database in Railway so events and subscribers survive deploys.' },
@@ -1401,8 +1433,12 @@ export async function createApp(opts = {}) {
         fix: 'In Stripe: create a restricted key (Checkout Sessions, Products and Prices: write) and a webhook to ' + siteUrl +
           '/api/stripe/webhook on API version 2026-09-30.endive. Put them in Railway as STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.' },
       { key: 'event_check', label: 'Event check hides church events, non-events and duplicates',
-        ok: Boolean(opts.eventCheckSecret ?? (env.EVENT_CHECK_SECRET || env.NEWSLETTER_CRON_SECRET)), level: 'recommended', link: ghSecrets,
+        ok: Boolean(eventCheckSecret), level: 'recommended', link: ghSecrets,
         fix: 'Set EVENT_CHECK_SECRET in Railway and as a GitHub secret (any long random string, the same in both). Until then the check only reports to Slack.' },
+      { key: 'submission_review', label: 'AI review publishes good free submissions', ok: Boolean(submissionReviewSecret), level: 'recommended', link: ghSecrets,
+        fix: 'Set SUBMISSION_REVIEW_SECRET in Railway and as a GitHub secret (any long random string, the same in both). Until then submissions wait for you in the Submissions tab.' },
+      { key: 'separate_secrets', label: 'Each automation has its own secret', ok: new Set(cronSecrets).size === cronSecrets.length, level: 'optional', link: ghSecrets,
+        fix: 'NEWSLETTER_CRON_SECRET, EVENT_CHECK_SECRET and SUBMISSION_REVIEW_SECRET share a value (or one is unset and borrows another), so one leak could send the newsletter, hide events and publish submissions. Give each its own long random string, the same in Railway and GitHub.' },
       { key: 'pull_now', label: '"Pull now" button (GitHub token)', ok: github.isConfigured(), level: 'optional',
         fix: 'Set GITHUB_TOKEN in Railway (fine-grained, Actions: write on this repo).' },
       { key: 'spam', label: 'Spam protection on forms (Turnstile)', ok: Boolean(turnstileSecret && turnstileSiteKey), level: 'optional',

@@ -1,11 +1,11 @@
 # ─── The Vic 361 — Weekly Event Collection ───────────────────────────────────
-# Runs every Sunday evening to populate candidates.json for the admin to
-# screen. Does NOT auto-publish: the live source of truth on Railway is the
-# `published_events` row written by the admin Save & Publish flow, and
-# docs/events.json in this repo is a curated fallback that Save & Publish
-# (via GITHUB_TOKEN) is the only writer of. The weekly run uses
-# --candidates-only so CI never overwrites that fallback with raw scraper
-# output. See README.md "Public Event Submissions" / RAILWAY.md for details.
+# Runs Sunday and Wednesday afternoons to refresh candidates.json. This job
+# publishes nothing itself: its commit redeploys Railway, and on boot the
+# server auto-publishes the candidates into the `published_events` row
+# (server/autopublish.js). docs/events.json in this repo is a curated
+# fallback that admin Save & Publish (via GITHUB_TOKEN) is the only writer
+# of, so the run uses --candidates-only and never stages that file
+# (test_collect_events_safety.py checks both). See AGENTS.md.
 #
 # Schedule note (DST drift): GitHub Actions cron runs in UTC and does NOT
 # observe US daylight-saving transitions. The fixed cron below means the
@@ -30,9 +30,9 @@
 # the weekly cron. See PRs #42/#43 for the prior non-blocking attempts
 # that this PR supersedes.
 #
-# Timeout budget (job-level 30 min, with per-step caps):
+# Timeout budget (job-level 55 min, with per-step caps):
 #   - Apify uses a 240s per-call timeout (OpenAI calls cap at 60s), and the
-#     collector chains several of them; 30 minutes gives room for a couple
+#     collector chains several of them; 55 minutes gives room for a couple
 #     of those to time out without killing the whole run.
 #   - Per-step timeouts cap each phase so a single hung dependency can't
 #     swallow the entire budget — the failed step gets a clean "timed out"
