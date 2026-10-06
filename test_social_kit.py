@@ -185,3 +185,130 @@ def test_captions_with_one_event_use_the_singular():
     assert "👉 Details: https://www.thevic361.com/today" in caps["facebook"]
     assert "👉 Details: link in bio" in caps["instagram"]
     assert "1 events" not in caps["facebook"] + caps["instagram"] and "See all 1" not in caps["facebook"]
+
+
+def test_generic_venue_never_tags_a_named_venue():
+    # Live data: an event "@ Victoria" must not tag @theatrevictoria.
+    handles = {"theatre victoria": "theatrevictoria", "the nave museum": "navemuseum", "aero crafters": "aerocrafters"}
+    d = date(2026, 10, 15)
+    groups = sk.select_events([
+        {"date": "2026-10-15", "name": "Parent Seminar", "venue": "Victoria"},
+        {"date": "2026-10-15", "name": "Downtown Walk", "venue": "Downtown"},
+        {"date": "2026-10-15", "name": "Art Night", "venue": "Nave Museum"},          # whole words, specific
+        {"date": "2026-10-15", "name": "Gala", "venue": "Theatre Victoria, Victoria, TX"},
+        {"date": "2026-10-15", "name": "Crafts", "venue": "Aero"},                     # one word: no fuzzy match
+    ], d, d)
+    assert sk.venue_tags(groups, handles) == ["@navemuseum", "@theatrevictoria"]
+    assert sk.match_venue("victoria", handles) is None
+    assert sk.match_venue("nave", {"the nave museum": "x"}) is None
+    assert sk.match_venue("museum of the coastal bend", {"the coastal bend": "x"}) == "x"
+    assert sk.match_venue("aero crafters", handles) == "aerocrafters"
+
+
+def test_outreach_ignores_generic_venue(tmp_path):
+    import json as _json
+    venues = tmp_path / "venues.json"
+    venues.write_text(_json.dumps([{"name": "Theatre Victoria", "instagram_url": "https://www.instagram.com/theatrevictoria/"}]))
+    d = date(2026, 10, 15)
+    groups = {d: [{"date": "2026-10-15", "name": "Parent Seminar", "venue": "Victoria"}]}
+    assert sk.outreach(groups, str(venues)) == ["• Victoria: Parent Seminar https://www.thevic361.com/"]
+    assert sk.outreach_slack(groups, str(venues)) == ""
+
+
+def test_clean_venue_drops_geocoder_noise():
+    assert sk.clean_venue("3102 Miori Ln., Victoria, TX, United States, Texas 77901") == "3102 Miori Ln."
+    assert sk.clean_venue("Theatre Victoria, Victoria, TX 77901") == "Theatre Victoria"
+    assert sk.clean_venue("402 E North St, TX 77901") == "402 E North St"
+    assert sk.clean_venue("Downtown Victoria / Riverside Park / DeLeon Plaza") == "Downtown Victoria / Riverside Park / DeLeon Plaza"
+    assert sk.clean_venue("Victoria") == "Victoria"
+    assert sk.clean_venue(None) == ""
+    d = date(2026, 10, 9)
+    caps = sk.captions({d: [{"date": "2026-10-09", "name": "Community Connection Party", "time": "4 PM", "free": True,
+                             "venue": "3102 Miori Ln., Victoria, TX, United States, Texas 77901"}]}, d, d, "today")
+    assert "• 4 PM Community Connection Party @ 3102 Miori Ln. (free)" in caps["instagram"]
+    assert "United States" not in caps["facebook"] and "77901" not in caps["facebook"]
+
+
+def test_branded_cover_shows_clean_venue():
+    import social_slides as ss
+    d = date(2026, 10, 9)
+    groups = {d: [{"date": "2026-10-09", "name": "Party", "venue": "3102 Miori Ln., Victoria, TX, United States, Texas 77901"}]}
+    html_ = ss.cover_html(groups, d, d, "today")
+    assert "3102 Miori Ln." in html_ and "United States" not in html_
+
+
+def _busy_week(picks=()):
+    evs = []
+    for day in range(5, 12):
+        for i in range(4):
+            evs.append({"date": f"2026-10-{day:02d}", "time": "7:30 PM",
+                        "name": f"Day {day} event {i} " + "with a really long descriptive name " * 2,
+                        "venue": f"Venue {day}-{i} " + "Downtown Riverside Park DeLeon Plaza Pavilion " * 2,
+                        "featured": (day, i) in picks})
+    return evs
+
+
+def test_instagram_caption_fits_2200_and_keeps_picks():
+    handles = {sk._norm(f"Venue {d}-{i} " + "Downtown Riverside Park DeLeon Plaza Pavilion " * 2): f"venue{d}{i}"
+               for d in range(5, 12) for i in range(4)}
+    start, end = date(2026, 10, 5), date(2026, 10, 11)
+    groups = sk.select_events(_busy_week(picks={(11, 3), (8, 2)}), start, end)
+    caps = sk.captions(groups, start, end, "week", handles)
+    ig = caps["instagram"]
+    assert len(caps["facebook"]) > 2200                        # Facebook keeps the full text
+    assert len(ig) <= sk.IG_MAX_CAPTION
+    assert "…" in ig                                           # long names and venues shortened
+    assert "Day 11 event 3" in ig and "Day 8 event 2" in ig   # Vic's Picks are in it
+    assert "#TheVic361" in ig and "link in bio" in ig
+
+
+def test_instagram_caption_folds_events_but_never_picks(monkeypatch):
+    monkeypatch.setattr(sk, "IG_MAX_CAPTION", 1000)
+    start, end = date(2026, 10, 5), date(2026, 10, 11)
+    groups = sk.select_events(_busy_week(picks={(11, 3), (8, 2)}), start, end)
+    ig = sk.captions(groups, start, end, "week")["instagram"]
+    assert len(ig) <= 1000
+    assert "+ more at thevic361.com" in ig
+    assert "Day 11 event 3" in ig and "Day 8 event 2" in ig
+    assert "Day 10 event 1" not in ig                          # later plain events fold first
+    assert "#TheVic361" in ig
+
+
+def test_short_caption_is_untouched():
+    start, end = date(2026, 10, 9), date(2026, 10, 11)
+    caps = sk.captions(sk.select_events(EVENTS, start, end), start, end, "weekend")
+    assert "+ more at thevic361.com" not in caps["instagram"]
+
+
+def test_every_vics_pick_is_in_the_caption_and_leads_today():
+    d = date(2026, 10, 8)  # a Thursday
+    evs = [{"date": "2026-10-08", "name": f"Free thing {i}", "time": f"{i + 1} PM"} for i in range(4)]
+    evs += [{"date": "2026-10-08", "name": f"Pick {i}", "time": "9 PM", "featured": True} for i in range(3)]
+    caps = sk.captions(sk.select_events(evs, d, d), d, d, "today")
+    lines = caps["facebook"].splitlines()
+    assert lines[2:5] == ["⭐ 9 PM Pick 0", "⭐ 9 PM Pick 1", "⭐ 9 PM Pick 2"]  # all three, first
+    assert "+ 4 more" in caps["facebook"]
+
+
+def test_manifest_has_jpeg_twins_and_featured_count(tmp_path):
+    import json as _json
+    import pytest
+    pytest.importorskip("PIL")
+    from PIL import Image
+    ev = tmp_path / "events.json"
+    ev.write_text(_json.dumps({"events": [
+        {"date": "2026-10-08", "name": "Thursday Pick", "time": "8 PM", "venue": "Aero Crafters", "featured": True},
+        {"date": "2026-10-09", "name": "Show", "time": "8 PM", "venue": "Aero Crafters"}]}))
+    out = tmp_path / "out"
+    sk.main(["--events-file", str(ev), "--today", "2026-10-08", "--out", str(out)])
+    m = _json.loads((out / "kit.json").read_text())
+    today = m["kits"]["today"]
+    assert today["featured"] == 1 and m["kits"]["weekend"]["featured"] == 0
+    assert today["slides_jpg"] == [n[:-4] + ".jpg" for n in today["slides"]]
+    for png, jpg in zip(today["slides"], today["slides_jpg"]):
+        with Image.open(out / jpg) as j, Image.open(out / png) as p:
+            assert j.format == "JPEG" and j.size == p.size
+    # A rebuild clears the old twins with the old PNGs.
+    (out / "today-9.jpg").write_bytes(b"x")
+    sk.main(["--events-file", str(ev), "--today", "2026-10-08", "--out", str(out), "--kinds", "today"])
+    assert not (out / "today-9.jpg").exists()
