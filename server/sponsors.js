@@ -196,6 +196,11 @@ export const STRIPE_API_VERSION = '2026-09-30.endive';
 // Tags our Checkout Sessions in the Dashboard (Stripe asks for an 8-letter suffix).
 export const INTEGRATION_ID = 'vic361_sponsor_checkout_qvbkmxtr';
 
+// Stripe's refusal of a catalog price that was archived ("The price
+// specified is inactive"), or whose product was ("... is not active"), or
+// that's gone.
+const INACTIVE_PRICE = /inactive|not active|archived|no such price/i;
+
 export function createStripe(secretKey, fetchImpl = globalThis.fetch) {
   async function call(method, path, params, idempotencyKey) {
     const qs = method === 'GET' && params ? `?${formEncode(params)}` : '';
@@ -223,8 +228,9 @@ export function createStripe(secretKey, fetchImpl = globalThis.fetch) {
   // first time it's needed, so the Dashboard catalog and reports show
   // "Weekly sponsor" etc. instead of a throwaway product per checkout.
   const priceCache = new Map();
+  const lookupKeyOf = pkg => `vic361_${pkg.key}_${pkg.amount}${pkg.interval ? `_${pkg.interval}` : ''}`;
   async function ensurePrice(pkg) {
-    const lookupKey = `vic361_${pkg.key}_${pkg.amount}${pkg.interval ? `_${pkg.interval}` : ''}`;
+    const lookupKey = lookupKeyOf(pkg);
     if (priceCache.has(lookupKey)) return priceCache.get(lookupKey);
     const found = await call('GET', '/prices', { 'lookup_keys[]': lookupKey, active: 'true', limit: 1 });
     let id = found && Array.isArray(found.data) && found.data[0] && found.data[0].id;
@@ -244,6 +250,9 @@ export function createStripe(secretKey, fetchImpl = globalThis.fetch) {
 
   return {
     ensurePrice,
+    // The cached id stopped working (the price or its product was archived
+    // in the Dashboard): the next ensurePrice looks it up again.
+    forgetPrice(pkg) { priceCache.delete(lookupKeyOf(pkg)); },
     async createCheckoutSession(params, idempotencyKey) {
       const body = await call('POST', '/checkout/sessions', params, idempotencyKey);
       if (typeof body.url !== 'string' || typeof body.id !== 'string') throw new Error('Stripe returned no checkout URL');
@@ -1159,14 +1168,19 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
   // live copy's date wins over the one bought.
   async function pickPlacement(order, list) {
     const p = await pins(list);
+    // `complete` is false when either read failed: "not found" then means
+    // "couldn't look", and the report run must try again rather than record
+    // the pick as never having gone live (a one-off and a refund alert).
+    let complete = true;
     let events = [];
-    try { events = ((getPayload && (await getPayload())) || {}).events || []; } catch { /* archive only */ }
+    try { events = ((getPayload && (await getPayload())) || {}).events || []; } catch { complete = false; }
     let archived = [];
-    try { archived = typeof store.listArchivedEvents === 'function' ? await store.listArchivedEvents() : []; } catch { /* live only */ }
+    try { archived = typeof store.listArchivedEvents === 'function' ? await store.listArchivedEvents() : []; } catch { complete = false; }
     const hits = [...events, ...archived].filter(ev => ev && ev.page && pickMatches(order, ev, p));
     const dates = [order.event.date, ...hits.map(ev => ev.date)].filter(Boolean).sort();
     return {
       found: hits.length > 0,
+      complete,
       pages: [...new Set(hits.map(ev => ev.page))],
       urls: [...new Set([order.event.url, ...hits.map(ev => ev.url)].filter(Boolean))],
       lastDate: dates[dates.length - 1]
@@ -1235,6 +1249,13 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       if (addDays(place.lastDate, 1) > today) continue; // re-dated later: not over yet
       if (addDays(place.lastDate, 1 + REPORT_CATCHUP_DAYS) < today) continue;
       const name = order.event.name || 'their event';
+      if (!place.found && !place.complete) {
+        // A database blip at this run, not proof it never ran: the next
+        // run (15 minutes) looks again.
+        console.warn(`[sponsors] pick report ${order.id}: event lookup failed, retrying next run`);
+        out.failed++;
+        continue;
+      }
       if (!place.found) {
         await recordReport(order, { report_skipped: nowIso() });
         out.skipped++;
@@ -1759,7 +1780,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         const order = booked.order;
         // A Vic’s Pick's price depends on its day (weekday vs Fri–Sun).
         const priced = pkg.key === 'featured' ? pickPackage(order.event.date) : pkg;
-        let lineItem = {
+        const inlineItem = {
           quantity: 1,
           price_data: {
             currency: 'usd', unit_amount: priced.amount,
@@ -1767,6 +1788,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
             recurring: pkg.interval ? { interval: pkg.interval } : undefined
           }
         };
+        let lineItem = inlineItem;
         // Catalog price when we can get one; inline price_data otherwise, so
         // a catalog hiccup never blocks a sale.
         if (typeof stripe.ensurePrice === 'function') {
@@ -1776,34 +1798,79 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
             console.warn('[sponsors] catalog price unavailable, using inline price:', err.message);
           }
         }
+        const sessionParams = item => ({
+          mode: pkg.interval ? 'subscription' : 'payment',
+          // No payment_method_types: Stripe shows the methods enabled in
+          // the Dashboard. Slower methods (bank debits) keep the week held
+          // as "processing" until they settle; see the webhook. Within a
+          // few days of the date, cards only (`instantOnly`): a bank debit
+          // could settle after it.
+          ...(!pkg.interval && instantOnly(order, nowFn()) ? { payment_method_types: ['card'] } : {}),
+          integration_identifier: INTEGRATION_ID,
+          customer_email: order.email,
+          client_reference_id: order.id,
+          line_items: [item],
+          metadata: { order_id: order.id, package: pkg.key },
+          subscription_data: pkg.interval ? { metadata: { order_id: order.id } } : undefined,
+          expires_at: Math.floor(Date.now() / 1000) + CHECKOUT_TTL_S,
+          success_url: `${siteUrl}/advertise/thanks?order=${order.id}`,
+          cancel_url: `${siteUrl}/advertise/checkout?package=${pkg.key}&cancelled=${order.id}`
+        });
         let session;
         try {
-          session = await stripe.createCheckoutSession({
-            mode: pkg.interval ? 'subscription' : 'payment',
-            // No payment_method_types: Stripe shows the methods enabled in
-            // the Dashboard. Slower methods (bank debits) keep the week held
-            // as "processing" until they settle; see the webhook. Within a
-            // few days of the date, cards only (`instantOnly`): a bank debit
-            // could settle after it.
-            ...(!pkg.interval && instantOnly(order, nowFn()) ? { payment_method_types: ['card'] } : {}),
-            integration_identifier: INTEGRATION_ID,
-            customer_email: order.email,
-            client_reference_id: order.id,
-            line_items: [lineItem],
-            metadata: { order_id: order.id, package: pkg.key },
-            subscription_data: pkg.interval ? { metadata: { order_id: order.id } } : undefined,
-            expires_at: Math.floor(Date.now() / 1000) + CHECKOUT_TTL_S,
-            success_url: `${siteUrl}/advertise/thanks?order=${order.id}`,
-            cancel_url: `${siteUrl}/advertise/checkout?package=${pkg.key}&cancelled=${order.id}`
-          }, `vic361-order-${order.id}`);
+          try {
+            session = await stripe.createCheckoutSession(sessionParams(lineItem), `vic361-order-${order.id}`);
+          } catch (err) {
+            // The cached catalog price was archived (or its product) in the
+            // Dashboard: every checkout failed until a restart. Forget it,
+            // look it up again once, and use inline pricing if that gives
+            // the same dead id. A new idempotency key, since the params
+            // differ from the refused request's.
+            if (!lineItem.price || !INACTIVE_PRICE.test(String(err && err.message))) throw err;
+            console.warn('[sponsors] catalog price refused, looking it up again:', err.message);
+            if (typeof stripe.forgetPrice === 'function') stripe.forgetPrice(priced);
+            let retry = { quantity: 1, price_data: inlineItem.price_data };
+            try {
+              const again = await stripe.ensurePrice(priced);
+              if (again && again !== lineItem.price) retry = { quantity: 1, price: again };
+            } catch (e) { console.warn('[sponsors] catalog price lookup failed, using inline price:', e.message); }
+            session = await stripe.createCheckoutSession(sessionParams(retry), `vic361-order-${order.id}-retry`);
+          }
         } catch (err) {
           console.error('[sponsors] checkout session failed:', err.message);
           if (slack) slack.alert('stripe-checkout', 'Sponsor checkout is failing', `Stripe: ${err.message}`);
-          await save({ ...order, status: 'failed' }); // release the hold
+          // Release the hold, from a fresh read under the booking lock: a
+          // second submit may have cancelled it meanwhile.
+          await withBookingLock(async () => {
+            let cur = order;
+            try { cur = (await freshOrders()).find(o => o.id === order.id) || order; } catch (_) { /* save what we have */ }
+            if (cur.status === 'pending') await save({ ...cur, status: 'failed' });
+          });
           await dropLogo(order);
           return fail({ _form: 'The payment page is unavailable right now. Please try again in a few minutes.' }, 502);
         }
-        await save({ ...order, session_id: session.id });
+        // Saved from a fresh read under the booking lock: a second submit
+        // from another tab during the Stripe call may have cancelled this
+        // hold (it had no session yet to expire). Spreading the copy read
+        // before the call put it back to pending with an open session, so
+        // both holds could be paid. Then this session is expired instead.
+        const attached = await withBookingLock(async () => {
+          let cur;
+          try { cur = (await freshOrders()).find(o => o.id === order.id); } catch (err) {
+            console.warn('[sponsors] order re-read failed after checkout:', err.message);
+            return 'unread';
+          }
+          if (!cur || cur.status !== 'pending') return 'replaced';
+          await save({ ...cur, session_id: session.id });
+          return 'ok';
+        });
+        if (attached !== 'ok') {
+          // The hold without a session lapses like any unpaid one.
+          await expireSession({ session_id: session.id });
+          return attached === 'unread'
+            ? fail({ _form: 'We couldn’t check what’s still available just now. Please try again in a minute.' }, 503)
+            : fail({ _form: 'This checkout was replaced by a newer one (another tab?). Please check your details and try again.' }, 409);
+        }
         res.redirect(303, session.url);
       } catch (err) { next(err); }
     });

@@ -44,6 +44,7 @@ import json
 import os
 import re
 import sys
+import time
 from collections import Counter
 from difflib import SequenceMatcher
 from datetime import datetime, timedelta, timezone
@@ -1166,6 +1167,9 @@ def fetch_library_events(days_ahead=7):
 
 # ─── SOURCE: VTX ART WALK ────────────────────────────────────────────────────
 
+VTX_RETRY_PAUSE = 5
+
+
 def fetch_vtx_artwalk(days_ahead=8):
     """Scrape next event date from vtxartwalk.com."""
     events = []
@@ -1174,9 +1178,25 @@ def fetch_vtx_artwalk(days_ahead=8):
 
     try:
         url = "https://vtxartwalk.com/"
-        # Cloudflare-fronted — needs Safari UA fallback
-        resp = http_get(url)
-        text = resp.text
+        # SiteGround answers the standard UA with a 202 "sgcaptcha" redirect
+        # page (not a 403, so http_get's fallback never fired); the Safari UA
+        # gets the real page (checked 2026-10-06).
+        resp = http_get(url, headers=HEADERS_SAFARI)
+        if "sgcaptcha" in resp.text:
+            # It also challenges now and then by request rate; a second try a
+            # few seconds later usually gets through.
+            time.sleep(VTX_RETRY_PAUSE)
+            resp = http_get(url, headers=HEADERS_SAFARI)
+        if "sgcaptcha" in resp.text or "Next Art Walk" not in resp.text:
+            # expect_events=False keeps a quiet 0 between walks, so a blocked
+            # or redesigned page has to say so itself.
+            why = "captcha page" if "sgcaptcha" in resp.text else "no 'Next Art Walk' heading"
+            _warn(f"[VTX Art Walk] {why}", status=resp.status_code)
+            _mark_partial("vtx_artwalk", why)
+            return events
+        # The page writes "Next Art Walk Event <br>March 14th, 2026<br>4-8pm":
+        # match the text, not the HTML, or the <br> breaks the pattern.
+        text = BeautifulSoup(resp.text, "html.parser").get_text(" ")
 
         # Look for "Next Art Walk Event Month D, YYYY" pattern
         match = re.search(
@@ -1216,52 +1236,55 @@ def fetch_vtx_artwalk(days_ahead=8):
 
 # ─── SOURCE: MOONSHINE DRINKERY ─────────────────────────────────────────────
 
-def fetch_moonshine_events(days_ahead=8):
-    """Scrape upcoming events from Moonshine Drinkery homepage."""
+def parse_moonshine_events(text, start, end):
+    """(events in [start, end], dated lines on the page) from the homepage
+    text. Lines look like "March 21 2026: Live Band Karaoke"."""
+    matches = re.findall(
+        r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})\s+(\d{4})\s*[:\-]\s*(.+)',
+        text or ""
+    )
     events = []
-    today = _WINDOW_START
-    end_date = _WINDOW_END
+    for month, day, year, name in matches:
+        name = name.strip().split('\n')[0].strip()
+        if not name or len(name) < 3:
+            continue
+        try:
+            ev_date = datetime.strptime(f"{month} {day} {year}", "%B %d %Y").date()
+        except ValueError:
+            continue
+        if ev_date < start or ev_date > end:
+            continue
+        events.append({
+            "date": ev_date.strftime("%Y-%m-%d"),
+            "name": name,
+            "time": "",
+            "venue": "Moonshine Drinkery",
+            "address": "103 W. Santa Rosa St.",
+            "description": "",
+            "icons": classify_icons(name, "", "Moonshine Drinkery"),
+            "free": guess_free(name, "", "Moonshine Drinkery"),
+            "url": "https://www.moonshinedrinkery.com",
+        })
+    return events, len(matches)
 
-    try:
-        url = "https://www.moonshinedrinkery.com"
-        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        text = soup.get_text()
 
-        # Pattern: "March 21 2026: Live Band Karaoke"
-        matches = re.findall(
-            r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})\s+(\d{4})\s*[:\-]\s*(.+)',
-            text
-        )
-        for month, day, year, name in matches:
-            name = name.strip().rstrip('\n').split('\n')[0].strip()
-            if not name or len(name) < 3:
-                continue
-            try:
-                ev_date = datetime.strptime(f"{month} {day} {year}", "%B %d %Y").date()
-                if ev_date < today or ev_date > end_date:
-                    continue
-            except ValueError:
-                continue
+def fetch_moonshine_events(days_ahead=8):
+    """Upcoming events from the Moonshine Drinkery homepage.
 
-            events.append({
-                "date": ev_date.strftime("%Y-%m-%d"),
-                "name": name,
-                "time": "",
-                "venue": "Moonshine Drinkery",
-                "address": "103 W. Santa Rosa St.",
-                "description": "",
-                "icons": classify_icons(name, "", "Moonshine Drinkery"),
-                "free": guess_free(name, "", "Moonshine Drinkery"),
-                "url": url,
-            })
-
-        print(f"  [Moonshine] {len(events)} events")
-
-    except Exception as e:
-        print(f"  [Moonshine] Error: {e}")
-
+    Runs with expect_events=False: the site often lists nothing ahead (on
+    2026-10-06 its newest date was May 9), and a "returned 0" warning every
+    collect buried real breakage in the alerts channel. It warns itself only
+    when the page has no dated lines at all, which means the layout changed."""
+    resp = requests.get("https://www.moonshinedrinkery.com", headers=HEADERS, timeout=TIMEOUT)
+    resp.raise_for_status()
+    text = BeautifulSoup(resp.text, "html.parser").get_text()
+    events, dated = parse_moonshine_events(text, _WINDOW_START, _WINDOW_END)
+    if not dated:
+        _warn("[Moonshine] no dated event lines on the page (layout change?)")
+        _mark_partial("moonshine", "no dated lines on the page")
+    elif not events:
+        _note_source("moonshine", f"site lists {dated} dates, none in the window")
+    print(f"  [Moonshine] {len(events)} events")
     return events
 
 
@@ -1309,16 +1332,27 @@ def _gemini_prompt(category, start, end):
 
 
 def _gemini_json_array(text):
-    """Pull the first JSON array out of a reply (it may be fenced or wrapped)."""
+    """The event objects in a reply's JSON array (it may be fenced or wrapped).
+
+    The whole reply first; failing that, the first "[" where a complete JSON
+    array of objects (or an empty one) starts. Slicing first "[" to last "]"
+    lost the whole answer when prose after it had a bracket ("I verified
+    each date [1]."), and a citation before it ("[1]") isn't an answer."""
     t = (text or "").strip()
     t = re.sub(r"^```(?:json)?\s*|\s*```$", "", t)
-    start, end = t.find("["), t.rfind("]")
-    if start < 0 or end <= start:
-        return []
     try:
-        data = json.loads(t[start:end + 1])
+        data = json.loads(t)
     except ValueError:
-        return []
+        data = None
+        decoder = json.JSONDecoder()
+        for m in re.finditer(r"\[", t):
+            try:
+                found, _ = decoder.raw_decode(t, m.start())
+            except ValueError:
+                continue
+            if isinstance(found, list) and (not found or any(isinstance(x, dict) for x in found)):
+                data = found
+                break
     return [x for x in data if isinstance(x, dict)] if isinstance(data, list) else []
 
 
@@ -2598,6 +2632,16 @@ def is_same_event(a, b):
     ra, rb = set(ta) - drop, set(tb) - drop
     if va and vb and _same_place(a, b) and ra and ra == rb:
         return True
+    # A post's short name and the listing's "X Night" form ("Bingo" vs
+    # "Bingo Night", "Trivia" vs "Trivia Tuesday") at one place and the same
+    # start minute. The site's own sameEvent misses names under six letters,
+    # and post events are never retired, so both would stay up. Same start
+    # required: a bar can run an early and a late bingo the same day.
+    na, nb = ra - _NIGHT_TOKENS, rb - _NIGHT_TOKENS
+    if na and na == nb and _same_spot(a, b):
+        sa_min, sb_min = _start_minutes(a.get("time")), _start_minutes(b.get("time"))
+        if sa_min is not None and sa_min == sb_min:
+            return True
     # ...or one is the other plus an organiser or brand prefix ("MOWSTX
     # Mahjong for Meals" vs "Mahjong for Meals- Victoria, TX", "The Nave
     # Museum: 'i want to talk about you'" vs "I want to talk about you - the
@@ -2684,6 +2728,7 @@ def _same_spot(a, b):
     return bool(ka) and ka == kb
 
 
+_NIGHT_TOKENS = {"night", "nite", "nights"}
 _WEEKDAY_TOKENS = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
                    "mondays", "tuesdays", "wednesdays", "thursdays", "fridays", "saturdays", "sundays"}
 
@@ -2864,14 +2909,15 @@ _PUBLIC_EVENT_RE = re.compile(r"\b(concert|choir|festival|fest|fair|fish fry|car
 # Bible study, revivals, gospel/praise music. Checked against the NAME only:
 # these words are common in secular text ("Creedence Clearwater Revival
 # Tribute", "Critical Mass Bike Ride", "Rosary Lane Car Show", "pray for
-# good weather!"). Church-hosted events are caught separately below.
+# good weather!", "The Lord of the Rings Trivia", the band "Evangeline").
+# Church-hosted events are caught separately below.
 _STREET_AFTER = r"(?!\s+(?:st|street|ave|avenue|rd|road|dr|drive|ln|lane|blvd|way|ct|court)\b)"
 _RELIGIOUS_RE = re.compile(
     r"\b(worship|repentance|(?<!clearwater )revival(?!\s+(?:market|tribute|band|fest|festival|sale|show|tour|concert|co\b|company))"
     r"|praise (?:and|&) worship|praise (?:night|team|service|concert)"
     r"|gospel|interfaith|prayer|pray(?:ing)?|bible|scripture|sermon|ministr(?:y|ies)|vacation bible school|vbs"
-    r"|youth group|seeking the lord|the lord|jesus|christ\b(?!\s*kindl)|holy (?:spirit|week|hour|communion)"
-    r"|church service|spiritual reflection|evangel\w*|baptism|confirmation class"
+    r"|youth group|seeking the lord|the lord(?!\s+of\s+the\b)|jesus|christ\b(?!\s*kindl)|holy (?:spirit|week|hour|communion)"
+    r"|church service|spiritual reflection|evangeli(?:sm|st|stic|cal|ze|zing|zation)\w*|baptism|confirmation class"
     r"|(?<!critical )mass(?!\s+(?:ride|transit|media|appeal|production))|misa|novena|rosary" + _STREET_AFTER +
     r"|adoration|vespers|catechism|rcia)\b", re.IGNORECASE)
 # In a description only unambiguous words and phrases count: "Hope Revival plays country
@@ -3550,89 +3596,71 @@ def fetch_theatre_victoria_events(days_ahead=7):
 
 # ─── SOURCE: VICTORIA GENERALS ────────────────────────────────────────────────
 
-def fetch_generals_events(days_ahead=7):
-    """Scrape home game schedule from Victoria Generals website."""
-    events = []
-    today = _WINDOW_START
-    end_date = _WINDOW_END
+GENERALS_URL = "https://victoriagenerals.com/game-schedule/"
 
+
+def parse_generals_schedule(html_text, start, end):
+    """Home games in [start, end] from the Generals schedule page.
+
+    The page draws its calendar in the browser (FullCalendar); the games sit
+    in an inline `let events = [...]` array, one {"title": opponent,
+    "start": "2026-06-03T19:05", "time": "19:05", "game_type": "home"|"away"}
+    per game (2026-10-06). Returns None when that array is missing, so the
+    caller can tell a changed page from an off-season one."""
+    m = re.search(r"\blet\s+events\s*=\s*(?=\[)", html_text or "")
+    if not m:
+        return None
     try:
-        # Schedule moved from /schedule/games/ → /game-schedule/ in 2026.
-        url = "https://victoriagenerals.com/game-schedule/"
-        resp = http_get(url)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        page_text = soup.get_text(" ", strip=True)
+        games, _ = json.JSONDecoder().raw_decode(html_text[m.end():])
+    except ValueError:
+        return None
+    if not isinstance(games, list):
+        return None
+    events = []
+    for g in games:
+        if not isinstance(g, dict) or g.get("game_type") != "home":
+            continue
+        opponent = _clean_text(g.get("title"))
+        if not opponent:
+            continue  # a stray blank entry (one is dated 2006)
+        try:
+            when = datetime.strptime(str(g.get("start") or "")[:16], "%Y-%m-%dT%H:%M")
+        except ValueError:
+            continue
+        if not (start <= when.date() <= end):
+            continue
+        events.append({
+            "date": when.strftime("%Y-%m-%d"),
+            "name": f"Victoria Generals Baseball vs {opponent}",
+            "time": when.strftime("%-I:%M %p"),
+            "venue": "Riverside Stadium",
+            "address": "405 Memorial Dr., Victoria, TX 77901",
+            "description": "Summer collegiate baseball. Family-friendly, affordable tickets. Theme nights and giveaways.",
+            "icons": classify_icons("baseball game family", "", "Riverside Stadium"),
+            "free": False,
+            "url": "https://victoriagenerals.com",
+        })
+    return events
 
-        # Look for date patterns + home game indicator
-        # Schedule page uses patterns like "June 3" with team names
-        month_pattern = re.compile(
-            r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})'
-        )
-        year = today.year
 
-        lines = soup.get_text("\n").split("\n")
-        lines = [l.strip() for l in lines if l.strip()]
-
-        i = 0
-        while i < len(lines):
-            line = lines[i]
-            m = month_pattern.search(line)
-            if m:
-                month, day = m.group(1), m.group(2)
-                try:
-                    dt = datetime.strptime(f"{month} {day} {year}", "%B %d %Y").date()
-                    if dt < today:
-                        dt = datetime.strptime(f"{month} {day} {year+1}", "%B %d %Y").date()
-
-                    if today <= dt <= end_date:
-                        # Check if it's a home game (no "@" before team name)
-                        context = " ".join(lines[max(0,i-1):i+3])
-                        is_home = "@ " not in context[:20] and "@\n" not in context[:20]
-                        # Extract opponent
-                        opponent = ""
-                        for l in lines[i:i+3]:
-                            if any(team in l for team in ["Bombers","Cane Cutters","Rougarou","Ducks","Generals","Oilers","Bats","Lizards"]):
-                                opponent = l.strip()
-                                break
-                        # Time
-                        time_m = re.search(r'(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))', context)
-                        time_str = time_m.group(1) if time_m else "7:05 PM"
-
-                        if is_home or not opponent:
-                            events.append({
-                                "date": dt.strftime("%Y-%m-%d"),
-                                "name": f"Victoria Generals Baseball" + (f" vs {opponent}" if opponent else " — Home Game"),
-                                "time": time_str,
-                                "venue": "Riverside Stadium",
-                                "address": "1307 E. Rio Grande St, Victoria, TX",
-                                "description": "Summer collegiate baseball. Family-friendly, affordable tickets. Theme nights and giveaways.",
-                                "icons": classify_icons("baseball game family", "", "Riverside Stadium"),
-                                "free": False,
-                                "url": "https://victoriagenerals.com",
-                            })
-                except ValueError:
-                    pass
-            i += 1
-
-        # Deduplicate
-        seen = {}
-        for ev in events:
-            k = (ev["date"], ev["name"])
-            if k not in seen:
-                seen[k] = ev
-        events = list(seen.values())
-        print(f"  [Victoria Generals] {len(events)} home games")
-
-    except Exception as e:
-        print(f"  [Victoria Generals] Error: {e}")
-
+def fetch_generals_events(days_ahead=7):
+    """Home games from the Victoria Generals schedule page. An empty window
+    is normal off-season (Sept-May); a page without the schedule array warns."""
+    resp = http_get(GENERALS_URL)
+    events = parse_generals_schedule(resp.text, _WINDOW_START, _WINDOW_END)
+    if events is None:
+        _warn("[Victoria Generals] schedule data not found on the page", url=GENERALS_URL)
+        _mark_partial("generals", "schedule data not found")
+        return []
+    print(f"  [Victoria Generals] {len(events)} home games")
     return events
 
 
 # ─── SOURCE: ALLEVENTS.IN (Victoria, TX aggregator) ──────────────────────────────
 
-# The "all" page only lists the first ~20 events. Category pages surface
-# different ones; a page that 404s or changes layout just adds nothing.
+# The "all" page lists a capped set (45 on 2026-10-06) in trending order,
+# not date order. Category pages surface different ones; a page that 404s or
+# changes layout just adds nothing.
 ALLEVENTS_PAGES = [
     "https://allevents.in/victoria-tx/all",
     "https://allevents.in/victoria-tx/this-weekend",
@@ -3646,6 +3674,11 @@ ALLEVENTS_PAGES = [
 ]
 
 
+# Event blocks on a page at or above which we assume AllEvents cut the list
+# off (the "all" page returned exactly 45; category pages 7-15).
+ALLEVENTS_PAGE_CAP = 40
+
+
 def fetch_allevents_events(days_ahead=14):
     """Pull events from allevents.in for Victoria, TX across several pages.
 
@@ -3657,6 +3690,7 @@ def fetch_allevents_events(days_ahead=14):
     seen_urls = set()
     per_page = []
     for url in ALLEVENTS_PAGES:
+        page = url.rsplit('/', 1)[-1]
         before = len(events)
         try:
             resp = http_get(url)
@@ -3665,14 +3699,21 @@ def fetch_allevents_events(days_ahead=14):
             per_page.append(f"{url.rsplit('/', 1)[-1]}: error {str(e)[:40]}")
             _mark_partial("allevents", f"{url.rsplit('/', 1)[-1]} page failed")
             continue
-        _parse_allevents_page(resp.text, events, seen_urls)
-        per_page.append(f"{url.rsplit('/', 1)[-1]}: +{len(events) - before}")
+        listed = _parse_allevents_page(resp.text, events, seen_urls) or 0
+        per_page.append(f"{page}: +{len(events) - before}")
+        # A full page means more events sit past the cut, and the order is
+        # by trending rank, so an event still scheduled can fall off it. Not
+        # "ok", or auto-publish would retire it after two such runs.
+        if listed >= ALLEVENTS_PAGE_CAP:
+            _mark_partial("allevents", f"{page} returned {listed} (capped)")
     print(f"  [AllEvents] Extracted {len(events)} events ({', '.join(per_page)})")
     return events
 
 
 def _parse_allevents_page(html_text, events, seen_urls):
-    """Append in-window Victoria events from one AllEvents page."""
+    """Append in-window Victoria events from one AllEvents page. Returns how
+    many Event blocks the page listed, before any filtering (for the cap)."""
+    listed = 0
     soup = BeautifulSoup(html_text, "html.parser")
 
     # Build eid → time map from HTML cards
@@ -3713,6 +3754,7 @@ def _parse_allevents_page(html_text, events, seen_urls):
         for ev in candidates:
             if not isinstance(ev, dict) or ev.get("@type") != "Event":
                 continue
+            listed += 1
             name = (ev.get("name") or "").strip()
             start = ev.get("startDate") or ""
             ev_url = (ev.get("url") or "").strip()
@@ -3773,6 +3815,7 @@ def _parse_allevents_page(html_text, events, seen_urls):
                 "url": ev_url,
             })
             seen_urls.add(ev_url)
+    return listed
 
 
 
@@ -4144,6 +4187,11 @@ def fetch_apify_facebook_events(days_ahead=14):
                 pass
         if not time_str:
             time_str = (item.get("startTime") or "").split(" at ")[-1].strip()
+        # A midnight start is a date-only placeholder, not a real time; blank
+        # it as AllEvents and Eventbrite do, or it sorts first in its day and
+        # shows "12:00 AM" on the page, .ics and card.
+        if _start_minutes(time_str) == 0:
+            time_str = ""
 
         description = (item.get("description") or "").strip()[:280]
         ev_url = item.get("url") or item.get("eventUrl") or ""
@@ -5240,8 +5288,11 @@ def main():
         all_events.extend(safe_fetch("city_calendar", fetch_city_calendar, args=(args.days,)))
         all_events.extend(safe_fetch("chamber", fetch_chamber_events, args=(args.days,)))
         all_events.extend(safe_fetch("library", fetch_library_events, args=(args.days,)))
-        all_events.extend(safe_fetch("moonshine", fetch_moonshine_events, args=(args.days,)))
-        # VTX Art Walk and Generals can legitimately have 0 (between events / off-season)
+        # Moonshine, VTX Art Walk and Generals can legitimately have 0 (nothing
+        # posted ahead / between walks / off-season); each warns on its own
+        # when its page no longer looks like it did.
+        all_events.extend(safe_fetch("moonshine", fetch_moonshine_events,
+                                     args=(args.days,), expect_events=False))
         all_events.extend(safe_fetch("vtx_artwalk", fetch_vtx_artwalk,
                                      args=(args.days,), expect_events=False))
         all_events.extend(safe_fetch("jwelch", fetch_jwelch_events,

@@ -394,7 +394,7 @@ def main(argv=None):
     # 3-hour outage would post a dozen identical "review failed" alerts on
     # top of the site's own health and uptime alerts, and nothing is lost,
     # since the next run picks the submissions up. A wrong secret (401)
-    # or a failed decisions POST still fails the run.
+    # or a decisions POST the site refused (4xx) still fails the run.
     try:
         r = requests.get(f"{SITE}/api/submission-review/pending", headers=headers, timeout=30)
     except (requests.ConnectionError, requests.Timeout) as e:
@@ -439,8 +439,25 @@ def main(argv=None):
             print(f"::warning::The AI review is still down ({down}); already alerted.")
     if args.dry_run or not reviews:
         return ai_rc
-    r = requests.post(f"{SITE}/api/submission-review", headers=headers, json={"reviews": reviews}, timeout=120)
-    body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    # Same outage rule as the GET: the POST comes minutes later (after the
+    # AI calls), so a Railway redeploy in between used to fail the run with
+    # a false "review failed" alert. Safe to leave for the next run: the
+    # site only applies a decision to a row still awaiting review and marks
+    # each one it applies (ai_review), so rows it never got are fetched and
+    # decided again, rows it did apply are not re-sent, and an approval
+    # whose publish failed is retried by the site (live_pending).
+    try:
+        r = requests.post(f"{SITE}/api/submission-review", headers=headers, json={"reviews": reviews}, timeout=120)
+    except (requests.ConnectionError, requests.Timeout) as e:
+        print(f"::warning::The site didn't answer the decisions ({e}); they're sent again next run.")
+        return ai_rc
+    if r.status_code >= 500:
+        print(f"::warning::The site answered the decisions with HTTP {r.status_code}; they're sent again next run.")
+        return ai_rc
+    try:
+        body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    except ValueError:
+        body = {}
     if not r.ok:
         print(f"::error::Sending decisions failed: {body.get('message') or body.get('error') or r.status_code}")
         return 1

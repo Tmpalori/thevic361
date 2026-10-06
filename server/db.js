@@ -173,6 +173,23 @@ export function resolveEditKey(edits, key, storedKeys = null) {
   return target;
 }
 
+// One read-modify-write of the published payload at a time. Every writer
+// (auto-publish in both modes, Save & Publish, unpublish/replace/forget,
+// keep, hide/restore, the edit's kept-key move) reads the whole payload,
+// changes its part and writes the whole thing back; two overlapping (a boot
+// auto-publish and an AI-review approval seconds after a deploy) meant the
+// last write silently undid the other. The site runs as one process, so an
+// in-process queue per store is enough. `fn` must not call another writer
+// (it would wait on itself).
+const publishedLocks = new WeakMap();
+export function withPublishedLock(store, fn) {
+  const prev = publishedLocks.get(store) || Promise.resolve();
+  const run = prev.then(() => fn());
+  // The queue continues whether this writer succeeded or not.
+  publishedLocks.set(store, run.then(() => {}, () => {}));
+  return run;
+}
+
 // ─── JSON FILE BACKEND ───
 const FILE_TRAFFIC_CAP = 50000;
 
@@ -661,12 +678,17 @@ export function breakerPool(pool, { windowMs = 30000, now = () => Date.now() } =
   return { query, get open() { return Boolean(openUntil); } };
 }
 
+// Tables holding data nothing else can rebuild; see ready().
+const FRESH_TABLES = ['subscribers', 'sponsor_orders'];
+
 class PgStore {
   // opts.breaker: { windowMs, now } for the circuit breaker (tests).
   constructor(pool, opts = {}) {
     this.rawPool = pool;
     this.pool = breakerPool(pool, opts.breaker);
     this._readyPromise = null;
+    // Called with the names of FRESH_TABLES that ready() had to create.
+    this.onTablesCreated = opts.onTablesCreated || null;
   }
 
   async ready() {
@@ -684,6 +706,17 @@ class PgStore {
             WHERE table_schema = current_schema() AND column_name = ANY($1::text[])`,
           [added.map(a => a[1])]);
         const have = new Set((cols.rows || []).map(r => `${r.table_name}.${r.column_name}`));
+        // Subscribers and paid orders exist nowhere else. Finding their
+        // tables missing means this is a new, empty database (a recreated
+        // Postgres service or volume): everything else refills itself from
+        // candidates.json, so without saying so the site looks fine while
+        // the list and the orders are gone. The caller alerts.
+        const existing = await this.pool.query(
+          `SELECT table_name FROM information_schema.tables
+            WHERE table_schema = current_schema() AND table_name = ANY($1::text[])`,
+          [FRESH_TABLES]);
+        const present = new Set((existing.rows || []).map(r => r.table_name));
+        const created = FRESH_TABLES.filter(t => !present.has(t));
         const addColumn = async (table, column, sql) => {
           if (!have.has(`${table}.${column}`)) await this.pool.query(sql);
         };
@@ -836,6 +869,9 @@ class PgStore {
             payload JSONB NOT NULL
           );
         `);
+        if (created.length && typeof this.onTablesCreated === 'function') {
+          try { this.onTablesCreated(created); } catch (err) { console.warn('[db] fresh-table hook failed:', err.message); }
+        }
       })().catch(err => {
         this._readyPromise = null;
         throw err;
@@ -1284,7 +1320,7 @@ export async function createStore(opts = {}) {
       statement_timeout: 15000
     });
     watchPool(pool);
-    const store = new PgStore(pool);
+    const store = new PgStore(pool, { onTablesCreated: opts.onTablesCreated });
     // Boot doesn't need the database: pages fall back to the bundled
     // events file, and ready() retries on the next query.
     try {

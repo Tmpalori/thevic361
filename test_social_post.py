@@ -459,3 +459,80 @@ def test_graph_version_comes_from_the_repo_variable_with_a_default(monkeypatch):
     finally:
         monkeypatch.delenv("GRAPH_API_VERSION")
         importlib.reload(sp)
+
+
+@pytest.mark.parametrize("session", [
+    lambda: FlakySession("/feed", {"message": "retry later", "code": 2, "is_transient": True}, 500),
+    lambda: FakeSession(raise_on={"/feed": __import__("requests").ConnectionError("reset by peer")}),
+])
+def test_a_5xx_or_dropped_connection_on_publish_keeps_the_slot_pending(tmp_path, monkeypatch, session):
+    # Meta can answer 500 {code: 2} after making the post; clearing the
+    # pending mark let a manual re-run post it twice.
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+    kit = write_kit(tmp_path)
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=session()) == 1
+    assert json.loads((kit / "posted.json").read_text())["2026-10-08:weekend"] == {"facebook": "pending"}
+    rerun = FakeSession()
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=rerun) == 0
+    assert not any(c[0] == "POST" for c in rerun.calls)
+
+
+def test_a_connection_that_never_opened_on_publish_is_a_plain_failure(tmp_path, monkeypatch):
+    import requests
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+    kit = write_kit(tmp_path)
+    sess = FakeSession(raise_on={"/feed": requests.ConnectTimeout("no route")})
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=sess) == 1
+    assert "facebook" not in json.loads((kit / "posted.json").read_text()).get("2026-10-08:weekend", {})
+
+
+class ReelFails(FakeSession):
+    """The Reel container processes to `reel_status`; photos are fine."""
+
+    def __init__(self, reel_status):
+        super().__init__()
+        self.reel_status, self.reel_id = reel_status, None
+
+    def request(self, method, url, data=None, params=None, timeout=None, headers=None):
+        resp = super().request(method, url, data=data, params=params, timeout=timeout, headers=headers)
+        if method == "POST" and (data or {}).get("media_type") == "REELS":
+            self.reel_id = resp.json()["id"]
+        if method == "GET" and self.reel_id and url.endswith("/" + self.reel_id):
+            return FakeResp({"status_code": self.reel_status})
+        return resp
+
+
+@pytest.mark.parametrize("reel_status", ["ERROR", "IN_PROGRESS"])
+def test_a_failed_reel_falls_back_to_the_carousel(tmp_path, monkeypatch, reel_status):
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.setenv("IG_USER_ID", "ig7")
+    monkeypatch.setattr(sp.time, "sleep", lambda s: None)
+    kit = write_kit(tmp_path, slides=4)
+    m = json.loads((kit / "kit.json").read_text())
+    m["kits"]["weekend"]["reel"] = "weekend.mp4"
+    (kit / "kit.json").write_text(json.dumps(m))
+    sess = ReelFails(reel_status)
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=sess) == 0
+    assert any(c[2].get("media_type") == "CAROUSEL" for c in sess.calls)
+    assert json.loads((kit / "posted.json").read_text())["2026-10-08:weekend"]["instagram"] == "post1"
+
+
+def test_an_unconfirmed_reel_publish_does_not_post_the_carousel_too(tmp_path, monkeypatch):
+    import requests
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.setenv("IG_USER_ID", "ig7")
+    monkeypatch.setattr(sp.time, "sleep", lambda s: None)
+    kit = write_kit(tmp_path, slides=4)
+    m = json.loads((kit / "kit.json").read_text())
+    m["kits"]["weekend"]["reel"] = "weekend.mp4"
+    (kit / "kit.json").write_text(json.dumps(m))
+    sess = FakeSession(raise_on={"/media_publish": requests.ReadTimeout("slow")})
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=sess) == 1
+    assert not any(c[2].get("media_type") == "CAROUSEL" for c in sess.calls)
+    assert json.loads((kit / "posted.json").read_text())["2026-10-08:weekend"]["instagram"] == "pending"

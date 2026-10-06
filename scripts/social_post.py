@@ -66,6 +66,10 @@ class _Transient(PostError):
     """An error Meta says to retry (see TRANSIENT_CODES)."""
 
 
+class _NotSent(_Transient):
+    """The connection never opened (connect timeout): Meta can't have acted."""
+
+
 def version_problem(err):
     """A message naming the Graph version when Meta refuses it (retired or
     unknown), or None. Otherwise it reads like a token problem."""
@@ -120,7 +124,12 @@ def _graph_once(method, path, session, params):
     except requests.RequestException as e:
         # Only the error type: the message can carry the URL. `from None`
         # keeps the original out of any traceback too.
-        cls = _SentButNoAnswer if isinstance(e, requests.ReadTimeout) and method == "POST" else _Transient
+        if isinstance(e, requests.ConnectTimeout):
+            cls = _NotSent
+        elif isinstance(e, requests.ReadTimeout) and method == "POST":
+            cls = _SentButNoAnswer
+        else:
+            cls = _Transient
         raise cls(f"{method} {path} failed: {type(e).__name__}") from None
     try:
         body = r.json()
@@ -172,16 +181,21 @@ def post_facebook(page_id, token, image_urls, caption, session, before_publish=N
 
 
 def _publish(path, session, before_publish=None, **params):
-    """The call that makes the post live. A read timeout here means Meta may
-    have posted it anyway, so it's Unconfirmed; any earlier timeout only
-    left unpublished photos or containers behind and is a plain failure.
+    """The call that makes the post live. A read timeout, a dropped
+    connection, a 5xx or an error Meta flags transient here means Meta may
+    have posted it anyway (a 500 {code: 2} can come back after the post was
+    made), so it's Unconfirmed and the slot stays pending; only a clear
+    refusal (4xx) or a connection that never opened is a plain failure.
+    Any earlier error only left unpublished photos or containers behind.
     before_publish runs first (main marks the slot pending on disk), so a
     run killed during this call (cancel, step timeout) can't post twice."""
     if before_publish:
         before_publish()
     try:
         return _graph("POST", path, session, _retry=False, **params)["id"]
-    except _SentButNoAnswer as e:
+    except _NotSent:
+        raise
+    except (_SentButNoAnswer, _Transient) as e:
         raise Unconfirmed(str(e)) from None
 
 
@@ -354,11 +368,20 @@ def main(argv=None, session=None):
         print("::warning::IG_USER_ID not set; skipping Instagram (Facebook only).")
     elif not already("Instagram", "instagram"):
         try:
+            ig_id = None
             if reel_url:
-                ig_id = post_instagram_reel(ig_user, token, reel_url, kit["captions"]["instagram"], session,
-                                            before_publish=pending("instagram"))
-                print(f"Instagram: posted Reel {ig_id}")
-            else:
+                try:
+                    ig_id = post_instagram_reel(ig_user, token, reel_url, kit["captions"]["instagram"], session,
+                                                before_publish=pending("instagram"))
+                    print(f"Instagram: posted Reel {ig_id}")
+                except Unconfirmed:
+                    raise  # may be live already: posting the carousel too could double up
+                except PostError as e:
+                    # Processing ERROR, a 6-minute timeout or a refused
+                    # publish: nothing went out, and the kit has the
+                    # carousel, so post that instead of nothing.
+                    print(f"::warning::Instagram Reel failed ({e}); posting the carousel instead.")
+            if ig_id is None:
                 ig_id = post_instagram(ig_user, token, ig_urls, kit["captions"]["instagram"], session,
                                        before_publish=pending("instagram"))
                 print(f"Instagram: posted {ig_id}")

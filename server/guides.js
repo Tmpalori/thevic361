@@ -498,10 +498,12 @@ function eventInstants(ev) {
   const start = new Date(`${ev.date}T${times[0]}:00${chicagoOffset(ev.date)}`);
   // A malformed date would make toISOString throw on every view.
   if (Number.isNaN(start.getTime())) return null;
-  let end = times[1] ? new Date(`${ev.date}T${times[1]}:00${chicagoOffset(ev.date)}`) : null;
-  if (!end || end <= start) {
-    end = times[1] ? new Date(end.getTime() + 24 * 3600 * 1000) : new Date(start.getTime() + 2 * 3600 * 1000);
-  }
+  if (!times[1]) return { start, end: new Date(start.getTime() + 2 * 3600 * 1000) };
+  // An end at or before the start is on the next day, read with that day's
+  // offset: start-day offset + 24 h was an hour off on a DST night (a
+  // Halloween party to 2 AM on Nov 1). Same as eventJsonLd in seo.js.
+  const endDay = times[1] <= times[0] ? addDays(ev.date, 1) : ev.date;
+  const end = new Date(`${endDay}T${times[1]}:00${chicagoOffset(endDay)}`);
   return { start, end };
 }
 

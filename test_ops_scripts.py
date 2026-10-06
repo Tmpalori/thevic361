@@ -51,3 +51,30 @@ def test_preview_banner_marks_every_page_once(tmp_path):
     assert "old bundled list" in (tmp_path / "sub" / "a.html").read_text()
     assert (tmp_path / "app.js").read_text() == "// <body>"
     assert preview_banner.mark(tmp_path) == 0  # already marked
+
+
+def _slack_answer(monkeypatch, code, body):
+    """slack_notify.main against a fake Slack answering code + body."""
+    import io
+    import urllib.error
+    import slack_notify
+
+    def fake_urlopen(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, code, "x", {}, io.BytesIO(body.encode()))
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/T/B/x")
+    monkeypatch.setattr(slack_notify.urllib.request, "urlopen", fake_urlopen)
+    return slack_notify.main(["hello"])
+
+
+def test_slack_refused_webhook_fails_the_step(monkeypatch, capsys):
+    # An archived channel or removed app would otherwise silence every later
+    # alert with only a log line; a red step makes GitHub email the owner.
+    assert _slack_answer(monkeypatch, 410, "channel_is_archived") == 2
+    assert "::error::Slack refused" in capsys.readouterr().out
+    assert _slack_answer(monkeypatch, 404, "no_service") == 2
+    assert _slack_answer(monkeypatch, 400, "channel_is_archived") == 2
+
+
+def test_slack_hiccup_stays_green(monkeypatch):
+    assert _slack_answer(monkeypatch, 500, "rollup_error") == 0
+    assert _slack_answer(monkeypatch, 429, "rate_limited") == 0

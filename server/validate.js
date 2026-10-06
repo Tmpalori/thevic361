@@ -260,16 +260,18 @@ export function validateEventEdit(input) {
 
 // Honeypot: a hidden field named "company" no real user fills. Combined with
 // elapsed_ms (time from form render to submit), we get a cheap bot filter.
+// Only too-fast counts: there is no upper bound, because an organizer who
+// leaves the tab open over lunch (or enters a series with "Submit another")
+// is a person, and a dropped submission answers "Got it" and is lost without
+// a trace. Turnstile and the rate limits already cover slow bots.
 export function checkBotSignals(input, opts = {}) {
   const minMs = opts.minMs ?? 1500;
-  const maxMs = opts.maxMs ?? 60 * 60 * 1000;
   if (input && typeof input.company === 'string' && input.company.trim()) {
     return { ok: false, reason: 'honeypot' };
   }
   const elapsed = Number(input && input.elapsed_ms);
   if (Number.isFinite(elapsed)) {
     if (elapsed < minMs) return { ok: false, reason: 'too-fast' };
-    if (elapsed > maxMs) return { ok: false, reason: 'too-slow' };
   }
   return { ok: true };
 }

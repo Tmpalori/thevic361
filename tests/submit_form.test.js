@@ -2,7 +2,7 @@
 // submit.js). Verifies the form structure, honeypot wiring, and the data
 // shape collectForm() will POST to /api/submissions.
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -108,6 +108,16 @@ describe('submit.js — collectForm()', () => {
     expect(out.submitter_last_name).toBe('Doe');
     expect(out.submitter_name).toBe('Jane Doe');
     expect(out.submitter_phone).toBe('(361) 555-0000');
+  });
+
+  it('"Submit another" restarts the form timer', () => {
+    const t0 = Date.now();
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(t0 + 2 * 60 * 60 * 1000);
+    try {
+      document.getElementById('submit-another').click();
+      spy.mockReturnValue(t0 + 2 * 60 * 60 * 1000 + 30000);
+      expect(api.collectForm().elapsed_ms).toBe(30000);
+    } finally { spy.mockRestore(); }
   });
 
   it('honeypot value is included in the payload (server detects it)', () => {

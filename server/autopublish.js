@@ -26,7 +26,7 @@
  * admin's Save & Publish already carries forward with other extras.
  */
 
-import { eventKeyOf } from './db.js';
+import { eventKeyOf, applyEventEdits, withPublishedLock } from './db.js';
 import { localDateStr, addDays } from './seo.js';
 import { sameEvent } from './sponsors.js';
 
@@ -133,6 +133,10 @@ const HEALTH_WINDOW_DAYS = 14;
 // `key` may be a list: the submission's key now plus the keys it was
 // published under before an edit, so an edited one still comes down.
 export async function unpublishEvent(store, key, now) {
+  return withPublishedLock(store, () => unpublishEventLocked(store, key, now));
+}
+
+async function unpublishEventLocked(store, key, now) {
   const keys = new Set((Array.isArray(key) ? key : [key]).filter(Boolean));
   const prior = await store.getPublished();
   if (!prior || !Array.isArray(prior.events)) return false;
@@ -156,6 +160,10 @@ export async function unpublishEvent(store, key, now) {
 // The admin approved this event by hand: forget that it was removed before
 // (e.g. rejected by mistake), so auto-publish may list it again.
 export async function forgetRemoved(store, key) {
+  return withPublishedLock(store, () => forgetRemovedLocked(store, key));
+}
+
+async function forgetRemovedLocked(store, key) {
   const prior = await store.getPublished();
   const rejected = (prior && prior.auto_publish && prior.auto_publish.rejected) || [];
   if (!rejected.includes(key)) return false;
@@ -168,6 +176,10 @@ export async function forgetRemoved(store, key) {
 // key), so the fix shows up now and a later un-approve finds it. False when
 // the old version isn't on the published list.
 export async function replacePublishedEvent(store, oldKey, next, now) {
+  return withPublishedLock(store, () => replacePublishedEventLocked(store, oldKey, next, now));
+}
+
+async function replacePublishedEventLocked(store, oldKey, next, now) {
   const prior = await store.getPublished();
   if (!prior || !Array.isArray(prior.events)) return false;
   const idx = prior.events.findIndex(ev => eventKeyOf(ev) === oldKey);
@@ -197,7 +209,13 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
   // submission review). The collector's candidates are left out entirely,
   // so it never publishes them when AUTO_PUBLISH=0 and never re-adds or
   // retires anything on its own.
-  async function run({ force = false, quiet = false, submissionsOnly = false } = {}) {
+  // Under the published-payload lock (db.js withPublishedLock): this reads
+  // the payload, rebuilds it and writes it back.
+  function run(opts = {}) {
+    return withPublishedLock(store, () => runLocked(opts));
+  }
+
+  async function runLocked({ force = false, quiet = false, submissionsOnly = false } = {}) {
     let candidates = null;
     if (!submissionsOnly) {
       try {
@@ -221,20 +239,31 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
 
     const today = localDateStr(nowFn());
     const upcoming = ev => ev && ev.date >= today && ev.name;
-    const priorUpcoming = (Array.isArray(prior.events) ? prior.events : []).filter(upcoming);
 
     // Retire events this module added before that the new run no longer has.
     // Hand-added and hand-edited events are never touched.
     const autoKeys = new Set(state.keys || []);
+    let edits = [];
     let edited = new Set();
     try {
       if (typeof store.listEventEdits === 'function') {
-        edited = new Set((await store.listEventEdits()).map(e => e.original_key));
+        edits = await store.listEventEdits();
+        edited = new Set(edits.map(e => e.original_key));
       }
     } catch (err) {
       console.warn('[auto-publish] event edits unavailable, retiring nothing:', err.message);
+      edits = null;
       edited = null;
     }
+    // Whether a published event is still coming up is decided on its edited
+    // copy: the site shows the overlay, so an event the admin moved from
+    // last week to next week is live under the new date, and dropping it on
+    // its stored (old) date took it off the site before it happened. With
+    // the edits unreadable we can't tell which events were moved, so past
+    // ones stay this run too (the public lists filter by date anyway); the
+    // next readable run drops the ones that really are over.
+    const priorUpcoming = (Array.isArray(prior.events) ? prior.events : [])
+      .filter(ev => ev && ev.name && (!edits || upcoming(applyEventEdits([ev], edits)[0])));
     // Read before retiring: approved submissions are in `keys` too (auto-
     // publish added them) but the collector never lists them, so without
     // this every one would count as missing and come down on the second run.
@@ -248,7 +277,9 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       approvedRead = false;
     }
     const freshUpcoming = fresh.filter(upcoming);
-    const ours = priorUpcoming.filter(ev => autoKeys.has(eventKeyOf(ev)));
+    // A past event kept only because the edits were unreadable isn't one of
+    // this run's to retire or to count for the health ratio.
+    const ours = priorUpcoming.filter(ev => autoKeys.has(eventKeyOf(ev)) && (edits || upcoming(ev)));
     const healthEnd = addDays(today, HEALTH_WINDOW_DAYS);
     const scraped = ev => ev.date <= healthEnd && !ev.curated && ev._source !== 'local_events';
     const healthy = !submissionsOnly &&

@@ -213,6 +213,12 @@ describe('POST /api/submissions — bot signals', () => {
     expect(r.status).toBe(200);
     expect(r.json.queued).toBe(false);
   });
+
+  it('a slow submission (tab left open for hours) is queued, not dropped', async () => {
+    const r = await fetchJson('POST', '/api/submissions', validBody({ elapsed_ms: 3 * 60 * 60 * 1000 }));
+    expect(r.status).toBe(201);
+    expect(r.json.queued).toBe(true);
+  });
 });
 
 describe('POST /api/submissions — turnstile gating', () => {
