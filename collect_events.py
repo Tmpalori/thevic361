@@ -123,6 +123,16 @@ def _record_source_stat(name, count, status, started_at, finished_at, message=No
 def reset_source_stats():
     """Clear per-run stats. Called at the top of main() and useful in tests."""
     _SOURCE_STATS.clear()
+    _SOURCE_NOTES.clear()
+
+
+# A scraper's note about a partial run ("skipped 12 listings"), shown with
+# its stats entry in the admin Sources tab.
+_SOURCE_NOTES = {}
+
+
+def _note_source(name, message):
+    _SOURCE_NOTES[name] = message
 
 
 def get_source_stats():
@@ -159,9 +169,11 @@ def safe_fetch(name, fn, args=(), expect_events=True):
                     f"[scraper] {name} returned 0 events",
                     scraper=name,
                 )
-            _record_source_stat(name, 0, "empty", started, finished)
+            _record_source_stat(name, 0, "empty", started, finished,
+                                message=_SOURCE_NOTES.pop(name, None))
         else:
-            _record_source_stat(name, len(result), "ok", started, finished)
+            _record_source_stat(name, len(result), "ok", started, finished,
+                                message=_SOURCE_NOTES.pop(name, None))
         return result
     except Exception as e:
         _sentry_exception(name)
@@ -301,6 +313,21 @@ CATEGORY_KEYWORDS = {
 }
 
 
+# Aimed at adults even when it's about kids ("Youth Mental Health First Aid
+# Training Course", "A Parent Seminar"): not for /this-weekend-with-kids.
+_ADULT_AUDIENCE_RE = re.compile(
+    r"\b(training|certification|certified|course|first aid|cpr|for adults|adults? only|21\s*\+|18\s*\+"
+    r"|parent seminar|for parents|continuing education|ceus?)\b", re.IGNORECASE)
+# Words that still make it a kids' event ("Kids Cooking Course").
+_KIDS_EVENT_RE = re.compile(r"\b(kids?|children|toddlers?|story ?time|family|families|camp)\b", re.IGNORECASE)
+
+
+def adult_audience(name, description=""):
+    """True when an event is for grown-ups, so it shouldn't get the family icon."""
+    text = f"{name} {description}"
+    return bool(_ADULT_AUDIENCE_RE.search(text)) and not _KIDS_EVENT_RE.search(name or "")
+
+
 def classify_icons(name, description="", venue=""):
     """Auto-assign icon tags based on text content."""
     text = f"{name} {description} {venue}".lower()
@@ -308,6 +335,8 @@ def classify_icons(name, description="", venue=""):
     for cat, keywords in CATEGORY_KEYWORDS.items():
         if any(kw in text for kw in keywords):
             icons.append(cat)
+    if "family" in icons and adult_audience(name, description):
+        icons.remove("family")
     return icons or ["community"]
 
 
@@ -466,6 +495,11 @@ def load_local_events(yaml_path, days_ahead=7):
 
 # ─── SOURCE: CITY OF VICTORIA CALENDAR ───────────────────────────────────────
 
+# Detail pages fetched per run. The month view lists ~45; the cap only
+# guards against a runaway page.
+CITY_CALENDAR_MAX_PAGES = 80
+
+
 def fetch_city_calendar(days_ahead=7):
     """Scrape event detail pages from victoriatx.gov CivicPlus calendar."""
     events = []
@@ -489,8 +523,16 @@ def fetch_city_calendar(days_ahead=7):
 
         print(f"  [City Calendar] Found {len(eids)} event IDs, fetching details...")
 
-        # Fetch each event detail page (limit to avoid hammering)
-        for eid in sorted(eids)[:30]:
+        # Fetch every detail page (the month view lists ~45). Newest IDs
+        # first, so if the cap ever bites it drops old listings, not the
+        # events the city just added; a cap that drops any shows up in the
+        # admin Sources tab. (Sorting the ID strings and taking 30 once
+        # skipped Wags-O-Ween and Stroller Barre entirely.)
+        ordered = sorted(eids, key=int, reverse=True)
+        if len(ordered) > CITY_CALENDAR_MAX_PAGES:
+            _note_source("city_calendar", f"fetched the newest {CITY_CALENDAR_MAX_PAGES} of "
+                                          f"{len(ordered)} listings; {len(ordered) - CITY_CALENDAR_MAX_PAGES} skipped")
+        for eid in ordered[:CITY_CALENDAR_MAX_PAGES]:
             try:
                 detail_url = f"https://www.victoriatx.gov/Calendar.aspx?EID={eid}"
                 detail_resp = requests.get(detail_url, headers=HEADERS, timeout=TIMEOUT)
@@ -498,12 +540,18 @@ def fetch_city_calendar(days_ahead=7):
                     continue
                 detail_soup = BeautifulSoup(detail_resp.text, "html.parser")
 
-                # CivicPlus: event name is the <title> after "Calendar • "
-                page_title = detail_soup.find("title")
-                title = page_title.get_text(strip=True) if page_title else ""
-                title = re.sub(r'^Calendar\s*[•·\-]\s*', '', title)
-                title = re.sub(r'\s*[-–]\s*Victoria,?\s*TX$', '', title)
-                title = title.strip()
+                # CivicPlus: the full name is in <h2 id="..._eventTitle">.
+                # The <title> ("Calendar • ...") is cut at ~50 characters
+                # ("Healthy South Texas Cooking Well Exploring Cultur"), so
+                # it's only a fallback.
+                heading = detail_soup.select_one('h2[id$="eventTitle"]')
+                title = heading.get_text(" ", strip=True) if heading else ""
+                if not title:
+                    page_title = detail_soup.find("title")
+                    title = page_title.get_text(strip=True) if page_title else ""
+                    title = re.sub(r'^Calendar\s*[•·\-]\s*', '', title)
+                    title = re.sub(r'\s*[-–]\s*Victoria,?\s*TX$', '', title)
+                title = re.sub(r'\s+', ' ', title).strip()
 
                 # Also try h2 elements (CivicPlus puts event name in h2 after "Event Details")
                 if not title or title.lower() in ["calendar", "event details", ""]:
@@ -589,9 +637,12 @@ def fetch_city_calendar(days_ahead=7):
                         venue = 'Victoria Public Library'
                         address = address or '302 N. Main St.'
 
-                # Get description from fr-view or main content
+                # Get description from fr-view or main content. The location
+                # box comes first and is also ".fr-view", so ask for the
+                # description by name first.
                 desc = ""
-                desc_el = detail_soup.select_one(".fr-view, .moduleContent")
+                desc_el = (detail_soup.select_one('[itemprop="description"]')
+                           or detail_soup.select_one(".fr-view, .moduleContent"))
                 if desc_el:
                     # Get first meaningful paragraph
                     for p in desc_el.select("p"):
@@ -1085,20 +1136,45 @@ def _host_matches(host, grounded):
 _PAGE_STOP = {"the", "and", "with", "for", "victoria", "texas", "event", "events", "night", "live", "annual", "2026", "2027"}
 
 
-def _page_mentions(url, name, get=None, timeout=10):
-    """True when the page at url loads and names the event (most of its
-    distinctive words). Used for links on sites Gemini didn't cite."""
-    get = get or (lambda u: requests.get(u, headers=HEADERS, timeout=timeout))
-    words = [w for w in re.findall(r"[a-z0-9]+", (name or "").lower()) if len(w) >= 4 and w not in _PAGE_STOP]
-    if not words:
+def _same_page(asked, final):
+    """True when a redirect kept us on the page we asked for: same path, and
+    every query parameter we sent still there (added tracking is fine)."""
+    from urllib.parse import urlsplit, parse_qsl
+    a, f = urlsplit(asked or ""), urlsplit(final or "")
+    if (a.path.rstrip("/").lower() or "/") != (f.path.rstrip("/").lower() or "/"):
         return False
+    have = {(k.lower(), v) for k, v in parse_qsl(f.query)}
+    return all((k.lower(), v) in have for k, v in parse_qsl(a.query))
+
+
+def _page_mentions(url, name, get=None, timeout=10, unsure=False):
+    """True when the page at url loads, is still that page after redirects,
+    and names the event (most of its distinctive words). Made-up deep links
+    redirect to a generic page (victoriatx.gov/calendar?view=detail&id=...
+    lands on the calendar home, which lists every event's name), so a
+    redirect to another path, or to a search/listing page, fails.
+
+    `unsure` is returned when the check can't tell (network error, bot
+    block): a link on a site Gemini cited gets the benefit of the doubt."""
+    get = get or (lambda u: requests.get(u, headers=HEADERS, timeout=timeout, allow_redirects=True))
+    words = [w for w in re.findall(r"[a-z0-9]+", (name or "").lower()) if len(w) >= 4 and w not in _PAGE_STOP]
     try:
         r = get(url)
-        if getattr(r, "status_code", 0) != 200:
+        code = getattr(r, "status_code", 0)
+        if code in (401, 403, 429, 503):
+            return unsure
+        if code != 200:
+            return False
+        final = getattr(r, "url", None) or url
+        if not isinstance(final, str):
+            final = url
+        if is_listing_url(final) or not _same_page(url, final):
             return False
         text = (getattr(r, "text", "") or "")[:500000].lower()
     except Exception:
-        return False
+        return unsure
+    if not words:
+        return unsure
     hits = sum(1 for w in set(words) if w in text)
     return hits >= max(1, round(len(set(words)) * 0.6))
 
@@ -1163,6 +1239,7 @@ def fetch_gemini_events(days_ahead=14, post=None, categories=None, get=None, wor
 
     seen = set()
     unverified = []  # (event, url, name): link on a site Gemini didn't cite
+    cited = []  # link on a site Gemini cited
     for data in replies:
         if not data:
             continue
@@ -1208,9 +1285,24 @@ def fetch_gemini_events(days_ahead=14, post=None, categories=None, get=None, wor
                 "url": url,
             }
             if grounded and _host_matches(host, grounded):
-                events.append(ev)
+                cited.append(ev)
             else:
                 unverified.append(ev)
+
+    # A link on a site Gemini cited still has to be that event's page:
+    # Gemini makes up deep links on real sites (victoriatx.gov/calendar?
+    # view=detail&id=12089 redirects to the calendar home). A link that
+    # fails is dropped but the event stays (the site was cited for it);
+    # Facebook/Instagram answer bots with a login page, so they're trusted.
+    checkable = [e for e in cited if not _LINK_CHECK_SKIP.search(e["url"])]
+    if checkable:
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            ok = list(pool.map(lambda e: _page_mentions(e["url"], e["name"], get=get, unsure=True), checkable[:60]))
+        for ev, good in zip(checkable, ok):
+            if not good:
+                ev["url"] = ""
+                dropped["bad link removed (event kept)"] += 1
+    events.extend(cited)
 
     # A link on a site Gemini didn't cite is kept only if the page loads and
     # names the event; that catches made-up or wrong links.
@@ -1451,7 +1543,7 @@ For each event you receive, return:
 Icon guidance:
   - food: meals, food trucks, tastings, farmers markets, BBQ, restaurants
   - music: live music, concerts, DJs, open mics, karaoke
-  - family: kid-friendly, story time, baby/toddler events, all-ages
+  - family: kid-friendly, story time, baby/toddler events, all-ages. Never for trainings, certification courses, seminars or anything aimed at adults, even when the topic is kids or youth
   - drinks: bars, breweries, wineries, beer/wine/cocktail events (21+)
   - arts: art shows, theatre, gallery, crafts, dance, painting
   - shopping: markets with vendors, pop-ups, retail events, craft fairs
@@ -1609,6 +1701,8 @@ def ai_review(events, batch_size=8):
                         cleaned_icons.append(ic)
                     if len(cleaned_icons) == 3:
                         break
+                if "family" in cleaned_icons and adult_audience(ev.get("name"), ev.get("description")):
+                    cleaned_icons.remove("family")
                 if cleaned_icons:
                     ev["icons"] = cleaned_icons
 
@@ -1647,6 +1741,10 @@ _LISTING_URL_RES = [
     re.compile(r"eventbrite\.[a-z.]+/(b|d)/", re.I),
     re.compile(r"allevents\.in/[^/]+/?(all|this-weekend|today|tomorrow|[a-z-]+-events)?/?([?#]|$)", re.I),
     re.compile(r"facebook\.com/events/?(explore|search|discover)?/?([?#]|$)", re.I),
+    # The city's calendar home or a made-up "detail" view; one event is
+    # Calendar.aspx?EID=<n>.
+    re.compile(r"victoriatx\.gov/calendar(\.aspx)?/?(?![^#]*\bEID=\d)([?#]|$)", re.I),
+    re.compile(r"perfectgame\.org/events/default\.aspx", re.I),
 ]
 
 
@@ -1708,7 +1806,7 @@ def fill_gaps(events):
         # Fill description from template if missing
         if not ev.get("description"):
             icons = ev.get("icons", [])
-            venue = ev.get("venue", "this venue")
+            venue = ev.get("venue") or ev.get("address") or "this venue"
             # Use first matching template
             for icon in icons:
                 if icon in DESC_TEMPLATES:
@@ -1776,20 +1874,43 @@ def out_of_area_reason(ev):
 _ADDRESSY = re.compile(r"^\d+\s+\w|,\s*(?:victoria|tx|texas)\b|\b7\d{4}\b", re.IGNORECASE)
 
 
+# Not a place: the city itself, or a stand-in ("Restaurant of the Week"
+# on Eventbrite dinner meetups, "TBA"). The event page would read "at
+# Victoria".
+_PLACEHOLDER_PLACE_RE = re.compile(
+    r"^\s*(?:(?:city of )?victoria(?:,?\s*(?:tx|texas))?(?:,?\s*(?:usa|united states))?|victoria county"
+    r"|tx|texas|online|virtual|various(?: locations)?|multiple locations|location tbd|tba|tbd|to be announced"
+    r"|restaurant of the week|see description|see details|private residence|secret location)\s*\.?\s*$",
+    re.IGNORECASE)
+_PLACEHOLDER_IN_RE = re.compile(r"restaurant of the week|\b(?:tba|tbd)\b|\bvarious\b", re.IGNORECASE)
+
+
 def clean_venue(ev, venues=None):
     """Fix venue/address mix-ups in place.
 
     AllEvents often puts "101 N. Main St, Victoria, TX, United States, Texas
     77901" in the venue field. Move it to address and, when the street
-    matches a venue in venues.json, use that venue's name.
+    matches a venue in venues.json, use that venue's name; otherwise the
+    venue is left blank and the site shows the street address alone (not
+    "at 78 Tate Rd."). Placeholder venues ("Victoria", "Restaurant of the
+    Week") are blanked, and so is an address that's only the city.
     """
     venue = (ev.get("venue") or "").strip()
+    if _PLACEHOLDER_PLACE_RE.match(ev.get("address") or ""):
+        ev["address"] = ""
+    if venue and (_PLACEHOLDER_PLACE_RE.match(venue) or _PLACEHOLDER_IN_RE.search(venue)):
+        ev["venue"] = ""
+        return ev
     if not venue or not _ADDRESSY.search(venue):
         return ev
     street = venue.split(",")[0].strip()
+    if not re.match(r"\d", street):
+        # "Moonshine Drinkery, Victoria, TX": the name part is the venue.
+        ev["venue"] = street
+        return ev
     if not (ev.get("address") or "").strip():
         ev["address"] = street
-    ev["venue"] = street
+    ev["venue"] = ""
     key = _street_key(street)
     for v in venues or []:
         if key and _street_key(v.get("address") or "") == key and v.get("name"):
@@ -1823,11 +1944,29 @@ def _name_tokens(name):
     return [w for w in n.split() if w not in _NAME_STOP]
 
 
+# Companies that perform at one house: their posts name the company as
+# the venue, other listings name the building (2026-10-08: "Disney's Finding
+# Nemo JR." at "Theatre Victoria" and "FINDING NEMO JR." at the Welder Center).
+_VENUE_HOME = {
+    "theatre victoria": "leo j. welder center for the performing arts",
+    "theater victoria": "leo j. welder center for the performing arts",
+    "welder center": "leo j. welder center for the performing arts",
+}
+
+
+def _venue_home(v):
+    v = (v or "").strip().lower()
+    return _VENUE_HOME.get(v, v)
+
+
 def _same_place(a, b):
-    """True when two events share a venue or street address (or one is blank)."""
-    va, vb = (a.get("venue") or "").lower(), (b.get("venue") or "").lower()
+    """True when two events share a venue or street address (or one is
+    blank and the addresses don't say otherwise)."""
+    va, vb = _venue_home(a.get("venue")), _venue_home(b.get("venue"))
     if not va or not vb:
-        return True
+        # A street-only listing has no venue name; its address still tells.
+        ka, kb = _street_key(a.get("address")), _street_key(b.get("address"))
+        return not (ka and kb) or ka == kb
     if va in vb or vb in va:
         return True
     ka, kb = _street_key(a.get("address") or a.get("venue")), _street_key(b.get("address") or b.get("venue"))
@@ -1931,15 +2070,34 @@ def is_same_event(a, b):
     small, big = (set(ta), set(tb)) if len(ta) <= len(tb) else (set(tb), set(ta))
     if len(small) >= 2 and small <= big and _same_place(a, b):
         return True
-    # Same name once the venue and weekday are taken out ("Brunch" vs
+    # Same name once the venue, weekday and city are taken out ("Brunch" vs
     # "Sunday Brunch at J Welch Farms"), both naming the same place.
     va, vb = (a.get("venue") or "").strip(), (b.get("venue") or "").strip()
-    if va and vb and _same_place(a, b):
-        drop = set(_name_tokens(va)) | set(_name_tokens(vb)) | _WEEKDAY_TOKENS
-        ra, rb = set(ta) - drop, set(tb) - drop
-        if ra and ra == rb:
-            return True
+    drop = set(_name_tokens(va)) | set(_name_tokens(vb)) | _WEEKDAY_TOKENS | _CITY_TOKENS
+    ra, rb = set(ta) - drop, set(tb) - drop
+    if va and vb and _same_place(a, b) and ra and ra == rb:
+        return True
+    # ...or one is the other plus an organiser or brand prefix ("MOWSTX
+    # Mahjong for Meals" vs "Mahjong for Meals- Victoria, TX", "The Nave
+    # Museum: 'i want to talk about you'" vs "I want to talk about you - the
+    # art of ..."). At least two words left, and a place both name: the
+    # same venue (or a company's home stage) or the same street address.
+    small, big = (ra, rb) if len(ra) <= len(rb) else (rb, ra)
+    if len(small) >= 2 and small <= big and _same_spot(a, b):
+        return True
     return False
+
+
+_CITY_TOKENS = {"victoria", "tx", "texas", "vtx"}
+
+
+def _same_spot(a, b):
+    """Both events say where they are, and it's the same place."""
+    va, vb = (a.get("venue") or "").strip(), (b.get("venue") or "").strip()
+    if va and vb:
+        return _near_place(a, b)
+    ka, kb = _street_key(a.get("address")), _street_key(b.get("address"))
+    return bool(ka) and ka == kb
 
 
 _WEEKDAY_TOKENS = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
@@ -1974,6 +2132,45 @@ def _set_non_place_names(venues):
             _NON_PLACE_NAMES.add(v["name"].lower())
 
 
+def _name_source(e):
+    return e.get("_name_from") or e.get("_source")
+
+
+def _name_trust(e):
+    """Official names beat names an AI wrote from a post, which beat
+    Gemini's (its own paraphrase, often lowercased)."""
+    src = _name_source(e)
+    return 0 if src == "gemini_search" else 1 if src in AI_NAMED_SOURCES else 2
+
+
+def _cut_short(short, long):
+    """True when `short` is `long` cut off mid-word: the city calendar's
+    ~50-character titles ("... Quilt Guild of Greate"). "Tejas Fest" isn't
+    a cut-off "Tejas Fest 2026": it ends on a whole word."""
+    s = re.sub(r"[^a-z0-9]+", " ", (short or "").lower()).strip()
+    l = re.sub(r"[^a-z0-9]+", " ", (long or "").lower()).strip()
+    return bool(s) and len(l) > len(s) and l.startswith(s) and l[len(s)] != " "
+
+
+def _pick_name(a, b):
+    """Which of two records of one event has the better name."""
+    na, nb = a.get("name") or "", b.get("name") or ""
+    if not nb:
+        return a
+    if not na:
+        return b
+    # A name that's cut off loses to the whole one.
+    for x, y in ((a, b), (b, a)):
+        if _cut_short(x.get("name"), y.get("name")) or (
+                cut_off_name_reason(x.get("name")) and not cut_off_name_reason(y.get("name"))):
+            return y
+    if _name_trust(a) != _name_trust(b):
+        return a if _name_trust(a) > _name_trust(b) else b
+    # The shorter name is usually the clean one ("Tejas Fest" over "Tejas
+    # Fest 2026 - Presented by ...").
+    return b if len(nb) < len(na) else a
+
+
 def _merge_pair(old, new):
     """Combine two records of the same event into the best single record."""
     def completeness(e):
@@ -2005,10 +2202,8 @@ def _merge_pair(old, new):
         # keep the flag so a later listing with the real place can merge.
         merged["_venue_guess"] = bool(merged.get("_venue_guess")
                                       or (other.get("_venue_guess") and _same_place(merged, other)))
-    # The shorter name is usually the clean one ("Tejas Fest" over "Tejas
-    # Fest 2026 - Presented by ...").
-    if other.get("name") and len(other["name"]) < len(merged.get("name") or ""):
-        merged["name"] = other["name"]
+    name_from = _pick_name(merged, other)
+    merged["name"], merged["_name_from"] = name_from.get("name"), _name_source(name_from)
     merged["icons"] = list(dict.fromkeys((base.get("icons") or []) + (other.get("icons") or [])))[:4]
     merged["free"] = bool(base.get("free") or other.get("free"))
     merged["_sources"] = sorted(set((old.get("_sources") or [old.get("_source")]) +
@@ -2032,26 +2227,44 @@ _NATIONAL_DAY_RE = re.compile(r"^\s*national\b.*\bday\b", re.IGNORECASE)
 # Regular worship and church business: real, but not a "thing to do" for the
 # general public. Church festivals, concerts and fish fries still pass.
 _WORSHIP_RE = re.compile(
-    r"\b(mass|misa|masses|confessions?|baptism(?:al)? class|communion(?: service)?|rosary|adoration"
+    r"\b((?<!critical )mass(?!\s+(?:ride|transit|media|appeal|production))|misa|masses|confessions?"
+    r"|baptism(?:al)? class|communion(?: service)?"
+    r"|rosary(?!\s+(?:st|street|ave|avenue|rd|road|dr|drive|ln|lane|blvd|way|ct|court)\b)|adoration"
     r"|worship service|sunday service|bible study|prayer (?:service|meeting|group)|novena|vespers"
     r"|(?:charities|second) collection|catechism|rcia|ccd)\b", re.IGNORECASE)
 # Worship words inside a public event's name ("Christmas Mass Choir Concert").
 _PUBLIC_EVENT_RE = re.compile(r"\b(concert|choir|festival|fest|fair|fish fry|carnival|bazaar|gala|market|5k|run)\b", re.IGNORECASE)
 # Religious events (the owner doesn't list them, Oct 2026): worship, prayer,
-# Bible study, revivals, gospel/praise music. Checked against the name and
-# description. Church-hosted events are caught separately below.
+# Bible study, revivals, gospel/praise music. Checked against the NAME only:
+# these words are common in secular text ("Creedence Clearwater Revival
+# Tribute", "Critical Mass Bike Ride", "Rosary Lane Car Show", "pray for
+# good weather!"). Church-hosted events are caught separately below.
+_STREET_AFTER = r"(?!\s+(?:st|street|ave|avenue|rd|road|dr|drive|ln|lane|blvd|way|ct|court)\b)"
 _RELIGIOUS_RE = re.compile(
-    r"\b(worship|repentance|revival|praise (?:and|&) worship|praise (?:night|team|service|concert)"
+    r"\b(worship|repentance|(?<!clearwater )revival(?!\s+(?:market|tribute|band|fest|festival|sale|show|tour|concert|co\b|company))"
+    r"|praise (?:and|&) worship|praise (?:night|team|service|concert)"
     r"|gospel|interfaith|prayer|pray(?:ing)?|bible|scripture|sermon|ministr(?:y|ies)|vacation bible school|vbs"
     r"|youth group|seeking the lord|the lord|jesus|christ\b(?!\s*kindl)|holy (?:spirit|week|hour|communion)"
-    r"|church service|spiritual reflection|evangel\w*|baptism|confirmation class|mass|misa|novena|rosary"
+    r"|church service|spiritual reflection|evangel\w*|baptism|confirmation class"
+    r"|(?<!critical )mass(?!\s+(?:ride|transit|media|appeal|production))|misa|novena|rosary" + _STREET_AFTER +
     r"|adoration|vespers|catechism|rcia)\b", re.IGNORECASE)
+# In a description only unambiguous words and phrases count: "Hope Revival plays country
+# hits" or "benefiting a Catholic school" is not a worship service.
+_RELIGIOUS_DESC_RE = re.compile(
+    r"\b(worship|interfaith|praise (?:and|&) worship|bible study|vacation bible school|church service|sunday service"
+    r"|prayer (?:service|meeting|vigil|breakfast|group)|revival (?:services?|meetings?)|holy (?:mass|communion)"
+    r"|(?:catholic|sunday|evening|morning|daily) mass|mass (?:will be|is) (?:celebrated|held)|praise team"
+    r"|altar call|youth group)\b", re.IGNORECASE)
 # Church-hosted events (fall festivals, fish fries, bazaars) are left off
 # too, per the owner. Matched on the event's name, venue or description,
-# never the street address ("Church St").
+# never the street address ("Church St"), and not denominational names of
+# hospitals, schools and charities ("Methodist Hospital", "a Catholic school").
 _CHURCH_HOSTED_RE = re.compile(
     r"\b(church(?!\s+(?:st|street|ave|avenue|rd|road)\b)|parish|cathedral|chapel|basilica|diocese|congregation"
-    r"|lutheran|catholic|baptist|methodist|presbyterian|episcopal|pentecostal|assembly of god|our lady|synagogue|mosque)\b",
+    r"|(?:lutheran|catholic|baptist|methodist|presbyterian|episcopal|pentecostal)"
+    r"(?!\s+(?:hospitals?|health|healthcare|medical|clinic|hospice|schools?|universit(?:y|ies)|college|academy"
+    r"|charities|high|elementary|middle))"
+    r"|assembly of god|our lady|synagogue|mosque)\b",
     re.IGNORECASE)
 # Members/students only: club meetings, orientations, recruiting visits.
 _MEMBERS_ONLY_RE = re.compile(
@@ -2095,7 +2308,7 @@ def non_event_reason(ev):
         return "not an event"
     if _WORSHIP_RE.search(name) and not _PUBLIC_EVENT_RE.search(name):
         return "worship service"
-    if _RELIGIOUS_RE.search(name) or _RELIGIOUS_RE.search(ev.get("description") or ""):
+    if _RELIGIOUS_RE.search(name) or _RELIGIOUS_DESC_RE.search(ev.get("description") or ""):
         return "religious event"
     if any(_CHURCH_HOSTED_RE.search(ev.get(k) or "") for k in ("name", "venue", "description")):
         return "church event"
@@ -2104,6 +2317,42 @@ def non_event_reason(ev):
     # "National Drink Beer Day" with no time is a social post, not a party.
     if _NATIONAL_DAY_RE.search(name) and not (ev.get("time") or "").strip():
         return "awareness day"
+    return None
+
+
+_NIGHTLIFE_RE = re.compile(
+    r"\b(comedy|comedian|stand-?up|karaoke|open mic|trivia|drag|dj|live (?:music|band)|band|concert"
+    r"|bar crawl|pub crawl)\b", re.IGNORECASE)
+_NIGHT_NAME_RE = re.compile(r"\b(night|nite|tonight|after dark|late show)\b", re.IGNORECASE)
+# Venues that are mostly open at night; a show there at 9 AM is a typo.
+_BAR_VENUE_RE = re.compile(r"\b(saloon|tavern|drinkery|bar|pub|lounge|nightclub|icehouse|ice house|cantina)\b",
+                           re.IGNORECASE)
+# Morning things bars do host.
+_DAYTIME_RE = re.compile(r"\b(brunch|breakfast|coffee|mimosas?|market|yoga|run|5k|watch party|game day|kickoff)\b",
+                         re.IGNORECASE)
+
+
+def morning_nightlife_reason(ev):
+    """Why a nightlife event's morning start looks wrong, or None. Only
+    the sure case: a nightlife word AND "night" in the name, starting
+    between 5 and 11 AM ("Comedy Night in Victoria" at 10:00 AM)."""
+    start = _start_minutes(ev.get("time"))
+    if start is None or not 5 * 60 <= start < 11 * 60:
+        return None
+    name = ev.get("name") or ""
+    if _NIGHTLIFE_RE.search(name) and _NIGHT_NAME_RE.search(name):
+        return f"a night event listed at {ev.get('time')}"
+    return None
+
+
+def evening_venue_morning_reason(ev):
+    """Softer version for the event check to report (never acted on): a
+    nightlife word in the name or a bar-type venue, starting 6-11 AM."""
+    start = _start_minutes(ev.get("time"))
+    if start is None or not 6 * 60 <= start < 11 * 60 or _DAYTIME_RE.search(ev.get("name") or ""):
+        return None
+    if _NIGHTLIFE_RE.search(ev.get("name") or "") or _BAR_VENUE_RE.search(ev.get("venue") or ""):
+        return f"starts at {ev.get('time')}, early for this kind of event"
     return None
 
 
@@ -2181,8 +2430,16 @@ def merge_events(all_events, days_ahead=7, venues=None):
                 dropped_junk.append(f"{new_entry['name'][:50]} ({reason})")
                 continue
 
+        # A nightlife name at a morning hour ("Comedy Night ... 10:00 AM"
+        # from AllEvents) is an organiser's AM/PM slip. No time beats a
+        # wrong one; the event check flags the softer cases.
+        if morning_nightlife_reason(new_entry):
+            new_entry["time"] = ""
+
         if not new_entry["icons"]:
             new_entry["icons"] = classify_icons(new_entry["name"], new_entry["description"], new_entry["venue"])
+        elif "family" in new_entry["icons"] and adult_audience(new_entry["name"], new_entry["description"]):
+            new_entry["icons"].remove("family")
         if new_entry["free"] and "free" not in new_entry["icons"]:
             new_entry["icons"].append("free")
 
@@ -2198,6 +2455,7 @@ def merge_events(all_events, days_ahead=7, venues=None):
     final = [e for d in by_date.values() for e in d]
     for e in final:
         e.pop("_venue_guess", None)  # dedupe-only; never reaches candidates.json
+        e.pop("_name_from", None)
         # Keep a single public-facing source string for the admin pill.
         srcs = e.pop("_sources", None)
         if srcs and len(srcs) > 1:
@@ -2489,105 +2747,137 @@ def fetch_jwelch_events(days_ahead=7):
 
 # ─── SOURCE: THEATRE VICTORIA ─────────────────────────────────────────────────
 
+_TV_MONTHS = ("January|February|March|April|May|June|July|August|September|October|November|December")
+_TV_DATE_RE = re.compile(r"\b(?:" + _TV_MONTHS + r")\s+\d{1,2}\b[^\n]*?\b(20\d{2})\b")
+# Credit lines around a show ("Music and Lyrics by Kristen Anderson-Lopez",
+# "Book Adapted by ...", "Directed by ...") are never its title.
+_TV_CREDIT_RE = re.compile(
+    r"\b(season|directed|screenplay|songs by|music and lyrics|lyrics|music by|book by|book adapted|written by"
+    r"|adapted|adaptation|orchestrations?|arranged|based on|production|newsletter|donate|volunteer|contact"
+    r"|tickets?|audition|about|box office|sponsors?|thank you|support|seating chart|sign up)\b", re.IGNORECASE)
+# Where the shows play (the site's footer), not the 203 E. Constitution St office.
+_TV_HOME = ("Leo J. Welder Center for the Performing Arts", "214 N. Main St.")
+
+
+def _tv_dates(text):
+    """Every date in "October 8-10, 2026", "February 12-14, 18-21, 2027" or
+    "July 23-25, July 29-August 1, 2027"."""
+    m = re.search(r"\b(20\d{2})\b", text)
+    if not m:
+        return []
+    year = int(m.group(1))
+    out, month = [], None
+    for part in text[:m.start()].split(","):
+        part = part.strip()
+        if not part:
+            continue
+        rng = re.fullmatch(r"(?:(" + _TV_MONTHS + r")\s+)?(\d{1,2})"
+                           r"(?:\s*[-–]\s*(?:(" + _TV_MONTHS + r")\s+)?(\d{1,2}))?", part)
+        if not rng or not (rng.group(1) or month):
+            return []
+        month = rng.group(1) or month
+        end_month = rng.group(3) or month
+        try:
+            d = datetime.strptime(f"{month} {rng.group(2)} {year}", "%B %d %Y").date()
+            end = datetime.strptime(f"{end_month} {rng.group(4) or rng.group(2)} {year}", "%B %d %Y").date()
+        except ValueError:
+            return []
+        month = end_month
+        while d <= end and len(out) < 60:
+            out.append(d)
+            d += timedelta(days=1)
+    return out
+
+
+def _tv_title_from_card(card):
+    """A season card's show name and page: the poster's alt text and link
+    (the home page has no title text, only posters)."""
+    for img in card.find_all("img"):
+        alt = (img.get("alt") or "").strip()
+        if len(alt) < 3 or _TV_CREDIT_RE.search(alt):
+            continue
+        link = img.find_parent("a")
+        href = (link.get("href") or "").strip().replace(" ", "") if link else ""
+        return alt, (urljoin("https://theatrevictoria.org/", href) if href and "etix" not in href else "")
+    return "", ""
+
+
+def _tv_title_from_text(lines, i):
+    """Fallback for a page without posters: the nearest clean line above the
+    date, skipping credit lines, else the first one after it. (The old scan
+    kept the last passing line, which was the credit line just above the
+    date: "Music and Lyrics by Kristen Anderson-Lopez".)"""
+    def ok(j):
+        c = lines[j]
+        # The name under "Music and Lyrics by" / "Book Adapted by" is a credit too.
+        after_by = j > 0 and re.search(r"(?i)\bby:?$", lines[j - 1])
+        return (len(c) > 3 and not after_by and not re.search(r"\d{4}", c) and not _TV_CREDIT_RE.search(c)
+                and not re.search(r"\bby\s+[A-Z]", c) and not re.match(r"(?i)by\b", c))
+    for j in range(i - 1, max(-1, i - 9), -1):
+        if ok(j):
+            return lines[j]
+    for j in range(i + 1, min(len(lines), i + 5)):
+        if ok(j):
+            return lines[j]
+    return ""
+
+
+def parse_theatre_victoria(html_text, start, end):
+    """Events from theatrevictoria.org's home page between start and end."""
+    soup = BeautifulSoup(html_text, "html.parser")
+    events, seen = [], set()
+
+    def add(title, show_url, dates):
+        for d in dates:
+            if not (start <= d <= end) or (title, d) in seen:
+                continue
+            seen.add((title, d))
+            events.append({
+                "date": d.strftime("%Y-%m-%d"),
+                "name": title,
+                # No curtain times on the site: evenings are 7:30 PM, and a
+                # Sunday (usually a matinee) is left blank rather than
+                # guessed; a social listing of the show fills it at merge.
+                "time": "" if d.weekday() == 6 else "7:30 PM",
+                "venue": _TV_HOME[0],
+                "address": _TV_HOME[1],
+                "description": f"Live theatre: Theatre Victoria presents {title}.",
+                "icons": classify_icons(title, "", "Theatre Victoria"),
+                "free": False,
+                "url": show_url or "https://theatrevictoria.org",
+            })
+
+    found_cards = False
+    for node in soup.find_all(string=_TV_DATE_RE):
+        dates = _tv_dates(str(node).strip())
+        card = node.find_parent("div")
+        if not dates or card is None:
+            continue
+        title, show_url = _tv_title_from_card(card)
+        if title:
+            found_cards = True
+            add(title, show_url, dates)
+
+    if not found_cards:
+        lines = [b.strip() for b in soup.get_text("\n").split("\n") if b.strip()]
+        for i, line in enumerate(lines):
+            if _TV_DATE_RE.search(line):
+                title = _tv_title_from_text(lines, i)
+                if title:
+                    add(title, "", _tv_dates(line))
+    return events
+
+
 def fetch_theatre_victoria_events(days_ahead=7):
-    """Scrape show listings from Theatre Victoria."""
+    """Scrape show listings from Theatre Victoria's season cards."""
     events = []
-    today = _WINDOW_START
-    end_date = _WINDOW_END
-
     try:
-        url = "https://theatrevictoria.org"
-        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        resp = requests.get("https://theatrevictoria.org", headers=HEADERS, timeout=TIMEOUT)
         resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        page_text = soup.get_text(" ", strip=True)
-
-        # Find all date ranges like "April 23-26, 2026" or "July 24-26, ..."
-        pattern = re.compile(
-            r'(January|February|March|April|May|June|July|August|September|October|November|December)'
-            r'\s+(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?,?\s+(\d{4})'
-        )
-
-        # Also grab show titles nearby
-        show_blocks = soup.select("section, article, .show, .production, [class*='season'], h2, h3, h4, p")
-
-        text_blocks = soup.get_text("\n").split("\n")
-        text_blocks = [b.strip() for b in text_blocks if b.strip()]
-
-        skip_words = ["season", "directed", "screenplay", "songs by", "based on",
-                      "by william", "betty", "nacio", "arthur", "newsletter", "donate",
-                      "volunteer", "contact", "tickets", "audition", "about", "box office"]
-
-        i = 0
-        while i < len(text_blocks):
-            block = text_blocks[i]
-            m = pattern.search(block)
-            if m:
-                month, day_start, day_end, year = m.group(1), m.group(2), m.group(3), m.group(4)
-                # Look backwards for title — skip author/credit lines, find a clean show name
-                title = ""
-                for j in range(max(0, i-8), i):
-                    candidate = text_blocks[j]
-                    if (candidate and len(candidate) > 3
-                            and not re.search(r'\d{4}', candidate)
-                            and not any(w in candidate.lower() for w in skip_words)
-                            and not candidate.startswith("By ")
-                            and not candidate.startswith("Directed")
-                            and not candidate.startswith("Screenplay")
-                            and not candidate.startswith("Songs")):
-                        title = candidate
-
-                # Also check lines immediately after the date for the title
-                if not title or any(w in title.lower() for w in ["sign up", "newsletter", "our"]):
-                    for j in range(i+1, min(len(text_blocks), i+5)):
-                        candidate = text_blocks[j]
-                        if (candidate and len(candidate) > 3
-                                and not re.search(r'\d{4}', candidate)
-                                and not any(w in candidate.lower() for w in skip_words)
-                                and not candidate.startswith("By ")
-                                and not candidate.startswith("Directed")):
-                            title = candidate
-                            break
-
-                if not title or len(title) < 3:
-                    i += 1
-                    continue
-
-                # Expand date range — add each date in range
-                try:
-                    start_dt = datetime.strptime(f"{month} {day_start} {year}", "%B %d %Y").date()
-                    end_dt = datetime.strptime(f"{month} {day_end or day_start} {year}", "%B %d %Y").date()
-                    cur = start_dt
-                    while cur <= end_dt:
-                        if today <= cur <= end_date:
-                            events.append({
-                                "date": cur.strftime("%Y-%m-%d"),
-                                "name": title,
-                                "time": "7:30 PM",
-                                "venue": "Theatre Victoria",
-                                "address": "203 E. Constitution St, Victoria, TX",
-                                "description": f"Live theatre performance. {title} — presented by Theatre Victoria.",
-                                "icons": classify_icons(title, "", "Theatre Victoria"),
-                                "free": False,
-                                "url": "https://theatrevictoria.org",
-                            })
-                        cur += timedelta(days=1)
-                except ValueError:
-                    pass
-            i += 1
-
-        # Deduplicate by name+date
-        seen = {}
-        for ev in events:
-            k = (ev["name"], ev["date"])
-            if k not in seen:
-                seen[k] = ev
-        events = list(seen.values())
+        events = parse_theatre_victoria(resp.text, _WINDOW_START, _WINDOW_END)
         print(f"  [Theatre Victoria] {len(events)} events")
-
     except Exception as e:
         print(f"  [Theatre Victoria] Error: {e}")
-
     return events
 
 

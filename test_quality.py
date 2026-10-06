@@ -61,10 +61,38 @@ def test_address_in_venue_field_moves_to_address_and_matches_venue_list():
     assert e["address"] == "101 N. Main St"
 
 
-def test_address_venue_without_match_keeps_street():
+def test_address_venue_without_match_shows_the_address_only():
+    # The event page read "at 78 Tate Rd."; now the street is the address
+    # and the venue is blank (the site then shows the address alone).
     e = ev("Seminar", venue="2002 E Mockingbird Ln, Victoria, TX, United States, Texas 77904")
     ce.clean_venue(e, [])
-    assert e["venue"] == "2002 E Mockingbird Ln"
+    assert e["venue"] == "" and e["address"] == "2002 E Mockingbird Ln"
+    e = ev("Haunted Attraction", venue="78 Tate Rd.", address="78 Tate Rd")
+    ce.clean_venue(e, [])
+    assert e["venue"] == "" and e["address"] == "78 Tate Rd"
+    # A name before the city is still the venue.
+    e = ev("Live Music", venue="Moonshine Drinkery, Victoria, TX")
+    ce.clean_venue(e, [])
+    assert e["venue"] == "Moonshine Drinkery"
+
+
+def test_placeholder_venues_are_blanked():
+    # Live 2026-10: "The ABC's of Behavior" at venue "Victoria", address
+    # "Victoria"; Eventbrite dinners at "Restaurant of the Week".
+    e = ev("The ABC’s of Behavior: A Parent Seminar", venue="Victoria", address="Victoria")
+    ce.clean_venue(e, [])
+    assert e["venue"] == "" and e["address"] == ""
+    e = ev("Dinner with Entrepreneurs", venue="Restaurant of the Week", address="South Main Street")
+    ce.clean_venue(e, [])
+    assert e["venue"] == "" and e["address"] == "South Main Street"
+    for v in ["Victoria, TX", "Victoria Texas", "TBA", "Various locations"]:
+        e = ev("X", venue=v)
+        ce.clean_venue(e, [])
+        assert e["venue"] == "", v
+    for v in ["Victoria Public Library", "Victoria College", "Downtown Victoria"]:
+        e = ev("X", venue=v)
+        ce.clean_venue(e, [])
+        assert e["venue"] == v
 
 
 def test_real_venue_names_untouched():
