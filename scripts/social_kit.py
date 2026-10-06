@@ -170,10 +170,10 @@ def captions(groups, start, end, kind, handles=None):
         body = ["Nothing listed yet. Know something happening? Submit it at thevic361.com/submit", ""]
     if kind == "today":
         body = [line for line in body if line not in (start.strftime("%A").upper(),)]
-    head = f"{title} ({_range_label(start, end)}): {total} events" if total else f"{title} ({_range_label(start, end)})"
+    head = f"{title} ({_range_label(start, end)})" + (f": {total} event{'s' if total != 1 else ''}" if total else "")
     tags = venue_tags(groups, handles or {})
     # Same call to action as the ad, the slides and the site: the newsletter.
-    see_all = f"👉 See all {total}: " if total else "👉 Full list: "
+    see_all = "👉 Full list: " if not total else "👉 Details: " if total == 1 else f"👉 See all {total}: "
     fb = "\n".join([head, ""] + body + [f"{see_all}{SITE}{path}",
                                           f"Don't miss a thing: get every event free in your inbox each Monday 👉 {SITE}/subscribe", "", HASHTAGS])
     ig = "\n".join([head, ""] + body + [f"{see_all}link in bio (thevic361.com)",

@@ -38,6 +38,18 @@ class PostError(RuntimeError):
     pass
 
 
+class Unconfirmed(PostError):
+    """The final publish call timed out after Meta got it: the post may or
+    may not exist. Never retried automatically (it could post twice)."""
+
+
+class _SentButNoAnswer(PostError):
+    """A POST timed out waiting for the answer: Meta may have acted on it."""
+
+
+PENDING = "pending"  # posted.json marker for an Unconfirmed post
+
+
 def pick_slides(slides, limit=MAX_CAROUSEL):
     """Cover first and the call-to-action last; day slides in between."""
     if len(slides) <= limit:
@@ -47,9 +59,22 @@ def pick_slides(slides, limit=MAX_CAROUSEL):
 
 def _graph(method, path, session, **params):
     # GET parameters go in the query string; Graph ignores a GET body, so
-    # the access token and fields would never arrive.
-    where = {"params": params} if method == "GET" else {"data": params}
-    r = session.request(method, f"{GRAPH}/{path}", timeout=60, **where)
+    # the fields would never arrive. The token goes in a header instead, so
+    # it never shows up in a URL (requests puts the URL in its errors).
+    if method == "GET":
+        token = params.pop("access_token", None)
+        where = {"params": params}
+        if token:
+            where["headers"] = {"Authorization": f"Bearer {token}"}
+    else:
+        where = {"data": params}
+    try:
+        r = session.request(method, f"{GRAPH}/{path}", timeout=60, **where)
+    except requests.RequestException as e:
+        # Only the error type: the message can carry the URL. `from None`
+        # keeps the original out of any traceback too.
+        cls = _SentButNoAnswer if isinstance(e, requests.ReadTimeout) and method == "POST" else PostError
+        raise cls(f"{method} {path} failed: {type(e).__name__}") from None
     try:
         body = r.json()
     except ValueError:
@@ -90,7 +115,17 @@ def post_facebook(page_id, token, image_urls, caption, session):
     params = {"message": caption, "access_token": token}
     for i, m in enumerate(media):
         params[f"attached_media[{i}]"] = json.dumps(m)
-    return _graph("POST", f"{page_id}/feed", session, **params)["id"]
+    return _publish(f"{page_id}/feed", session, **params)
+
+
+def _publish(path, session, **params):
+    """The call that makes the post live. A read timeout here means Meta may
+    have posted it anyway, so it's Unconfirmed; any earlier timeout only
+    left unpublished photos or containers behind and is a plain failure."""
+    try:
+        return _graph("POST", path, session, **params)["id"]
+    except _SentButNoAnswer as e:
+        raise Unconfirmed(str(e)) from None
 
 
 def post_instagram(ig_user_id, token, image_urls, caption, session, poll_sleep=5):
@@ -112,8 +147,8 @@ def post_instagram(ig_user_id, token, image_urls, caption, session, poll_sleep=5
         time.sleep(poll_sleep)
     else:
         raise PostError("Instagram was still processing the carousel after 2 minutes.")
-    return _graph("POST", f"{ig_user_id}/media_publish", session,
-                  creation_id=carousel["id"], access_token=token)["id"]
+    return _publish(f"{ig_user_id}/media_publish", session,
+                    creation_id=carousel["id"], access_token=token)
 
 
 def post_instagram_reel(ig_user_id, token, video_url, caption, session, poll_sleep=10):
@@ -130,8 +165,8 @@ def post_instagram_reel(ig_user_id, token, video_url, caption, session, poll_sle
         time.sleep(poll_sleep)
     else:
         raise PostError("Instagram was still processing the Reel after 6 minutes.")
-    return _graph("POST", f"{ig_user_id}/media_publish", session,
-                  creation_id=item["id"], access_token=token)["id"]
+    return _publish(f"{ig_user_id}/media_publish", session,
+                    creation_id=item["id"], access_token=token)
 
 
 def page_token(page_id, token, session):
@@ -169,7 +204,12 @@ def main(argv=None, session=None):
         print(f"No events in the {args.kind} kit; not posting an empty list.")
         return 0
 
-    token = page_token(page_id, token, session)
+    looked_up = page_token(page_id, token, session)
+    if looked_up != token and os.environ.get("GITHUB_ACTIONS"):
+        # GitHub only masks the secret it was given; hide the Page's own
+        # token in the log too.
+        print(f"::add-mask::{looked_up}")
+    token = looked_up
     base = f"{SITE}/social/latest"
     urls = [f"{base}/{name}" for name in pick_slides(kit["slides"])]
     reel_url = f"{base}/{kit['reel']}" if kit.get("reel") else None
@@ -202,18 +242,37 @@ def main(argv=None, session=None):
             json.dump(posted, f, indent=2)
 
     failures = []
-    if slot.get("facebook"):
-        print(f"Facebook: already posted {slot['facebook']} for {slot_key}; skipping.")
-    else:
+
+    def already(label, platform):
+        """True (and says why) when this slot shouldn't be posted again."""
+        if slot.get(platform) == PENDING:
+            print(f"::warning::{label}: an earlier run timed out publishing {slot_key} and may have posted it. "
+                  f"Not posting again; check the {label} account by hand, and to retry remove "
+                  f'"{platform}" under "{slot_key}" in docs/social/latest/posted.json.')
+            return True
+        if slot.get(platform):
+            print(f"{label}: already posted {slot[platform]} for {slot_key}; skipping.")
+            return True
+        return False
+
+    def failed(label, platform, e):
+        if isinstance(e, Unconfirmed):
+            remember(platform, PENDING)
+            failures.append(f"{label}: {e}; it may have posted anyway. Check {label} by hand; "
+                            f"re-runs skip it until \"{platform}\" is removed from posted.json.")
+        else:
+            failures.append(f"{label}: {e}")
+
+    if not already("Facebook", "facebook"):
         try:
             fb_id = post_facebook(page_id, token, urls, kit["captions"]["facebook"], session)
             remember("facebook", fb_id)
             print(f"Facebook: posted {fb_id}")
         except PostError as e:
-            failures.append(f"Facebook: {e}")
-    if ig_user and slot.get("instagram"):
-        print(f"Instagram: already posted {slot['instagram']} for {slot_key}; skipping.")
-    elif ig_user:
+            failed("Facebook", "facebook", e)
+    if not ig_user:
+        print("IG_USER_ID not set; skipping Instagram.")
+    elif not already("Instagram", "instagram"):
         try:
             if reel_url:
                 ig_id = post_instagram_reel(ig_user, token, reel_url, kit["captions"]["instagram"], session)
@@ -223,9 +282,7 @@ def main(argv=None, session=None):
                 print(f"Instagram: posted {ig_id}")
             remember("instagram", ig_id)
         except PostError as e:
-            failures.append(f"Instagram: {e}")
-    else:
-        print("IG_USER_ID not set; skipping Instagram.")
+            failed("Instagram", "instagram", e)
 
     for f in failures:
         print(f"::error::{f}")
