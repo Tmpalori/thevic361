@@ -19,10 +19,10 @@ import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, withoutSubmitter } from './db.js';
+import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter } from './db.js';
 import { validateSubmission, validateEventEdit, checkBotSignals } from './validate.js';
 import { verifyTurnstile } from './turnstile.js';
-import { createRateLimiter } from './rateLimit.js';
+import { createRateLimiter, ipKey } from './rateLimit.js';
 import { createAuth } from './auth.js';
 import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
@@ -84,8 +84,35 @@ function safeTokenEqual(a, b) {
   return crypto.timingSafeEqual(ah, bh);
 }
 
+// Express 4 doesn't catch a rejected promise from an async handler: the
+// request hangs and the rejection goes unhandled (a database blip left the
+// submit form and admin tabs spinning). Send every handler's rejection to
+// next(err) so the error handler answers. Error handlers (4 args) and
+// mounted apps/routers pass through untouched.
+function catchAsync(fn) {
+  if (typeof fn !== 'function' || fn.length >= 4 || fn.handle) return fn;
+  return function (req, res, next) {
+    const out = fn.call(this, req, res, next);
+    if (out && typeof out.catch === 'function') out.catch(err => next(err || new Error('handler rejected')));
+    return out;
+  };
+}
+
+// Wraps app.get/post/... so routes registered anywhere (including the
+// register* helpers in other modules) get catchAsync.
+function catchAsyncRoutes(app) {
+  for (const method of ['use', 'all', 'get', 'post', 'put', 'patch', 'delete']) {
+    const orig = app[method].bind(app);
+    app[method] = (...args) => {
+      if (method === 'get' && args.length === 1) return orig(...args); // app.get(setting)
+      return orig(...args.map(a => (Array.isArray(a) ? a.map(catchAsync) : catchAsync(a))));
+    };
+  }
+  return app;
+}
+
 export async function createApp(opts = {}) {
-  const app = express();
+  const app = catchAsyncRoutes(express());
 
   const adminToken = opts.adminToken ?? process.env.ADMIN_TOKEN ?? null;
   const turnstileSecret = opts.turnstileSecret ?? process.env.TURNSTILE_SECRET_KEY ?? null;
@@ -175,13 +202,36 @@ export async function createApp(opts = {}) {
 
   // Per-IP login throttle. 10 attempts / 15 min — enough for an admin who
   // typoes their password a few times, way too few for online brute force.
+  // IPv6 clients are keyed on their /64 (ipKey), which one subscriber owns.
   const loginLimiter = opts.loginLimiter || createRateLimiter({
     windowMs: 15 * 60 * 1000, max: 10
   });
+  // Wrong legacy ADMIN_TOKEN guesses on /api/admin/*, per client.
+  const authFailLimiter = opts.authFailLimiter || createRateLimiter({
+    windowMs: 15 * 60 * 1000, max: 20
+  });
+  // Failed logins and wrong admin tokens from everyone together, so an
+  // attacker rotating addresses still runs out. Past it, sign-in and the
+  // legacy token pause for the rest of the window (signed-in sessions keep
+  // working) and Slack hears about it once.
+  const authFailGlobal = opts.authFailGlobal || createRateLimiter({
+    windowMs: 15 * 60 * 1000, max: 100
+  });
+  const clientKey = req => ipKey(req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress);
+  function recordAuthFailure() {
+    authFailGlobal.check('all');
+    if (!authFailGlobal.peek('all').ok) {
+      slack.alert('admin-auth-flood', 'Many failed admin sign-ins',
+        'Too many failed admin sign-ins or wrong admin tokens in 15 minutes, from many addresses. ' +
+        'Sign-in is paused until it slows down; signed-in sessions keep working.');
+    }
+  }
 
   const storeBundle = opts.storeBundle ?? await createStore({
     databaseUrl: opts.databaseUrl,
-    file: opts.storageFile
+    file: opts.storageFile,
+    onUnavailable: err => slack.alert('db-boot', 'Database unreachable at boot',
+      `${err.message}\nThe site is up on the bundled events.json and retries the database on the next request.`)
   });
   const store = storeBundle.store;
 
@@ -220,9 +270,13 @@ export async function createApp(opts = {}) {
 
   // The admin's sponsor edit can carry a new logo (a data URL, shrunk in
   // the browser), so it alone gets a bigger JSON limit.
+  // Save & Publish sends the whole live list (~450 bytes an event), which
+  // outgrows 64 KB around 150 events, so it gets room too.
   const smallJson = express.json({ limit: '64kb' });
   const sponsorEditJson = express.json({ limit: '600kb' });
-  app.use((req, res, next) => (/^\/api\/admin\/sponsors\/[^/]+$/.test(req.path) ? sponsorEditJson : smallJson)(req, res, next));
+  const publishJson = express.json({ limit: '2mb' });
+  app.use((req, res, next) => (/^\/api\/admin\/sponsors\/[^/]+$/.test(req.path) ? sponsorEditJson
+    : req.path === '/api/admin/publish-events' ? publishJson : smallJson)(req, res, next));
   // The sponsor checkout form can carry a logo (a data URL, shrunk in the
   // browser), so it alone gets a bigger limit.
   const smallForms = express.urlencoded({ extended: false, limit: '64kb' });
@@ -262,10 +316,10 @@ export async function createApp(opts = {}) {
   // ─── Admin: login ─────────────────────────────────────────────────────
   // Body: { username, password }. Returns { ok, token, expires_at } on success.
   app.post('/api/admin/login', async (req, res) => {
-    const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    const burst = loginLimiter.check(ip);
-    if (!burst.ok) {
-      res.set('Retry-After', String(burst.retryAfter || 60));
+    const burst = loginLimiter.check(clientKey(req));
+    const flood = authFailGlobal.peek('all');
+    if (!burst.ok || !flood.ok) {
+      res.set('Retry-After', String((burst.ok ? flood : burst).retryAfter || 60));
       return res.status(429).json({ ok: false, error: 'rate-limited' });
     }
     if (!auth.configured) {
@@ -281,6 +335,7 @@ export async function createApp(opts = {}) {
       password: typeof body.password === 'string' ? body.password : ''
     });
     if (!result.ok) {
+      recordAuthFailure();
       // Generic message — never disclose which field was wrong.
       return res.status(401).json({ ok: false, error: 'invalid-credentials' });
     }
@@ -295,7 +350,7 @@ export async function createApp(opts = {}) {
   // probe auth.
   app.get('/api/admin/me', (req, res) => {
     const ok = checkAdminAuth(req);
-    if (!ok.ok) return res.status(401).json({ ok: false, error: ok.reason });
+    if (!ok.ok) return res.status(ok.reason === 'rate-limited' ? 429 : 401).json({ ok: false, error: ok.reason });
     res.json({ ok: true, kind: ok.kind, sub: ok.sub || null });
   });
 
@@ -428,8 +483,14 @@ export async function createApp(opts = {}) {
       if (v.ok) return { ok: true, kind: 'session', sub: v.payload.sub };
       // Fall through to legacy token check before giving up.
     }
-    if (adminToken && provided && safeTokenEqual(provided, adminToken)) {
-      return { ok: true, kind: 'legacy-token' };
+    if (adminToken) {
+      // Session tokens are signed, so only the legacy token can be guessed:
+      // throttle wrong ones per client and overall, checked before comparing.
+      const key = clientKey(req);
+      if (!authFailLimiter.peek(key).ok || !authFailGlobal.peek('all').ok) return { ok: false, reason: 'rate-limited' };
+      if (safeTokenEqual(provided, adminToken)) return { ok: true, kind: 'legacy-token' };
+      authFailLimiter.check(key);
+      recordAuthFailure();
     }
     return { ok: false, reason: 'unauthorized' };
   }
@@ -443,6 +504,9 @@ export async function createApp(opts = {}) {
       });
     }
     const result = checkAdminAuth(req);
+    if (!result.ok && result.reason === 'rate-limited') {
+      return res.status(429).json({ ok: false, error: 'rate-limited' });
+    }
     if (!result.ok) {
       return res.status(401).json({ ok: false, error: 'unauthorized' });
     }
@@ -675,7 +739,9 @@ export async function createApp(opts = {}) {
     const original_key = typeof body.original_key === 'string'
       ? body.original_key.trim().slice(0, 600)
       : '';
-    if (!original_key || original_key.split('|').length !== 3) {
+    // Names and venues can contain '|' themselves, so "at least three
+    // parts", not exactly three (see parseEventKey).
+    if (!original_key || original_key.split('|').length < 3) {
       return res.status(400).json({
         ok: false,
         error: 'bad-original-key',
@@ -964,7 +1030,7 @@ export async function createApp(opts = {}) {
   app.post('/api/admin/keep-event', requireAdmin, async (req, res) => {
     const key = String(req.body && req.body.key || '').slice(0, 600);
     const keep = Boolean(req.body && req.body.keep);
-    if (key.split('|').length !== 3 || !/^\d{4}-\d{2}-\d{2}\|/.test(key)) {
+    if (!parseEventKey(key)) {
       return res.status(400).json({ ok: false, error: 'bad-key' });
     }
     try {
@@ -1380,21 +1446,26 @@ export async function createApp(opts = {}) {
     }));
   }
 
-  async function findEvent(payload, page) {
-    let ev = payload.events.find(e => e.page === page);
-    if (!ev && typeof store.getArchivedEvent === 'function') {
-      ev = await store.getArchivedEvent(page);
-      // A hidden event's archived copy stays hidden.
-      if (ev && !withoutHidden([{ ...ev, page }], payload).length) ev = null;
-    }
-    return ev || null;
+  // { ev } for a page to show, { gone: true } for an upcoming event that's
+  // only in the archive: it was taken down, retired or re-dated, so its old
+  // copy mustn't keep passing for a live listing. Past events keep their
+  // archive pages.
+  async function findEvent(payload, page, now) {
+    const live = payload.events.find(e => e.page === page);
+    if (live) return { ev: live };
+    if (typeof store.getArchivedEvent !== 'function') return {};
+    const ev = await store.getArchivedEvent(page);
+    // A hidden event's archived copy stays hidden.
+    if (!ev || !withoutHidden([{ ...ev, page }], payload).length) return {};
+    if (ev.date >= localDateStr(now)) return { gone: true };
+    return { ev };
   }
 
   // Add-to-calendar file. Registered before /events/:slug, which would
   // otherwise treat "<slug>.ics" as a slug.
   app.get('/events/:slug.ics', pageHandler(async (req, res, payload, ctx) => {
-    const ev = await findEvent(payload, `/events/${req.params.slug}`);
-    if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), 404);
+    const { ev, gone } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), gone ? 410 : 404);
     res.set('Content-Disposition', `attachment; filename="${String(req.params.slug).replace(/[^a-z0-9-]/gi, '') || 'event'}.ics"`);
     res.type('text/calendar; charset=utf-8').send(renderIcs(ev, ctx));
   }));
@@ -1402,9 +1473,9 @@ export async function createApp(opts = {}) {
   // Link-preview card (server/ogImage.js). The page links it with ?v=<hash
   // of what's drawn>, so the long cache is safe: an edited event gets a new
   // URL, and Facebook re-fetches it. Also registered before /events/:slug.
-  app.get('/events/:slug.png', pageHandler(async (req, res, payload) => {
-    const ev = await findEvent(payload, `/events/${req.params.slug}`);
-    if (!ev) return res.status(404).type('text/plain').send('Not found');
+  app.get('/events/:slug.png', pageHandler(async (req, res, payload, ctx) => {
+    const { ev, gone } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    if (!ev) return res.status(gone ? 410 : 404).type('text/plain').send('Not found');
     let png;
     try {
       png = renderEventCard({ ...ev, page: `/events/${req.params.slug}` });
@@ -1418,8 +1489,8 @@ export async function createApp(opts = {}) {
   }));
 
   app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
-    const ev = await findEvent(payload, `/events/${req.params.slug}`);
-    if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), 404);
+    const { ev, gone } = await findEvent(payload, `/events/${req.params.slug}`, ctx.now);
+    if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), gone ? 410 : 404);
     const venue = venueFor(ev, venues);
     sendHtml(res, renderEventPage(ev, payload.events, {
       ...ctx, extras: eventActionsHtml(ev, siteUrl), venuePath: venue ? venue.path : null,
@@ -1659,7 +1730,9 @@ export async function createApp(opts = {}) {
     res.status(404).type('text/plain').send('Not found');
   });
 
-  app.use((err, req, res, _next) => {
+  app.use((err, req, res, next) => {
+    // Too late to answer (a handler failed after sending): let Express close it.
+    if (res.headersSent) return next(err);
     // A garbled tracking beacon (bad JSON from a browser extension, a bot)
     // isn't worth a 500 or an error log line.
     if (req.path === '/api/track') return res.status(204).end();
@@ -1671,8 +1744,22 @@ export async function createApp(opts = {}) {
       if (req.path.startsWith('/api/')) return res.status(413).json({ ok: false, error: 'too-large' });
       return res.status(413).type('text/plain').send('Too large');
     }
+    // Other client errors Express flags (malformed JSON, a bad %-escape in
+    // a URL) are the sender's too: answer with their status, no alert.
+    const status = Number(err && (err.status || err.statusCode));
+    if (status >= 400 && status < 500) {
+      if (req.path.startsWith('/api/')) {
+        return res.status(status).json({ ok: false, error: err.type === 'entity.parse.failed' ? 'bad-json' : 'bad-request' });
+      }
+      if ((req.method === 'GET' || req.method === 'HEAD') && /text\/html/.test(req.get('accept') || '')) {
+        return sendHtml(res, renderNotFoundPage({ siteUrl, kind: req.path.startsWith('/venues/') ? 'venue' : req.path.startsWith('/events/') ? 'event' : 'page' }), status);
+      }
+      return res.status(status).type('text/plain').send('Bad request');
+    }
     console.error('[server] error:', err);
-    slack.alert(`500:${req.path}:${err && err.message}`, 'Site error (500)',
+    // Keyed on the message, not the path, so one fault hit on many URLs
+    // alerts once.
+    slack.alert(`500:${err && err.message}`, 'Site error (500)',
       `${req.method} ${req.path}\n${(err && err.message) || err}`);
     if (req.path.startsWith('/api/')) {
       return res.status(500).json({ ok: false, error: 'server-error' });

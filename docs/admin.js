@@ -1394,6 +1394,9 @@
           setStatus(json.message, 'error');
           return;
         }
+        if (res.status === 413) {
+          throw new Error('That list is too big to publish in one go. Uncheck some events and try again.');
+        }
         if (!res.ok || !json || !json.ok) {
           throw new Error((json && (json.message || json.error)) || ('Publish failed (' + res.status + ')'));
         }
