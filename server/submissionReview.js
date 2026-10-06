@@ -23,7 +23,13 @@
  * a preview before paying), and nothing paid for is turned away
  * automatically: a reject becomes a flag, and an exact copy of a live
  * event is approved (the pin finds the listed one). A paid pick still
- * unpublished close to its date is called out in Slack (remindPaidPicks).
+ * unpublished close to its date, or to the Monday newsletter that promised
+ * to star it, is called out in Slack (remindPaidPicks). A pick whose order
+ * was refunded or disputed is treated as a free submission again.
+ *
+ * An approval whose publish failed (or whose live check threw) is marked
+ * `ai_review.live_pending` and retried on later runs (retryLive), so the
+ * event still goes live and its "you're live" email still goes out.
  *
  * Safety: the shared secret (like the event check), pending rows only, at
  * most MAX_PER_RUN decisions per call.
@@ -32,7 +38,8 @@
 import crypto from 'node:crypto';
 import { validateSubmission } from './validate.js';
 import { normalizePayload, eventKeyOf } from './db.js';
-import { localDateStr } from './seo.js';
+import { localDateStr, currentWeek } from './seo.js';
+import { newsletterCovers } from './notify.js';
 
 export const MAX_PER_RUN = 20;
 const DECISIONS = new Set(['approve', 'flag', 'reject', 'duplicate']);
@@ -46,7 +53,29 @@ function secretOk(given, want) {
 }
 
 const REVIEWED_SOURCES = new Set(['submission', 'paid-feature']);
-export const isPaidPick = row => Boolean(row) && row.source === 'paid-feature';
+// Order statuses that still carry a paid pick's privileges (sponsors.js LIVE).
+const PAID_ORDER = new Set(['paid', 'active']);
+
+// A paid Vic's Pick submission. With `orders` (the sponsor orders), only
+// while its order is still paid: a refunded or disputed pick loses the
+// softened review and the reminders. Without them (or with no order found
+// for the row) the source alone decides, as before orders were checked.
+export function isPaidPick(row, orders = null) {
+  if (!row || row.source !== 'paid-feature') return false;
+  if (!Array.isArray(orders)) return true;
+  const order = orders.find(o => o && o.submission_id === row.id);
+  return !order || PAID_ORDER.has(order.status);
+}
+
+// The sponsor orders, or null when they can't be read (then isPaidPick
+// falls back to the source).
+async function sponsorOrders(store) {
+  if (typeof store.listSponsorOrders !== 'function') return null;
+  try { return await store.listSponsorOrders(); } catch (err) {
+    console.warn('[submission-review] sponsor orders unavailable:', err.message);
+    return null;
+  }
+}
 
 // Waiting for the AI: pending submissions (free or paid) it hasn't seen
 // and the admin hasn't touched (anything beyond the "submitted" history
@@ -58,10 +87,14 @@ export function awaitingReview(row) {
   return history.every(h => h && (h.action === 'submitted' || h.action === 'reminder'));
 }
 
-// Paid picks this close to their date (days) that still aren't approved
-// get a Slack reminder, at most every REMIND_EVERY_MS, once they've had
-// REMIND_GRACE_MS for the review to publish them.
+// Paid picks this close to their date (days) that still aren't live get a
+// Slack reminder, at most every REMIND_EVERY_MS, once they've had
+// REMIND_GRACE_MS for the review to publish them. So do picks promised a
+// star in the Monday newsletter (newsletterCovers) from REMIND_NEWSLETTER_DAYS
+// before that Monday: the issue goes out early Monday, before the 2-day
+// window would open for a pick later in the week.
 const REMIND_DAYS = 2;
+const REMIND_NEWSLETTER_DAYS = 1;
 const REMIND_EVERY_MS = 6 * 3600 * 1000;
 const REMIND_GRACE_MS = 30 * 60 * 1000;
 
@@ -69,14 +102,28 @@ function addDaysStr(dateStr, n) {
   return new Date(Date.parse(dateStr + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
 }
 
+// Not live yet: still pending, or approved but its publish hasn't
+// succeeded (retryLive).
+const notLive = r => r.status === 'pending' || (r.status === 'approved' && Boolean(r.ai_review && r.ai_review.live_pending));
+
 // Called on every review run (the pending fetch). Returns the reminded rows.
-export async function remindPaidPicks({ store, slack, nowFn, siteUrl = '' }) {
+// `rows` (pending and approved-but-not-live submissions) and `orders` can be
+// passed in when the caller already read them.
+export async function remindPaidPicks({ store, slack, nowFn, siteUrl = '', rows: given = null, orders }) {
   if (!slack) return [];
   const now = nowFn();
   const today = localDateStr(now);
   const until = addDaysStr(today, REMIND_DAYS);
-  const rows = (await store.list({ status: 'pending' })).filter(r => isPaidPick(r) && r.payload &&
-    r.payload.date >= today && r.payload.date <= until &&
+  const paidOrders = orders === undefined ? await sponsorOrders(store) : orders;
+  const soon = r => {
+    const date = r.payload.date;
+    if (date < today) return false;
+    if (date <= until) return true;
+    const monday = currentWeek(date)[0];
+    return newsletterCovers(date, r.created_at) && monday >= today && monday <= addDaysStr(today, REMIND_NEWSLETTER_DAYS);
+  };
+  const candidates = given || [...await store.list({ status: 'pending' }), ...await store.list({ status: 'approved' })];
+  const rows = candidates.filter(r => notLive(r) && isPaidPick(r, paidOrders) && r.payload && soon(r) &&
     now.getTime() - Date.parse(r.created_at || 0) >= REMIND_GRACE_MS);
   const due = rows.filter(r => {
     const last = (Array.isArray(r.review_history) ? r.review_history : []).filter(h => h && h.action === 'reminder').pop();
@@ -92,12 +139,47 @@ export async function remindPaidPicks({ store, slack, nowFn, siteUrl = '' }) {
     channel: 'sales',
     title: `⏰ ${due.length === 1 ? 'A paid Vic’s Pick isn’t' : `${due.length} paid Vic’s Picks aren’t`} on the site yet`,
     text: due.map(r => {
-      const why = r.ai_review && r.ai_review.reason ? `: ${r.ai_review.reason}` : r.ai_review ? '' : ': not reviewed yet';
+      const why = r.status === 'approved' ? ': approved, but publishing it failed (retrying)'
+        : r.ai_review && r.ai_review.reason ? `: ${r.ai_review.reason}` : r.ai_review ? '' : ': not reviewed yet';
       return `• ${r.payload.name} · ${r.payload.date === today ? 'TODAY' : r.payload.date} (${r.submitter_name || r.submitter_email || 'buyer'})${why}`;
     }).join('\n'),
     link: `${siteUrl}/admin.html`, footer: 'Approve it in the Submissions tab, or refund it in Stripe'
   });
   return due;
+}
+
+// Approvals whose publish failed (or whose live check threw): publish
+// again and, once the event is on the site, send its "you're live" email
+// (onApproved). Upcoming dates only; one that published fine but still
+// isn't listed stops retrying (the review's Slack note already said so).
+export async function retryLive({ store, publish, onApproved, nowFn, slack = null, siteUrl = '', rows: given = null }) {
+  const today = localDateStr(nowFn());
+  const rows = (given || await store.list({ status: 'approved' })).filter(r => r.status === 'approved' &&
+    r.ai_review && r.ai_review.live_pending && r.payload && String(r.payload.date || '') >= today);
+  if (!rows.length) return [];
+  let published;
+  try { published = await publish(); } catch (err) {
+    console.warn('[submission-review] publish retry failed:', err.message);
+    return [];
+  }
+  if (!published || !published.ok) return [];
+  const out = [];
+  for (const r of rows) {
+    let live;
+    try { live = Boolean(await onApproved(r)); } catch (err) {
+      console.warn('[submission-review] live check/email retry failed:', err.message);
+      continue;
+    }
+    const at = nowFn().toISOString();
+    await store.update(r.id, { ai_review: { ...r.ai_review, live_pending: null, live, live_at: live ? at : null } });
+    out.push({ id: r.id, live });
+    if (!live && slack) {
+      slack.notify({ channel: 'activity', title: `⚠️ Approved but not on the site: ${r.payload.name}`,
+        text: `${r.payload.name} · ${r.payload.date} published on retry but isn't listed (removed before, or matches an event already listed); check it.`,
+        link: `${siteUrl}/admin.html` });
+    }
+  }
+  return out;
 }
 
 // The stored payload with only the AI's allowed changes applied. Returns
@@ -136,16 +218,27 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
       try { Promise.resolve(onRun()).catch(err => console.warn('[submission-review] onRun failed:', err.message)); } catch (err) {
         console.warn('[submission-review] onRun failed:', err.message);
       }
-      // Each review run passes through here, so it's also when paid picks
-      // close to their date and still unpublished are called out.
-      try { await remindPaidPicks({ store, slack, nowFn, siteUrl }); } catch (err) {
+      const orders = await sponsorOrders(store);
+      // Each review run passes through here, so it's also when approvals
+      // whose publish failed are retried, and paid picks close to their
+      // date (or their newsletter) and still not live are called out.
+      let approved = [];
+      try {
+        approved = await store.list({ status: 'approved' });
+        const retried = await retryLive({ store, publish, onApproved, nowFn, slack, siteUrl, rows: approved });
+        if (retried.length) approved = await store.list({ status: 'approved' });
+      } catch (err) {
+        console.warn('[submission-review] live retry failed:', err.message);
+      }
+      const pending = await store.list({ status: 'pending' });
+      try { await remindPaidPicks({ store, slack, nowFn, siteUrl, rows: [...pending, ...approved], orders }); } catch (err) {
         console.warn('[submission-review] paid pick reminder failed:', err.message);
       }
       const rows = (await store.list({ status: 'pending' })).filter(awaitingReview);
       // Only what the review needs: no emails, phone numbers or IPs.
       const submissions = rows.slice(0, MAX_PER_RUN).map(r => {
         const { submitter_first_name: _f, submitter_last_name: _l, submitter_phone: _p, ...event } = r.payload || {};
-        return { id: r.id, created_at: r.created_at, submitter_kind: r.submitter_kind || 'other', paid: isPaidPick(r), event };
+        return { id: r.id, created_at: r.created_at, submitter_kind: r.submitter_kind || 'other', paid: isPaidPick(r, orders), event };
       });
       res.json({ ok: true, auto_approve: autoApprove, submissions });
     } catch (err) { next(err); }
@@ -161,6 +254,7 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
     try {
       const done = [];
       const skipped = [];
+      const orders = await sponsorOrders(store);
       for (const ask of asks) {
         const id = String(ask && ask.id || '');
         let decision = String(ask && ask.decision || '');
@@ -168,7 +262,7 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
         const row = id ? await store.get(id) : null;
         if (!row || !awaitingReview(row)) { skipped.push({ id, why: 'not-awaiting-review' }); continue; }
         if (!DECISIONS.has(decision)) { skipped.push({ id, why: 'bad-decision' }); continue; }
-        const paid = isPaidPick(row);
+        const paid = isPaidPick(row, orders);
         let reasonNote = reason;
         // Nothing paid for is turned away without the owner: a refund is
         // their call. An exact copy of a live event is fine for a paid
@@ -238,14 +332,25 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
           try { d.live = published && published.ok ? Boolean(await onApproved(d.row)) : false; } catch (err) {
             console.warn('[submission-review] live check/email failed:', err.message);
           }
+          // Publishing failed (or the check threw): the event isn't live and
+          // nobody would send its email later, so retryLive picks it up on
+          // the next run.
+          if (!(published && published.ok) || d.live === null) {
+            d.retrying = true;
+            const aiReview = { ...(d.row.ai_review || {}), live_pending: nowFn().toISOString() };
+            try {
+              d.row = (await store.update(d.id, { ai_review: aiReview })) || { ...d.row, ai_review: aiReview };
+            } catch (err) { console.warn('[submission-review] live retry mark failed:', err.message); }
+          }
         }
       }
       if (slack && done.length) {
         const lines = done.map(d => {
           const ev = d.row.payload || {};
           const fixed = d.changes.length ? ` (tidied: ${d.changes.join(', ')})` : '';
-          const notLive = d.decision === 'approve' && d.live === false
-            ? ': ⚠️ approved but not on the site (removed before, or matches an event already listed); check it' : '';
+          const notLive = d.retrying ? ': not live yet, publishing is retried on the next run'
+            : d.decision === 'approve' && d.live === false
+              ? ': ⚠️ approved but not on the site (removed before, or matches an event already listed); check it' : '';
           return `• *${LABEL[d.decision]}*${d.paid ? ' (💰 paid Vic’s Pick)' : ''}: ${ev.name} · ${ev.date}${fixed}${notLive}${d.decision === 'approve' ? '' : `: ${d.reason}`}`;
         });
         const live = done.filter(d => d.decision === 'approve' && d.live !== false).length;
