@@ -283,7 +283,35 @@
     });
   }
 
+  function showNotice(msg) {
+    const el = $('#submissions-notice');
+    if (!el) return;
+    el.hidden = !msg;
+    el.textContent = msg || '';
+  }
+
+  // What the server did with the live site after an approve, reject or
+  // edit, in words (nothing to say for a plain pending edit).
+  function liveNotice(prev, json, status) {
+    const name = ((json.submission && json.submission.payload) || {}).name || 'It';
+    if (status === 'approved' && prev !== 'approved') {
+      if (json.live) return name + ' is approved and live on the site; the submitter was emailed.';
+      if (json.published === false) return name + ' is approved, but publishing failed. It goes live with the next automatic update, or add it in the Events tab now.';
+      return name + ' is approved but not on the site: its date may have passed, it was removed before, or it matches an event already listed.';
+    }
+    if (status && status !== 'approved' && prev === 'approved') {
+      return json.unpublished ? name + ' was taken off the site.'
+        : 'Warning: ' + name + ' wasn’t found on the published list. If it’s still showing, remove it in the Events tab.';
+    }
+    if (!status && prev === 'approved' && json.updated_live === false) {
+      return 'Saved, but the live event wasn’t found to update. Check it in the Events tab.';
+    }
+    if (!status && prev === 'approved' && json.updated_live) return 'Saved; the live event is updated too.';
+    return '';
+  }
+
   async function patch(id, body) {
+    const prev = (state.submissions.find(s => s.id === id) || {}).status;
     const { res, json } = await apiFetch('/api/admin/submissions/' + encodeURIComponent(id), {
       method: 'POST',
       body: JSON.stringify(body)
@@ -292,6 +320,7 @@
       showError((json && json.error) || ('Update failed (' + res.status + ').'));
       return null;
     }
+    showNotice(liveNotice(prev, json, body.status));
     return json.submission;
   }
 

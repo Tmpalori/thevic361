@@ -3,7 +3,7 @@
 The full agent guide lives in AGENTS.md. Read it before making changes.
 
 ## Project in one paragraph
-The Vic 361 is a weekly community-events website for Victoria, TX. It runs a Sunday-night Python collector (collect_events.py, 3.3k LOC monolith) that writes candidates.json and collection_metadata.json. An Express server in server/ (flat layout, not server/routes/) serves the static site under docs/ and exposes /api/admin/* for the Sunday-night admin curation. Live data is in Railway Postgres (table published_events, single row id=1). The repo is Tmpalori/thevic361. Live site is thevic361.com on Railway.
+The Vic 361 is a weekly community-events website for Victoria, TX. It runs a Python collector (collect_events.py, 3.3k LOC monolith) Sunday and Wednesday at 20:23 UTC that writes candidates.json and collection_metadata.json; the commit redeploys the site, which auto-publishes the new candidates (server/autopublish.js). An Express server in server/ (flat layout, not server/routes/) serves the static site under docs/ and exposes /api/admin/* for the owner to fix exceptions. Live data is in Railway Postgres (table published_events, single row id=1), written by auto-publish, admin Save & Publish, the event check's hide/restore and submission un-approval. The repo is Tmpalori/thevic361. Live site is www.thevic361.com on Railway.
 
 ## Hard rules
 1. The weekly workflow runs `collect_events.py --candidates-only`. CI must NEVER overwrite docs/events.json. test_collect_events_safety.py pins this — do not break it.
@@ -21,12 +21,12 @@ The Vic 361 is a weekly community-events website for Victoria, TX. It runs a Sun
 
 ## Run / test
 ```
-npm install && npm test           # vitest, runs every tests/*.test.js
+npm ci && npm test                # Node 22 (.nvmrc); vitest, runs every tests/*.test.js
 pip install -r requirements.txt -r requirements-dev.txt
 pytest -q                          # tests live AT THE REPO ROOT, not in tests/
 ```
 
-There is no PR-gating CI for the test suites. Run them locally before pushing.
+.github/workflows/tests.yml runs npm test and pytest on every PR and on pushes to main; run both locally first.
 
 ## Don't touch
 - candidates.json, collection_metadata.json (CI artifacts)
@@ -36,9 +36,9 @@ There is no PR-gating CI for the test suites. Run them locally before pushing.
 
 ## Environment variables — quick map
 DATABASE_URL, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_SESSION_SECRET (required for prod server)
-OPENAI_API_KEY, APIFY_TOKEN, SENTRY_DSN (collector)
+OPENAI_API_KEY, APIFY_TOKEN, GEMINI_API_KEY, SENTRY_DSN (collector)
 GITHUB_TOKEN (optional — enables docs/events.json commits + workflow_dispatch from admin)
 TURNSTILE_SECRET_KEY, TURNSTILE_SITE_KEY (optional — when set, submissions require a token)
 FB_POSTS_ENABLED, IG_POSTS_ENABLED (repo variables, =1 to enable in CI)
 
-Full reference in RAILWAY.md.
+Full reference: the Environment variables section of AGENTS.md.

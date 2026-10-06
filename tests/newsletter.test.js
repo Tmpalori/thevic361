@@ -3,7 +3,7 @@
 // Resend newsletter (server/newsletter.js). Resend is replaced with a
 // recording fake; nothing is emailed.
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore, } from '../server/db.js';
 import { withPages } from '../server/seo.js';
@@ -283,8 +283,8 @@ describe('signup flow', () => {
     // Opening the link again after confirming just says so.
     expect(await (await fetch(`${baseUrl}/subscribe/confirm?token=${link[1]}`)).text()).toContain('You&#39;re subscribed');
     expect((await fetch(`${baseUrl}/subscribe/confirm?token=nope`)).status).toBe(404);
-    await new Promise(r => setTimeout(r, 50)); // the welcome email goes out after the page
-    expect(sent.single).toHaveLength(2);
+    // The welcome email goes out after the page.
+    await vi.waitFor(() => expect(sent.single).toHaveLength(2), { timeout: 2000 });
 
     // Signing up again while active sends nothing.
     await post('/api/subscribe', { email: 'fan@example.com' });
@@ -301,7 +301,11 @@ describe('signup flow', () => {
     expect(sent.single.filter(m => m.subject === 'Welcome to The Vic 361')).toHaveLength(0);
     await fetch(`${baseUrl}/subscribe/confirm?token=${token}`, { method: 'POST' });
     await fetch(`${baseUrl}/subscribe/confirm?token=${token}`, { method: 'POST' }); // second click
-    await new Promise(r => setTimeout(r, 50));
+    await vi.waitFor(() => {
+      expect(sent.single.some(m => m.subject === 'Welcome to The Vic 361')).toBe(true);
+      expect(pings.some(p => p.title.includes('New newsletter subscriber'))).toBe(true);
+    }, { timeout: 2000 });
+    await new Promise(r => setTimeout(r, 50)); // room for a wrong second one
     const welcomes = sent.single.filter(m => m.subject === 'Welcome to The Vic 361');
     expect(welcomes).toHaveLength(1);
     expect(welcomes[0].to).toEqual(['new@example.com']);
@@ -317,7 +321,7 @@ describe('signup flow', () => {
     await post('/api/subscribe', { email: 'new@example.com' });
     const token = sent.single[0].html.match(/confirm\?token=([^"&]+)/)[1];
     await fetch(`${baseUrl}/subscribe/confirm?token=${token}`, { method: 'POST' });
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise(r => setTimeout(r, 50)); // checks an email is NOT sent, so a fixed wait
     expect(sent.single.filter(m => m.subject === 'Welcome to The Vic 361')).toHaveLength(0);
   });
 

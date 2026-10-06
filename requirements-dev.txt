@@ -2,4 +2,4 @@
 # Production runtime deps live in requirements.txt; this file is for the
 # pytest suite that exercises collect_events.py + discover_venues.py.
 -r requirements.txt
-pytest>=8.0
+pytest>=8.0,<9

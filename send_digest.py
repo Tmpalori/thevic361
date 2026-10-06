@@ -80,7 +80,9 @@ def build_email_body(events, by_date):
     digest_tag = f"[VIC361-DIGEST {today.strftime('%Y-%m-%d')}]"
     subject = f"The Vic 361 — Events to Screen ({today.strftime('%a %b %d')}) {digest_tag}"
 
-    admin_url = "https://thevic361.com/admin.html"
+    # www, not the bare domain: Squarespace forwards thevic361.com/<path> to
+    # www.thevic361.com//<path>, which 404s.
+    admin_url = (os.environ.get("SITE_URL") or "https://www.thevic361.com").rstrip("/") + "/admin.html"
 
     # ── Plain text version ──
     text_lines = [

@@ -49,7 +49,7 @@ import {
   renderEventItem, sponsorHtml
 } from './seo.js';
 import { normalizeUrl, validateSubmission } from './validate.js';
-import { normalizePayload, newId, nowIso } from './db.js';
+import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
 import { normalizeEmail } from './newsletter.js';
 import { venueFor } from './guides.js';
 import { renderSponsorConfirmed, renderSponsorReport, newsletterCovers, pickWhere } from './notify.js';
@@ -301,7 +301,17 @@ export function sameEvent(a, b) {
   return shared / new Set([...ta, ...tb]).size >= 0.6;
 }
 
-export function applyPlacements(payload, orders, { now, venues = [] }) {
+// Whether a Vic's Pick order is this event. `pins` maps order id to the
+// other shapes the event may be live as: its submission as it is now (the
+// admin may have fixed the date, venue or name when approving) and any
+// Events-tab edit of that, so an edit doesn't silently drop the pin.
+export function pickMatches(order, ev, pins = new Map()) {
+  if (sameEvent(order.event, ev)) return true;
+  const key = eventKeyOf(ev);
+  return (pins.get(order.id) || []).some(s => eventKeyOf(s) === key || sameEvent(s, ev));
+}
+
+export function applyPlacements(payload, orders, { now, venues = [], pins = new Map() }) {
   const live = (orders || []).filter(o => LIVE.has(o.status));
   if (!live.length || !payload) return payload;
   const week = currentWeek(localDateStr(now))[0];
@@ -310,7 +320,7 @@ export function applyPlacements(payload, orders, { now, venues = [] }) {
   const partners = new Set(live.filter(o => o.kind === 'partner').map(o => o.venue_slug));
   const events = (payload.events || []).map(ev => {
     if (ev.featured) return ev;
-    let hit = featured.some(o => sameEvent(o.event, ev));
+    let hit = featured.some(o => pickMatches(o, ev, pins));
     if (!hit && partners.size) {
       const v = venueFor(ev, venues);
       hit = Boolean(v && partners.has(v.slug));
@@ -708,7 +718,7 @@ export function renderThanksPage(order, { siteUrl, now = new Date() }) {
     } else {
       const day = order.event ? formatDay(order.event.date, { weekday: 'long', month: 'long', day: 'numeric' }) : 'its day';
       msg = `Thanks! ${escHtml(order.event ? order.event.name : 'Your event')} is a Vic’s Pick.`;
-      next = ['We check the details and publish it, usually within a day. If anything needs fixing, we’ll email you.',
+      next = ['We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
         `Then it’s pinned to the top of ${escHtml(day)} with the Vic’s Pick badge, and ${escHtml(pickWhere(order.event && order.event.date, order.paid_at || order.created_at))}.`,
         `${emailed ? 'We’ve emailed you' : 'We’ll email you'} a confirmation. Stripe sends your receipt separately.`];
     }
@@ -741,7 +751,7 @@ export function renderLogoTooLargePage({ siteUrl }) {
 
 // ─── Wiring ──────────────────────────────────────────────────────────────
 
-export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenues, slack = null, mailer = null, mailAddress = '' }) {
+export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenues, slack = null, mailer = null, mailAddress = '', getPayload = null }) {
   const supported = typeof store.listSponsorOrders === 'function';
   let cache = null;
 
@@ -772,9 +782,35 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     return run;
   }
 
+  // Order id -> the shapes its event may be live as (see pickMatches), for
+  // live Vic's Picks that came with a submission. Cached with the orders.
+  async function pins(list) {
+    if (cache && cache.list === list && cache.pins) return cache.pins;
+    const out = new Map();
+    const picks = list.filter(o => o.kind === 'featured' && o.event && o.submission_id && LIVE.has(o.status));
+    if (picks.length) {
+      let edits = [];
+      try { edits = typeof store.listEventEdits === 'function' ? await store.listEventEdits() : []; } catch { /* none */ }
+      const byKey = new Map(edits.map(e => [e.original_key, e.payload]));
+      for (const o of picks) {
+        try {
+          const row = await store.get(o.submission_id);
+          if (!row || !row.payload) continue;
+          const shapes = [row.payload];
+          const edit = byKey.get(eventKeyOf(row.payload));
+          if (edit) shapes.push({ ...row.payload, ...edit });
+          out.set(o.id, shapes);
+        } catch (err) { console.warn('[sponsors] pick submission lookup failed:', err.message); }
+      }
+    }
+    if (cache && cache.list === list) cache.pins = out;
+    return out;
+  }
+
   async function apply(payload) {
     try {
-      return applyPlacements(payload, await orders(), { now: nowFn(), venues: getVenues() });
+      const list = await orders();
+      return applyPlacements(payload, list, { now: nowFn(), venues: getVenues(), pins: await pins(list) });
     } catch (err) {
       console.warn('[sponsors] placements skipped:', err.message);
       return payload;
@@ -788,7 +824,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         id: newId(), created_at: now, updated_at: now, status: 'pending', source: 'paid-feature',
         submitter_kind: 'organizer', submitter_name: order.business, submitter_email: order.email,
         submitter_ip: null, user_agent: '', payload: normalizePayload(order.event),
-        admin_notes: `Paid featured listing (order ${order.id}). Approve and publish it; it's pinned as a Vic’s Pick automatically.`,
+        admin_notes: `Paid featured listing (order ${order.id}). The AI review publishes it when it's clean and flags it here otherwise; it's pinned as a Vic’s Pick automatically.`,
         review_history: [{ at: now, action: 'submitted', note: 'Paid featured listing' }]
       };
       await store.insert(row);
@@ -803,7 +839,9 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         fields: [['Package', pkg ? pkg.name : order.kind], ['Paid', `$${Math.round((order.amount || 0) / 100)}${order.kind === 'partner' ? '/mo' : ''}`],
           ['Contact', order.email],
           ['Details', order.kind === 'weekly' ? `Week of ${order.week_start}` : order.kind === 'partner' ? order.venue_name : `${order.event.name} (${order.event.date})`]],
-        text: order.kind === 'featured' ? 'Approve the event in the Submissions tab to put it live.' : 'Live automatically.',
+        text: order.kind === 'featured'
+          ? 'The AI review puts it live when it checks out (usually within the hour); if it flags it, approve it in the Submissions tab. You’ll get a reminder if it’s still not live close to its date.'
+          : 'Live automatically.',
         link: `${siteUrl}/admin.html`
       });
     }
@@ -1355,12 +1393,25 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         // database error, which would look like "no orders".
         const list = supported ? await store.listSponsorOrders() : [];
         cache = { at: Date.now(), list };
+        // Live Vic's Picks for today or later: is the pin finding its event?
+        // (on_site false: not approved yet, rejected, or edited past matching.)
+        let onSite = () => undefined;
+        if (getPayload) {
+          try {
+            const events = ((await getPayload()) || {}).events || [];
+            const p = await pins(list);
+            const today = localDateStr(nowFn());
+            onSite = o => (o.kind === 'featured' && o.event && LIVE.has(o.status) && o.event.date >= today
+              ? events.some(ev => pickMatches(o, ev, p)) : undefined);
+          } catch (err) { console.warn('[sponsors] on-site check failed:', err.message); }
+        }
         res.json({
           ok: true,
           configured: config.enabled,
           supported,
           orders: list.filter(o => o.status !== 'expired' && o.status !== 'failed' && !(o.status === 'cancelled' && !o.paid_at) &&
-            !(o.status === 'pending' && nowFn().getTime() - Date.parse(o.created_at) > 24 * 3600 * 1000)),
+            !(o.status === 'pending' && nowFn().getTime() - Date.parse(o.created_at) > 24 * 3600 * 1000))
+            .map(o => { const s = onSite(o); return s === undefined ? o : { ...o, on_site: s }; }),
           weeks: bookableWeeks(nowFn(), list),
           calendar: sponsorCalendar(nowFn(), list)
         });

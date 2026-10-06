@@ -279,3 +279,68 @@ def test_looked_up_page_token_is_masked_in_actions(tmp_path, monkeypatch, capsys
             session=FakeSession(page_token="page-tok"))
     assert "::add-mask::" not in capsys.readouterr().out
 
+
+def test_instagram_gets_the_jpeg_twins(tmp_path, monkeypatch):
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.setenv("IG_USER_ID", "ig7")
+    monkeypatch.setattr(sp.time, "sleep", lambda s: None)
+    kit = write_kit(tmp_path, slides=3)
+    m = json.loads((kit / "kit.json").read_text())
+    m["build"] = "42-1"
+    m["kits"]["weekend"]["slides_jpg"] = [f"weekend-{i}.jpg" for i in range(1, 4)]
+    (kit / "kit.json").write_text(json.dumps(m))
+    sess = FakeSession()
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=sess) == 0
+    items = [c[2]["image_url"] for c in sess.calls if c[1] == "ig7/media" and c[2].get("is_carousel_item")]
+    assert items == [f"https://www.thevic361.com/social/latest/weekend-{i}.jpg?v=42-1" for i in range(1, 4)]
+    photos = [c[2]["url"] for c in sess.calls if c[1] == "page9/photos"]
+    assert photos[0] == "https://www.thevic361.com/social/latest/weekend-1.png?v=42-1"
+
+
+def test_waits_for_the_jpegs_too(tmp_path, monkeypatch):
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+    kit = write_kit(tmp_path, slides=2)
+    m = json.loads((kit / "kit.json").read_text())
+    m["kits"]["weekend"]["slides_jpg"] = ["weekend-1.jpg", "weekend-2.jpg"]
+    (kit / "kit.json").write_text(json.dumps(m))
+    seen = {}
+    monkeypatch.setattr(sp, "wait_for_deploy", lambda urls, *a, **k: seen.setdefault("urls", urls))
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit)], session=FakeSession()) == 0
+    assert [u.rsplit("/", 1)[1] for u in seen["urls"]] == ["weekend-1.png", "weekend-2.png", "weekend-1.jpg", "weekend-2.jpg"]
+
+
+def test_missing_ig_user_is_a_visible_warning(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(write_kit(tmp_path)), "--no-wait"], session=FakeSession()) == 0
+    assert "::warning::IG_USER_ID not set" in capsys.readouterr().out
+
+
+def test_if_featured_posts_today_only_with_a_vics_pick(tmp_path, monkeypatch):
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+
+    def kit(featured):
+        (tmp_path / "kit.json").write_text(json.dumps({"generated_for": "2026-10-08", "kits": {
+            "today": {"slides": ["today-1.png"], "events": 3, "featured": featured,
+                      "captions": {"facebook": "Today FB", "instagram": "Today IG"}}}}))
+    kit(0)
+    sess = FakeSession()
+    assert sp.main(["--kind", "today", "--if-featured", "--kit-dir", str(tmp_path), "--no-wait"], session=sess) == 0
+    assert not any(c[1] == "page9/feed" for c in sess.calls)
+    kit(1)
+    sess = FakeSession()
+    assert sp.main(["--kind", "today", "--if-featured", "--kit-dir", str(tmp_path), "--no-wait"], session=sess) == 0
+    assert any(c[1] == "page9/feed" for c in sess.calls)
+
+
+def test_thursday_workflow_also_posts_today_with_a_pick():
+    wf = open(os.path.join(os.path.dirname(__file__), ".github", "workflows", "social-kit.yml")).read()
+    assert "social_post.py --kind today --if-featured" in wf
+    assert "'47 13 * * *'" in wf  # schedule unchanged
+

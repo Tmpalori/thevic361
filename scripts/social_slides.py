@@ -92,13 +92,14 @@ body{{font-family:Nunito,'Helvetica Neue',Arial,sans-serif;color:{INK}}}
 
 
 def cover_html(groups, start, end, kind):
+    from social_kit import clean_venue  # a venue name, not a geocoder string
     events = [e for evs in groups.values() for e in evs]
     total = len(events)
     picks = ([e for e in events if e.get("featured")] + [e for e in events if not e.get("featured")])[:3]
     rows = "".join(
         f'<div class="card pick" style="padding:18px 30px;border-radius:30px;box-shadow:10px 10px 0 {INK};transform:rotate({r}deg)"><div class="one disp" style="font-size:40px">{_icons(e, 42)} {esc(e["name"])}</div>'
         f'<div class="one" style="font-size:28px;font-weight:800;color:#554E7A;margin-top:6px">'
-        f'{esc(_day_label(e, kind))}{" · " + esc(e.get("venue")) if e.get("venue") else ""}</div></div>'
+        f'{esc(_day_label(e, kind))}{" · " + esc(clean_venue(e.get("venue"))) if clean_venue(e.get("venue")) else ""}</div></div>'
         for e, r in zip(picks, (-1.2, 0.8, -0.6)))
     count = f"{total} thing{'s' if total != 1 else ''} to do" if total else "Nothing listed yet"
     return f"""<section class="slide"><div class="dots"></div><div class="sky"></div>
@@ -135,6 +136,7 @@ def _digest_day(day, evs, per_day, first, compact=False):
     (Vic's Picks / sponsored first; select_events sorts them to the top),
     then "+ N more". compact shrinks it so a full week (7 days) fits."""
     color = DAY_COLORS[day.weekday()]
+    per_day = max(per_day, sum(1 for e in evs if e.get("featured")))  # every Vic's Pick shows
     name_px, time_px, more_px, pad = (29, 24, 24, 9) if compact else (33, 28, 28, 16)
     items = "".join(
         f'<div class="one" style="font-size:{name_px}px;font-weight:900;line-height:1.25">'
