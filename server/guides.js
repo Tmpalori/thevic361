@@ -82,9 +82,18 @@ function venueEvents(venue, live, archived, today, venues) {
   };
 }
 
+// Street part only: some sources store "203 E. Constitution St, Victoria,
+// TX" and the page adds ", Victoria, TX" itself.
+export function streetAddress(addr) {
+  return String(addr || '').trim()
+    // ", Victoria[, TX]" or " Victoria TX", so "123 N Victoria" (a street) stays.
+    .replace(/(?:,\s*Victoria\s*,?\s*(?:TX|Texas)?|\s+Victoria\s*,?\s*(?:TX|Texas))\.?\s*(?:\d{5}(?:-\d{4})?)?\s*$/i, '')
+    .replace(/,\s*$/, '').trim();
+}
+
 function venueAddress(events) {
-  const withAddr = events.find(e => e.address);
-  return withAddr ? withAddr.address : '';
+  const withAddr = events.find(e => streetAddress(e.address));
+  return withAddr ? streetAddress(withAddr.address) : '';
 }
 
 export function renderVenuePage(venue, live, archived, { siteUrl, now, sponsor, venues }) {

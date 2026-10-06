@@ -1707,3 +1707,37 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
 
 /* Weekly sponsor logo (optional, uploaded at checkout). */
 .sponsor-logo { display: block; max-height: 72px; max-width: 220px; width: auto; height: auto; margin: var(--space-2) 0; border-radius: 8px; }
+
+/* Skip link: first thing a keyboard user reaches; hidden until focused. */
+.skip-link { position: absolute; left: var(--space-3); top: -100px; z-index: 1000; padding: var(--space-2) var(--space-4); background: var(--card); color: var(--color-text); border: 2.5px solid var(--ink); border-radius: 999px; font-weight: 800; text-decoration: none; }
+.skip-link:focus { top: var(--space-3); }
+
+/* Theme toggle carries both icons; show the one for the other theme. */
+.theme-icon--sun { display: none; }
+[data-theme="dark"] .theme-icon--sun { display: block; }
+[data-theme="dark"] .theme-icon--moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .theme-icon--sun { display: block; }
+  :root:not([data-theme]) .theme-icon--moon { display: none; }
+}
+
+/* Days already over (homepage): folded to their header bar. */
+.day-section--past { margin-bottom: var(--space-4); box-shadow: none; }
+.day-section--past summary.day-header { cursor: pointer; list-style: none; display: flex; border-bottom: 0; margin: 0; }
+.day-section--past summary.day-header::-webkit-details-marker { display: none; }
+.day-section--past details[open] summary.day-header { border-bottom: 3px solid var(--ink); }
+.past-count { margin-left: auto; font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
+.past-count::after { content: " ▾"; }
+.day-section--past details[open] .past-count::after { content: " ▴"; }
+
+/* Small phones: logo, "+ Event" and Subscribe on one row at 360px. The
+   theme toggle moves to the footer only. */
+@media (max-width: 479px) {
+  .site-header .header-inner { gap: var(--space-2); padding-inline: 16px; }
+  .header-actions { gap: 6px; }
+  .site-title { font-size: 1.2rem; }
+  .logo-group { gap: 6px; }
+  .logo-group .site-logo { width: 36px; height: 36px; }
+  .header-actions .btn { padding: 0.35em 0.75em; }
+  .header-actions .theme-toggle { display: none; }
+}

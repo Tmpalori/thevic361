@@ -74,14 +74,19 @@ describe('search landing pages', () => {
     expect((await get('/sitemap.xml')).html).toContain('/this-weekend-with-kids');
   });
 
-  it('lists get a share button and the weekend page previews the weekend slide', async () => {
+  it('lists get a share button; link previews use the 1200x630 image, not the portrait slides', async () => {
     await start();
     const wk = (await get('/this-weekend')).html;
     expect(wk).toContain('data-share-url="https://www.thevic361.com/this-weekend"');
-    expect(wk).toContain('content="https://www.thevic361.com/social/latest/weekend-1.png"');
+    // The social-kit slides are 1080x1350, sit under robots.txt's /social/
+    // block and change weekly under one URL, so previews don't use them.
+    expect(wk).toContain('<meta property="og:image" content="https://www.thevic361.com/og-image.png">');
+    expect(wk).toContain('<meta property="og:image:width" content="1200">');
+    expect(wk).not.toContain('/social/latest/');
     const home = (await get('/')).html;
-    expect(home).toContain('property="og:image" content="https://www.thevic361.com/social/latest/week-1.png"');
-    expect(home).not.toContain('og:image:width');
+    expect(home).toContain('property="og:image" content="https://www.thevic361.com/og-image.png"');
+    expect(home).toContain('<meta property="og:image:height" content="630">');
+    expect(home).not.toContain('/social/latest/');
   });
 });
 
