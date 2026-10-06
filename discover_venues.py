@@ -71,6 +71,9 @@ APIFY_GMAPS_ACTOR = "compass~google-maps-extractor"
 # the ceiling: 120s is enough for a single category × 25 places + enrichment,
 # and a clean timeout on one category no longer takes the whole step with it.
 APIFY_PER_CALL_TIMEOUT = 120
+# The actor's own limit, under ours: a run we stopped waiting for would
+# otherwise keep running (and billing) on Apify.
+APIFY_ACTOR_TIMEOUT = 110
 
 # Up to two retries per category on transient failures (request exception,
 # 5xx, or read timeout). Backoff is exponential with jitter — if Apify is
@@ -504,7 +507,7 @@ def run_apify_discovery(
         monotonic = time.monotonic
     url = (
         f"https://api.apify.com/v2/acts/{APIFY_GMAPS_ACTOR}"
-        f"/run-sync-get-dataset-items?token={token}"
+        f"/run-sync-get-dataset-items?token={token}&timeout={APIFY_ACTOR_TIMEOUT}"
     )
     all_items: list[dict] = []
     successes = 0
