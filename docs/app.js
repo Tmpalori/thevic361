@@ -265,6 +265,8 @@
     }
     return '<div class="sponsor-block">' +
       '<div class="sponsor-label">This week\'s sponsor</div>' +
+      (/^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(sponsor.logo || '')
+        ? '<img class="sponsor-logo" src="' + escHtml(sponsor.logo) + '" alt="' + escHtml(sponsor.name) + ' logo" loading="lazy">' : '') +
       '<div class="sponsor-name">' + escHtml(sponsor.name) + '</div>' +
       '<div class="sponsor-text">' + escHtml(sponsor.text) + '</div>' +
       (sponsor.address ? '<div class="sponsor-address">📍 ' + escHtml(sponsor.address) + '</div>' : '') +

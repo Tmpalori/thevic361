@@ -714,8 +714,10 @@ export function sponsorHtml(sponsor) {
       ? `<a href="${escHtml(href)}" class="btn btn--outline sponsor-cta" target="_blank" rel="noopener noreferrer">${escHtml(sponsor.cta)}</a>`
       : `<span class="btn btn--outline" style="cursor:default; opacity:0.6">${escHtml(sponsor.cta)}</span>`)
     : '';
+  const logo = /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(sponsor.logo || '') ? sponsor.logo : '';
   return '<section class="sponsor-section"><div class="sponsor-block">' +
     '<div class="sponsor-label">This week\'s sponsor</div>' +
+    (logo ? `<img class="sponsor-logo" src="${escHtml(logo)}" alt="${escHtml(sponsor.name)} logo" loading="lazy">` : '') +
     `<div class="sponsor-name">${escHtml(sponsor.name)}</div>` +
     (sponsor.text ? `<div class="sponsor-text">${escHtml(sponsor.text)}</div>` : '') +
     (sponsor.address ? `<div class="sponsor-address">📍 ${escHtml(sponsor.address)}</div>` : '') +

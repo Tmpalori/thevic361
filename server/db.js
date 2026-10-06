@@ -366,6 +366,33 @@ class FileStore {
     return data.sponsor_orders.slice().sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   }
 
+  // Weekly sponsor logos, kept apart from orders (orders are read on every
+  // page view; logos only when someone loads the image).
+  async saveSponsorLogo(id, { contentType, data: bytes }) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      data.sponsor_logos = data.sponsor_logos || {};
+      data.sponsor_logos[id] = { contentType, data: Buffer.from(bytes).toString('base64') };
+      await this._write(data);
+    });
+  }
+
+  async getSponsorLogo(id) {
+    const data = await this._read();
+    const row = (data.sponsor_logos || {})[id];
+    return row ? { contentType: row.contentType, data: Buffer.from(row.data, 'base64') } : null;
+  }
+
+  // Unpaid checkouts (expired, failed) and admin removals drop the image.
+  async deleteSponsorLogo(id) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      if (!data.sponsor_logos || !data.sponsor_logos[id]) return;
+      delete data.sponsor_logos[id];
+      await this._write(data);
+    });
+  }
+
   async getArchivedEvent(page) {
     const data = await this._read();
     return data.event_archive[page] || null;
@@ -532,6 +559,15 @@ class PgStore {
             payload JSONB NOT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `);
+        // Weekly sponsor logos (small images, read only when displayed).
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS sponsor_logos (
+            id TEXT PRIMARY KEY,
+            content_type TEXT NOT NULL,
+            data BYTEA NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
         `);
         await this.pool.query(`
@@ -777,13 +813,34 @@ class PgStore {
     `, [order.id, JSON.stringify(order), order.created_at || null]);
   }
 
+  async saveSponsorLogo(id, { contentType, data }) {
+    await this.ready();
+    await this.pool.query(`
+      INSERT INTO sponsor_logos (id, content_type, data) VALUES ($1, $2, $3)
+      ON CONFLICT (id) DO UPDATE SET content_type = EXCLUDED.content_type, data = EXCLUDED.data
+    `, [id, contentType, Buffer.from(data)]);
+  }
+
+  async getSponsorLogo(id) {
+    await this.ready();
+    const r = await this.pool.query('SELECT content_type, data FROM sponsor_logos WHERE id = $1', [id]);
+    return r.rows[0] ? { contentType: r.rows[0].content_type, data: r.rows[0].data } : null;
+  }
+
+  async deleteSponsorLogo(id) {
+    await this.ready();
+    await this.pool.query('DELETE FROM sponsor_logos WHERE id = $1', [id]);
+  }
+
   async listSponsorOrders() {
     await this.ready();
     // Abandoned checkouts pile up; keep every live or recent order and let
-    // old expired/failed ones fall out instead of capping the whole list.
+    // old expired/failed ones (and checkouts the buyer backed out of) fall
+    // out instead of capping the whole list.
     const r = await this.pool.query(
       `SELECT payload FROM sponsor_orders
-        WHERE COALESCE(payload->>'status', '') NOT IN ('expired', 'failed')
+        WHERE (COALESCE(payload->>'status', '') NOT IN ('expired', 'failed')
+               AND NOT (payload->>'status' = 'cancelled' AND payload->>'paid_at' IS NULL))
            OR created_at > now() - interval '30 days'
         ORDER BY created_at DESC`);
     return r.rows.map(row => row.payload);

@@ -91,12 +91,18 @@ export function pickPackage(dateStr) {
   return { ...base, key: 'featured_weekend', name: `${base.name} (Fri–Sun)`, amount: VICS_PICK.weekendAmount };
 }
 
+// A checkout someone is paying for right now. `email` is the buyer asking:
+// their own earlier hold (they backed out of Stripe and came back) doesn't
+// count against them.
+function isHold(o, nowMs, email = '') {
+  return o.status === 'pending' && nowMs - Date.parse(o.created_at) < HOLD_MS && !(email && o.email === email);
+}
+
 // Spots used on a date: paid or settling orders, plus checkouts still being
 // paid (held like weekly sponsor weeks, so a day can't be oversold).
-export function picksTaken(dateStr, orders, nowMs) {
+export function picksTaken(dateStr, orders, nowMs, email = '') {
   return (orders || []).filter(o => o.kind === 'featured' && o.event && o.event.date === dateStr &&
-    (LIVE.has(o.status) || o.status === 'processing' ||
-      (o.status === 'pending' && nowMs - Date.parse(o.created_at) < HOLD_MS))).length;
+    (LIVE.has(o.status) || o.status === 'processing' || isHold(o, nowMs, email))).length;
 }
 
 // Admin calendar: every sponsorship slot for `weeks` weeks from this
@@ -134,10 +140,10 @@ export function sponsorCalendar(now, orders, weeks = 8) {
   });
 }
 
-export function pickAvailability(dateStr, orders, now) {
+export function pickAvailability(dateStr, orders, now, email = '') {
   const weekend = isWeekendDate(dateStr);
   const cap = weekend ? VICS_PICK.weekendCap : VICS_PICK.weekdayCap;
-  const taken = picksTaken(dateStr, orders, now.getTime());
+  const taken = picksTaken(dateStr, orders, now.getTime(), email);
   const amount = weekend ? VICS_PICK.weekendAmount : VICS_PICK.weekdayAmount;
   return { date: dateStr, weekend, cap, taken, left: Math.max(0, cap - taken), amount, price: `$${amount / 100}` };
 }
@@ -214,6 +220,11 @@ export function createStripe(secretKey, fetchImpl = globalThis.fetch) {
       const body = await call('POST', '/checkout/sessions', params, idempotencyKey);
       if (typeof body.url !== 'string' || typeof body.id !== 'string') throw new Error('Stripe returned no checkout URL');
       return { id: body.id, url: body.url };
+    },
+    // The buyer came back from Stripe without paying: close the session so
+    // it can't be paid later for a spot we've released.
+    async expireCheckoutSession(id) {
+      return call('POST', `/checkout/sessions/${encodeURIComponent(id)}/expire`, {});
     }
   };
 }
@@ -291,18 +302,43 @@ export function applyPlacements(payload, orders, { now, venues = [] }) {
   return { ...payload, events, sponsor: weekly ? weekly.sponsor : (payload.sponsor || null) };
 }
 
-export function bookableWeeks(now, orders) {
+export function bookableWeeks(now, orders, email = '') {
   const monday = currentWeek(localDateStr(now))[0];
   const nowMs = now.getTime();
   const taken = new Set((orders || [])
-    .filter(o => o.kind === 'weekly' && (o.status === 'paid' || o.status === 'processing' ||
-      (o.status === 'pending' && nowMs - Date.parse(o.created_at) < HOLD_MS)))
+    .filter(o => o.kind === 'weekly' && (o.status === 'paid' || o.status === 'processing' || isHold(o, nowMs, email)))
     .map(o => o.week_start));
   const short = { month: 'short', day: 'numeric' };
   return Array.from({ length: WEEKS_AHEAD }, (_, i) => {
     const start = addDays(monday, 7 * (i + 1));
     return { start, label: `${formatDay(start, short)} to ${formatDay(addDays(start, 6), short)}`, available: !taken.has(start) };
   });
+}
+
+// ─── Sponsor logo ────────────────────────────────────────────────────────
+// The checkout page shrinks the logo in the browser (canvas) and sends it as
+// a data URL in a hidden field, so the server needs no upload library. Only
+// PNG, JPEG and WebP (checked by their first bytes, not the label): SVG can
+// carry script, so it's not accepted.
+const LOGO_MAX_BYTES = 300 * 1024;
+// The same limit as base64 (4 chars per 3 bytes) plus the data: prefix; the
+// checkout page refuses anything longer before it's sent.
+const LOGO_MAX_CHARS = Math.ceil(LOGO_MAX_BYTES / 3) * 4 + 32;
+export const LOGO_PATH = /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/;
+
+export function parseLogo(dataUrl) {
+  const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || '').trim());
+  if (!m) return { error: 'Logo must be a PNG, JPG or WebP image.' };
+  const data = Buffer.from(m[2], 'base64');
+  if (!data.length) return { error: 'That logo file looks empty.' };
+  if (data.length > LOGO_MAX_BYTES) return { error: 'Logo is too large. Try a smaller image (under 300 KB).' };
+  const sig = {
+    png: data[0] === 0x89 && data.slice(1, 4).toString() === 'PNG',
+    jpeg: data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff,
+    webp: data.slice(0, 4).toString() === 'RIFF' && data.slice(8, 12).toString() === 'WEBP'
+  };
+  if (!sig[m[1]]) return { error: 'That file isn’t a valid image.' };
+  return { contentType: `image/${m[1]}`, data };
 }
 
 // ─── Form validation ─────────────────────────────────────────────────────
@@ -326,11 +362,16 @@ export function validateOrder(kind, input, { now, orders, venues }) {
     const url = safeUrl(normalizeUrl(clean(input.url, 300)));
     if (!url) errors.url = 'Enter your website or page (e.g. example.com).';
     const address = clean(input.address, 120);
-    const week = bookableWeeks(now, orders).find(w => w.start === input.week);
+    const week = bookableWeeks(now, orders, email).find(w => w.start === input.week);
     if (!week) errors.week = 'Pick a week.';
     else if (!week.available) errors.week = 'That week was just booked. Pick another.';
     order.week_start = week ? week.start : '';
     order.sponsor = { name: business, text, cta, url, address };
+    if (input.logo_data) {
+      const logo = parseLogo(input.logo_data);
+      if (logo.error) errors.logo = logo.error;
+      else order.logo = logo;   // saved separately; never stored on the order
+    }
   } else if (kind === 'featured') {
     const v = validateSubmission({
       name: input.event_name, date: input.date, time: input.time, venue: input.venue,
@@ -342,8 +383,8 @@ export function validateOrder(kind, input, { now, orders, venues }) {
       const today = localDateStr(now);
       if (ev.date < today) errors.date = 'That date has passed.';
       else if (ev.date > addDays(today, FEATURE_DAYS_AHEAD)) errors.date = `Pick a date in the next ${FEATURE_DAYS_AHEAD} days.`;
-      else if (!pickAvailability(ev.date, orders, now).left) {
-        const a = pickAvailability(ev.date, orders, now);
+      else if (!pickAvailability(ev.date, orders, now, email).left) {
+        const a = pickAvailability(ev.date, orders, now, email);
         errors.date = `Vic’s Picks for ${formatDay(ev.date, { weekday: 'long', month: 'short', day: 'numeric' })} are sold out (${a.cap} a day). Pick another day, or submit the event free.`;
       }
     }
@@ -452,6 +493,12 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
       field({ name: 'text', label: 'Sponsor message', value: v.text, error: e.text, max: 160, rows: 3, hint: 'Up to 160 characters. Shown under your name.' }) +
       field({ name: 'url', label: 'Website or page', value: v.url, error: e.url, max: 300 }) +
       field({ name: 'cta', label: 'Button text', value: v.cta, error: e.cta, max: 24, required: false, hint: 'Optional, e.g. "Order now". Default: Learn more.' }) +
+      `<div class="co-field"><label for="f-logo">Logo</label><input type="file" id="f-logo" accept="image/png,image/jpeg,image/webp">` +
+      // A rejected logo isn't sent back, so resubmitting doesn't fail again.
+      `<input type="hidden" name="logo_data" id="f-logo-data" value="${e.logo ? '' : escHtml(v.logo_data || '')}">` +
+      `<button type="button" class="btn btn--ghost" id="f-logo-remove"${!e.logo && v.logo_data ? '' : ' hidden'}>Remove logo</button>` +
+      `<small class="co-hint">Optional. PNG, JPG or WebP; a wide logo on a plain background looks best. Shown on your sponsor block.</small>` +
+      (e.logo ? `<small class="co-error">${escHtml(e.logo)}</small>` : '') + '</div>' +
       field({ name: 'address', label: 'Address', value: v.address, error: e.address, max: 120, required: false, hint: 'Optional.' });
   } else {
     fields = field({ name: 'event_name', label: 'Event name', value: v.event_name, error: e.name, max: 200 }) +
@@ -484,12 +531,65 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
     (function () {
       var f = document.querySelector('.co-form'), box = document.getElementById('co-preview'), t;
       if (!f || !box || !window.fetch) return;
+      var logoData = document.getElementById('f-logo-data'), logoRemove = document.getElementById('f-logo-remove');
+      // The logo is shown in the preview from the browser's copy; it isn't
+      // sent with every preview request.
+      function showLogo() {
+        if (logoRemove) logoRemove.hidden = !(logoData && logoData.value);
+        var block = box.querySelector('.sponsor-block');
+        if (!block) return;
+        var img = block.querySelector('.sponsor-logo');
+        if (!logoData || !logoData.value) { if (img) img.remove(); return; }
+        if (!img) {
+          img = document.createElement('img');
+          img.className = 'sponsor-logo'; img.alt = 'Your logo';
+          block.insertBefore(img, block.querySelector('.sponsor-name') || block.firstChild);
+        }
+        img.src = logoData.value;
+      }
       function refresh() {
         var data = new URLSearchParams(new FormData(f));
+        data.delete('logo_data');
         fetch('/advertise/preview', { method: 'POST', body: data })
           .then(function (r) { return r.ok ? r.text() : null; })
-          .then(function (html) { if (html !== null) box.innerHTML = html; })
+          .then(function (html) { if (html !== null) { box.innerHTML = html; showLogo(); } })
           .catch(function () { /* the server-rendered preview stays */ });
+      }
+      // Shrink the logo in the browser (max 480x240) so it's small to send.
+      var logoInput = document.getElementById('f-logo');
+      if (logoInput && logoData) {
+        logoInput.addEventListener('change', function () {
+          var file = logoInput.files && logoInput.files[0];
+          if (!file) { logoData.value = ''; showLogo(); return; }
+          var reader = new FileReader();
+          reader.onload = function () {
+            var im = new Image();
+            im.onload = function () {
+              var s = Math.min(1, 480 / im.width, 240 / im.height);
+              var c = document.createElement('canvas');
+              c.width = Math.max(1, Math.round(im.width * s)); c.height = Math.max(1, Math.round(im.height * s));
+              c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+              logoData.value = c.toDataURL('image/png');
+              showLogo();
+            };
+            im.onerror = function () { logoData.value = ''; alert('That file isn’t an image we can use. Try a PNG or JPG.'); };
+            im.src = reader.result;
+          };
+          reader.readAsDataURL(file);
+        });
+        if (logoRemove) logoRemove.addEventListener('click', function () {
+          logoData.value = ''; logoInput.value = ''; showLogo();
+        });
+        // Over the server's limit once encoded: drop it rather than lose the
+        // whole form to a "too large" error.
+        f.addEventListener('submit', function (ev) {
+          if (logoData.value.length > ${LOGO_MAX_CHARS}) {
+            ev.preventDefault();
+            logoData.value = ''; logoInput.value = ''; showLogo();
+            alert('That logo is too large. Try a smaller image, or continue without one.');
+          }
+        });
+        showLogo();
       }
       f.addEventListener('input', function () { clearTimeout(t); t = setTimeout(refresh, 350); });
       f.addEventListener('change', refresh);
@@ -501,7 +601,10 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
   });
 }
 
+// Only claims the confirmation email went out once it has (Resend can be
+// down or not set up); otherwise it's on its way.
 export function renderThanksPage(order, { siteUrl }) {
+  const emailed = Boolean(order && order.confirmation_sent);
   let msg = 'We\'re confirming your payment. Stripe will email your receipt in a minute or two.';
   let next = [];
   if (order && LIVE.has(order.status)) {
@@ -509,7 +612,7 @@ export function renderThanksPage(order, { siteUrl }) {
       const week = formatDay(order.week_start, { weekday: 'long', month: 'long', day: 'numeric' });
       msg = `You're booked for the week of ${escHtml(week)}.`;
       next = [`Your sponsor block goes live on its own on ${escHtml(week)}, on every page of the site and at the top of that Monday’s newsletter.`,
-        'We’ve emailed you a confirmation with a copy of your block. Stripe sends your receipt separately.',
+        `${emailed ? 'We’ve emailed you' : 'We’ll email you'} a confirmation with a copy of your block. Stripe sends your receipt separately.`,
         'Want to change the wording or link before it goes live? Reply to that email.'];
     } else if (order.kind === 'partner') {
       msg = `You're a venue partner. Every event at ${escHtml(order.venue_name)} is now a Vic’s Pick.`;
@@ -518,7 +621,7 @@ export function renderThanksPage(order, { siteUrl }) {
       msg = `Thanks! ${escHtml(order.event ? order.event.name : 'Your event')} is a Vic’s Pick.`;
       next = ['We check the details and publish it, usually within a day. If anything needs fixing, we’ll email you.',
         `Then it’s pinned to the top of ${escHtml(day)} with the Vic’s Pick badge, starred in that week’s newsletter and featured first in our social posts.`,
-        'We’ve emailed you a confirmation. Stripe sends your receipt separately.'];
+        `${emailed ? 'We’ve emailed you' : 'We’ll email you'} a confirmation. Stripe sends your receipt separately.`];
     }
   } else if (order && order.status === 'processing') {
     msg = 'Your payment is processing (bank payments can take a few days). Your spot is held, and we’ll email you as soon as it clears.';
@@ -528,6 +631,16 @@ export function renderThanksPage(order, { siteUrl }) {
     <p>Questions or something not right? <a href="/contact?topic=advertising">Contact us</a> and we’ll sort it out.</p>
     <p><a class="btn btn--primary" href="/">See this week's events</a></p>`;
   return layout({ siteUrl, path: '/advertise/thanks', nav: '/advertise', noindex: true, title: `Thank you | ${SITE_NAME}`, description: 'Thank you.', body });
+}
+
+// The checkout body went over its size limit (server/index.js error
+// handler); in practice a logo too big to send.
+export function renderLogoTooLargePage({ siteUrl }) {
+  const body = `<h1 class="page-title">That logo is too large</h1>
+    <p class="page-lead">Your form didn’t go through because the logo file was too big to send. Nothing was charged.</p>
+    <p>Go back and pick a smaller image (under 300 KB), or continue without a logo.</p>
+    <p><a class="btn btn--primary" href="/advertise/checkout?package=weekly" onclick="if (history.length > 1) { history.back(); return false; }">Back to the form</a></p>`;
+  return layout({ siteUrl, path: '/advertise/checkout', nav: '/advertise', noindex: true, title: `Logo too large | ${SITE_NAME}`, description: 'Logo too large.', body });
 }
 
 // ─── Wiring ──────────────────────────────────────────────────────────────
@@ -586,15 +699,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       order.submission_id = row.id;
       await save(order);
     }
-    // "You're booked" email: what happens next and how to reach us. Once
-    // per order (a webhook retry finishing a fulfil doesn't resend).
-    if (mailer && (order.kind === 'weekly' || order.kind === 'featured') && !order.confirmation_sent) {
-      const sent = await mailer.send(order.email, renderSponsorConfirmed(order, { siteUrl, address: mailAddress }), `vic361-sponsor-${order.id}`);
-      if (sent) {
-        order.confirmation_sent = nowIso();
-        await save(order);
-      }
-    }
+    await sendConfirmation(order);
     if (slack) {
       const pkg = packageFor(order.kind);
       slack.notify({ channel: 'sales',
@@ -606,6 +711,67 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         link: `${siteUrl}/admin.html`
       });
     }
+  }
+
+  // "You're booked" email: what happens next and how to reach us. Once
+  // per order; a send that failed (Resend down) is tried again on the next
+  // webhook for the order.
+  async function sendConfirmation(order) {
+    if (!mailer || !mailer.enabled || (order.kind !== 'weekly' && order.kind !== 'featured') || order.confirmation_sent) return;
+    const sent = await mailer.send(order.email, renderSponsorConfirmed(order, { siteUrl, address: mailAddress }), `vic361-sponsor-${order.id}`);
+    if (sent) {
+      order.confirmation_sent = nowIso();
+      await save(order);
+    }
+  }
+
+  // A checkout that never got paid doesn't keep its uploaded logo.
+  async function dropLogo(order) {
+    if (!order || !order.sponsor || !order.sponsor.logo || typeof store.deleteSponsorLogo !== 'function') return;
+    try { await store.deleteSponsorLogo(order.id); } catch (err) { console.warn('[sponsors] logo delete failed:', err.message); }
+  }
+
+  // Served only while the order is live, settling or being paid for right
+  // now (the confirmation email and the hold's own preview), never once
+  // it's hidden, refunded, expired or abandoned.
+  function logoServed(o, nowMs) {
+    return Boolean(o) && (LIVE.has(o.status) || o.status === 'processing' || isHold(o, nowMs));
+  }
+
+  // Why a hidden order can't be put back: its day or week was sold while it
+  // was hidden. Empty when it fits.
+  function restoreConflict(order, list, now) {
+    const others = list.filter(o => o.id !== order.id);
+    if (order.kind === 'featured' && order.event) {
+      const a = pickAvailability(order.event.date, others, now);
+      if (!a.left) return `${formatDay(order.event.date, { weekday: 'long', month: 'short', day: 'numeric' })} already has its ${a.cap} Vic’s Picks (one was sold while this was hidden). Refund this one in Stripe, or hide another first.`;
+    }
+    if (order.kind === 'weekly') {
+      const nowMs = now.getTime();
+      const taken = others.some(o => o.kind === 'weekly' && o.week_start === order.week_start &&
+        (o.status === 'paid' || o.status === 'processing' || isHold(o, nowMs)));
+      if (taken) return `The week of ${order.week_start} was sold to someone else while this was hidden. Refund this one in Stripe, or move it to another week.`;
+    }
+    return '';
+  }
+
+  // Best effort: close a released hold's Stripe session so it can't be paid
+  // later. If this fails it expires on its own in 30 minutes, and a late
+  // payment is still honored (see the webhook).
+  async function expireSession(o) {
+    if (!o.session_id || typeof stripe.expireCheckoutSession !== 'function') return;
+    try { await stripe.expireCheckoutSession(o.session_id); } catch (err) { console.warn('[sponsors] session expire failed:', err.message); }
+  }
+
+  // The form fields of an order, to refill the form when the buyer backs
+  // out of Stripe (cancel_url).
+  function orderValues(o) {
+    const s = o.sponsor || {};
+    const ev = o.event || {};
+    return o.kind === 'weekly'
+      ? { week: o.week_start, business: o.business, text: s.text, url: s.url, cta: s.cta, address: s.address, email: o.email }
+      : { event_name: ev.name, date: ev.date, time: ev.time, venue: ev.venue, address: ev.address, description: ev.description,
+        url: ev.url, business: o.business, email: o.email };
   }
 
   const findBy = (list, key, val) => (val ? list.find(o => o[key] === val) : null);
@@ -624,9 +790,13 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         // the order is already paid, so finish the job instead of stopping.
         if (LIVE.has(order.status)) {
           if (order.kind === 'featured' && order.event && !order.submission_id) await fulfil(order);
+          else await sendConfirmation(order);
           return;
         }
-        if (!['pending', 'expired', 'failed', 'processing'].includes(order.status)) return;
+        // 'cancelled': the buyer came back via cancel_url but paid anyway
+        // (another tab) before the session could be expired.
+        if (!['pending', 'expired', 'failed', 'processing', 'cancelled'].includes(order.status) ||
+            (order.status === 'cancelled' && order.paid_at)) return;
         // Delayed payment methods complete the session before the money
         // arrives; async_payment_succeeded (or _failed) follows. Hold the
         // week meanwhile so nobody else can buy it.
@@ -666,6 +836,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         const order = findBy(list, 'id', obj.client_reference_id) || findBy(list, 'session_id', obj.id);
         if (!order || !['processing', 'pending'].includes(order.status)) return;
         await save({ ...order, status: 'failed' });
+        await dropLogo(order);
         if (slack) {
           slack.notify({ channel: 'sales',
             title: `⚠️ Sponsor payment didn't go through: ${order.business}`,
@@ -702,7 +873,9 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       }
       case 'checkout.session.expired': {
         const order = findBy(list, 'id', obj.client_reference_id) || findBy(list, 'session_id', obj.id);
-        if (order && order.status === 'pending') await save({ ...order, status: 'expired' });
+        if (!order || !(order.status === 'pending' || (order.status === 'cancelled' && !order.paid_at))) return;
+        if (order.status === 'pending') await save({ ...order, status: 'expired' });
+        await dropLogo(order);
         return;
       }
       case 'customer.subscription.updated':
@@ -783,7 +956,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         // page URLs): the submit form and its emails link with `from=<the
         // submission's id>` (a random UUID) and the server fills them in.
         const PREFILL = ['event_name', 'date', 'time', 'venue', 'address', 'description', 'url'];
-        const values = Object.fromEntries(PREFILL.filter(k => typeof req.query[k] === 'string').map(k => [k, req.query[k].slice(0, 2000)]));
+        let values = Object.fromEntries(PREFILL.filter(k => typeof req.query[k] === 'string').map(k => [k, req.query[k].slice(0, 2000)]));
         const from = typeof req.query.from === 'string' && /^[0-9a-f-]{36}$/i.test(req.query.from) ? req.query.from : '';
         const sub = from && typeof store.get === 'function' ? await store.get(from).catch(() => null) : null;
         if (sub && (sub.source || 'submission') === 'submission') {
@@ -791,6 +964,20 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           for (const [k, v] of [['event_name', p.name], ['date', p.date], ['time', p.time], ['venue', p.venue], ['address', p.address],
             ['description', p.description], ['url', p.url], ['business', sub.submitter_name], ['email', sub.submitter_email]]) {
             if (v) values[k] = String(v).slice(0, 2000);
+          }
+        }
+        // Back from Stripe without paying (cancel_url): release their hold
+        // so trying again isn't blocked by it, and refill the form.
+        if (typeof req.query.cancelled === 'string' && req.query.cancelled) {
+          const left = await withBookingLock(async () => {
+            cache = null;
+            const o = (await orders()).find(x => x.id === req.query.cancelled && x.status === 'pending');
+            if (o) await save({ ...o, status: 'cancelled' });
+            return o || null;
+          });
+          if (left) {
+            await expireSession(left);
+            values = { ...orderValues(left), ...values };
           }
         }
         sendHtml(res, renderCheckoutPage(pkg, { siteUrl, now: nowFn(), orders: await orders(), venues: getVenues(), values }), 200, 'no-store');
@@ -806,6 +993,21 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         if (!previewLimiter.check(req.ip || req.socket.remoteAddress).ok) return res.status(429).type('text/plain').send('Slow down');
         res.set('Cache-Control', 'no-store').type('html')
           .send(renderPreview(pkg.key, body, { now: nowFn(), orders: await orders(), venues: getVenues() }));
+      } catch (err) { next(err); }
+    });
+
+    // Short cache, so a logo the admin removes (or a hidden or refunded
+    // order's) stops showing within the hour.
+    app.get('/sponsor-logo/:id', async (req, res, next) => {
+      try {
+        const path = `/sponsor-logo/${req.params.id}`;
+        if (!LOGO_PATH.test(path) || typeof store.getSponsorLogo !== 'function') return res.status(404).end();
+        const order = (await orders()).find(o => o.id === req.params.id);
+        if (!logoServed(order, nowFn().getTime())) return res.status(404).end();
+        const logo = await store.getSponsorLogo(req.params.id);
+        if (!logo) return res.status(404).end();
+        res.set({ 'Content-Type': logo.contentType, 'Cache-Control': 'public, max-age=3600', 'X-Content-Type-Options': 'nosniff' })
+          .send(Buffer.from(logo.data));
       } catch (err) { next(err); }
     });
 
@@ -841,11 +1043,22 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           if (!v.ok) return { errors: v.errors };
           // Same clock as bookableWeeks, so the hold window lines up.
           const priced = pkg.key === 'featured' ? pickPackage(v.order.event.date) : pkg;
-          const o = { ...v.order, id: newId(), status: 'pending', amount: priced.amount, created_at: nowFn().toISOString() };
+          const { logo, ...fields } = v.order;
+          const o = { ...fields, id: newId(), status: 'pending', amount: priced.amount, created_at: nowFn().toISOString() };
+          if (logo && typeof store.saveSponsorLogo === 'function') {
+            await store.saveSponsorLogo(o.id, logo);
+            o.sponsor = { ...o.sponsor, logo: `/sponsor-logo/${o.id}` };
+          }
+          // The buyer's own earlier hold on this slot didn't count against
+          // them (validateOrder); it's replaced, so one buyer can't hold two.
+          const replaced = ctx.orders.filter(x => x.email === o.email && x.kind === o.kind && x.status === 'pending' &&
+            (o.kind === 'weekly' ? x.week_start === o.week_start : x.event && x.event.date === o.event.date));
+          for (const x of replaced) await save({ ...x, status: 'cancelled' });
           await save(o);
-          return { order: o };
+          return { order: o, replaced };
         });
         if (booked.errors) return fail(booked.errors);
+        for (const x of booked.replaced) await expireSession(x);
         const order = booked.order;
         // A Vic’s Pick's price depends on its day (weekday vs Fri–Sun).
         const priced = pkg.key === 'featured' ? pickPackage(order.event.date) : pkg;
@@ -881,12 +1094,13 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
             subscription_data: pkg.interval ? { metadata: { order_id: order.id } } : undefined,
             expires_at: Math.floor(Date.now() / 1000) + CHECKOUT_TTL_S,
             success_url: `${siteUrl}/advertise/thanks?order=${order.id}`,
-            cancel_url: `${siteUrl}/advertise/checkout?package=${pkg.key}`
+            cancel_url: `${siteUrl}/advertise/checkout?package=${pkg.key}&cancelled=${order.id}`
           }, `vic361-order-${order.id}`);
         } catch (err) {
           console.error('[sponsors] checkout session failed:', err.message);
           if (slack) slack.alert('stripe-checkout', 'Sponsor checkout is failing', `Stripe: ${err.message}`);
           await save({ ...order, status: 'failed' }); // release the hold
+          await dropLogo(order);
           return fail({ _form: 'The payment page is unavailable right now. Please try again in a few minutes.' }, 502);
         }
         await save({ ...order, session_id: session.id });
@@ -909,23 +1123,43 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         ok: true,
         configured: config.enabled,
         supported,
-        orders: list.filter(o => o.status !== 'expired' && o.status !== 'failed' && !(o.status === 'pending' &&
-          nowFn().getTime() - Date.parse(o.created_at) > 24 * 3600 * 1000)),
+        orders: list.filter(o => o.status !== 'expired' && o.status !== 'failed' && !(o.status === 'cancelled' && !o.paid_at) &&
+          !(o.status === 'pending' && nowFn().getTime() - Date.parse(o.created_at) > 24 * 3600 * 1000)),
         weeks: bookableWeeks(nowFn(), list),
         calendar: sponsorCalendar(nowFn(), list)
       });
     });
 
-    // Hide pulls a placement (refund, bad copy); restore puts it back.
+    // The uploaded logo, whatever the order's status, for the Sponsors tab.
+    app.get('/api/admin/sponsors/:id/logo', requireAdmin, async (req, res, next) => {
+      try {
+        const logo = typeof store.getSponsorLogo === 'function' ? await store.getSponsorLogo(req.params.id) : null;
+        if (!logo) return res.status(404).json({ ok: false, error: 'not-found' });
+        res.set({ 'Content-Type': logo.contentType, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' })
+          .send(Buffer.from(logo.data));
+      } catch (err) { next(err); }
+    });
+
+    // Hide pulls a placement (refund, bad copy); restore puts it back, unless
+    // its day or week was sold meanwhile. Remove-logo deletes the uploaded
+    // logo and keeps the rest of the placement.
     app.post('/api/admin/sponsors/:id', requireAdmin, async (req, res) => {
       const action = req.body && req.body.action;
       cache = null;
-      const order = (await orders()).find(o => o.id === req.params.id);
+      const list = await orders();
+      const order = list.find(o => o.id === req.params.id);
       if (!order) return res.status(404).json({ ok: false, error: 'not-found' });
       if (action === 'hide' && LIVE.has(order.status)) {
         await save({ ...order, status: 'hidden', hidden_from: order.status });
       } else if (action === 'restore' && order.status === 'hidden') {
-        await save({ ...order, status: order.hidden_from || 'paid', hidden_from: null });
+        const status = order.hidden_from || 'paid';
+        const conflict = LIVE.has(status) ? restoreConflict(order, list, nowFn()) : '';
+        if (conflict) return res.status(409).json({ ok: false, error: 'slot-taken', message: conflict });
+        await save({ ...order, status, hidden_from: null });
+      } else if (action === 'remove-logo' && order.sponsor && order.sponsor.logo) {
+        if (typeof store.deleteSponsorLogo === 'function') await store.deleteSponsorLogo(order.id);
+        const { logo: _gone, ...sponsor } = order.sponsor;
+        await save({ ...order, sponsor });
       } else {
         return res.status(400).json({ ok: false, error: 'bad-action' });
       }

@@ -190,10 +190,13 @@ ${ev.description ? `<div style="color:${C.muted};font-size:13px;margin-top:2px;"
 </td></tr>`;
 }
 
-function sponsorHtml(sponsor) {
+function sponsorHtml(sponsor, siteUrl = '') {
+  // Logo: absolute URL (email clients can't resolve a path), only our own.
+  const logo = sponsor && /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(sponsor.logo || '') ? `${siteUrl}${sponsor.logo}` : '';
   return sponsor && sponsor.name ? `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;background:${C.sunLight};border:3px dashed ${C.ink};border-radius:16px;"><tr><td style="padding:14px 16px;">
 <span style="display:inline-block;font-family:${DISPLAY};font-size:11px;font-weight:bold;letter-spacing:.5px;background:${C.sunset};color:${C.ink};border:2px solid ${C.ink};border-radius:999px;padding:1px 10px;">THIS WEEK'S SPONSOR</span>
+${logo ? `<div style="margin:8px 0 2px;"><img src="${escHtml(logo)}" alt="${escHtml(sponsor.name)}" style="display:block;max-height:60px;max-width:200px;height:auto;border:0;"></div>` : ''}
 <div style="font-family:${DISPLAY};font-size:20px;font-weight:bold;margin:6px 0 2px;">${escHtml(sponsor.name)}</div>
 ${sponsor.text ? `<div style="font-size:14px;">${escHtml(sponsor.text)}</div>` : ''}
 ${safeUrl(sponsor.url) && sponsor.cta ? `<a href="${escHtml(safeUrl(sponsor.url))}" style="display:inline-block;margin-top:10px;background:#fff;color:${C.ink};font-family:${DISPLAY};font-weight:bold;padding:6px 14px;border:2px solid ${C.ink};border-radius:999px;text-decoration:none;">${escHtml(sponsor.cta)} →</a>` : ''}
@@ -222,7 +225,7 @@ export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, ad
 ${list.length > PER_DAY ? `<p style="margin:8px 0 0;font-size:13px;font-weight:bold;"><a href="${siteUrl}/" style="color:${C.accent};">+${list.length - PER_DAY} more on ${escHtml(formatDay(d, { weekday: 'long' }))} →</a></p>` : ''}
 </td></tr></table>`).join('');
 
-  const sponsorBlock = sponsorHtml(sponsor);
+  const sponsorBlock = sponsorHtml(sponsor, siteUrl);
 
   const pill = (href, label) => `<a href="${siteUrl}${href}" style="display:inline-block;margin:6px 4px 0 0;font-family:${DISPLAY};font-weight:bold;font-size:13px;color:${C.ink};background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:2px 10px;text-decoration:none;">${label}</a>`;
   const bodyHtml = `
@@ -269,7 +272,7 @@ export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeU
 ${soon.length > picks.length ? `<p style="margin:10px 0 0;font-size:13px;font-weight:bold;"><a href="${siteUrl}/" style="color:${C.accent};">+${soon.length - picks.length} more this week →</a></p>` : ''}` : '';
   const bodyHtml = `
 <p style="margin:18px 0 4px;font-size:16px;"><strong>You're in!</strong> Every Monday morning you'll get the week's events in Victoria, TX: concerts, markets, festivals, family stuff and more, all in one email.</p>
-${coming}${sponsorHtml(sponsor)}
+${coming}${sponsorHtml(sponsor, siteUrl)}
 <p style="margin:26px 0 0;text-align:center;">${btn(`${siteUrl}/`, "See this week's events")}</p>
 <p style="margin:22px 0 0;font-size:14px;color:${C.muted};">Know someone who's always asking what there is to do in Victoria? Forward them this email or send them to <a href="${siteUrl}/" style="color:${C.accent};font-weight:bold;">thevic361.com</a>.</p>`;
   const text = [

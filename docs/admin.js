@@ -1532,16 +1532,21 @@
         ? '<tr><th>Date</th><th>Package</th><th>Business</th><th>Details</th><th>Amount</th><th>Status</th><th></th></tr>' +
           d.orders.map(o => {
             const live = o.status === 'paid' || o.status === 'active';
-            const btn = live ? '<button type="button" class="btn btn--ghost" data-sponsor-action="hide" data-id="' + escapeHtml(o.id) + '">Hide</button>'
-              : o.status === 'hidden' ? '<button type="button" class="btn btn--ghost" data-sponsor-action="restore" data-id="' + escapeHtml(o.id) + '">Restore</button>' : '';
+            const hasLogo = Boolean(o.sponsor && o.sponsor.logo);
+            const btn = (live ? '<button type="button" class="btn btn--ghost" data-sponsor-action="hide" data-id="' + escapeHtml(o.id) + '">Hide</button>'
+              : o.status === 'hidden' ? '<button type="button" class="btn btn--ghost" data-sponsor-action="restore" data-id="' + escapeHtml(o.id) + '">Restore</button>' : '') +
+              (hasLogo ? '<button type="button" class="btn btn--ghost" data-sponsor-action="remove-logo" data-id="' + escapeHtml(o.id) + '">Remove logo</button>' : '');
+            // Filled in by loadSponsorLogos (the image needs the admin session).
+            const logo = hasLogo ? '<br><img class="sponsor-admin-logo" alt="Uploaded logo" data-logo-id="' + escapeHtml(o.id) + '">' : '';
             return '<tr><td>' + escapeHtml((o.paid_at || o.created_at || '').slice(0, 10)) + '</td>' +
               '<td>' + escapeHtml(SPONSOR_KIND[o.kind] || o.kind) + '</td>' +
               '<td>' + escapeHtml(o.business || '') + '<br><small>' + escapeHtml(o.email || '') + '</small></td>' +
-              '<td>' + escapeHtml(sponsorDetail(o)) + '</td>' +
+              '<td>' + escapeHtml(sponsorDetail(o)) + logo + '</td>' +
               '<td>$' + escapeHtml(String(Math.round((o.amount || 0) / 100))) + '</td>' +
               '<td>' + escapeHtml(SPONSOR_STATUS[o.status] || o.status) + '</td><td>' + btn + '</td></tr>';
           }).join('')
         : '<tr><td class="traffic-empty">No orders yet.</td></tr>';
+      loadSponsorLogos(table);
     }
     const cal = document.getElementById('sponsors-calendar');
     if (cal && Array.isArray(d.calendar)) cal.innerHTML = d.calendar.map(renderCalendarWeek).join('');
@@ -1571,6 +1576,19 @@
     }).join('');
     return '<section class="cal-week"><div class="cal-week__head"><strong>' + escapeHtml(w.label) + '</strong>' + weekly + '</div>' +
       '<div class="cal-grid">' + days + '</div></section>';
+  }
+
+  // Weekly sponsor logos, so they can be checked (and pulled) here. Fetched
+  // with the admin session: the public URL stops serving hidden orders.
+  function loadSponsorLogos(root) {
+    root.querySelectorAll('img[data-logo-id]').forEach(async img => {
+      try {
+        const headers = state.session ? { Authorization: 'Bearer ' + state.session } : {};
+        const r = await fetch(apiBaseUrl() + '/api/admin/sponsors/' + encodeURIComponent(img.getAttribute('data-logo-id')) + '/logo', { headers });
+        if (!r.ok) { img.remove(); return; }
+        img.src = URL.createObjectURL(await r.blob());
+      } catch (_) { img.remove(); }
+    });
   }
 
   async function loadSponsors() {
@@ -2124,6 +2142,7 @@
       if (!b) return;
       const action = b.getAttribute('data-sponsor-action');
       if (action === 'hide' && !confirm('Hide this placement from the site? (Refund it in Stripe separately.)')) return;
+      if (action === 'remove-logo' && !confirm('Remove this sponsor’s logo? Their block stays up without it. This can’t be undone.')) return;
       sponsorAction(b.getAttribute('data-id'), action);
     });
 
