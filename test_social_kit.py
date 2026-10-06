@@ -134,8 +134,8 @@ def test_caption_points_to_the_signup_page():
     from datetime import date as _d
     caps = sk.captions({_d(2026, 10, 9): [{"name": "Live Music", "date": "2026-10-09", "time": "7 PM"}]},
                        _d(2026, 10, 9), _d(2026, 10, 9), "today")
-    assert "Get the list free every Monday: https://www.thevic361.com/subscribe" in caps["facebook"]
-    assert "Get the list free every Monday: link in bio" in caps["instagram"]
+    assert "Don't miss a thing: get every event free in your inbox each Monday 👉 https://www.thevic361.com/subscribe" in caps["facebook"]
+    assert "subscribe at the link in bio" in caps["instagram"]
 
 
 def test_outreach_slack_is_short_and_actionable(tmp_path):
@@ -174,5 +174,5 @@ def test_posts_have_at_most_three_slides():
     names, doc = ss.slides_html(groups, date(2026, 10, 5), date(2026, 10, 11), "week")
     assert names == ["week-1.png", "week-2.png", "week-3.png"]
     assert doc.count("+ 7 more") == 7                      # every day: 2 shown, the rest teased
-    assert "All 63 events" in doc and "are on" in doc
+    assert "See all 63 events" in doc and "Subscribe free →" in doc and "thevic361.com/subscribe" in doc
 

@@ -165,20 +165,23 @@ def digest_html(groups, start, end, kind):
 </div>
 <div class="disp" style="position:absolute;left:64px;top:140px;font-size:60px">A peek at {"today" if kind == "today" else "the list"} <span style="font-size:40px;color:{PURPLE}">({total} in all)</span></div>
 <div class="card" style="position:absolute;left:64px;right:78px;top:228px;max-height:1010px">{days}</div>
-<div class="foot"><span style="color:{PURPLE}">See them all at thevic361.com</span><span style="font-size:30px">→</span></div>
+<div class="foot"><span style="color:{PURPLE}">Don’t miss out: get the list free every Monday</span><span style="font-size:30px">→</span></div>
 </section>"""
 
 
 def cta_html(total=0):
-    """Slide 3: send them to the site for everything, then the newsletter."""
-    see_all = f"All {total} events" if total else "The full list"
+    """Slide 3: subscribe first (so they don't miss the next one), then the
+    full list on the site."""
+    see_all = f"See all {total} events" if total else "See the full list"
     return f"""<section class="slide" style="background:{PURPLE}"><div class="sky" style="opacity:.95"></div>
 <div style="position:absolute;left:72px;right:72px;top:80px;color:#fff">
   {_brand(color="#fff")}
-  <div class="disp" style="font-size:104px;margin-top:64px">{esc(see_all)}<br>{"are" if total else "is"} on <span style="color:{SUN}">the site.</span></div>
-  <div class="pill" style="margin-top:44px;font-size:56px;background:{SUN};color:{INK};box-shadow:10px 10px 0 {INK}">thevic361.com</div>
-  <div style="font-size:44px;font-weight:800;margin-top:60px;opacity:.95">Get the list <span style="color:{SUN}">free</span> every Monday:<br>thevic361.com/subscribe</div>
-  <div style="font-size:32px;font-weight:800;margin-top:40px;opacity:.85">Hosting something? Submit it free at thevic361.com/submit</div>
+  <div class="disp" style="font-size:112px;margin-top:60px">Don’t miss<br>a thing.</div>
+  <div style="font-size:46px;font-weight:800;margin-top:26px;opacity:.95">Every event in Victoria, <span style="color:{SUN}">free</span> in your inbox each Monday.</div>
+  <div class="pill" style="margin-top:44px;font-size:62px;padding:10px 40px;background:{SUN};color:{INK};box-shadow:10px 10px 0 {INK}">Subscribe free →</div>
+  <div class="disp" style="font-size:46px;margin-top:22px;color:{SUN}">thevic361.com/subscribe</div>
+  <div style="font-size:40px;font-weight:800;margin-top:52px">{esc(see_all)} at <span style="color:{SUN}">thevic361.com</span></div>
+  <div style="font-size:30px;font-weight:800;margin-top:26px;opacity:.85">Hosting something? Submit it free at thevic361.com/submit</div>
 </div>
 </section>"""
 
