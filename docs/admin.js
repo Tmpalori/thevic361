@@ -720,6 +720,9 @@
       const events = Array.isArray(json.events) ? json.events : [];
       const keys = new Set(events.map(eventKey));
       state.publishedKeys = keys;
+      // Sent back with Save & Publish so the server can refuse if the live
+      // list changed meanwhile (see /api/admin/publish-events).
+      state.publishedVersion = json.last_updated || null;
       // Match on the original key and the shown (edited) one: the list
       // here has the edits overlay applied.
       state.hiddenKeys = new Set((await loadHidden()).flatMap(h => [h.key, h.shown_key].filter(Boolean)));
@@ -1327,8 +1330,15 @@
       if (mode === 'server') {
         const { res, json } = await adminFetch('/api/admin/publish-events', {
           method: 'POST',
-          body: JSON.stringify({ events: payload.events })
+          body: JSON.stringify({ events: payload.events, based_on: state.publishedVersion || undefined })
         });
+        if (res.status === 409 && json && json.error === 'stale') {
+          // Reload the live list; unsaved checks/unchecks are kept (pending).
+          await loadPublishedAndSeedSelections();
+          renderPicker();
+          setStatus(json.message, 'error');
+          return;
+        }
         if (!res.ok || !json || !json.ok) {
           throw new Error((json && (json.message || json.error)) || ('Publish failed (' + res.status + ')'));
         }
@@ -1338,6 +1348,7 @@
         // be surfaced as an error — the public site (Railway/Postgres) is
         // already updated, which is what Save & Publish is responsible for.
         state.publishedKeys = new Set(state.selected);
+        if (json.last_updated) state.publishedVersion = json.last_updated;
         persistSelections();
         renderPicker();
         const dest = (json && json.destinations) || {};

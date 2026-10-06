@@ -951,10 +951,21 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       try {
         const pkg = packageFor(req.query.package);
         if (!config.enabled || !pkg) return res.redirect(302, '/advertise');
-        // Prefill from the query (the free submit form links here with the
-        // event it just sent); only the form's own fields are taken.
-        const PREFILL = ['event_name', 'date', 'time', 'venue', 'address', 'description', 'url', 'business', 'email'];
+        // Prefill from the query; only the form's own event fields are taken.
+        // Contact details never ride in the URL (analytics and the Pixel see
+        // page URLs): the submit form and its emails link with `from=<the
+        // submission's id>` (a random UUID) and the server fills them in.
+        const PREFILL = ['event_name', 'date', 'time', 'venue', 'address', 'description', 'url'];
         let values = Object.fromEntries(PREFILL.filter(k => typeof req.query[k] === 'string').map(k => [k, req.query[k].slice(0, 2000)]));
+        const from = typeof req.query.from === 'string' && /^[0-9a-f-]{36}$/i.test(req.query.from) ? req.query.from : '';
+        const sub = from && typeof store.get === 'function' ? await store.get(from).catch(() => null) : null;
+        if (sub && (sub.source || 'submission') === 'submission') {
+          const p = sub.payload || {};
+          for (const [k, v] of [['event_name', p.name], ['date', p.date], ['time', p.time], ['venue', p.venue], ['address', p.address],
+            ['description', p.description], ['url', p.url], ['business', sub.submitter_name], ['email', sub.submitter_email]]) {
+            if (v) values[k] = String(v).slice(0, 2000);
+          }
+        }
         // Back from Stripe without paying (cancel_url): release their hold
         // so trying again isn't blocked by it, and refill the form.
         if (typeof req.query.cancelled === 'string' && req.query.cancelled) {

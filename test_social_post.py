@@ -21,13 +21,20 @@ class FakeResp:
 class FakeSession:
     """Answers Graph calls in order of a simple router and records them."""
 
-    def __init__(self, fail=None, page_token=None):
+    def __init__(self, fail=None, page_token=None, raise_on=None):
         self.calls, self.n, self.fail, self.page_token = [], 0, fail or "", page_token
+        self.raise_on = raise_on or {}  # path suffix -> exception to raise
 
-    def request(self, method, url, data=None, params=None, timeout=None):
+    def request(self, method, url, data=None, params=None, timeout=None, headers=None):
         sent = dict(params or data or {})
+        auth = (headers or {}).get("Authorization", "")
+        if auth.startswith("Bearer "):  # GETs carry the token in a header
+            sent["access_token"] = auth[len("Bearer "):]
         self.calls.append((method, url.split("/", 4)[-1], sent))
         path = url.split("/", 4)[-1]
+        for suffix, exc in self.raise_on.items():
+            if path.endswith(suffix):
+                raise exc
         if method == "GET" and sent.get("fields") == "access_token":  # Page token lookup
             return FakeResp({"access_token": self.page_token, "id": path} if self.page_token else {"id": path})
         self.n += 1
@@ -176,7 +183,7 @@ def test_system_user_token_is_swapped_for_the_page_token(tmp_path, monkeypatch):
     assert posts and all(c[2]["access_token"] == "page-tok" for c in posts)
 
 
-def test_get_calls_send_their_parameters_in_the_query_string():
+def test_get_calls_send_fields_in_the_query_string_and_the_token_in_a_header():
     seen = {}
 
     class S:
@@ -184,5 +191,91 @@ def test_get_calls_send_their_parameters_in_the_query_string():
             seen.update(kw)
             return FakeResp({"status_code": "FINISHED"})
     sp._graph("GET", "123", S(), fields="status_code", access_token="t")
-    assert seen == {"params": {"fields": "status_code", "access_token": "t"}}
+    assert seen == {"params": {"fields": "status_code"}, "headers": {"Authorization": "Bearer t"}}
+
+
+def test_network_errors_become_post_errors_without_the_url():
+    import requests
+
+    class S:
+        def request(self, method, url, timeout=None, **kw):
+            raise requests.ConnectionError(f"Max retries exceeded with url: {url}?access_token=SECRET")
+    with pytest.raises(sp.PostError) as e:
+        sp._graph("GET", "123", S(), fields="status_code", access_token="SECRET")
+    assert "SECRET" not in str(e.value) and "ConnectionError" in str(e.value)
+    assert e.value.__cause__ is None and e.value.__suppress_context__
+
+
+def test_network_error_on_facebook_still_tries_instagram(tmp_path, monkeypatch):
+    import requests
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.setenv("IG_USER_ID", "ig7")
+    monkeypatch.setattr(sp.time, "sleep", lambda s: None)
+    sess = FakeSession(raise_on={"/photos": requests.ConnectionError("down")})
+    kit = write_kit(tmp_path)
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=sess) == 1
+    assert any(c[1] == "ig7/media_publish" for c in sess.calls)
+    slot = json.loads((kit / "posted.json").read_text())["2026-10-08:weekend"]
+    assert slot == {"instagram": "post1"}   # a plain failure leaves Facebook free to retry
+
+
+def test_timeout_publishing_marks_the_slot_pending_and_reruns_skip_it(tmp_path, monkeypatch, capsys):
+    import requests
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+    kit = write_kit(tmp_path)
+    sess = FakeSession(raise_on={"/feed": requests.ReadTimeout("slow")})
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=sess) == 1
+    assert json.loads((kit / "posted.json").read_text())["2026-10-08:weekend"] == {"facebook": "pending"}
+    assert "may have posted" in capsys.readouterr().out
+
+    rerun = FakeSession()
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=rerun) == 0
+    assert not any(c[0] == "POST" for c in rerun.calls)
+    assert "check the Facebook account by hand" in capsys.readouterr().out
+
+
+def test_timeout_before_the_final_call_is_a_plain_failure(tmp_path, monkeypatch):
+    import requests
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+    kit = write_kit(tmp_path)
+    sess = FakeSession(raise_on={"/photos": requests.ReadTimeout("slow")})
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=sess) == 1
+    assert not (kit / "posted.json").exists() or \
+        "facebook" not in json.loads((kit / "posted.json").read_text()).get("2026-10-08:weekend", {})
+
+
+def test_instagram_publish_timeout_marks_instagram_pending(tmp_path, monkeypatch):
+    import requests
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.setenv("IG_USER_ID", "ig7")
+    monkeypatch.setattr(sp.time, "sleep", lambda s: None)
+    kit = write_kit(tmp_path)
+    sess = FakeSession(raise_on={"/media_publish": requests.ReadTimeout("slow")})
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=sess) == 1
+    slot = json.loads((kit / "posted.json").read_text())["2026-10-08:weekend"]
+    assert slot == {"facebook": "post1", "instagram": "pending"}
+
+
+def test_looked_up_page_token_is_masked_in_actions(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "system-user-tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    sp.main(["--kind", "weekend", "--kit-dir", str(write_kit(tmp_path)), "--no-wait"],
+            session=FakeSession(page_token="page-tok"))
+    assert "::add-mask::page-tok" in capsys.readouterr().out
+    # Same token back (already a Page token), or outside Actions: nothing to mask.
+    sp.main(["--kind", "weekend", "--kit-dir", str(write_kit(tmp_path)), "--no-wait"], session=FakeSession())
+    assert "::add-mask::" not in capsys.readouterr().out
+    monkeypatch.delenv("GITHUB_ACTIONS")
+    (tmp_path / "posted.json").unlink()
+    sp.main(["--kind", "weekend", "--kit-dir", str(write_kit(tmp_path)), "--no-wait"],
+            session=FakeSession(page_token="page-tok"))
+    assert "::add-mask::" not in capsys.readouterr().out
 

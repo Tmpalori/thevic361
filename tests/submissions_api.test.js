@@ -482,8 +482,10 @@ describe('Admin API auth + transitions', () => {
     // Submitter contact rides on the approved candidate so the admin can
     // still see it during picker review; admin.js stripPrivateFields keeps
     // it out of the published events.json.
-    expect(ev.submitter_first_name).toBe('Jane');
-    expect(ev.submitter_phone).toBe('(361) 555-0123');
+    // The submitter's contact stays in the review queue: these events get
+    // published, so their name and phone must never ride along.
+    expect(ev).not.toHaveProperty('submitter_first_name');
+    expect(ev).not.toHaveProperty('submitter_phone');
   });
 
   it('approved-events endpoint returns candidate-shaped events with source metadata', async () => {

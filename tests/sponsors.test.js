@@ -431,13 +431,12 @@ describe('Vic’s Pick: price by day, daily limits, preview', () => {
 
   it('shows a live preview with the site’s own markup before payment', async () => {
     await startApp();
-    const page = await (await fetch(baseUrl + '/advertise/checkout?package=featured&event_name=Pumpkin%20%3CPatch%3E&date=2026-10-10&venue=Titan&business=Me')).text();
+    const page = await (await fetch(baseUrl + '/advertise/checkout?package=featured&event_name=Pumpkin%20%3CPatch%3E&date=2026-10-10&venue=Titan')).text();
     expect(page).toContain('Preview: exactly how it’ll look');
     expect(page).toContain('event-entry event-entry--featured');            // same markup as the site
     expect(page).toContain('Pumpkin &lt;Patch&gt;');                        // prefilled and escaped
     expect(page).toContain('Saturday, Oct 10: $89');
     expect(page).toContain('4 of 4 Vic’s Pick spots left');
-    expect(page).toContain('value="Me"');                                    // business prefilled
     expect(page.indexOf('co-preview')).toBeLessThan(page.indexOf('Continue to payment'));
 
     const r = await fetch(baseUrl + '/advertise/preview', {
@@ -549,10 +548,29 @@ describe('confirmation emails', () => {
     expect(mail.sent).toHaveLength(1);
     const m = mail.sent[0];
     expect(m.to).toEqual(['org@example.com']);
-    expect(m.subject).toBe('We got your event: Fall Fest');
+    expect(m.subject).toBe('We got your event submission');                // fixed: no sender-chosen text
     expect(m.text).toContain('Free listings aren’t guaranteed a spot');
-    expect(m.text).toMatch(/advertise\/checkout\?package=featured&event_name=Fall\+Fest&date=2026-10-17/);
+    expect(m.html).not.toContain('Music and food all day.');
+    const { id } = await r.json();
+    expect(m.text).toContain(`/advertise/checkout?package=featured&from=${id}`);
+    expect(m.text).not.toContain('org%40example.com');
     expect(m.text).toContain('/contact');
+
+    // The upgrade link fills in the event and contact on the server.
+    const page = await (await fetch(`${baseUrl}/advertise/checkout?package=featured&from=${id}`)).text();
+    expect(page).toContain('value="Fall Fest"');
+    expect(page).toContain('value="org@example.com"');
+    expect(page).toContain('value="Pat Lee"');
+    // Contact fields in the query are ignored.
+    expect(await (await fetch(`${baseUrl}/advertise/checkout?package=featured&email=x%40y.com&business=Me`)).text()).not.toContain('value="Me"');
+
+    // At most 3 receipts a day to one address.
+    for (let i = 0; i < 4; i++) {
+      await fetch(baseUrl + '/api/submissions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, name: `Fall Fest ${i + 2}` }) });
+    }
+    await new Promise(res => setTimeout(res, 20));
+    expect(mail.sent).toHaveLength(3);
   });
 
   it('renders safely', () => {
