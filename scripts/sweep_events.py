@@ -48,6 +48,7 @@ RELIGIOUS_REASONS = {"religious event", "church event", "worship service"}  # co
 # times stay flags: the fix is an edit, not a removal. AI findings are never
 # acted on.
 AUTO_HIDE = {"religious", "not_an_event", "duplicate", "cut_off"}
+MAX_PER_RUN = 10  # server/eventcheck.js refuses a larger batch
 # Hand-written events (curated: true, from local_events.yaml) were checked
 # by a person: church trunk-or-treats and nearby-town festivals are on the
 # list on purpose, and a name like "Movie Night: Friday the 13th" on a
@@ -199,6 +200,13 @@ def ai_findings(events, api_key):
             why = f"same as “{other['name']}” at {other.get('venue') or 'no venue'}" + (f" ({why})" if why else "")
         out.append((i, kind, why))
     return out
+
+
+def cap_picks(events, picks):
+    """At most MAX_PER_RUN: the hide endpoint refuses a bigger batch outright,
+    which would hide nothing. Events on the day lists go first (stable order
+    otherwise); the rest stay in the report and wait for the next run."""
+    return sorted(picks, key=lambda p: bool(events[p[0]].get("overflow")))[:MAX_PER_RUN]
 
 
 def trusted(events, findings):
@@ -363,6 +371,7 @@ def main(argv=None):
     ai = trusted(events, ai) if ai is not None else None
     secret = "" if args.dry_run else os.environ.get("EVENT_CHECK_SECRET", "").strip()
     picks, resolved = to_hide(events, rules)
+    picks = cap_picks(events, picks)
     hidden, restored, problem = hide(events, picks, secret)
     findings = combine(rules, ai)
     # A duplicate pair shows once: as the copy that was hidden.

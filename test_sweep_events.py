@@ -264,3 +264,18 @@ def test_an_editors_pick_does_not_shield_its_duplicate():
     assert [p[1] for p in picks] == ["duplicate"]
     paid = [dict(twin, featured=True), dict(twin)]
     assert sw.to_hide(paid, sw.rule_findings(paid))[0] == []
+
+
+def test_hide_batch_stays_under_the_server_limit_and_day_lists_go_first():
+    events = []
+    names = ["Pumpkin Patch", "Quilt Show", "Car Rally", "Book Swap", "Jazz Brunch", "Rodeo Night", "Taco Crawl",
+             "Kite Day", "Chili Cookoff", "Art Walk", "Salsa Social", "Bike Parade", "Yoga Picnic", "Pottery Sale"]
+    for i, name in enumerate(names):
+        twin = {"date": "2026-10-10", "name": name, "venue": f"{name} Grounds", "time": f"{i % 9 + 1}:00 PM", "page": f"/events/{i}"}
+        events += [dict(twin, url="https://x", overflow=i < 7), dict(twin, overflow=i < 7)]
+    picks, _ = sw.to_hide(events, sw.rule_findings(events))
+    assert len(picks) > sw.MAX_PER_RUN
+    capped = sw.cap_picks(events, picks)
+    assert len(capped) == sw.MAX_PER_RUN
+    shown_first = [bool(events[i].get("overflow")) for i, _, _ in capped]
+    assert shown_first == sorted(shown_first) and shown_first.count(False) == 7

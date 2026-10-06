@@ -64,7 +64,10 @@ const REFRESH_FIELDS = ['time', 'venue', 'address', 'url', 'description', 'icons
 // Tags the collector writes only when set: a fresh copy without one means
 // it was taken off (a wrong town removed from the YAML), so it goes.
 // appeal/sources are different: missing means unknown, so they're kept.
-const TAG_FIELDS = ['big', 'town', 'curated', 'favorite', 'recurring'];
+// So is `recurring`: a bar's "every Tuesday" post and a dated "this
+// Tuesday" post can alternate runs, and a weekly staple shouldn't flicker
+// in and out of the weekly-repeat score (and editor's picks).
+const TAG_FIELDS = ['big', 'town', 'curated', 'favorite'];
 
 function normName(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();

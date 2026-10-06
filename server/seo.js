@@ -528,10 +528,16 @@ export function withPages(events) {
 }
 
 // By date, then featured (paid) events first within a day, then by time.
+// Within a day: paid Vic's Picks first (sold as "pinned to the top"), then
+// editor's picks (server/scoring.js pickDays), then the rest by time.
+export function pickRank(ev) {
+  return ev && ev.featured ? (ev.editor_pick ? 1 : 0) : 2;
+}
+
 export function sortEvents(list) {
   return list.slice().sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-    if (Boolean(a.featured) !== Boolean(b.featured)) return a.featured ? -1 : 1;
+    if (pickRank(a) !== pickRank(b)) return pickRank(a) - pickRank(b);
     return timeKey(a) - timeKey(b);
   });
 }

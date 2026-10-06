@@ -89,3 +89,24 @@ describe('filter messages', () => {
     expect(msgs).toEqual(['Nothing in this category on this day.', 'Nothing in this category today.']);
   });
 });
+
+describe('docs/app.js day order', () => {
+  it('puts paid Vic’s Picks above editor’s picks, like sortEvents', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 7, 12)); // Wednesday, local time
+    const events = [
+      { date: '2026-10-10', name: 'Plain', time: '9:00 AM', icons: [] },
+      { date: '2026-10-10', name: 'Editor Pick', time: '1:00 PM', featured: true, editor_pick: true, icons: [] },
+      { date: '2026-10-10', name: 'Paid Pick', time: '7:00 PM', featured: true, icons: [] }
+    ];
+    let done;
+    const ready = new Promise(r => { done = r; });
+    boot('', () => Promise.resolve({ ok: true, json: () => { setTimeout(done, 0); return Promise.resolve({ events }); } }));
+    await ready;
+    await new Promise(r => setTimeout(r, 0));
+    const html = document.getElementById('events-container').innerHTML;
+    const order = ['Paid Pick', 'Editor Pick', 'Plain'].map(n => html.indexOf(n));
+    expect(order.every(i => i >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+});
