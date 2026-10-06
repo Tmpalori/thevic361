@@ -18,6 +18,7 @@ Requires:
 """
 
 import argparse
+import html
 import json
 import os
 import smtplib
@@ -132,7 +133,7 @@ def build_email_body(events, by_date):
 
         text_lines.append(f"\n--- {day_label} ---")
         html_parts.append(
-            f"<h2 style='color: #1A7A7E; font-size: 16px; border-bottom: 2px solid #1A7A7E; padding-bottom: 5px; margin-top: 25px;'>{day_label}</h2>"
+            f"<h2 style='color: #1A7A7E; font-size: 16px; border-bottom: 2px solid #1A7A7E; padding-bottom: 5px; margin-top: 25px;'>{html.escape(day_label)}</h2>"
         )
 
         for ev in by_date[date_str]:
@@ -153,7 +154,9 @@ def build_email_body(events, by_date):
             if desc:
                 text_lines.append(f"      {desc}")
 
-            # HTML
+            # HTML. Scraped text is escaped: the collector unescapes entities,
+            # so "&lt;a href…&gt;" in a post arrives here as a live tag.
+            name, time, venue, desc = (html.escape(str(v)) for v in (name, time, venue, desc))
             free_badge = '<span style="background: #1A7A7E; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 5px;">FREE</span>' if ev.get("free") else ""
             html_parts.append(f"""
             <div style='padding: 10px; margin: 8px 0; background: white; border-radius: 6px; border-left: 3px solid #1A7A7E;'>
