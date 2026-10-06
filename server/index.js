@@ -300,7 +300,24 @@ export async function createApp(opts = {}) {
   });
 
   // ─── Health ───
-  app.get('/api/health', (req, res) => {
+  // ?deep=1 also asks the database (for the uptime check), so "the page
+  // loads but nothing can be saved or published" counts as down. Plain
+  // /api/health stays process-only, so a database blip can't fail a deploy.
+  app.get('/api/health', async (req, res) => {
+    if (req.query.deep && storeBundle.pool) {
+      let timer;
+      try {
+        await Promise.race([
+          storeBundle.pool.query('SELECT 1'),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('database timeout')), 5000); })
+        ]);
+      } catch (err) {
+        console.error('[health] database check failed:', err?.message || err);
+        return res.status(503).json({ ok: false, storage: storeBundle.kind, error: 'database' });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
     res.json({ ok: true, storage: storeBundle.kind });
   });
 

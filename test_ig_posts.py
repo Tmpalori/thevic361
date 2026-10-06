@@ -479,15 +479,15 @@ def test_ig_posts_default_cap_is_20(monkeypatch):
     assert ce._IG_POSTS_MAX_VENUES == 20
 
 
-def test_ig_posts_zero_events_with_posts_fires_sentry(monkeypatch):
+def test_ig_posts_zero_events_with_posts_fires_warning(monkeypatch):
     """If Apify returns posts but OpenAI extracts zero events for ALL venues,
-    that's a silent regression — fire a Sentry warning so it's visible."""
+    that's a silent regression — fire a warning so it's visible."""
     monkeypatch.setenv("IG_POSTS_ENABLED", "1")
     monkeypatch.setenv("APIFY_TOKEN", "fake")
     monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
     warns = []
-    monkeypatch.setattr(ce, "_sentry_warn",
+    monkeypatch.setattr(ce, "_warn",
                         lambda msg, **tags: warns.append((msg, tags)))
 
     def fake_post(url, **kwargs):
@@ -588,3 +588,16 @@ def test_post_event_dates_without_weekday_keeps_legacy_shape():
     assert ce._post_event_dates({"date": d.isoformat(), "name": "X"}, start, end) == [d]
     assert ce._post_event_dates({"date": (end + timedelta(days=1)).isoformat()}, start, end) == []
     assert ce._post_event_dates({"date": "nope"}, start, end) == []
+
+
+def test_warn_prints_one_line_actions_annotation(capsys):
+    """Collector warnings show as ::warning:: annotations on the run page,
+    one line each (a newline would cut the annotation short)."""
+    ce._warn("FB posts AI HTTP error", venue="Aero\nCrafters", status="500")
+    out = capsys.readouterr().out
+    assert out == "::warning::FB posts AI HTTP error (venue=Aero Crafters status=500)\n"
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        ce._report_exception("library")
+    assert capsys.readouterr().out.startswith("::warning::library failed (error=ValueError: boom)")
