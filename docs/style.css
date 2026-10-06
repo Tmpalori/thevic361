@@ -1341,6 +1341,54 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 .badge--free { background: var(--cactus-light); color: var(--color-text); }
 .badge--new { background: var(--cactus); color: var(--ink); }
 .badge--coming { background: var(--lilac); color: var(--ink); }
+.badge--nearby { background: var(--sky-light); color: var(--color-text); }
+
+/* ─── Coming up (server/seo.js renderComingUp) ─── */
+.coming-up { margin-top: var(--space-6); }
+.coming-sub { margin: 0 0 var(--space-3); color: var(--color-text-muted); font-size: var(--text-sm); }
+.coming-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: var(--space-3);
+}
+.coming-item a {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 2.5px solid var(--ink);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text);
+  text-decoration: none;
+  transition: transform 120ms ease, background 150ms ease;
+}
+.coming-item a:hover { background: var(--sun-light); transform: translate(-1px, -1px); }
+.coming-item a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.coming-date {
+  align-self: flex-start;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-xs);
+  background: var(--lilac);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  padding: 0 0.6em;
+}
+.coming-name { font-family: var(--font-display); font-weight: 700; font-size: var(--text-base); line-height: 1.25; margin-top: 4px; }
+.coming-where { font-size: var(--text-sm); color: var(--color-text-muted); }
+.coming-more { margin-top: var(--space-3); }
+.coming-more > summary { display: inline-flex; list-style: none; cursor: pointer; }
+.coming-more > summary::-webkit-details-marker { display: none; }
+.coming-more > .coming-list { margin-top: var(--space-3); }
+.coming-more .when-open, .coming-more[open] .when-closed { display: none; }
+.coming-more[open] .when-open { display: inline; }
 
 .empty-state { padding: var(--space-4) var(--space-5); font-style: normal; color: var(--color-text-muted); }
 .empty-state a { font-weight: 800; }

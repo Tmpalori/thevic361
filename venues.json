@@ -478,13 +478,15 @@
     "facebook_page": "https://www.facebook.com/CrossroadsArtHouse",
     "facebook_events": "https://www.facebook.com/CrossroadsArtHouse/events",
     "event_potential": "Art events, community gatherings",
-    "confidence": "medium",
-    "notes": "Owners confirmed FB is primary channel",
+    "confidence": "high",
+    "notes": "Owners confirmed FB is primary channel Raised to high Oct 2026: many classes and kids crafts listed in the community events list.",
     "source": "seed",
     "instagrams": [
       "crossroadsart"
     ],
-    "instagram_url": "https://www.instagram.com/crossroadsart/"
+    "instagram_url": "https://www.instagram.com/crossroadsart/",
+    "tier": "MEDIUM",
+    "address": "2914 N. Laurent St."
   },
   {
     "name": "The Colorful Canvas",
@@ -1048,5 +1050,95 @@
     "confidence": "low",
     "event_potential": "673-person event capacity; meeting rooms; cross-platform community events",
     "source": "seed-csv-2026-04"
+  },
+  {
+    "name": "Evan's Fire Brick Oven Pizza",
+    "category": "Restaurant / Live Music",
+    "facebook_page": "https://www.facebook.com/p/Evans-Fire-Brick-Oven-Pizza-61565940617671/",
+    "event_potential": "Live music Thu–Sat, trivia Wednesdays; posts a monthly lineup flyer",
+    "confidence": "high",
+    "notes": "Added Oct 2026: events here were missing from the site (see local_events.yaml fall list). Their website links an older page (facebook.com/456013757588258); this is the 2024 one.",
+    "source": "manual",
+    "tier": "HIGH",
+    "instagrams": [
+      "evanspizzeria"
+    ],
+    "instagram_url": "https://www.instagram.com/evanspizzeria/",
+    "website": "https://evansfirebrickovenpizza.com/",
+    "address": "711 S. Bridge St."
+  },
+  {
+    "name": "Texas Roadhouse",
+    "category": "Restaurant",
+    "facebook_page": "https://www.facebook.com/txrhVictoriaTX4908NNavarroStreet/",
+    "event_potential": "Kids nights, school fundraiser (Dine to Donate) nights",
+    "confidence": "high",
+    "notes": "Added Oct 2026: events here were missing from the site (see local_events.yaml fall list). The Victoria store's own page, not the chain's.",
+    "source": "manual",
+    "tier": "MEDIUM",
+    "website": "https://www.texasroadhouse.com/locations/215-victoriatx",
+    "address": "4908 N. Navarro St."
+  },
+  {
+    "name": "Victoria TNR",
+    "category": "Animal Rescue",
+    "facebook_page": "https://www.facebook.com/victoriatxtnr/",
+    "event_potential": "Adoption events (Caturdays at PetSmart)",
+    "confidence": "high",
+    "notes": "Added Oct 2026: events here were missing from the site (see local_events.yaml fall list). Events are held at PetSmart.",
+    "source": "manual",
+    "tier": "MEDIUM",
+    "website": "http://www.victoriatnr.org/"
+  },
+  {
+    "name": "Scenic Root",
+    "category": "Plant Workshops",
+    "facebook_page": "https://www.facebook.com/p/Scenic-Root-100087131182326/",
+    "event_potential": "Plant workshops at Moonshine, Aero Crafters and others",
+    "confidence": "high",
+    "notes": "Added Oct 2026: events here were missing from the site (see local_events.yaml fall list). Based in Edna; the extraction keeps only its Victoria County events.",
+    "source": "manual",
+    "tier": "MEDIUM"
+  },
+  {
+    "name": "Victoria Film Society",
+    "category": "Film Screenings",
+    "facebook_page": "https://www.facebook.com/VictoriaFilmSociety/",
+    "event_potential": "Movie nights (Mondays at Moonshine in October), screenings at the Welder Center",
+    "confidence": "high",
+    "notes": "Added Oct 2026: events here were missing from the site (see local_events.yaml fall list). Screens at other venues; no place of its own.",
+    "source": "manual",
+    "tier": "MEDIUM",
+    "website": "https://victoriafilmsociety.org/"
+  },
+  {
+    "name": "Children's Discovery Museum",
+    "category": "Museum / Kids",
+    "facebook_page": "https://www.facebook.com/CDM204/",
+    "event_potential": "Family events (Happy Haunted Museum), kids programs",
+    "confidence": "high",
+    "notes": "Added Oct 2026: events here were missing from the site (see local_events.yaml fall list).",
+    "source": "manual",
+    "tier": "HIGH",
+    "instagrams": [
+      "cdmgoldencrescent"
+    ],
+    "instagram_url": "https://www.instagram.com/cdmgoldencrescent/",
+    "website": "https://www.cdmgoldencrescent.org/",
+    "address": "1205 Sam Houston Dr."
+  },
+  {
+    "name": "Tabree Nashay Entertainment",
+    "category": "Event Organizer",
+    "event_potential": "Crossroads Pickle Festival (Dec 5 2026) and other events",
+    "confidence": "medium",
+    "notes": "Added Oct 2026: events here were missing from the site (see local_events.yaml fall list). Organizer, not a place. Facebook is a personal profile the posts scraper can't read, so Instagram only.",
+    "source": "manual",
+    "tier": "MEDIUM",
+    "instagrams": [
+      "tabreenashay_"
+    ],
+    "instagram_url": "https://www.instagram.com/tabreenashay_/",
+    "website": "https://tabreenashay.com/"
   }
 ]

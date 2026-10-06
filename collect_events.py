@@ -38,6 +38,7 @@ Usage:
 """
 
 import argparse
+import base64
 import html
 import json
 import os
@@ -221,6 +222,40 @@ def date_window(days_ahead=14, backfill_to_monday=True):
 # Module-level window — set once in main() and read by every scraper.
 # Defaults handle ad-hoc invocations (tests, --list, etc).
 _WINDOW_START, _WINDOW_END = date_window(14, True)
+
+# Hand-added one-time events in local_events.yaml look further ahead than
+# the scrapers: a festival two months out ("Crossroads Pickle Festival",
+# Dec 5) should be on the site, in the guides and in "Coming up" while
+# people can still plan for it, not first appear the week before.
+# Recurring YAML entries stay inside the window so they don't repeat for
+# months in the Sunday review.
+LOCAL_HORIZON_DAYS = 90
+
+
+def local_horizon_end():
+    """Last date a hand-added one-time event is collected for."""
+    return max(_WINDOW_END, now_central().date() + timedelta(days=LOCAL_HORIZON_DAYS))
+
+
+def _local_extras(ev):
+    """Optional YAML fields that ride along to the site.
+
+    curated: always; hand-written events (see below).
+    big: a highlight for the homepage's "Coming up" list.
+    town: a nearby town (Cuero, Port Lavaca...) for events outside
+    Victoria, so the site says where it is instead of "Victoria, TX".
+    """
+    # curated: written by hand, so the event check (scripts/sweep_events.py)
+    # trusts it the way merge_events does: no auto-hiding as religious, out
+    # of area or wrongly dated (the Oct 2026 list has church trunk-or-treats
+    # and nearby-town festivals on purpose).
+    out = {"curated": True}
+    if ev.get("big") is True:
+        out["big"] = True
+    town = str(ev.get("town") or "").strip()
+    if town:
+        out["town"] = town
+    return out
 
 
 def in_window(d):
@@ -458,6 +493,7 @@ def load_local_events(yaml_path, days_ahead=7):
                         "icons": ev.get("icons", []),
                         "free": ev.get("free", False),
                         "url": ev.get("url", ""),
+                        **_local_extras(ev),
                     })
                 d += timedelta(days=1)
         except (ValueError, KeyError, TypeError) as e:
@@ -468,13 +504,14 @@ def load_local_events(yaml_path, days_ahead=7):
             )
             continue
 
-    # One-time events
+    # One-time events, out to the longer local horizon
+    horizon = local_horizon_end()
     for ev in data.get("events", []) or []:
         if not ev or not ev.get("date"):
             continue
         try:
             ev_date = datetime.strptime(ev["date"], "%Y-%m-%d").date()
-            if today <= ev_date <= end_date:
+            if today <= ev_date <= horizon:
                 events.append({
                     "date": ev["date"],
                     "name": ev["name"],
@@ -485,6 +522,7 @@ def load_local_events(yaml_path, days_ahead=7):
                     "icons": ev.get("icons", []),
                     "free": ev.get("free", False),
                     "url": ev.get("url", ""),
+                    **_local_extras(ev),
                 })
         except Exception:  # one bad entry must not stop the run
             continue
@@ -1509,6 +1547,194 @@ def _parse_ai_json_array(content):
     return None
 
 
+# ─── GAP FILLING (Gemini + Google Search) ────────────────────────────────────
+#
+# Hand-added and post-extracted events often arrive thin: "Trunk or treat."
+# with no time or link (the Oct 2026 community list), so the page says little
+# and the AI review has nothing to work from. This looks each thin event up
+# with Google Search grounding and fills in only what's blank: time, street
+# address, a link, and a fuller description when the current one is a stub.
+#
+# Same trust rules as Gemini discovery: nothing is taken unless the answer
+# names a source page on a site Gemini actually cited, and a link must load
+# and name the event (or be on a cited site that blocks the check). Nothing
+# set by hand or by a venue is overwritten. Results are cached in
+# enrichment_cache.json (committed by weekly-collect.yml) so each event is
+# looked up once; a miss is retried after ENRICH_RETRY_DAYS. Soonest events
+# go first, ENRICH_MAX_PER_RUN per run. GEMINI_ENABLED=0 / ENRICH_ENABLED=0
+# turn it off.
+
+ENRICH_MAX_PER_RUN = 24
+ENRICH_BATCH = 6
+ENRICH_RETRY_DAYS = 7
+THIN_DESCRIPTION_CHARS = 70
+_TIME_RE = re.compile(r"^\d{1,2}(:\d{2})?\s*[AaPp]\.?[Mm]\.?(\s*[–—-]\s*\d{1,2}(:\d{2})?\s*[AaPp]\.?[Mm]\.?)?$")
+
+
+def _enrich_key(ev):
+    return f"{ev.get('date')}|{re.sub(r'[^a-z0-9]+', ' ', str(ev.get('name') or '').lower()).strip()}"
+
+
+def _is_thin(ev):
+    return (not ev.get("time") or not ev.get("url")
+            or len(str(ev.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS)
+
+
+def _enrich_prompt(batch):
+    lines = []
+    for i, ev in enumerate(batch, start=1):
+        town = ev.get("town") or "Victoria"
+        day = datetime.strptime(ev["date"], "%Y-%m-%d").strftime("%A %B %d, %Y")
+        known = "; ".join(f"{k}: {ev[k]}" for k in ("time", "venue", "address", "description", "url") if ev.get(k))
+        lines.append(f"[{i}] {ev.get('name')} on {day} in {town}, Texas. Known: {known or 'nothing else'}")
+    return (
+        "Use Google Search to find details for these local events. For each one, look for the event's own page "
+        "or the organizer's announcement (Facebook event or post, venue site, ticket page, official calendar).\n\n"
+        + "\n".join(lines) +
+        "\n\nReturn ONLY a JSON array, no prose, one object per event you found: "
+        '{"id": N, "source": the page that states these details, "url": the event\'s own page or "", '
+        '"time": "6:00 PM" or "6:00 PM – 8:00 PM" or "", "address": street address or "", '
+        '"description": 1-2 factual sentences from the page (what happens, who it is for, price or registration) or ""}.\n'
+        "Rules: only use a page about this event on this date (not a past year's). Leave any field you can't "
+        "confirm empty; never guess. Skip events you can't find. No search or category pages as url or source."
+    )
+
+
+def _load_enrich_cache(path):
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _apply_enrichment(ev, found):
+    """Fill blanks on ev from a cached/verified lookup. Returns True if changed."""
+    changed = False
+    if found.get("time") and not ev.get("time"):
+        ev["time"] = found["time"]
+        changed = True
+    if found.get("address") and not ev.get("address"):
+        ev["address"] = found["address"]
+        changed = True
+    if found.get("url") and not ev.get("url"):
+        ev["url"] = found["url"]
+        changed = True
+    if found.get("description") and len(str(ev.get("description") or "").strip()) < THIN_DESCRIPTION_CHARS:
+        ev["description"] = found["description"]
+        changed = True
+    return changed
+
+
+def _verified_details(item, grounded, get=None):
+    """The fields from one Gemini answer we can trust, or {}."""
+    source = str(item.get("source") or "").strip()
+    url = str(item.get("url") or "").strip()
+    cited = lambda u: re.match(r"https?://", u) and not is_listing_url(u) and _host_matches(_host(u), grounded)
+    if not (cited(source) or cited(url)):
+        return {}
+    out = {}
+    time_str = _clean_text(item.get("time"))
+    if time_str and _TIME_RE.match(time_str):
+        out["time"] = time_str
+    address = _clean_text(item.get("address"))
+    if address and re.match(r"^\d+\s+\w", address) and len(address) <= 120:
+        out["address"] = address
+    desc = _strip_emojis(_clean_text(item.get("description")))
+    if len(desc) >= 30:
+        out["description"] = desc[:217].rstrip() + "…" if len(desc) > 220 else desc
+    if url and cited(url) and _page_mentions(url, item.get("_name"), get=get, unsure=True):
+        out["url"] = url
+    return out
+
+
+def enrich_thin_events(events, cache_path=None, post=None, get=None, today=None):
+    """Fill blank details on thin events from grounded search; see above."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    cache = _load_enrich_cache(cache_path) if cache_path else {}
+    cache = {k: v for k, v in cache.items() if isinstance(v, dict) and isinstance(v.get("found", {}), dict)}
+    today = today or now_central().date()
+    today_s = today.isoformat()
+    # Cached finds apply every run: the YAML or post they came from is
+    # re-read each time and doesn't carry them.
+    for ev in events:
+        hit = cache.get(_enrich_key(ev))
+        if hit and hit.get("found"):
+            _apply_enrichment(ev, hit["found"])
+
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    off = (os.environ.get("GEMINI_ENABLED", "1").strip().lower() in ("0", "false", "no")
+           or os.environ.get("ENRICH_ENABLED", "1").strip().lower() in ("0", "false", "no"))
+    todo = []
+    if key and not off:
+        retry_before = (today - timedelta(days=ENRICH_RETRY_DAYS)).isoformat()
+        for ev in sorted(events, key=lambda e: (e["date"] > _WINDOW_END.isoformat() and not e.get("big"), e["date"])):
+            if ev["date"] < today_s or not _is_thin(ev):
+                continue
+            hit = cache.get(_enrich_key(ev))
+            if hit and (hit.get("found") or str(hit.get("checked", "")) > retry_before):
+                continue
+            todo.append(ev)
+            if len(todo) >= ENRICH_MAX_PER_RUN:
+                break
+
+    filled = 0
+    if todo:
+        post = post or requests.post
+        model = os.environ.get("GEMINI_MODEL", "").strip() or _GEMINI_DEFAULT_MODEL
+        batches = [todo[i:i + ENRICH_BATCH] for i in range(0, len(todo), ENRICH_BATCH)]
+
+        def ask(batch):
+            body = {
+                "contents": [{"role": "user", "parts": [{"text": _enrich_prompt(batch)}]}],
+                "tools": [{"google_search": {}}],
+                "generationConfig": {"temperature": 0.1},
+            }
+            try:
+                resp = post(GEMINI_URL.format(model=model), json=body, timeout=90,
+                            headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+                return resp.json() if resp.status_code == 200 else None
+            except Exception as e:
+                print(f"  [Enrich] lookup failed: {e}")
+                return None
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            replies = list(pool.map(ask, batches))
+        for batch, data in zip(batches, replies):
+            if not data:
+                continue  # not cached: try again next run
+            cand = (data.get("candidates") or [{}])[0]
+            text = "".join(p.get("text", "") for p in ((cand.get("content") or {}).get("parts") or []))
+            grounded = _grounded_hosts(cand)
+            answers = {}
+            for item in _gemini_json_array(text):
+                try:
+                    answers[int(item.get("id"))] = item
+                except (TypeError, ValueError):
+                    continue
+            for i, ev in enumerate(batch, start=1):
+                item = answers.get(i) or {}
+                found = _verified_details({**item, "_name": ev.get("name")}, grounded, get=get) if item else {}
+                cache[_enrich_key(ev)] = {"checked": today_s, "found": found}
+                if found and _apply_enrichment(ev, found):
+                    filled += 1
+
+    if cache_path:
+        # Past events don't come back; keep the file small.
+        cache = {k: v for k, v in cache.items() if k[:10] >= today_s}
+        try:
+            with open(cache_path, "w") as f:
+                json.dump(dict(sorted(cache.items())), f, indent=1, ensure_ascii=False)
+                f.write("\n")
+        except OSError as e:
+            print(f"  [Enrich] couldn't save cache: {e}")
+    if todo or filled:
+        print(f"  [Enrich] looked up {len(todo)} thin events, filled in {filled}")
+    return events
+
+
 # ─── AI REVIEW (description + icons polish) ─────────────────────────────────
 #
 # What this does:
@@ -2206,6 +2432,11 @@ def _merge_pair(old, new):
     merged["name"], merged["_name_from"] = name_from.get("name"), _name_source(name_from)
     merged["icons"] = list(dict.fromkeys((base.get("icons") or []) + (other.get("icons") or [])))[:4]
     merged["free"] = bool(base.get("free") or other.get("free"))
+    # Hand-set tags (local_events.yaml) survive a better-ranked scraped copy.
+    if base.get("big") or other.get("big"):
+        merged["big"] = True
+    if not merged.get("town") and other.get("town"):
+        merged["town"] = other["town"]
     merged["_sources"] = sorted(set((old.get("_sources") or [old.get("_source")]) +
                                     (new.get("_sources") or [new.get("_source")])) - {None})
     return merged
@@ -2374,6 +2605,7 @@ def merge_events(all_events, days_ahead=7, venues=None):
             venues = []
 
     _set_non_place_names(venues)
+    horizon = local_horizon_end()
     by_date = {}
     dropped_area = []
     dropped_junk = []
@@ -2386,7 +2618,8 @@ def merge_events(all_events, days_ahead=7, venues=None):
             continue
         try:
             ev_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-            if ev_date < today or ev_date > end_date:
+            last = horizon if ev.get("_source") == "local_events" else end_date
+            if ev_date < today or ev_date > last:
                 continue
         except ValueError:
             continue
@@ -2406,6 +2639,8 @@ def merge_events(all_events, days_ahead=7, venues=None):
             new_entry["_source"] = ev["_source"]
         if ev.get("_venue_guess"):
             new_entry["_venue_guess"] = True
+        if ev.get("_source") == "local_events":
+            new_entry.update(_local_extras(ev))
         if not new_entry["name"]:
             continue
         clean_venue(new_entry, venues)
@@ -3549,8 +3784,103 @@ def _trim_post_text(text, limit=POST_TEXT_LIMIT):
     return cut.rstrip() + " [post continues]"
 
 
+# Flyers. Venues post their month as a picture ("Live Music at Evan's",
+# Moonshine's "Upcoming Events") with a caption like "October lineup!", so
+# reading only the text missed most of their dates (Oct 2026: four Evan's
+# shows in one week). The newest few post images go to the model with the
+# text. Downloaded here and sent inline: Facebook/Instagram CDN links are
+# signed and short-lived, and one the API can't fetch fails the whole call.
+# FLYER_IMAGES=0 turns it off.
+FLYER_IMAGES_PER_ACCOUNT = 4
+FLYER_IMAGE_MAX_BYTES = 4_000_000
+# No GIF: the API rejects animated ones, which would lose the whole call.
+_FLYER_TYPES = ("image/jpeg", "image/png", "image/webp")
+# Flyer calls are slower; past this many minutes into a collect, posts go
+# back to text only so the job stays inside its step timeout.
+FLYER_TIME_BUDGET_MIN = 30
+_RUN_STARTED = None
+
+
+def _post_image_urls(p):
+    """Image URLs on a post, for both actors' shapes, cover image first.
+
+    Instagram: displayUrl, images[], childPosts[].displayUrl (carousels).
+    Facebook: media[].photo_image.uri, else media[].thumbnail (a video's
+    still). The IG fetcher normalizes posts with images[] already.
+    """
+    urls = []
+
+    def add(u):
+        if isinstance(u, str) and u.startswith("http") and u not in urls:
+            urls.append(u)
+
+    if not isinstance(p, dict):
+        return urls
+    add(p.get("displayUrl"))
+    for u in p.get("images") or []:
+        add(u if isinstance(u, str) else (u or {}).get("url") if isinstance(u, dict) else None)
+    for c in p.get("childPosts") or []:
+        if isinstance(c, dict):
+            add(c.get("displayUrl"))
+    for m in p.get("media") or []:
+        if not isinstance(m, dict):
+            continue
+        photo = m.get("photo_image")
+        add(photo.get("uri") if isinstance(photo, dict) else None)
+        add(m.get("thumbnail"))
+    return urls
+
+
+def _fetch_image_data_url(url, get=None):
+    """Download one image as a data: URL, or None if it isn't a usable image."""
+    get = get or requests.get
+    try:
+        resp = get(url, timeout=8)
+    except Exception:
+        return None
+    if getattr(resp, "status_code", 0) != 200:
+        return None
+    ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+    body = resp.content or b""
+    if ctype not in _FLYER_TYPES or not body or len(body) > FLYER_IMAGE_MAX_BYTES:
+        return None
+    return f"data:{ctype};base64,{base64.b64encode(body).decode('ascii')}"
+
+
+def _post_time(p):
+    return str(p.get("time") or p.get("timestamp") or p.get("date") or "")
+
+
+def _flyers_for(posts, limit=FLYER_IMAGES_PER_ACCOUNT, fetch=None):
+    """[(post number, data URL)] for the newest posts' first image.
+
+    Newest by post time, not list order: a pinned post (often months old)
+    comes first from the actors and would take a slot.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    if os.environ.get("FLYER_IMAGES", "").strip().lower() in ("0", "false", "no", "off"):
+        return []
+    if _RUN_STARTED is not None and (datetime.now().timestamp() - _RUN_STARTED) > FLYER_TIME_BUDGET_MIN * 60:
+        return []
+    fetch = fetch or _fetch_image_data_url
+    picks = []
+    for i, p in sorted(enumerate(posts, start=1), key=lambda ip: _post_time(ip[1]), reverse=True):
+        urls = _post_image_urls(p)
+        if urls:
+            picks.append((i, urls[0]))
+        if len(picks) >= limit:
+            break
+    if not picks:
+        return []
+    with ThreadPoolExecutor(max_workers=len(picks)) as pool:
+        datas = list(pool.map(lambda pick: fetch(pick[1]), picks))
+    return sorted((i, data) for (i, _), data in zip(picks, datas) if data)
+
+
 def _extract_events_from_posts_via_ai(venue_name, posts):
-    """Send a venue's recent posts to OpenAI and parse out events.
+    """Send a venue's recent posts (text and flyer images) to OpenAI and
+    parse out events.
 
     Returns a list of event dicts (date/name/time/description/url) — venue is
     filled in by the caller.
@@ -3568,12 +3898,20 @@ def _extract_events_from_posts_via_ai(venue_name, posts):
     # on a word boundary and marked, so the model never sees half a phrase:
     # the old 400-character cut turned "…for a Plant and Sip!!" into an event
     # named "Scenic Root — Plant a" (2026-10-08).
+    try:
+        flyers = _flyers_for(posts)
+    except Exception as e:  # a flyer problem must not cost the post text
+        _sentry_warn("flyer images failed", venue=venue_name, error=str(e)[:200])
+        flyers = []
+    with_flyer = {i for i, _ in flyers}
     lines = []
     for i, p in enumerate(posts, start=1):
         text = (p.get("text") or p.get("caption") or "").strip()
-        if not text:
+        if not text and i not in with_flyer:
             continue
-        text = _trim_post_text(re.sub(r"\s+", " ", text))
+        text = _trim_post_text(re.sub(r"\s+", " ", text)) if text else "(no caption)"
+        if i in with_flyer:
+            text += " [flyer image attached]"
         post_date = (p.get("time") or p.get("timestamp") or p.get("date") or "")[:10]
         lines.append(f"[{i}] (posted {post_date}) {text}")
     if not lines:
@@ -3602,14 +3940,27 @@ Rules:
 - Only include events held in Victoria, TX or elsewhere in Victoria County. Skip events in other towns (Cuero, Port Lavaca, Goliad, Edna, Yoakum, Corpus Christi, Houston, etc.).
 - Return [] if no events found. No prose, no markdown fences."""
 
+    if flyers:
+        prompt += """
+
+Flyer images: posts marked [flyer image attached] have their image after this text, labeled with the post number. Read the flyers as part of the post: dates, times, names, performers and prices are often only in the picture. A schedule flyer (a month of live music, "Upcoming Events") lists one-time events: emit one object per row whose date is in the window, with the performer or event as the name, and use that post's number as source_post_index. A flyer date with no year is the next time that date comes around."""
+        content_parts = [{"type": "text", "text": prompt}]
+        for i, data_url in flyers:
+            content_parts.append({"type": "text", "text": f"Flyer for post [{i}]:"})
+            content_parts.append({"type": "image_url", "image_url": {"url": data_url, "detail": "auto"}})
+        message = {"role": "user", "content": content_parts}
+    else:
+        message = {"role": "user", "content": prompt}
+
     try:
         content = _openai_chat(
             api_key,
-            [{"role": "user", "content": prompt}],
+            [message],
             # Reasoning tokens share this budget with up to ~50 posts' worth
             # of events, so leave plenty of headroom.
             max_tokens=12000,
-            timeout=60,
+            # Reading flyers takes the model longer than text alone.
+            timeout=90 if flyers else 60,
         )
         content = re.sub(r"^```\w*\s*", "", content)
         content = re.sub(r"\s*```\s*$", "", content)
@@ -3802,10 +4153,11 @@ def fetch_apify_facebook_posts(days_ahead=14):
         # page has no reachable posts (renamed page, private, login wall).
         # Counting that as "1 post" hid ~25 dead page URLs for months.
         page_errors = [p for p in posts if isinstance(p, dict) and p.get("error")]
+        # A flyer with no caption is still a post worth reading.
         posts = [p for p in posts if isinstance(p, dict) and not p.get("error")
-                 and (p.get("text") or p.get("caption"))]
+                 and (p.get("text") or p.get("caption") or _post_image_urls(p))]
         if not posts:
-            reason = (page_errors[0].get("error") if page_errors else "no posts with text")
+            reason = (page_errors[0].get("error") if page_errors else "no posts with text or images")
             venue_stats.append(f"{venue_name}: 0 posts ({str(reason)[:60]}) — check facebook_page in venues.json")
             continue
 
@@ -4165,6 +4517,7 @@ def fetch_apify_instagram_posts(days_ahead=14):
                 "text": p.get("caption") or p.get("text") or "",
                 "url": p.get("url") or p.get("postUrl") or p.get("link") or "",
                 "time": p.get("timestamp") or p.get("time") or p.get("date") or "",
+                "images": _post_image_urls(p),
             })
         total_posts_pulled += len(normalized)
         if not normalized:
@@ -4286,6 +4639,8 @@ def main():
     print(f"   Collecting next {args.days} days...\n")
 
     reset_source_stats()
+    global _RUN_STARTED
+    _RUN_STARTED = datetime.now().timestamp()  # flyer time budget
     all_events = []
 
     # 1. Local YAML (backbone)
@@ -4363,12 +4718,26 @@ def main():
 
     # 6. Fill missing descriptions + URLs
     merged = drop_dead_links(merged)
+    # Look up missing times, links and descriptions before templates fill
+    # descriptions in (a template would make the event look complete).
+    if not args.skip_web:
+        print("\n🔎 Filling in thin events…")
+        try:
+            merged = enrich_thin_events(merged, cache_path=os.path.join(args.local_dir, "enrichment_cache.json"))
+        except Exception as e:  # never fail the collect over gap filling
+            print(f"  [Enrich] crashed: {e}")
+            _sentry_exception("enrich_thin_events")
     merged = fill_gaps(merged)
 
     # 7. AI review — polish descriptions + assign icons via OpenAI
+    # Far-ahead hand-added events wait until they're inside the window:
+    # they're written by hand, and reviewing ~100 of them every run would
+    # add minutes to a job with tight step timeouts.
     if not args.skip_ai and merged:
         print("\n🤖 AI review (descriptions + icons)…")
-        merged = ai_review(merged)
+        window_end = _WINDOW_END.strftime("%Y-%m-%d")
+        later = [e for e in merged if e["date"] > window_end]
+        merged = ai_review([e for e in merged if e["date"] <= window_end]) + later
 
     # 5. Load extras. Hand-written New & Notable items (extras.yaml) come
     # first, then what Gemini found this run.

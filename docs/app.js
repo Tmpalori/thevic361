@@ -132,6 +132,8 @@
       '<span class="event-icons" aria-hidden="true">' + iconHtml + '</span>' +
       '<div class="event-details">' +
         (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
+        // Nearby-town events (ev.town), same as nearbyBadge in server/seo.js.
+        (ev.town ? '<span class="badge badge--nearby">Nearby · ' + escHtml(ev.town) + '</span> ' : '') +
         (ev.time ? '<span class="event-time">' + escHtml(formatTime(ev.time)) + '</span> ' : '') +
         '<span class="event-name">' + nameHtml + '</span>' +
         (venuePart ? '<span class="event-venue">' + escHtml(venuePart) + '</span>' : '') +

@@ -26,7 +26,7 @@
  */
 
 import { eventKeyOf } from './db.js';
-import { localDateStr } from './seo.js';
+import { localDateStr, addDays } from './seo.js';
 import { sameEvent } from './sponsors.js';
 
 // Internal collector fields (_source, _also_from...) aren't public.
@@ -50,11 +50,13 @@ function sortKey(ev) {
 // the current candidates (otherwise an unchanged candidates.json is skipped).
 // 2: auto-added events the collector no longer finds are taken down.
 // 3: auto-added events take the collector's newer copy of themselves.
-export const AUTO_PUBLISH_RULES = 3;
+// 4: big/town/curated refresh; the health check counts scraped events only.
+export const AUTO_PUBLISH_RULES = 4;
 
 // What a newer collector copy may change on an event this module added.
 // The name only when the published one was cut off (see cutOff).
-const REFRESH_FIELDS = ['time', 'venue', 'address', 'url', 'description', 'icons', 'free'];
+// big/town/curated: tags set in local_events.yaml after an event went live.
+const REFRESH_FIELDS = ['time', 'venue', 'address', 'url', 'description', 'icons', 'free', 'big', 'town', 'curated'];
 
 function normName(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -92,6 +94,11 @@ export function mergeNotable(fresh, prior, today) {
 // The new run must have at least this share of the events this module has
 // up before it may take any of them down.
 const REPLACE_MIN_RATIO = 0.6;
+// ...counted over the collector's own window. Hand-added events now run 90
+// days ahead (local_events.yaml); counted too, they alone could pass the
+// ratio on a run where every scraper failed and take the scraped events
+// down.
+const HEALTH_WINDOW_DAYS = 14;
 
 // Take one event off the published list (an approved submission the admin
 // rejected) and remember it as removed so auto-publish doesn't put it back.
@@ -197,7 +204,10 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     }
     const freshUpcoming = fresh.filter(upcoming);
     const ours = priorUpcoming.filter(ev => autoKeys.has(eventKeyOf(ev)));
-    const healthy = !submissionsOnly && freshUpcoming.length >= ours.length * REPLACE_MIN_RATIO;
+    const healthEnd = addDays(today, HEALTH_WINDOW_DAYS);
+    const scraped = ev => ev.date <= healthEnd && !ev.curated && ev._source !== 'local_events';
+    const healthy = !submissionsOnly &&
+      freshUpcoming.filter(scraped).length >= ours.filter(scraped).length * REPLACE_MIN_RATIO;
     const stillFound = ev => freshUpcoming.some(f => eventKeyOf(f) === eventKeyOf(ev) || sameEvent(f, ev));
     const retired = edited && healthy
       ? ours.filter(ev => !edited.has(eventKeyOf(ev)) && !stillFound(ev))

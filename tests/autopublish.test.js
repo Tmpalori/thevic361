@@ -3,6 +3,7 @@
 // Auto-publish (server/autopublish.js): collector candidates go live without
 // the admin, but the admin's removals stick.
 
+import { AUTO_PUBLISH_RULES } from '../server/autopublish.js';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
@@ -181,9 +182,9 @@ describe('auto-publish', () => {
       },
       extra: { autoPublish: true, autoPublishDelayMs: 0 }
     });
-    await vi.waitFor(async () => expect((await store.getPublished()).auto_publish.rules).toBe(3), { timeout: 2000 });
+    await vi.waitFor(async () => expect((await store.getPublished()).auto_publish.rules).toBe(AUTO_PUBLISH_RULES), { timeout: 2000 });
     expect((await live()).events.map(e => e.name)).not.toContain('Bingo Night');
-    expect((await store.getPublished()).auto_publish.rules).toBe(3);
+    expect((await store.getPublished()).auto_publish.rules).toBe(AUTO_PUBLISH_RULES);
   });
 
   it("updates events it published with the collector's newer copy, never hand-made, edited, hidden or submitted ones", async () => {
@@ -352,5 +353,39 @@ describe('client IP behind Railway', () => {
     expect(codes).toContain(429);
     await new Promise(r => srv.close(r));
     await fs.rm(dir, { recursive: true, force: true });
+  });
+});
+
+describe('auto-publish with far-ahead hand-added events', () => {
+  const scraped = n => Array.from({ length: n }, (_, i) => ({
+    date: `2026-10-${String(6 + (i % 10)).padStart(2, '0')}`, name: `Scraped ${i}`, time: '7:00 PM', venue: `Venue ${i}`, _source: 'allevents'
+  }));
+  const local = n => Array.from({ length: n }, (_, i) => ({
+    date: `2026-11-${String(1 + (i % 28)).padStart(2, '0')}`, name: `Hand ${i}`, time: '6:00 PM', venue: `Place ${i}`,
+    _source: 'local_events', curated: true
+  }));
+
+  it('a run where every scraper failed takes nothing down, however many hand-added events it has', async () => {
+    await start({ candidates: { last_updated: '2026-10-04T23:00:00-05:00', events: [...scraped(20), ...local(40)] } });
+    expect((await runNow()).ok).toBe(true);
+    const before = (await live()).events.map(e => e.name).sort();
+    expect(before.filter(n => n.startsWith('Scraped')).length).toBeGreaterThan(10);
+    // Next run: scrapers all failed, only the 40 hand-added events came back
+    // (40 is more than 0.6 × everything live).
+    await fs.writeFile(path.join(tmpDir, 'candidates.json'), JSON.stringify({ last_updated: '2026-10-05T23:00:00-05:00', events: local(40) }));
+    expect((await runNow()).ok).toBe(true);
+    expect((await live()).events.map(e => e.name).sort()).toEqual(before);
+  });
+
+  it('tags added to the YAML later reach the live event', async () => {
+    const ev = { date: '2026-10-15', name: 'Symphonic Spooktacular', time: '5:30 PM', venue: 'Victoria Fine Arts Center', _source: 'local_events' };
+    await start({ candidates: { last_updated: '2026-10-04T23:00:00-05:00', events: [ev] } });
+    await runNow();
+    await fs.writeFile(path.join(tmpDir, 'candidates.json'), JSON.stringify({
+      last_updated: '2026-10-05T23:00:00-05:00', events: [{ ...ev, big: true, curated: true, town: 'Victoria' }]
+    }));
+    await runNow();
+    const [live1] = (await live()).events;
+    expect(live1).toMatchObject({ big: true, curated: true, town: 'Victoria' });
   });
 });

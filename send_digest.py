@@ -45,6 +45,9 @@ ICON_MAP = {
 }
 
 
+REVIEW_DAYS = 14
+
+
 def load_candidates(path, all_days=False):
     """Load candidates.json and return events grouped by date.
     By default, only returns events for day 7 (the new day entering the window).
@@ -55,6 +58,11 @@ def load_candidates(path, all_days=False):
         data = json.load(f)
 
     events = data.get("events", [])
+    # The review covers the collector's 14-day window. Hand-added events
+    # now run 90 days ahead (local_events.yaml) and would swamp the email.
+    from zoneinfo import ZoneInfo
+    last = (datetime.now(ZoneInfo("America/Chicago")).date() + timedelta(days=REVIEW_DAYS)).isoformat()
+    events = [ev for ev in events if ev.get("date", "") <= last]
 
     if not all_days:
         all_dates = sorted(set(ev.get("date", "") for ev in events if ev.get("date")))

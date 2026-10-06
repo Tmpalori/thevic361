@@ -239,3 +239,19 @@ def test_ai_reasons_name_hash_and_event_references_but_leave_names_alone():
     assert sw._named("same as line 1", events) == "same as “Karaoke”"
     assert sw._named("Line 2 Dance Night at the hall", events) == "Line 2 Dance Night at the hall"
     assert sw._named("#1 Fan Day is not an event", events) == "#1 Fan Day is not an event"
+
+
+def test_curated_events_are_not_auto_hidden_or_flagged_for_what_a_person_checked():
+    events = [
+        {"date": "2026-10-24", "name": "Kingdom Church Fall Fest & Trunk or Treat", "venue": "Kingdom Church",
+         "time": "6:00 PM", "curated": True},
+        {"date": "2026-10-19", "name": "Movie Night: Friday the 13th", "venue": "Moonshine Drinkery",
+         "time": "7:00 PM", "curated": True},
+        {"date": "2026-10-24", "name": "Goliad Scare on the Square", "venue": "Goliad Courthouse Square",
+         "time": "6:00 PM", "town": "Goliad", "curated": True},
+    ]
+    found = sw.trusted(events, sw.rule_findings(events))
+    assert found == []
+    # Without the mark, the same church event is still caught.
+    plain = [dict(events[0], curated=False)]
+    assert any(k == "religious" for _, k, _ in sw.trusted(plain, sw.rule_findings(plain)))
