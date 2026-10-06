@@ -27,16 +27,18 @@ const VENUES = [
   { name: 'De Leon Plaza', category: 'Park' }
 ];
 
-let tmpDir, server, baseUrl, store, sessions;
+let tmpDir, server, baseUrl, store, sessions, expiredSessions;
 
 function fakeStripe() {
   sessions = [];
+  expiredSessions = [];
   return {
     createCheckoutSession: async (params, key) => {
       const id = `cs_test_${sessions.length + 1}`;
       sessions.push({ params, key, id });
       return { id, url: `https://checkout.stripe.com/c/pay/${id}` };
-    }
+    },
+    expireCheckoutSession: async (id) => { expiredSessions.push(id); return { id, status: 'expired' }; }
   };
 }
 
@@ -421,7 +423,7 @@ describe('Vic’s Pick: price by day, daily limits, preview', () => {
     expect((await pick('2026-10-10')).status).toBe(303);            // 4th Saturday spot
     const sat = await (await fetch(baseUrl + '/api/vics-pick/availability?date=2026-10-10')).json();
     expect(sat).toMatchObject({ ok: true, weekend: true, cap: 4, taken: 4, left: 0, price: '$89' });
-    expect((await pick('2026-10-10')).status).toBe(400);
+    expect((await pick('2026-10-10', { email: 'someone@else.example' })).status).toBe(400);
     const thu = await (await fetch(baseUrl + '/api/vics-pick/availability?date=2026-10-08')).json();
     expect(thu).toMatchObject({ weekend: false, cap: 3, left: 0, price: '$49' });
     expect((await fetch(baseUrl + '/api/vics-pick/availability?date=soon')).status).toBe(400);
@@ -607,3 +609,215 @@ describe('weekly sponsor logo', () => {
   });
 });
 
+
+describe('logo review fixes', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const weeklyForm = (extra = {}) => ({ package: 'weekly', week: '2026-10-19', business: 'Acme Tacos', text: 'Best tacos.',
+    url: 'acme.example', email: 'acme@example.com', logo_data: PNG, ...extra });
+  const quietSlack = () => {
+    const alerts = [];
+    return { alerts, slack: { enabled: true, notify: async () => true, alert: async (...a) => { alerts.push(a); } } };
+  };
+
+  it('an oversized checkout body is a friendly 413, not a 500 or a Slack alert', async () => {
+    const s = quietSlack();
+    await startApp({ slack: s.slack });
+    const r = await form(weeklyForm({ logo_data: 'data:image/png;base64,' + 'A'.repeat(700 * 1024) }));
+    expect(r.status).toBe(413);
+    const html = await r.text();
+    expect(html).toContain('That logo is too large');
+    expect(html).toContain('href="/advertise/checkout?package=weekly"');
+    const api = await fetch(baseUrl + '/api/submissions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x: 'y'.repeat(70 * 1024) }) });
+    expect(api.status).toBe(413);
+    expect(s.alerts).toHaveLength(0);
+    expect(sessions).toHaveLength(0);
+    // The page refuses an oversized logo before sending it.
+    expect(await (await fetch(baseUrl + '/advertise/checkout?package=weekly')).text()).toMatch(/logoData\.value\.length > \d{6}/);
+  });
+
+  it('a rejected logo isn’t sent back into the form, and a chosen one can be removed', async () => {
+    await startApp();
+    const bad = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    const html = await (await form(weeklyForm({ logo_data: bad }))).text();
+    expect(html).toContain('Logo must be a PNG');
+    expect(html).toContain('id="f-logo-data" value=""');
+    expect(html).not.toContain('PHN2Zz48L3N2Zz4=');
+    expect(html).toMatch(/id="f-logo-remove" hidden>Remove logo/);
+    // A good logo kept across another field's error shows the remove button.
+    const kept = await (await form(weeklyForm({ email: 'nope' }))).text();
+    expect(kept).toContain(`value="${PNG}"`);
+    expect(kept).toMatch(/id="f-logo-remove">Remove logo/);
+  });
+
+  it('logos are served only while the order is live or being paid for, and unpaid ones are deleted', async () => {
+    await startApp();
+    await form(weeklyForm());
+    let [order] = await store.listSponsorOrders();
+    const logoUrl = baseUrl + order.sponsor.logo;
+    const held = await fetch(logoUrl);
+    expect(held.status).toBe(200);                             // checkout open right now
+    expect(held.headers.get('cache-control')).toBe('public, max-age=3600');
+    await webhook({ type: 'checkout.session.expired', data: { object: { id: sessions[0].id, client_reference_id: order.id } } });
+    [order] = await store.listSponsorOrders();
+    expect(order.status).toBe('expired');
+    expect(await store.getSponsorLogo(order.id)).toBeNull();
+    expect((await fetch(logoUrl)).status).toBe(404);
+  });
+
+  it('a logo whose checkout couldn’t start is deleted; a hidden order’s logo isn’t served', async () => {
+    await startApp({ stripe: { createCheckoutSession: async () => { throw new Error('down'); } } });
+    expect((await form(weeklyForm())).status).toBe(502);
+    const [failed] = await store.listSponsorOrders();
+    expect(await store.getSponsorLogo(failed.id)).toBeNull();
+
+    // A paid order stored by hand, then hidden: its logo stops resolving.
+    await store.saveSponsorLogo('paid-order-1', { contentType: 'image/png', data: Buffer.from(PNG.split(',')[1], 'base64') });
+    await store.saveSponsorOrder({ id: 'paid-order-1', kind: 'weekly', status: 'paid', week_start: '2026-10-26', business: 'B', email: 'b@x.example',
+      created_at: NOW.toISOString(), sponsor: { name: 'B', text: 'Hi', url: 'https://b.example', logo: '/sponsor-logo/paid-order-1' } });
+    expect((await fetch(baseUrl + '/sponsor-logo/paid-order-1')).status).toBe(200);
+    const h = await auth();
+    await fetch(baseUrl + '/api/admin/sponsors/paid-order-1', { method: 'POST', headers: h, body: JSON.stringify({ action: 'hide' }) });
+    expect((await fetch(baseUrl + '/sponsor-logo/paid-order-1')).status).toBe(404);
+    // The admin still sees it.
+    const adminImg = await fetch(baseUrl + '/api/admin/sponsors/paid-order-1/logo', { headers: h });
+    expect(adminImg.status).toBe(200);
+    expect(adminImg.headers.get('content-type')).toBe('image/png');
+    expect((await fetch(baseUrl + '/api/admin/sponsors/paid-order-1/logo')).status).toBe(401);
+  });
+
+  it('the admin can remove a logo and the block stays up without it', async () => {
+    await startApp();
+    await form(weeklyForm());
+    await completed(sessions[0]);
+    let [order] = await store.listSponsorOrders();
+    expect((await fetch(baseUrl + order.sponsor.logo)).status).toBe(200);
+    const h = await auth();
+    const r = await fetch(`${baseUrl}/api/admin/sponsors/${order.id}`, { method: 'POST', headers: h, body: JSON.stringify({ action: 'remove-logo' }) });
+    expect((await r.json()).ok).toBe(true);
+    [order] = await store.listSponsorOrders();
+    expect(order.status).toBe('paid');
+    expect(order.sponsor.logo).toBeUndefined();
+    expect(order.sponsor.name).toBe('Acme Tacos');
+    expect(await store.getSponsorLogo(order.id)).toBeNull();
+    expect((await fetch(`${baseUrl}/sponsor-logo/${order.id}`)).status).toBe(404);
+    // Nothing left to remove.
+    expect((await fetch(`${baseUrl}/api/admin/sponsors/${order.id}`, { method: 'POST', headers: h, body: JSON.stringify({ action: 'remove-logo' }) })).status).toBe(400);
+  });
+});
+
+describe('backing out of Stripe', () => {
+  const pick = (extra = {}) => form({
+    package: 'featured', event_name: 'Last Spot Show', date: '2026-10-08', time: '7 PM', venue: 'Aero Crafters',
+    address: '309 E Crestwood Dr', description: 'Live music.', business: 'Aero', email: 'aero@example.com', ...extra
+  });
+  const paidPick = (id) => store.saveSponsorOrder({ id, kind: 'featured', status: 'paid', amount: 4900, created_at: NOW.toISOString(),
+    event: { date: '2026-10-08', name: 'Taken', time: '7 PM', venue: 'X' } });
+
+  it('cancel_url releases the hold, expires the session and refills the form', async () => {
+    await startApp();
+    await paidPick('p1'); await paidPick('p2');               // 1 of 3 Thursday spots left
+    expect((await pick()).status).toBe(303);
+    const s = sessions[0];
+    expect(s.params.cancel_url).toBe(`https://www.thevic361.com/advertise/checkout?package=featured&cancelled=${s.params.client_reference_id}`);
+    // Someone else can't have the held spot.
+    expect((await pick({ email: 'other@example.com' })).status).toBe(400);
+
+    const back = await (await fetch(s.params.cancel_url.replace('https://www.thevic361.com', baseUrl))).text();
+    expect(back).toContain('value="Last Spot Show"');
+    expect(back).toContain('value="aero@example.com"');
+    const order = (await store.listSponsorOrders()).find(o => o.id === s.params.client_reference_id);
+    expect(order.status).toBe('cancelled');
+    expect(expiredSessions).toEqual([s.id]);
+    expect((await pick()).status).toBe(303);                  // their retry gets the spot
+
+    // Admin doesn't list abandoned checkouts the buyer backed out of.
+    const d = await (await fetch(baseUrl + '/api/admin/sponsors', { headers: await auth() })).json();
+    expect(d.orders.map(o => o.status)).not.toContain('cancelled');
+  });
+
+  it('the same buyer resubmitting isn’t blocked by their own hold; a different buyer is', async () => {
+    await startApp();
+    await paidPick('p1'); await paidPick('p2');
+    expect((await pick()).status).toBe(303);
+    expect((await pick()).status).toBe(303);                  // fixed a typo and tried again
+    expect((await pick({ email: 'someone@else.example' })).status).toBe(400);
+    // The retry replaced their first hold, so they don't hold two spots.
+    const mine = (await store.listSponsorOrders()).filter(o => o.email === 'aero@example.com');
+    expect(mine.map(o => o.status).sort()).toEqual(['cancelled', 'pending']);
+    expect(expiredSessions).toEqual([sessions[0].id]);
+
+    const weekly = (email) => form({ package: 'weekly', week: '2026-10-19', business: 'W', text: 'x', url: 'w.example', email });
+    expect((await weekly('w@x.example')).status).toBe(303);
+    expect((await weekly('w@x.example')).status).toBe(303);
+    expect((await weekly('z@x.example')).status).toBe(400);
+  });
+
+  it('a payment that lands after cancelling is still honored', async () => {
+    await startApp();
+    await pick();
+    const s = sessions[0];
+    await fetch(s.params.cancel_url.replace('https://www.thevic361.com', baseUrl));
+    await completed(s);
+    const order = (await store.listSponsorOrders()).find(o => o.id === s.params.client_reference_id);
+    expect(order.status).toBe('paid');
+    expect(order.submission_id).toBeTruthy();
+  });
+});
+
+describe('confirmation email retries', () => {
+  it('a confirmation that failed to send is retried on the next webhook; the thank-you page doesn’t claim it was sent', async () => {
+    let fail = true;
+    const sent = [];
+    const resend = { send: async (msg) => { if (fail) throw new Error('resend down'); sent.push(msg); return { id: 'e1' }; }, batch: async () => ({ data: [] }) };
+    await startApp({ resendApiKey: 're_test', resend });
+    await form({ package: 'weekly', week: '2026-10-19', business: 'Acme', text: 'Hi.', url: 'acme.example', email: 'a@acme.example' });
+    await completed(sessions[0]);
+    let [order] = await store.listSponsorOrders();
+    expect(order.status).toBe('paid');
+    expect(order.confirmation_sent).toBeFalsy();
+    let thanks = await (await fetch(`${baseUrl}/advertise/thanks?order=${order.id}`)).text();
+    expect(thanks).toContain('We’ll email you a confirmation');
+    expect(thanks).not.toContain('We’ve emailed you');
+
+    fail = false;
+    await completed(sessions[0]);                              // Stripe resends / another event for the order
+    [order] = await store.listSponsorOrders();
+    expect(order.confirmation_sent).toBeTruthy();
+    expect(sent).toHaveLength(1);
+    thanks = await (await fetch(`${baseUrl}/advertise/thanks?order=${order.id}`)).text();
+    expect(thanks).toContain('We’ve emailed you a confirmation');
+    await completed(sessions[0]);
+    expect(sent).toHaveLength(1);                              // still only once
+  });
+});
+
+describe('restoring a hidden sponsorship', () => {
+  const pickOrder = (id, status, extra = {}) => store.saveSponsorOrder({ id, kind: 'featured', status, amount: 4900, created_at: NOW.toISOString(),
+    event: { date: '2026-10-08', name: `Show ${id}`, time: '7 PM', venue: 'X' }, ...extra });
+  const act = async (id, action) => fetch(`${baseUrl}/api/admin/sponsors/${id}`, { method: 'POST', headers: await auth(), body: JSON.stringify({ action }) });
+
+  it('refuses when the day filled up while the pick was hidden', async () => {
+    await startApp();
+    await pickOrder('a', 'paid'); await pickOrder('b', 'paid'); await pickOrder('c', 'paid');
+    expect((await act('a', 'hide')).status).toBe(200);
+    await pickOrder('d', 'paid');                               // the freed spot was sold
+    const r = await act('a', 'restore');
+    expect(r.status).toBe(409);
+    expect((await r.json()).message).toContain('already has its 3 Vic’s Picks');
+    expect((await store.listSponsorOrders()).find(o => o.id === 'a').status).toBe('hidden');
+    await act('d', 'hide');
+    expect((await act('a', 'restore')).status).toBe(200);       // room again
+  });
+
+  it('refuses when the week was sold while the weekly sponsor was hidden', async () => {
+    await startApp();
+    const weekly = (id) => store.saveSponsorOrder({ id, kind: 'weekly', status: 'paid', amount: 30000, week_start: '2026-10-19',
+      created_at: NOW.toISOString(), business: id, sponsor: { name: id, text: 'x', url: 'https://x.example' } });
+    await weekly('w1');
+    await act('w1', 'hide');
+    await weekly('w2');
+    const r = await act('w1', 'restore');
+    expect(r.status).toBe(409);
+    expect((await r.json()).message).toContain('week of 2026-10-19');
+  });
+});

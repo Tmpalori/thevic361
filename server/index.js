@@ -30,7 +30,7 @@ import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys } from './eventcheck.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { createMailer, renderSubmissionReceived } from './notify.js';
-import { stripeConfig, createStripe, createSponsors, samplePreviews } from './sponsors.js';
+import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
 import { createAutoPublish } from './autopublish.js';
@@ -1324,6 +1324,14 @@ export async function createApp(opts = {}) {
     // A garbled tracking beacon (bad JSON from a browser extension, a bot)
     // isn't worth a 500 or an error log line.
     if (req.path === '/api/track') return res.status(204).end();
+    // A body over its size limit (body-parser 413) is the sender's problem,
+    // not a site error: no 500, no Slack alert. On the sponsor checkout it
+    // means the logo was too big, so say that.
+    if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+      if (req.path === '/advertise/checkout') return sendHtml(res, renderLogoTooLargePage({ siteUrl }), 413, 'no-store');
+      if (req.path.startsWith('/api/')) return res.status(413).json({ ok: false, error: 'too-large' });
+      return res.status(413).type('text/plain').send('Too large');
+    }
     console.error('[server] error:', err);
     slack.alert(`500:${req.path}:${err && err.message}`, 'Site error (500)',
       `${req.method} ${req.path}\n${(err && err.message) || err}`);
