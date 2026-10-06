@@ -184,7 +184,18 @@
       return;
     }
 
-    // Success branch.
+    // Success branch. Offer the paid upgrade with this event prefilled
+    // (server/sponsors.js reads these query fields into the checkout form).
+    const promo = $('#thanks-promo-link');
+    if (promo) {
+      const q = new URLSearchParams({ package: 'featured' });
+      const add = (k, v) => { if (v) q.set(k, String(v).slice(0, 2000)); };
+      add('event_name', body.name); add('date', body.date); add('time', body.time);
+      add('venue', body.venue); add('address', body.address); add('description', body.description);
+      add('url', body.url); add('email', body.submitter_email);
+      add('business', [body.submitter_first_name, body.submitter_last_name].filter(Boolean).join(' '));
+      promo.href = '/advertise/checkout?' + q.toString();
+    }
     const card = $('#form-card');
     const thanks = $('#thanks-card');
     if (card) card.hidden = true;

@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import crypto from 'node:crypto';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
-import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks } from '../server/sponsors.js';
+import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks, pickAvailability, isWeekendDate, renderPreview, sponsorCalendar } from '../server/sponsors.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -196,7 +196,8 @@ describe('featured event', () => {
       address: '101 N Main St', description: 'Food, music, rides.', business: 'Main Street', email: 'ms@example.com'
     });
     expect(r.status).toBe(303);
-    expect(sessions[0].params.line_items[0].price_data.unit_amount).toBe(4900);
+    // Saturday: weekend Vic’s Pick price.
+    expect(sessions[0].params.line_items[0].price_data.unit_amount).toBe(8900);
     await completed(sessions[0]);
 
     const subs = await store.list({});
@@ -224,29 +225,27 @@ describe('featured event', () => {
   });
 });
 
-describe('venue partner', () => {
-  it('subscription features every event at the venue until it is cancelled', async () => {
+describe('venue partner (retired)', () => {
+  it('is no longer for sale, but an existing subscription keeps working until it is cancelled', async () => {
     await startApp();
+    // A subscription bought before the package was retired (saved before any
+    // request, since orders are cached for a minute).
+    await store.saveSponsorOrder({ id: 'old-partner', kind: 'partner', status: 'active', venue_slug: 'aero-crafters',
+      venue_name: 'Aero Crafters', business: 'Aero Crafters', email: 'aero@example.com', amount: 15000,
+      subscription_id: 'sub_123', created_at: '2026-09-01T00:00:00Z' });
+    // Can't buy a new one: checkout sends them back to /advertise.
     const r = await form({ package: 'partner', venue: 'aero-crafters', business: 'Aero Crafters', email: 'aero@example.com' });
     expect(r.status).toBe(303);
-    const s = sessions[0];
-    expect(s.params.mode).toBe('subscription');
-    expect(s.params.line_items[0].price_data.recurring).toEqual({ interval: 'month' });
-    await completed(s, { subscription: 'sub_123' });
+    expect(r.headers.get('location')).toBe('/advertise');
+    expect(sessions).toHaveLength(0);
+    expect((await fetch(baseUrl + '/advertise/checkout?package=partner', { redirect: 'manual' })).headers.get('location')).toBe('/advertise');
+    expect(await (await fetch(baseUrl + '/advertise')).text()).not.toContain('Venue partner');
 
+    // One bought before it was retired is still honored.
     const featuredNames = async () => (await publicEvents()).events.filter(e => e.featured).map(e => e.name);
-    expect(await featuredNames()).toEqual(['Friday Live Music']);
-
-    // A second purchase for the same venue is refused.
-    expect((await form({ package: 'partner', venue: 'aero-crafters', business: 'Aero', email: 'a@example.com' })).status).toBe(400);
-
-    await webhook({ type: 'customer.subscription.updated', data: { object: { id: 'sub_123', status: 'past_due' } } });
-    expect(await featuredNames()).toEqual([]);
-    await webhook({ type: 'customer.subscription.updated', data: { object: { id: 'sub_123', status: 'active' } } });
     expect(await featuredNames()).toEqual(['Friday Live Music']);
     await webhook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_123', status: 'canceled' } } });
     expect(await featuredNames()).toEqual([]);
-    expect((await store.listSponsorOrders())[0].status).toBe('cancelled');
   });
 });
 
@@ -383,3 +382,120 @@ describe('Stripe client', () => {
     expect(calls[2].init.body).toContain('lookup_key=vic361_partner_15000_month');
   });
 });
+
+describe('Vic’s Pick: price by day, daily limits, preview', () => {
+  const pick = (date, extra = {}) => form({
+    package: 'featured', event_name: `Show on ${date}`, date, time: '7 PM', venue: 'Aero Crafters',
+    address: '309 E Crestwood Dr', description: 'Live music.', business: 'Aero', email: 'a@example.com', ...extra
+  });
+  const order = (date, status, minutesAgo = 0) => store.saveSponsorOrder({
+    id: `o-${date}-${Math.random()}`, kind: 'featured', status, amount: 4900,
+    created_at: new Date(NOW.getTime() - minutesAgo * 60000).toISOString(),
+    event: { date, name: 'Taken', time: '7 PM', venue: 'X' }
+  });
+
+  it('weekdays are $49, Fri–Sun $89, with its own Stripe product name', async () => {
+    expect([isWeekendDate('2026-10-08'), isWeekendDate('2026-10-09'), isWeekendDate('2026-10-11'), isWeekendDate('2026-10-12')])
+      .toEqual([false, true, true, false]);
+    await startApp();
+    expect((await pick('2026-10-08')).status).toBe(303);   // Thursday
+    expect((await pick('2026-10-09')).status).toBe(303);   // Friday
+    expect(sessions.map(x => x.params.line_items[0].price_data.unit_amount)).toEqual([4900, 8900]);
+    expect(sessions[1].params.line_items[0].price_data.product_data.name).toContain('Fri–Sun');
+    const amounts = (await store.listSponsorOrders()).map(o => o.amount).sort();
+    expect(amounts).toEqual([4900, 8900]);
+  });
+
+  it('a weekday holds 3 picks and a weekend day 4; live checkouts count, expired ones don’t', async () => {
+    await startApp();
+    await order('2026-10-08', 'paid'); await order('2026-10-08', 'paid');
+    await order('2026-10-08', 'pending', 5);        // someone paying right now
+    await order('2026-10-08', 'pending', 120);      // abandoned long ago
+    await order('2026-10-08', 'refunded');
+    const full = await pick('2026-10-08');
+    expect(full.status).toBe(400);
+    expect(await full.text()).toContain('sold out (3 a day)');
+
+    for (let i = 0; i < 3; i++) await order('2026-10-10', 'paid');
+    expect((await pick('2026-10-10')).status).toBe(303);            // 4th Saturday spot
+    const sat = await (await fetch(baseUrl + '/api/vics-pick/availability?date=2026-10-10')).json();
+    expect(sat).toMatchObject({ ok: true, weekend: true, cap: 4, taken: 4, left: 0, price: '$89' });
+    expect((await pick('2026-10-10')).status).toBe(400);
+    const thu = await (await fetch(baseUrl + '/api/vics-pick/availability?date=2026-10-08')).json();
+    expect(thu).toMatchObject({ weekend: false, cap: 3, left: 0, price: '$49' });
+    expect((await fetch(baseUrl + '/api/vics-pick/availability?date=soon')).status).toBe(400);
+  });
+
+  it('shows a live preview with the site’s own markup before payment', async () => {
+    await startApp();
+    const page = await (await fetch(baseUrl + '/advertise/checkout?package=featured&event_name=Pumpkin%20%3CPatch%3E&date=2026-10-10&venue=Titan&business=Me')).text();
+    expect(page).toContain('Preview: exactly how it’ll look');
+    expect(page).toContain('event-entry event-entry--featured');            // same markup as the site
+    expect(page).toContain('Pumpkin &lt;Patch&gt;');                        // prefilled and escaped
+    expect(page).toContain('Saturday, Oct 10: $89');
+    expect(page).toContain('4 of 4 Vic’s Pick spots left');
+    expect(page).toContain('value="Me"');                                    // business prefilled
+    expect(page.indexOf('co-preview')).toBeLessThan(page.indexOf('Continue to payment'));
+
+    const r = await fetch(baseUrl + '/advertise/preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ package: 'weekly', business: 'Acme Tacos', text: 'Best tacos <b>ever</b>', cta: 'Order' }).toString()
+    });
+    const html = await r.text();
+    expect(html).toContain('sponsor-block');
+    expect(html).toContain('Acme Tacos');
+    expect(html).toContain('Best tacos &lt;b&gt;ever&lt;/b&gt;');
+  });
+
+  it('the advertise page says where each option shows, its limits, and shows examples', async () => {
+    await startApp();
+    const html = await (await fetch(baseUrl + '/advertise')).text();
+    expect(html).toContain('$49 Mon–Thu · $89 Fri–Sun');
+    expect(html).toContain('Only 3 a day Mon–Thu and 4 a day Fri–Sun');
+    expect(html).toContain('Where it shows:');
+    expect((html.match(/ad-package__preview/g) || []).length).toBe(2);
+    expect(html).toContain('Preview yours and book');
+  });
+});
+
+describe('free submissions point to the paid upgrade', () => {
+  it('the submit page says free isn’t guaranteed and links to a Vic’s Pick', async () => {
+    const html = await fs.readFile(path.join(process.cwd(), 'docs', 'submit.html'), 'utf8');
+    expect(html).toContain("aren't guaranteed a spot");
+    expect(html).toContain('href="/advertise/checkout?package=featured"');
+    expect(html).toContain('id="thanks-promo-link"');
+  });
+});
+
+describe('admin sponsorship calendar', () => {
+  it('shows every slot for 8 weeks: the weekly sponsor and each day’s Vic’s Picks with who holds them', () => {
+    const o = (extra) => ({ id: Math.random().toString(36), created_at: NOW.toISOString(), ...extra });
+    const orders = [
+      o({ kind: 'weekly', status: 'paid', week_start: '2026-10-12', business: 'Acme Tacos' }),
+      o({ kind: 'featured', status: 'paid', business: 'Titan', event: { date: '2026-10-10', name: 'Pumpkin Patch' } }),
+      o({ kind: 'featured', status: 'pending', business: 'Weber', event: { date: '2026-10-10', name: 'Oktoberfest' } }),
+      o({ kind: 'featured', status: 'pending', business: 'Stale', event: { date: '2026-10-10', name: 'Old' },
+          created_at: new Date(NOW.getTime() - 3 * 3600e3).toISOString() }),
+      o({ kind: 'featured', status: 'refunded', business: 'Gone', event: { date: '2026-10-10', name: 'X' } })
+    ];
+    const cal = sponsorCalendar(NOW, orders);
+    expect(cal).toHaveLength(8);
+    expect(cal[0].start).toBe('2026-10-05');                 // starts this week
+    expect(cal[0].weekly).toBeNull();
+    expect(cal[1].weekly).toMatchObject({ business: 'Acme Tacos', state: 'booked' });
+    const sat = cal[0].days.find(d => d.date === '2026-10-10');
+    expect(sat).toMatchObject({ weekend: true, cap: 4, taken: 2, left: 2, price: '$89', past: false });
+    expect(sat.picks.map(p => [p.business, p.state])).toEqual([['Titan', 'booked'], ['Weber', 'held']]);
+    expect(cal[0].days.find(d => d.date === '2026-10-06')).toMatchObject({ past: true, cap: 3, price: '$49' });
+  });
+
+  it('comes back from the admin API', async () => {
+    await startApp();
+    const login = await fetch(baseUrl + '/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'a', password: 'b' }) });
+    const token = (await login.json()).token;
+    const d = await (await fetch(baseUrl + '/api/admin/sponsors', { headers: { Authorization: `Bearer ${token}` } })).json();
+    expect(d.calendar).toHaveLength(8);
+    expect(d.calendar[0].days).toHaveLength(7);
+  });
+});
+
