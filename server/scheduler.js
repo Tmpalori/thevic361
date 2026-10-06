@@ -21,9 +21,11 @@
  * (until `until`). The 15-minute and hourly jobs are harmless to repeat and
  * only tracked in memory.
  *
- * The GitHub crons stay as late fallbacks: each asks GET /api/scheduler/ran
- * and skips itself when the site already ran that slot (newsletter and
- * submission review are idempotent anyway).
+ * The GitHub crons stay as late fallbacks: each lists its slot at both the
+ * CDT and the CST UTC time, keeps only the one matching today's offset (so
+ * it never asks before the slot, when lastSlot() still means yesterday),
+ * then asks GET /api/scheduler/ran and skips itself when the site already
+ * ran that slot (submission review is idempotent anyway).
  *
  * Production only (RAILWAY_ENVIRONMENT_NAME=production); SCHEDULER=0 turns it
  * off. Dispatching needs GITHUB_TOKEN with Actions: write; without a token

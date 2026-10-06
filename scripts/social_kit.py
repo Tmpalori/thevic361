@@ -27,6 +27,8 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import time
+import urllib.error
 import urllib.request
 from datetime import date, datetime, timedelta
 
@@ -537,11 +539,34 @@ var t=document.getElementById(b.getAttribute('data-copy'));t.select();
 """
 
 
-def fetch_events(url):
+# Waits between tries of /events.json. The site scheduler marks the day's
+# run done once the dispatch succeeds, so the fallback cron won't retry a
+# failed build: a restart or a brief 5xx at 8:47 would lose the day's post.
+FETCH_BACKOFF = (30, 60, 120)
+
+
+def _transient(err):
+    """Worth trying again: no answer, a timeout or a 5xx. A 4xx won't fix
+    itself."""
+    if isinstance(err, urllib.error.HTTPError):
+        return err.code >= 500
+    return isinstance(err, OSError)  # URLError, timeouts, resets
+
+
+def fetch_events(url, sleep=time.sleep):
     req = urllib.request.Request(url, headers={"User-Agent": "TheVic361-SocialKit/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        data = json.loads(r.read().decode("utf-8"))
-        events = data.get("events", []) if isinstance(data, dict) else []
+    for i, wait in enumerate((*FETCH_BACKOFF, None)):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                data = json.loads(r.read().decode("utf-8"))
+            break
+        except OSError as e:
+            if wait is None or not _transient(e):
+                raise
+            print(f"::warning::{url} failed ({e}); trying again in {wait}s "
+                  f"(try {i + 2} of {len(FETCH_BACKOFF) + 1})")
+            sleep(wait)
+    events = data.get("events", []) if isinstance(data, dict) else []
     for ev in events:  # older data can carry "&amp;"
         for k in ("name", "venue"):
             if isinstance(ev.get(k), str):

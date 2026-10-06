@@ -195,3 +195,33 @@ def test_main_sends_decisions_with_the_secret(monkeypatch):
 def test_main_skips_without_a_secret(monkeypatch):
     monkeypatch.delenv("SUBMISSION_REVIEW_SECRET", raising=False)
     assert rs.main([]) == 0
+
+
+class _Status:
+    def __init__(self, status):
+        self.status_code, self.ok = status, status < 400
+        self.headers = {"content-type": "application/json"}
+
+    def json(self):
+        return {}
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise rs.requests.HTTPError(f"HTTP {self.status_code}")
+
+
+def test_site_outage_is_a_warning_not_a_failure_alert(monkeypatch, capsys):
+    # Every 15 minutes through a database outage, each failed run posted
+    # its own "Submission review failed" alert.
+    monkeypatch.setenv("SUBMISSION_REVIEW_SECRET", "s3cret")
+    monkeypatch.setattr(rs.requests, "get", lambda *a, **k: _Status(503))
+    assert rs.main([]) == 0
+    assert "::warning::" in capsys.readouterr().out
+
+    def down(*a, **k):
+        raise rs.requests.ConnectionError("connection refused")
+    monkeypatch.setattr(rs.requests, "get", down)
+    assert rs.main([]) == 0
+    # A wrong secret still fails: that won't fix itself.
+    monkeypatch.setattr(rs.requests, "get", lambda *a, **k: _Status(401))
+    assert rs.main([]) == 1

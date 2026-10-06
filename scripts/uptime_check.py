@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Is thevic361.com up? Run every 5 minutes by .github/workflows/uptime.yml.
+"""Is thevic361.com up? Run by .github/workflows/uptime.yml (best-effort cron; backup check).
 
 Down means any of: the homepage, /api/health?deep=1 (the server and its
 database) or /events.json doesn't answer 200 within TIMEOUT seconds, answers
