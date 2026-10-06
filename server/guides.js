@@ -63,10 +63,27 @@ export function eventAtVenue(ev, venue) {
 
 // The single venue an event belongs to: an exact name match wins over a
 // partial one, so each event lands on exactly one venue page.
+//
+// Answers are memoized per venues list (built once at boot) by the event's
+// venue string. Venue pages and the sitemap ask for every archived event
+// (thousands once the 400-day archive fills); normalizing and scanning
+// ~80 venues each time took ~300 ms of blocking CPU per request. There are
+// only a few hundred distinct venue strings.
+const venueMemo = new WeakMap();
 export function venueFor(ev, venues) {
-  const k = normName(ev.venue);
-  if (!k) return null;
-  return venues.find(v => v.key === k) || venues.find(v => eventAtVenue(ev, v)) || null;
+  const raw = String((ev && ev.venue) || '');
+  let memo = venueMemo.get(venues);
+  // A list changed in place (tests build their own) starts over.
+  if (!memo || memo.size !== venues.length) {
+    memo = { size: venues.length, byVenue: new Map() };
+    venueMemo.set(venues, memo);
+  }
+  if (memo.byVenue.has(raw)) return memo.byVenue.get(raw);
+  const k = normName(raw);
+  const found = !k ? null
+    : venues.find(v => v.key === k) || venues.find(v => eventAtVenue({ venue: raw }, v)) || null;
+  memo.byVenue.set(raw, found);
+  return found;
 }
 
 function venueEvents(venue, live, archived, today, venues) {
