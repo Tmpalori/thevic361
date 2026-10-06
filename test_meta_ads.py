@@ -93,12 +93,54 @@ def test_scheduled_run_with_a_setup_problem_warns_but_does_not_fail(capsys):
     assert sent == []
 
 
+def test_scheduled_run_with_a_dead_token_fails(capsys):
+    # An expired or revoked token must turn the daily run red (the workflow's
+    # failure step alerts Slack), not pass quietly every morning.
+    class Expired(FakeMeta):
+        def request(self, method, url, **k):
+            return Resp({"error": {"message": "Error validating access token: Session has expired"}}, 400)
+    assert ma.main(["report", "--scheduled"], session=Expired()) == 1
+    assert "::error::" in capsys.readouterr().out
+
+
+def test_scheduled_run_fails_when_the_configured_account_is_gone(monkeypatch, capsys):
+    monkeypatch.setenv("META_AD_ACCOUNT_ID", "act_1")
+    assert ma.main(["report", "--scheduled"], session=FakeMeta(accounts=[])) == 1
+    assert "::error::" in capsys.readouterr().out
+
+
 def test_report_goes_to_slack_only_when_something_spent():
     assert ma.main(["report"], session=FakeMeta()) == 0
     assert len(sent) == 1 and "📈 Meta ads: yesterday $12.34 spent" in sent[0][0]
     sent.clear()
     assert ma.main(["report"], session=FakeMeta(spend="0")) == 0
     assert sent == []
+
+
+def test_zero_spend_is_reported_when_ads_should_be_running():
+    # Nothing spent but an ad is on (or the account is disabled): that's a
+    # stalled campaign, not a quiet week.
+    class Live(FakeMeta):
+        def request(self, method, url, **k):
+            if url.endswith("/ads"):
+                return Resp({"data": [{"id": "5", "name": "Video", "adset_id": "999", "effective_status": "ACTIVE"}]})
+            return super().request(method, url, **k)
+    assert ma.main(["report"], session=Live(spend="0")) == 0
+    assert len(sent) == 1 and "$0 spent in the last 7 days" in sent[0][0] and "1 ad on" in sent[0][0]
+    sent.clear()
+    disabled = [{"id": "act_1", "name": "The Vic 361", "currency": "USD", "account_status": 2}]
+    assert ma.main(["report"], session=FakeMeta(accounts=disabled, spend="0")) == 0
+    assert len(sent) == 1 and "account is disabled" in sent[0][0]
+    sent.clear()
+    disapproved = [{"id": "5", "name": "Video", "adset_id": "999", "effective_status": "DISAPPROVED"}]
+
+    class Rejected(FakeMeta):
+        def request(self, method, url, **k):
+            if url.endswith("/ads"):
+                return Resp({"data": disapproved})
+            return super().request(method, url, **k)
+    assert ma.main(["report"], session=Rejected(spend="0")) == 0
+    assert len(sent) == 1 and "Ad *Video* is disapproved" in sent[0][0]
 
 
 def test_pause_resume_and_budget_with_a_safety_limit(capsys):

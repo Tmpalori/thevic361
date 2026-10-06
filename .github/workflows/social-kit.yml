@@ -46,14 +46,21 @@ on:
 permissions:
   contents: write
 
+# A group holds one running and one pending run, and a newer run replaces
+# the pending one, so a push rebuild could drop a queued scheduled post.
+# Posting runs (schedule, or by hand with post) get their own group; two of
+# them still never overlap, so nothing posts twice.
 concurrency:
-  group: social-kit
+  group: social-kit-${{ (github.event_name == 'schedule' || inputs.post) && 'post' || 'build' }}
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Worst case: build, up to 10 min waiting for the deploy, a Reel that
+    # takes 6 min to process, and Thursday's second post. The post step has
+    # its own limit, so a slow post still leaves time to save posted.json.
+    timeout-minutes: 35
     steps:
       # Always the latest main, not the commit that triggered the run: a
       # re-run must see the kit and posted.json an earlier attempt pushed,
@@ -99,6 +106,7 @@ jobs:
           exit 1
       - name: Post to Facebook + Instagram
         id: post
+        timeout-minutes: 22
         if: >-
           (github.event_name == 'schedule' && vars.SOCIAL_AUTOPOST == '1') ||
           (github.event_name == 'workflow_dispatch' && inputs.post)
@@ -124,8 +132,10 @@ jobs:
           fi
           exit $rc
 
-      # Record what was posted (posted.json) even when one platform failed,
-      # so re-running the job doesn't post to the other one twice.
+      # Record what was posted (posted.json) even when one platform failed
+      # or the post step was cancelled or timed out (social_post.py writes
+      # it right after each post), so re-running the job doesn't post to the
+      # other one twice.
       - name: Save posted ids
         if: always() && steps.post.outcome != 'skipped' && hashFiles('docs/social/latest/posted.json') != ''
         run: |
@@ -153,8 +163,10 @@ jobs:
           # list stays in outreach.txt, linked from the message.
           python3 scripts/slack_notify.py "$(cat docs/social/latest/outreach-slack.txt)"
 
+      # cancelled() too: a run cut off by its timeout may have posted to
+      # one platform and not the other.
       - name: Tell Slack it failed
-        if: failure()
+        if: failure() || cancelled()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: python3 scripts/slack_notify.py "🚨 Social kit (build or Facebook/Instagram post) failed" --link "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

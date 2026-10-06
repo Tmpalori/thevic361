@@ -245,7 +245,9 @@ def main():
         sys.exit(0)
 
     subject, text_body, html_body = build_email_body(events, by_date)
-    send_email(subject, text_body, html_body, args.to, args.dry_run)
+    # A failed send must fail the job, or weekly-digest.yml's Slack alert
+    # never fires and the digest just stops arriving.
+    sys.exit(0 if send_email(subject, text_body, html_body, args.to, args.dry_run) else 1)
 
 
 if __name__ == "__main__":

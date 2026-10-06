@@ -237,6 +237,33 @@ def test_timeout_publishing_marks_the_slot_pending_and_reruns_skip_it(tmp_path, 
     assert "check the Facebook account by hand" in capsys.readouterr().out
 
 
+def test_run_killed_mid_publish_leaves_the_slot_pending(tmp_path, monkeypatch):
+    # A cancelled or timed-out job stops the process during the publish
+    # call; posted.json must already say pending so a re-run can't post twice.
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.setenv("IG_USER_ID", "ig7")
+    monkeypatch.setattr(sp.time, "sleep", lambda s: None)
+    kit = write_kit(tmp_path)
+    with pytest.raises(KeyboardInterrupt):
+        sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"],
+                session=FakeSession(raise_on={"/media_publish": KeyboardInterrupt()}))
+    slot = json.loads((kit / "posted.json").read_text())["2026-10-08:weekend"]
+    assert slot == {"facebook": "post1", "instagram": "pending"}
+    rerun = FakeSession()
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=rerun) == 0
+    assert not any(c[0] == "POST" for c in rerun.calls)
+
+
+def test_publish_rejected_by_meta_clears_the_pending_mark(tmp_path, monkeypatch):
+    monkeypatch.setenv("META_PAGE_ID", "page9")
+    monkeypatch.setenv("META_PAGE_TOKEN", "tok")
+    monkeypatch.delenv("IG_USER_ID", raising=False)
+    kit = write_kit(tmp_path)
+    assert sp.main(["--kind", "weekend", "--kit-dir", str(kit), "--no-wait"], session=FakeSession(fail="/feed")) == 1
+    assert "facebook" not in json.loads((kit / "posted.json").read_text()).get("2026-10-08:weekend", {})
+
+
 def test_timeout_before_the_final_call_is_a_plain_failure(tmp_path, monkeypatch):
     import requests
     monkeypatch.setenv("META_PAGE_ID", "page9")

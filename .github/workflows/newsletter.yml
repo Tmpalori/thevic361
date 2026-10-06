@@ -6,7 +6,9 @@
 # Railway variable of the same name (that's what the admin's "Auto-send
 # Mondays" reflects); if it's missing or wrong the run fails and Slack is
 # told, instead of skipping quietly. A week that was already sent from the
-# admin is skipped. The same call sends last week's sponsor click reports.
+# admin is skipped. A server error or no answer is tried again twice, a few
+# minutes apart (safe: the send resumes and never mails anyone twice).
+# The same call sends last week's sponsor click reports.
 
 name: Newsletter
 
@@ -21,7 +23,8 @@ permissions:
 jobs:
   send:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 3 tries of up to 5 minutes each, 4 minutes apart.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6   # for scripts/slack_notify.py
       - name: Send this week's newsletter
@@ -30,9 +33,22 @@ jobs:
           SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
         run: |
           if [ -z "$SECRET" ]; then echo "::error::NEWSLETTER_CRON_SECRET is not set"; exit 1; fi
-          code=$(curl -sS -o out.json -w '%{http_code}' -X POST -H "X-Cron-Secret: $SECRET" "$SITE/api/newsletter/cron")
-          cat out.json; echo
-          [ "$code" = "200" ] || { echo "::error::Newsletter send returned HTTP $code"; exit 1; }
+          # A 5xx or no answer (Railway mid-restart, a Resend blip) is tried
+          # again, up to 3 times about 4 minutes apart. That's safe:
+          # sendWeekly (server/newsletter.js) answers already-sent for a sent
+          # week, a partial send resumes with only the failed addresses, and
+          # its per-week Resend idempotency keys stop a request that timed
+          # out mid-send from mailing anyone twice. A 4xx (wrong secret)
+          # won't fix itself, so it fails at once.
+          for try in 1 2 3; do
+            : > out.json
+            code=$(curl -sS --max-time 300 -o out.json -w '%{http_code}' -X POST -H "X-Cron-Secret: $SECRET" "$SITE/api/newsletter/cron") || true
+            cat out.json; echo
+            [ "$code" = "200" ] && exit 0
+            case "$code" in 5*|000|"") ;; *) break ;; esac
+            [ "$try" = 3 ] || { echo "HTTP $code; trying again in 4 minutes"; sleep 240; }
+          done
+          echo "::error::Newsletter send returned HTTP $code"; exit 1
 
       - name: Tell Slack it failed
         if: failure()

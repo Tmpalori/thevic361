@@ -9,7 +9,8 @@
 # When:
 #   - after each successful Weekly Collect, once auto-publish has put the
 #     new events on the site (the collect commit redeploys Railway, which
-#     publishes on boot, so we wait for /events.json to change)
+#     publishes on boot, so we wait for /events.json to hold the new
+#     candidates)
 #   - Monday 11:43 UTC (6:43 AM CDT), an hour before the newsletter, to
 #     catch anything from Sunday-night edits
 #   - by hand (workflow_dispatch)
@@ -45,29 +46,15 @@ jobs:
 
       # The collect run commits candidates.json; Railway redeploys and
       # auto-publish runs on boot. Wait (up to 15 min) until the live list
-      # was published after these candidates were made (candidates.json's
-      # own last_updated, from the commit this job checked out), then
-      # check it. Timestamps are compared as times: the collector writes
-      # Central time, the site UTC.
+      # holds these candidates (from the commit this job checked out), then
+      # check it. A newer last_updated alone isn't enough: a submission
+      # approved or an admin publish during the deploy bumps it too. See
+      # wait_for_publish in scripts/sweep_events.py.
       - name: Wait for the new events to go live
         if: github.event_name == 'workflow_run'
-        run: |
-          python3 - <<'PY'
-          import json, time, urllib.request
-          from datetime import datetime
-          made = datetime.fromisoformat(json.load(open("candidates.json"))["last_updated"].replace("Z", "+00:00"))
-          for _ in range(30):
-              try:
-                  live = json.load(urllib.request.urlopen("${{ vars.SITE_URL || 'https://www.thevic361.com' }}/events.json", timeout=30))
-                  updated = datetime.fromisoformat((live.get("last_updated") or "").replace("Z", "+00:00"))
-                  if updated >= made:
-                      print(f"Live list updated at {updated}, candidates made {made}")
-                      raise SystemExit(0)
-              except (ValueError, OSError) as e:
-                  print(f"waiting: {e}")
-              time.sleep(30)
-          print("::warning::Live list didn't update within 15 minutes; checking what's there now.")
-          PY
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
+        run: python3 scripts/sweep_events.py --wait-for candidates.json
 
       - name: Check the live events
         timeout-minutes: 5

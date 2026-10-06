@@ -132,3 +132,15 @@ def test_main_fails_when_candidates_are_missing(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as e:
         sd.main()
     assert e.value.code == 1
+
+
+def test_main_exits_nonzero_when_the_send_fails(tmp_path, monkeypatch):
+    # A revoked app password must turn the job red so its Slack alert fires.
+    p = tmp_path / "candidates.json"
+    p.write_text(json.dumps({"events": [{"date": "2026-01-01", "name": "Bingo", "venue": "Hall"}]}))
+    monkeypatch.setattr("sys.argv", ["send_digest.py", "--candidates", str(p), "--all-days"])
+    for ok, code in ((False, 1), (True, 0)):
+        monkeypatch.setattr(sd, "send_email", lambda *a, ok=ok, **k: ok)
+        with pytest.raises(SystemExit) as e:
+            sd.main()
+        assert e.value.code == code
