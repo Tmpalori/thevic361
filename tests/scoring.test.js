@@ -6,7 +6,8 @@
 // their place in the guides.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { scoreEvent, capDays, shown, dayMax } from '../server/scoring.js';
+import { scoreEvent, capDays, shown, dayMax, pickDays } from '../server/scoring.js';
+import { comingUpEvents, withPages } from '../server/seo.js';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
 import { promises as fs } from 'node:fs';
@@ -121,6 +122,60 @@ describe('capDays', () => {
   });
 });
 
+describe('editor’s picks (pickDays)', () => {
+  const ev = (date, name, score, extra = {}) => ({ date, name, venue: `${name} Hall`, score, ...extra });
+  const picks = (list, date) => pickDays(list).filter(e => e.date === date && e.featured).map(e => e.name);
+
+  it('up to 2 strong events on a weekday and 3 on Fri–Sun', () => {
+    const wk = [ev('2026-10-08', 'A', 90), ev('2026-10-08', 'B', 80), ev('2026-10-08', 'C', 75), ev('2026-10-08', 'D', 40)];
+    expect(picks(wk, '2026-10-08')).toEqual(['A', 'B']);
+    const sat = [ev('2026-10-10', 'A', 90), ev('2026-10-10', 'B', 80), ev('2026-10-10', 'C', 75), ev('2026-10-10', 'D', 72)];
+    expect(picks(sat, '2026-10-10')).toEqual(['A', 'B', 'C']);
+  });
+
+  it('a quiet day still gets its minimum if the best are decent, never weak ones', () => {
+    expect(picks([ev('2026-10-08', 'A', 68), ev('2026-10-08', 'B', 66)], '2026-10-08')).toEqual(['A']);
+    expect(picks([ev('2026-10-10', 'A', 68), ev('2026-10-10', 'B', 66), ev('2026-10-10', 'C', 60)], '2026-10-10')).toEqual(['A', 'B']);
+    expect(picks([ev('2026-10-08', 'A', 62)], '2026-10-08')).toEqual([]);
+  });
+
+  it('only one-time Victoria events, each picked once', () => {
+    const list = [
+      ev('2026-10-09', 'Turkeyfest', 95, { town: 'Cuero' }),
+      ev('2026-10-09', 'Corn Maze', 90, { recurring: true, favorite: true }),
+      ev('2026-10-09', 'Harvest Fest', 85), ev('2026-10-10', 'Harvest Fest', 85), ev('2026-10-10', 'Zoo Boo', 80)
+    ];
+    const out = pickDays(list);
+    expect(out.filter(e => e.featured).map(e => `${e.date} ${e.name}`)).toEqual(['2026-10-09 Harvest Fest', '2026-10-10 Zoo Boo']);
+  });
+
+  it('paid Vic’s Picks come first and take an editor’s spot', () => {
+    const list = [ev('2026-10-08', 'Paid', 30, { featured: true }), ev('2026-10-08', 'A', 90), ev('2026-10-08', 'B', 85)];
+    const out = pickDays(list);
+    expect(out.filter(e => e.featured).map(e => e.name)).toEqual(['Paid', 'A']);
+    expect(out.find(e => e.name === 'Paid').editor_pick).toBeUndefined();
+    const full = [ev('2026-10-08', 'P1', 30, { featured: true }), ev('2026-10-08', 'P2', 30, { featured: true }), ev('2026-10-08', 'A', 95)];
+    expect(pickDays(full).find(e => e.name === 'A').featured).toBeUndefined();
+  });
+
+  it('one pick per venue, none from dropped events, and stale marks are recomputed', () => {
+    const list = [
+      ev('2026-10-10', 'Show 1', 90, { venue: "Evan's" }), ev('2026-10-10', 'Show 2', 88, { venue: "Evan's" }),
+      ev('2026-10-10', 'Dropped', 99, { overflow: true }), ev('2026-10-10', 'Fest', 80),
+      ev('2026-10-10', 'Old Pick', 10, { featured: true, editor_pick: true })
+    ];
+    expect(picks(list, '2026-10-10')).toEqual(['Show 1', 'Fest']);
+  });
+
+  it('editor’s picks stay out of “Coming up”; paid ones still show', () => {
+    const list = withPages([
+      { date: '2026-10-20', name: 'Editor Pick', venue: 'X', featured: true, editor_pick: true },
+      { date: '2026-10-21', name: 'Paid Pick', venue: 'Y', featured: true }
+    ]);
+    expect(comingUpEvents(list, '2026-10-07').map(e => e.name)).toEqual(['Paid Pick']);
+  });
+});
+
 describe('the site with the daily limit', () => {
   let tmpDir, server, baseUrl, store;
   const NOW = new Date('2026-10-07T17:00:00Z'); // Wed
@@ -152,7 +207,7 @@ describe('the site with the daily limit', () => {
   };
 
   const thursday = [
-    ...Array.from({ length: 15 }, (_, i) => ({ ...base, name: `Good Event ${i}`, venue: `Venue ${i}`, appeal: 4, icons: ['family'] })),
+    ...Array.from({ length: 15 }, (_, i) => ({ ...base, name: `Good Event ${i}`, venue: `Venue ${i}`, appeal: 5, icons: ['family'] })),
     { ...base, name: 'Chess Club', venue: 'Victoria Public Library', recurring: true, appeal: 2, icons: ['family', 'free'], free: true }
   ];
 
@@ -197,9 +252,13 @@ describe('the site with the daily limit', () => {
     await start(thursday);
     const h = await auth();
     const list = await (await fetch(baseUrl + '/api/admin/published-events', { headers: h })).json();
+    // As if the admin page sent back an editor's pick as featured.
+    list.events = list.events.map(e => e.editor_pick ? { ...e, featured: true } : e);
+    expect(list.events.some(e => e.editor_pick)).toBe(true);
     const pub = await (await fetch(baseUrl + '/api/admin/publish-events', { method: 'POST', headers: h, body: JSON.stringify({ events: list.events, based_on: list.last_updated }) })).json();
     expect(pub.ok).toBe(true);
     const stored = (await store.getPublished()).events;
-    expect(stored.some(e => 'score' in e || 'overflow' in e || 'keep' in e)).toBe(false);
+    expect(stored.some(e => 'score' in e || 'overflow' in e || 'keep' in e || 'editor_pick' in e)).toBe(false);
+    expect(stored.some(e => e.featured)).toBe(false); // nothing pinned for good
   });
 });

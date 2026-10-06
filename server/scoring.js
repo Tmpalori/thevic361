@@ -102,6 +102,7 @@ export function dayMax(date) {
   return isWeekend(date) ? DAY_MAX.weekend : DAY_MAX.weekday;
 }
 
+const nameKey = ev => String(ev.name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const venueKey = ev => String(ev.venue || ev.address || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 // Marks each event with `score`, and `overflow: true` on the ones that don't
@@ -151,3 +152,68 @@ export function capDays(events, { venues = [] } = {}) {
 
 // The events a day list shows.
 export const shown = events => (events || []).filter(ev => !ev.overflow);
+
+// Editor's picks. With few paid Vic's Picks, a day's can't-miss events get
+// the badge on merit: up to PICKS.weekday (Mon–Thu) / PICKS.weekend (Fri–Sun)
+// per day, counting paid picks first, so a paid one takes an editor's spot
+// (and paid capacity is counted from orders in server/sponsors.js, never
+// from these). An event needs PICK_SCORE to be picked; a day with no event
+// that strong still gets PICKS_MIN of its best if they reach PICK_FLOOR.
+// Marked `featured` (pinned on top, the badge, starred in the newsletter
+// and social posts) plus `editor_pick`, which keeps them out of "Coming
+// up" and the paid wording in llms.txt, and off anything stored: computed
+// on read like the score.
+export const PICKS = { weekday: 2, weekend: 3 };
+export const PICKS_MIN = { weekday: 1, weekend: 2 };
+const PICK_SCORE = 70;
+const PICK_FLOOR = 65;
+// Picks are one-time Victoria events: a weekly favorite (corn maze, the
+// farmers market) would be a "pick" every week, a nearby-town festival
+// isn't a Victoria can't-miss, and a multi-day event is picked once, on
+// its first day.
+const pickable = ev => !ev.featured && ev.recurring !== true && !ev.town;
+
+export function pickDays(events) {
+  const out = (events || []).map(ev => {
+    if (!ev.editor_pick) return ev;
+    const { editor_pick: _p, featured: _f, ...rest } = ev; // recomputed below
+    return rest;
+  });
+  const byDay = new Map();
+  for (const ev of out) {
+    if (ev.overflow) continue;
+    if (!byDay.has(ev.date)) byDay.set(ev.date, []);
+    byDay.get(ev.date).push(ev);
+  }
+  const pickedNames = new Set();
+  for (const date of [...byDay.keys()].sort()) {
+    const list = byDay.get(date);
+    const weekend = isWeekend(date);
+    const quota = weekend ? PICKS.weekend : PICKS.weekday;
+    const min = weekend ? PICKS_MIN.weekend : PICKS_MIN.weekday;
+    const paid = list.filter(ev => ev.featured);
+    let count = paid.length;
+    const venues = new Set(paid.map(venueKey).filter(Boolean));
+    const pool = list.filter(ev => pickable(ev) && !pickedNames.has(nameKey(ev)))
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
+    const take = (ev) => {
+      ev.featured = true;
+      ev.editor_pick = true;
+      pickedNames.add(nameKey(ev));
+      count++;
+      const v = venueKey(ev);
+      if (v) venues.add(v);
+    };
+    for (const ev of pool) {
+      if (count >= quota || (ev.score || 0) < PICK_SCORE) break;
+      if (venueKey(ev) && venues.has(venueKey(ev))) continue;
+      take(ev);
+    }
+    for (const ev of pool) {
+      if (count >= min || (ev.score || 0) < PICK_FLOOR) break;
+      if (ev.editor_pick || (venueKey(ev) && venues.has(venueKey(ev)))) continue;
+      take(ev);
+    }
+  }
+  return out;
+}

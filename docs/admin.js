@@ -554,6 +554,8 @@
         // the day lists but keeps its page and its place in the guides.
         const info = state.publishedKeys.has(k) ? state.scoreInfo.get(k) : null;
         const scorePill = !info ? ''
+          : info.pick
+          ? '<span class="src-pill src-pill--kept" title="Score ' + info.score + ': one of this day’s top events, so the site shows it as a Vic’s Pick. A paid Vic’s Pick takes its place.">Vic’s Pick (auto)</span>'
           : info.keep
           ? '<span class="src-pill src-pill--kept" title="Shown on its day whatever its score (you chose this).">Shown anyway</span>' +
             '<button type="button" class="btn btn--outline event-row__keep-btn" data-act="keep-event" data-keep="0" data-key="' + escapeHtml(k) + '">Undo</button>'
@@ -758,7 +760,7 @@
       const keys = new Set(events.map(eventKey));
       state.publishedKeys = keys;
       state.scoreInfo = new Map(events.filter(ev => typeof ev.score === 'number')
-        .map(ev => [eventKey(ev), { score: ev.score, overflow: Boolean(ev.overflow), keep: Boolean(ev.keep) }]));
+        .map(ev => [eventKey(ev), { score: ev.score, overflow: Boolean(ev.overflow), keep: Boolean(ev.keep), pick: Boolean(ev.editor_pick) }]));
       // Sent back with Save & Publish so the server can refuse if the live
       // list changed meanwhile (see /api/admin/publish-events).
       state.publishedVersion = json.last_updated || null;
