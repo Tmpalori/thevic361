@@ -28,9 +28,11 @@ export function metaPixelJs(id) {
   try { skip = !!localStorage.getItem('vic361_admin_session'); } catch (e) { /* storage blocked */ }
   if (/[?&]previewKey=/.test(location.search) || location.pathname.indexOf('/social/') === 0) skip = true;
   // Never on a page whose URL carries a private token (confirm/unsubscribe
-  // links): the pixel sends the whole URL to Meta. Those pages don't load
-  // this script anyway (layout pixel: false); this is the backstop.
-  if (/[?&]token=/.test(location.search) || location.pathname.indexOf('/subscribe/confirm') === 0 ||
+  // links) or an id that looks up someone's details (a submission or order
+  // in the sponsor checkout): the pixel sends the whole URL to Meta. Token
+  // pages don't load this script anyway (layout pixel: false); this is the
+  // backstop.
+  if (/[?&](token|from|cancelled|order)=/.test(location.search) || location.pathname.indexOf('/subscribe/confirm') === 0 ||
       location.pathname.indexOf('/unsubscribe') === 0) skip = true;
   if (skip) return;
   !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?

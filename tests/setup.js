@@ -5,3 +5,15 @@
 delete process.env.GITHUB_TOKEN;
 delete process.env.GITHUB_PAT;
 delete process.env.GH_TOKEN;
+
+// Node 25 ships its own global localStorage/sessionStorage, which have no
+// methods unless node runs with --localstorage-file, and they shadow jsdom's.
+// Point the globals back at jsdom's working Storage so admin/app tests run
+// the same on Node 25 as on CI's Node 22.
+if (globalThis.jsdom && typeof globalThis.localStorage?.setItem !== 'function') {
+  for (const name of ['localStorage', 'sessionStorage']) {
+    Object.defineProperty(globalThis, name, {
+      configurable: true, enumerable: true, get: () => globalThis.jsdom.window[name]
+    });
+  }
+}

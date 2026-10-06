@@ -17,13 +17,13 @@ const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/6
 
 let tmpDir, server, baseUrl, store;
 
-async function startApp() {
+async function startApp(now = NOW) {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-traffic-'));
   const eventsFile = path.join(tmpDir, 'events.json');
   await fs.writeFile(eventsFile, JSON.stringify({ events: [] }));
   store = new FileStore(path.join(tmpDir, 's.json'));
   const { app } = await createApp({
-    storeBundle: { kind: 'file', store }, eventsFile, trustProxy: false, now: () => NOW,
+    storeBundle: { kind: 'file', store }, eventsFile, trustProxy: false, now: () => now,
     siteUrl: 'https://www.thevic361.com', analyticsSecret: 'test',
     adminUsername: 'tristen', adminPassword: 'pw', adminSessionSecret: 'secret'
   });
@@ -186,6 +186,16 @@ describe('traffic endpoints', () => {
     expect(t.ai).toMatchObject({ answer_reads: 1, training_crawls: 1, answer_pages: [{ key: '/llms.txt', count: 1 }] });
   });
 
+  // Crawler rows used the real clock while the summary used the injected
+  // one, so this suite broke once the real date passed NOW.
+  it('stamps crawler rows with the app clock', async () => {
+    await startApp(new Date('2031-03-04T17:00:00Z'));
+    await fetch(baseUrl + '/llms.txt', { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; GPTBot/1.2)' } });
+    await settleRows(1);
+    const rows = await store.listTraffic('2000-01-01');
+    expect(rows.map(r => [r.kind, r.day])).toEqual([['crawl', '2031-03-04']]);
+  });
+
   it('ignores malformed beacons', async () => {
     await startApp();
     const r = await fetch(baseUrl + '/api/track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{bad' });
@@ -227,7 +237,7 @@ describe('Meta Pixel script', () => {
 
   it('never runs on token pages', async () => {
     const js = await (await fetch(await pixelApp('123456789012345'))).text();
-    expect(js).toContain("/[?&]token=/.test(location.search)");
+    expect(js).toContain("/[?&](token|from|cancelled|order)=/.test(location.search)");
     expect(js).toContain("'/subscribe/confirm'");
     expect(js).toContain("'/unsubscribe'");
   });

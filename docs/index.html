@@ -1,14 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- Google tag (gtag.js) -->
+<!-- Google tag (gtag.js); same snippet as server/seo.js GA_SNIPPET -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-52YHD3X3C2"></script>
-<script>
- window.dataLayer = window.dataLayer || [];
- function gtag(){dataLayer.push(arguments);}
- gtag('js', new Date());
- gtag('config', 'G-52YHD3X3C2');
-</script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());(function(){var k=new URLSearchParams();new URLSearchParams(location.search).forEach(function(v,n){if(/^(utm_[a-z]+|gclid)$/.test(n))k.append(n,v);});var q=k.toString();gtag('config','G-52YHD3X3C2',{page_location:location.origin+location.pathname+(q?'?'+q:'')});})();</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Vic 361 — Events & Things To Do in Victoria, TX</title>
@@ -47,8 +42,11 @@
 <!-- Styles -->
 <link rel="stylesheet" href="./base.css">
 <link rel="stylesheet" href="./style.css">
+<!-- Saved light/dark choice; same as server/seo.js THEME_SCRIPT -->
+<script>(function(){var d=document.documentElement,K='vic361-theme';try{var t=localStorage.getItem(K);if(t==='dark'||t==='light')d.setAttribute('data-theme',t);}catch(e){}function cur(){return d.getAttribute('data-theme')||(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}function label(){var l='Switch to '+(cur()==='dark'?'light':'dark')+' mode';document.querySelectorAll('[data-theme-toggle]').forEach(function(b){b.setAttribute('aria-label',l);});}document.addEventListener('click',function(e){var b=e.target&&e.target.closest&&e.target.closest('[data-theme-toggle]');if(!b)return;var n=cur()==='dark'?'light':'dark';d.setAttribute('data-theme',n);try{localStorage.setItem(K,n);}catch(e2){}label();});document.addEventListener('DOMContentLoaded',label);})();</script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
 
   <!-- ═══ HEADER ═══ -->
   <header class="site-header" id="site-header">
@@ -64,9 +62,11 @@
       </div>
 
       <div class="header-actions">
-        <a href="./submit.html" class="btn btn--outline desktop-submit">Submit an Event</a>
-        <button class="theme-toggle" data-theme-toggle aria-label="Switch to dark mode" title="Toggle dark mode">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <a href="/submit" class="btn btn--outline desktop-submit">Submit an Event</a>
+        <a href="/submit" class="btn btn--outline mobile-submit" aria-label="Submit an event">+ Event</a>
+        <button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch color theme" title="Toggle dark mode">
+          <svg class="theme-icon theme-icon--moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="theme-icon theme-icon--sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
         </button>
         <a href="/subscribe" class="btn btn--primary">Subscribe</a>
       </div>
@@ -89,7 +89,7 @@
   </section>
 
   <!-- ═══ MAIN ═══ -->
-  <main class="main-content">
+  <main class="main-content" id="main">
     <div class="container container--narrow">
 
       <!-- Last updated -->
@@ -158,7 +158,7 @@
         <div class="footer-section" id="submit">
           <h3>Submit an Event</h3>
           <p>Know something happening in Victoria? Help us keep this list complete.</p>
-          <a href="./submit.html" class="btn btn--outline">Submit an Event</a>
+          <a href="/submit" class="btn btn--outline">Submit an Event</a>
         </div>
 
         <div class="footer-section">
@@ -178,6 +178,10 @@
 
       <div class="footer-bottom">
         <span>&copy; 2026 The Vic 361 · Victoria, TX</span>
+        <button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch color theme" title="Toggle dark mode">
+          <svg class="theme-icon theme-icon--moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="theme-icon theme-icon--sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
 
       </div>
     </div>

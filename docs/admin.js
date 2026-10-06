@@ -920,8 +920,10 @@
       escapeHtml(label) + '</span><span class="sources-summary__value">' + escapeHtml(String(value)) + '</span></div>';
     if (st) st.innerHTML = item('Subscribers', d.counts.active) + item('Awaiting confirmation', d.counts.pending) +
       item('Unsubscribed', d.counts.unsubscribed) +
-      item('This week', d.this_week_sent ? 'Sent' : (d.next.events + ' events ready')) +
-      item('Auto-send Mondays', d.autosend ? 'On' : 'Off');
+      item('This week', d.this_week_failed ? ('Partly sent (' + d.this_week_failed + ' failed)')
+        : d.this_week_sent ? 'Sent' : (d.next.events + ' events ready')) +
+      // The server only sees its own copy of the secret; GitHub needs the same one.
+      item('Auto-send Mondays', d.autosend ? 'On (if the GitHub secret matches)' : 'Off');
     const warn = document.getElementById('email-nl-warning');
     const issues = [];
     if (!d.configured) issues.push('Add RESEND_API_KEY in Railway to turn on sending. Signups are being saved in the meantime.');
@@ -930,7 +932,9 @@
     const send = document.getElementById('email-nl-send');
     if (send) {
       send.disabled = !d.configured || !d.counts.active;
-      send.textContent = d.this_week_sent ? 'Already sent this week' : ('Send to ' + d.counts.active + ' subscribers');
+      // A partly failed send is retried for just the people who missed it.
+      send.textContent = d.this_week_failed ? ('Retry ' + d.this_week_failed + ' failed')
+        : d.this_week_sent ? 'Already sent this week' : ('Send to ' + d.counts.active + ' subscribers');
       if (d.this_week_sent) send.disabled = true;
     }
     const sends = document.getElementById('email-nl-sends');
@@ -975,6 +979,8 @@
       loadEmailNewsletter();
     } catch (err) {
       emailNlMsg(err.message || String(err), 'error');
+      // A partly failed send changed the status (and the button to Retry).
+      loadEmailNewsletter();
     }
   }
 
@@ -1546,7 +1552,88 @@
     return o.event ? o.event.name + ' (' + o.event.date + ')' + (o.submission_id ? ' · in Submissions' : '') : '';
   }
 
+  // Weekly orders the server lets the admin edit (server/sponsors.js EDITABLE).
+  const SPONSOR_EDITABLE = new Set(['paid', 'hidden', 'processing', 'conflict']);
+
+  // Inline editor under a weekly order's row: wording, link, button text,
+  // address, week and logo. Sponsors are told to reply with changes, and a
+  // double-booked order is fixed by moving it to an open week.
+  function openSponsorEdit(id, button) {
+    const d = state.sponsors || {};
+    const o = (d.orders || []).find(x => x.id === id);
+    const row = button && button.closest('tr');
+    if (!o || !row) return;
+    const existing = row.nextElementSibling;
+    if (existing && existing.classList.contains('sponsor-edit-row')) { existing.remove(); return; }
+    const s = o.sponsor || {};
+    const weeks = (d.weeks || []).filter(w => w.available || w.start === o.week_start);
+    if (!weeks.some(w => w.start === o.week_start)) weeks.unshift({ start: o.week_start, label: 'Week of ' + o.week_start + ' (current)' });
+    const input = (name, label, value, max) => '<label class="sponsor-edit__field">' + escapeHtml(label) +
+      '<input name="' + name + '" maxlength="' + max + '" value="' + escapeHtml(value || '') + '"></label>';
+    const tr = document.createElement('tr');
+    tr.className = 'sponsor-edit-row';
+    tr.innerHTML = '<td colspan="7"><form class="sponsor-edit" data-id="' + escapeHtml(o.id) + '">' +
+      input('business', 'Business name', o.business || s.name, 80) +
+      '<label class="sponsor-edit__field">Message<textarea name="text" maxlength="160" rows="2">' + escapeHtml(s.text || '') + '</textarea></label>' +
+      input('url', 'Website or page', s.url, 300) +
+      input('cta', 'Button text', s.cta, 24) +
+      input('address', 'Address', s.address, 120) +
+      '<label class="sponsor-edit__field">Week<select name="week">' + weeks.map(w => '<option value="' + escapeHtml(w.start) + '"' +
+        (w.start === o.week_start ? ' selected' : '') + '>' + escapeHtml(w.label) + '</option>').join('') + '</select></label>' +
+      '<label class="sponsor-edit__field">New logo (optional)<input type="file" name="logo" accept="image/png,image/jpeg,image/webp"></label>' +
+      '<button type="submit" class="btn btn--primary">Save changes</button> <button type="button" class="btn btn--ghost" data-sponsor-edit-cancel>Cancel</button>' +
+      (o.status === 'conflict' ? '<p class="sponsor-edit__hint">Double-booked: pick an open week to put it live (they get their confirmation email), or refund them in Stripe.</p>' : '') +
+      '</form></td>';
+    row.after(tr);
+  }
+
+  // Shrink a chosen logo in the browser like the checkout page does (max
+  // 480x240 PNG), so the request stays small.
+  function sponsorLogoData(file) {
+    return new Promise((resolve, reject) => {
+      if (!file) return resolve('');
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Could not read that file.'));
+      reader.onload = () => {
+        const im = new Image();
+        im.onload = () => {
+          const s = Math.min(1, 480 / im.width, 240 / im.height);
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(im.width * s)); c.height = Math.max(1, Math.round(im.height * s));
+          c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+          resolve(c.toDataURL('image/png'));
+        };
+        im.onerror = () => reject(new Error('That file isn’t an image we can use. Try a PNG or JPG.'));
+        im.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function saveSponsorEdit(form) {
+    const errEl = document.getElementById('sponsors-error');
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    try {
+      const f = form.elements;
+      const body = { action: 'edit', business: f.business.value, text: f.text.value, url: f.url.value, cta: f.cta.value,
+        address: f.address.value, week: f.week.value };
+      const logo = await sponsorLogoData(f.logo.files && f.logo.files[0]);
+      if (logo) body.logo_data = logo;
+      const { res, json } = await adminFetch('/api/admin/sponsors/' + encodeURIComponent(form.getAttribute('data-id')), {
+        method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' }
+      });
+      if (!res.ok || !json || !json.ok) throw new Error((json && (json.message || json.error)) || ('HTTP ' + res.status));
+      if (errEl) errEl.hidden = true;
+      loadSponsors();
+    } catch (err) {
+      if (errEl) { errEl.hidden = false; errEl.textContent = err.message || String(err); }
+      if (btn) btn.disabled = false;
+    }
+  }
+
   function renderSponsors(d) {
+    state.sponsors = d;
     const status = document.getElementById('sponsors-status');
     if (status) {
       status.textContent = d.configured
@@ -1560,7 +1647,9 @@
           d.orders.map(o => {
             const live = o.status === 'paid' || o.status === 'active';
             const hasLogo = Boolean(o.sponsor && o.sponsor.logo);
-            const btn = (live ? '<button type="button" class="btn btn--ghost" data-sponsor-action="hide" data-id="' + escapeHtml(o.id) + '">Hide</button>'
+            const editable = o.kind === 'weekly' && SPONSOR_EDITABLE.has(o.status);
+            const btn = (editable ? '<button type="button" class="btn btn--ghost" data-sponsor-action="edit" data-id="' + escapeHtml(o.id) + '">Edit</button>' : '') +
+              (live ?'<button type="button" class="btn btn--ghost" data-sponsor-action="hide" data-id="' + escapeHtml(o.id) + '">Hide</button>'
               : o.status === 'hidden' ? '<button type="button" class="btn btn--ghost" data-sponsor-action="restore" data-id="' + escapeHtml(o.id) + '">Restore</button>' : '') +
               (hasLogo ? '<button type="button" class="btn btn--ghost" data-sponsor-action="remove-logo" data-id="' + escapeHtml(o.id) + '">Remove logo</button>' : '');
             // Filled in by loadSponsorLogos (the image needs the admin session).
@@ -1570,7 +1659,11 @@
               '<td>' + escapeHtml(o.business || '') + '<br><small>' + escapeHtml(o.email || '') + '</small></td>' +
               '<td>' + escapeHtml(sponsorDetail(o)) + logo + '</td>' +
               '<td>$' + escapeHtml(String(Math.round((o.amount || 0) / 100))) + '</td>' +
-              '<td>' + escapeHtml(SPONSOR_STATUS[o.status] || o.status) + '</td><td>' + btn + '</td></tr>';
+              // on_site false: a paid Vic's Pick whose event the pin can't
+              // find on the site (not approved yet, rejected, or edited).
+              '<td>' + (o.on_site === false
+                ? '<strong class="sponsor-not-live">Paid, not on the site yet</strong><br><small>Approve its event in Submissions</small>'
+                : escapeHtml(SPONSOR_STATUS[o.status] || o.status)) + '</td><td>' + btn + '</td></tr>';
           }).join('')
         : '<tr><td class="traffic-empty">No orders yet.</td></tr>';
       loadSponsorLogos(table);
@@ -2150,8 +2243,11 @@
     if (nlTest) nlTest.addEventListener('click', () => emailNlPost('/api/admin/newsletter/test',
       { email: (document.getElementById('email-nl-test-to') || {}).value }, j => 'Test sent to ' + j.to + '.'));
     if (nlSend) nlSend.addEventListener('click', () => {
-      const n = state.emailNewsletter ? state.emailNewsletter.counts.active : 0;
-      if (!window.confirm('Send this week\'s newsletter to ' + n + ' subscribers?')) return;
+      const nl = state.emailNewsletter || {};
+      const retry = nl.this_week_failed || 0;
+      const n = nl.counts ? nl.counts.active : 0;
+      if (!window.confirm(retry ? 'Retry this week\'s newsletter for the ' + retry + ' subscribers who didn\'t get it?'
+        : 'Send this week\'s newsletter to ' + n + ' subscribers?')) return;
       emailNlPost('/api/admin/newsletter/send', {}, j => 'Sent to ' + j.recipients + ' subscribers.');
     });
     if (nlImport) nlImport.addEventListener('click', () => emailNlPost('/api/admin/newsletter/import',
@@ -2167,10 +2263,19 @@
     const sponsorsRefresh = document.getElementById('sponsors-refresh');
     if (sponsorsRefresh) sponsorsRefresh.addEventListener('click', loadSponsors);
     const sponsorsOrders = document.getElementById('sponsors-orders');
+    if (sponsorsOrders) sponsorsOrders.addEventListener('submit', e => {
+      const f = e.target.closest('form.sponsor-edit');
+      if (!f) return;
+      e.preventDefault();
+      saveSponsorEdit(f);
+    });
     if (sponsorsOrders) sponsorsOrders.addEventListener('click', e => {
+      const cancel = e.target.closest('[data-sponsor-edit-cancel]');
+      if (cancel) { cancel.closest('tr').remove(); return; }
       const b = e.target.closest('[data-sponsor-action]');
       if (!b) return;
       const action = b.getAttribute('data-sponsor-action');
+      if (action === 'edit') { openSponsorEdit(b.getAttribute('data-id'), b); return; }
       if (action === 'hide' && !confirm('Hide this placement from the site? (Refund it in Stripe separately.)')) return;
       if (action === 'remove-logo' && !confirm('Remove this sponsor’s logo? Their block stays up without it. This can’t be undone.')) return;
       sponsorAction(b.getAttribute('data-id'), action);

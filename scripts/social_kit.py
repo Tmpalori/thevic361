@@ -4,7 +4,8 @@
 Runs on a schedule (.github/workflows/social-kit.yml) and writes
 docs/social/latest/:
   - week-N.png / weekend-N.png / today-N.png   Instagram/Facebook slides (1080x1350): at most
-                                 three, a teaser (cover, day-by-day peek, see-all)
+                                 three, a teaser (cover, day-by-day peek, see-all),
+                                 each with a .jpg twin (Instagram only takes JPEG)
   - weekend.mp4                  the weekend slides as a vertical Reel (needs ffmpeg)
   - outreach.txt                 venues on this week's list, to send their link
   - outreach-slack.txt           the short Monday Slack version (taggable venues only)
@@ -49,6 +50,13 @@ TITLES = {
     "today": ("Today in Victoria, TX", "Today in Victoria", "/today"),
 }
 MAX_TAGS = 15  # Instagram allows 20 @mentions per caption
+IG_MAX_CAPTION = 2200  # Instagram rejects longer captions
+MORE_ONLINE = "+ more at thevic361.com"
+TRIM_NAME = 50  # a long name or venue is cut to this when a caption runs long
+# Venue names too generic to tag anyone by (an event "@ Victoria" is not
+# Theatre Victoria).
+GENERIC_VENUES = {"victoria", "victoria tx", "victoria texas", "downtown", "downtown victoria",
+                  "tba", "tbd", "online", "various", "various locations", "texas", "tx"}
 
 
 def today_central():
@@ -110,12 +118,32 @@ def _short_time(t):
     return f"{int(m.group(1))}{mins} {m.group(3).upper()}M"
 
 
-def _line(ev):
+_ZIP = re.compile(r"\b\d{5}(?:-\d{4})?\b")
+
+
+def clean_venue(venue):
+    """A venue as people say it, not a geocoder string: '3102 Miori Ln.,
+    Victoria, TX, United States, Texas 77901' → '3102 Miori Ln.'."""
+    v = re.sub(r"\s+", " ", str(venue or "")).strip()
+    cut = re.search(r",\s*(?:victoria\b|tx\b|texas\b|united states\b|usa\b)", v, re.I)
+    if cut and cut.start() > 0:
+        v = v[:cut.start()]
+    v = re.sub(r",?\s*\bunited states\b", "", v, flags=re.I)
+    v = _ZIP.sub("", v)
+    return re.sub(r"[\s,]+$", "", v).strip()
+
+
+def _clip(text, limit):
+    return text if not limit or len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
+
+def _line(ev, limit=None):
     t = _short_time(ev.get("time"))
-    venue = f" @ {ev['venue']}" if ev.get("venue") else ""
+    v = clean_venue(ev.get("venue"))
+    venue = f" @ {_clip(v, limit)}" if v else ""
     free = " (free)" if ev.get("free") else ""
     mark = "⭐ " if ev.get("featured") else "• "  # Vic's Picks / sponsored stand out
-    return f"{mark}{t + ' ' if t else ''}{ev['name']}{venue}{free}"
+    return f"{mark}{t + ' ' if t else ''}{_clip(ev['name'], limit)}{venue}{free}"
 
 
 def _range_label(start, end):
@@ -143,43 +171,108 @@ def load_venue_handles(path=VENUES_FILE):
     return out
 
 
+def match_venue(key, table):
+    """table[key] for a normalized venue name, or a close match: only when
+    the shorter name is specific (2+ words, 8+ characters) and the other
+    contains it as whole words. Generic names ('victoria', 'downtown') never
+    match, so an event "@ Victoria" doesn't tag Theatre Victoria."""
+    if not key or key in GENERIC_VENUES:
+        return None
+    if key in table:
+        return table[key]
+    for n, val in table.items():
+        if not n or n in GENERIC_VENUES:
+            continue
+        short, long_ = (n, key) if len(n) <= len(key) else (key, n)
+        if len(short.split()) >= 2 and len(short) >= 8 and f" {short} " in f" {long_} ":
+            return val
+    return None
+
+
+def _venue_key(ev):
+    return _norm(clean_venue(ev.get("venue")))
+
+
 def venue_tags(groups, handles):
     """@mentions for venues on the list, so they get notified and reshare."""
     tags = []
     for evs in groups.values():
         for e in evs:
-            v = _norm(e.get("venue"))
-            h = handles.get(v) or next((h for n, h in handles.items() if n and v and (n in v or v in n)), None)
+            h = match_venue(_venue_key(e), handles)
             if h and f"@{h}" not in tags:
                 tags.append(f"@{h}")
     return tags[:MAX_TAGS]
 
 
+def _shown(evs):
+    """A day's events in the caption: the first PER_DAY_CAPTION, but every
+    Vic's Pick (sorted first) even past that; a paid pick is never cut."""
+    return evs[:max(PER_DAY_CAPTION, sum(1 for e in evs if e.get("featured")))]
+
+
+def _body(groups, kind, limit=None, keep=None):
+    """Caption body lines: each day's heading, its first PER_DAY_CAPTION
+    events (all Vic's Picks first), "+ N more". keep, when given, is how many
+    of the non-pick event lines survive (earliest first); the rest fold into
+    a "+ more at thevic361.com" line. Vic's Picks are never dropped."""
+    if not groups:
+        return ["Nothing listed yet. Know something happening? Submit it at thevic361.com/submit", ""]
+    body, plain = [], 0
+    for d, evs in groups.items():
+        lines = []
+        shown = _shown(evs)
+        for e in shown:
+            if not e.get("featured") and keep is not None:
+                plain += 1
+                if plain > keep:
+                    continue
+            lines.append(_line(e, limit))
+        if keep is None and len(evs) > len(shown):
+            lines.append(f"+ {len(evs) - len(shown)} more")
+        if not lines:
+            continue  # every event that day folded into "+ more"
+        if kind != "today":
+            body.append(d.strftime("%A").upper())
+        body += lines + [""]
+    if keep is not None:
+        body += [MORE_ONLINE, ""]
+    return body
+
+
 def captions(groups, start, end, kind, handles=None):
     """Return {'facebook': str, 'instagram': str} for a kit."""
     title, _, path = TITLES[kind]
-    body = []
     total = sum(len(v) for v in groups.values())
-    for d, evs in groups.items():
-        body.append(d.strftime("%A").upper())
-        body.extend(_line(e) for e in evs[:PER_DAY_CAPTION])
-        if len(evs) > PER_DAY_CAPTION:
-            body.append(f"+ {len(evs) - PER_DAY_CAPTION} more")
-        body.append("")
-    if not groups:
-        body = ["Nothing listed yet. Know something happening? Submit it at thevic361.com/submit", ""]
-    if kind == "today":
-        body = [line for line in body if line not in (start.strftime("%A").upper(),)]
     head = f"{title} ({_range_label(start, end)})" + (f": {total} event{'s' if total != 1 else ''}" if total else "")
     tags = venue_tags(groups, handles or {})
     # Same call to action as the ad, the slides and the site: the newsletter.
     see_all = "👉 Full list: " if not total else "👉 Details: " if total == 1 else f"👉 See all {total}: "
+    body = _body(groups, kind)
     fb = "\n".join([head, ""] + body + [f"{see_all}{SITE}{path}",
                                           f"Don't miss a thing: get every event free in your inbox each Monday 👉 {SITE}/subscribe", "", HASHTAGS])
-    ig = "\n".join([head, ""] + body + [f"{see_all}link in bio (thevic361.com)",
-                                          "Don't miss a thing: get every event free in your inbox each Monday (subscribe at the link in bio)", ""]
-                    + ([" ".join(tags), ""] if tags else []) + [HASHTAGS])
-    return {"facebook": fb.strip() + "\n", "instagram": ig.strip() + "\n"}
+
+    def ig_caption(body, tags):
+        return "\n".join([head, ""] + body + [f"{see_all}link in bio (thevic361.com)",
+                                                "Don't miss a thing: get every event free in your inbox each Monday (subscribe at the link in bio)", ""]
+                         + ([" ".join(tags), ""] if tags else []) + [HASHTAGS]).strip() + "\n"
+
+    # Instagram stops at 2,200 characters, and a busy week of long names can
+    # go over: drop @tags from the end, then shorten long names and venues,
+    # then fold events (never Vic's Picks) into "+ more at thevic361.com".
+    ig = ig_caption(body, tags)
+    while len(ig) > IG_MAX_CAPTION and tags:
+        tags = tags[:-1]
+        ig = ig_caption(body, tags)
+    if len(ig) > IG_MAX_CAPTION:
+        body = _body(groups, kind, limit=TRIM_NAME)
+        ig = ig_caption(body, tags)
+    keep = sum(1 for evs in groups.values() for e in _shown(evs) if not e.get("featured"))
+    while len(ig) > IG_MAX_CAPTION and keep > 0:
+        keep -= 1
+        ig = ig_caption(_body(groups, kind, limit=TRIM_NAME, keep=keep), tags)
+    if len(ig) > IG_MAX_CAPTION:  # nothing left but picks and still too long
+        ig = ig[:IG_MAX_CAPTION - len(MORE_ONLINE) - 3].rstrip() + "…\n" + MORE_ONLINE + "\n"
+    return {"facebook": fb.strip() + "\n", "instagram": ig}
 
 
 # ─── Rendering (Pillow) ──────────────────────────────────────────────────
@@ -255,6 +348,21 @@ def render_slides(groups, start, end, kind, out_dir):
         print(f"Branded slides failed ({e}); using plain slides.")
         names = None
     return names or render_plain_slides(groups, start, end, kind, out_dir)
+
+
+def jpeg_copies(out_dir, names, quality=92):
+    """Instagram's publishing API takes JPEG only for image_url, so every
+    slide also gets a .jpg twin (same pixels, flattened to RGB). Facebook
+    and the kit page keep the PNGs."""
+    from PIL import Image
+    out = []
+    for name in names:
+        jpg = os.path.splitext(name)[0] + ".jpg"
+        with Image.open(os.path.join(out_dir, name)) as img:
+            img.convert("RGB").save(os.path.join(out_dir, jpg), "JPEG", quality=quality, optimize=True,
+                                    subsampling=0)
+        out.append(jpg)
+    return out
 
 
 def render_plain_slides(groups, start, end, kind, out_dir):
@@ -345,14 +453,14 @@ def outreach(groups, venues_path=VENUES_FILE):
     seen, lines = set(), []
     for evs in groups.values():
         for e in evs:
-            key = _norm(e.get("venue"))
+            key = _venue_key(e)
             if not key or key in seen:
                 continue
             seen.add(key)
-            v = venues.get(key) or next((v for n, v in venues.items() if n and (n in key or key in n)), {})
+            v = match_venue(key, venues) or {}
             where = v.get("instagram_url") or v.get("facebook_page") or ""
             page = f"{SITE}{e['page']}" if e.get("page") else f"{SITE}/"
-            lines.append(f"• {e['venue']}: {e['name']} {page}" + (f" ({where})" if where else ""))
+            lines.append(f"• {clean_venue(e['venue'])}: {e['name']} {page}" + (f" ({where})" if where else ""))
     return lines
 
 
@@ -368,17 +476,17 @@ def outreach_slack(groups, venues_path=VENUES_FILE, limit=8):
     seen, rows = set(), []
     for evs in groups.values():
         for e in evs:
-            key = _norm(e.get("venue"))
+            key = _venue_key(e)
             if not key or key in seen:
                 continue
             seen.add(key)
-            v = venues.get(key) or next((v for n, v in venues.items() if n and (n in key or key in n)), {})
+            v = match_venue(key, venues) or {}
             where = v.get("instagram_url") or v.get("facebook_page") or ""
             if not where:
                 continue
             page = f"{SITE}{e['page']}" if e.get("page") else f"{SITE}/"
             clean = lambda t: str(t).replace("|", "/").replace("<", "").replace(">", "")
-            rows.append(f"• <{where}|{clean(e['venue'])}> → <{page}|{clean(e['name'])}>")
+            rows.append(f"• <{where}|{clean(clean_venue(e['venue']))}> → <{page}|{clean(e['name'])}>")
     if not rows:
         return ""
     more = len(rows) - limit
@@ -451,7 +559,7 @@ def main(argv=None):
     today = date.fromisoformat(args.today) if args.today else today_central()
     os.makedirs(args.out, exist_ok=True)
     for old in os.listdir(args.out):
-        if any(old.startswith(f"{k}-") and old.endswith(".png") for k in kinds) or \
+        if any(old.startswith(f"{k}-") and old.endswith((".png", ".jpg")) for k in kinds) or \
                 ("weekend" in kinds and old == "weekend.mp4"):
             os.remove(os.path.join(args.out, old))
 
@@ -471,8 +579,12 @@ def main(argv=None):
         if kind == "week":
             week_groups = groups
         slides = render_slides(groups, start, end, kind, args.out)
-        kit = {"slides": slides, "captions": captions(groups, start, end, kind, handles),
-               "events": sum(len(v) for v in groups.values())}
+        # featured: Vic's Picks in the kit (the Thursday run posts "today"
+        # too when it has one; see social-kit.yml).
+        kit = {"slides": slides, "slides_jpg": jpeg_copies(args.out, slides),
+               "captions": captions(groups, start, end, kind, handles),
+               "events": sum(len(v) for v in groups.values()),
+               "featured": sum(1 for v in groups.values() for e in v if e.get("featured"))}
         if kind == "weekend":
             reel = make_reel(args.out, slides)
             if reel:

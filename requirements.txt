@@ -1,5 +1,7 @@
-requests>=2.28
-beautifulsoup4>=4.12
-lxml>=4.9
-pyyaml>=6.0
-sentry-sdk>=2.0
+# Floors are what the collector needs; the caps block an untested major
+# release from reaching the Sunday/Wednesday run on a fresh CI install.
+requests>=2.28,<3
+beautifulsoup4>=4.12,<5
+lxml>=4.9,<7
+pyyaml>=6.0,<7
+sentry-sdk>=2.0,<3

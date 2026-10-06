@@ -8,6 +8,6 @@ It covers:
 - The `--candidates-only` invariant and why `docs/events.json` is *not* the source of truth
 - File layout, run/test commands, conventions
 - Don't-touch list and PR checklist
-- Environment variables (full reference in `RAILWAY.md`)
+- Environment variables (full reference in AGENTS.md; `RAILWAY.md` covers Railway setup)
 
 The same content is mirrored for Cursor in `.cursorrules`.

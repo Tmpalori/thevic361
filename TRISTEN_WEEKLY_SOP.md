@@ -8,20 +8,25 @@ The system handles ~70% of event collection automatically:
 - **Google Sheet submissions** — anything you add to the sheet gets pulled in automatically
 - **Deduplication** — the system merges everything and removes duplicates
 
-**Your job: Fill in what the bots can't find, then pick which events to publish.** That's mainly bar/restaurant live music, Facebook-only events, and one-time community stuff, plus the Sunday night admin review. Takes ~15 minutes per week.
+- **Publishing** — each collect goes live on its own (auto-publish); free submissions are AI-reviewed and the good ones publish themselves; the event check hides church events, non-events and exact duplicates
+
+**Your job: Fill in what the bots can't find, and step in when Slack or the admin Home tab says something needs you.** That's mainly bar/restaurant live music, Facebook-only events, and one-time community stuff. There is no event picking to do. Takes ~15 minutes per week.
 
 ---
 
-## Weekly Cadence (Sunday → Monday)
+## Weekly Cadence
+
+Times are Central daylight time (an hour earlier in winter). GitHub often starts scheduled jobs late, sometimes by an hour.
 
 | Time (Central) | What happens | Who does it |
 |---|---|---|
-| Sun 6 PM | `weekly-collect.yml` runs the event collector and writes `candidates.json` (plus `collection_metadata.json` for the admin Sources tab). It does **not** overwrite `docs/events.json` — that's the admin Save & Publish flow's job. | Automated |
-| Sun 9 PM | `weekly-digest.yml` emails an **informational** summary of what was collected, with a link to the admin review page | Automated |
-| Sun 10 PM | Open `/admin.html`, pick the events you want to publish, save your selection. Admin commits go directly to `main`. | **You** |
-| Mon morning | Newsletter sends automatically (or press Send in admin) | Automatic |
+| Sun + Wed 3:23 PM | `weekly-collect.yml` runs the event collector and writes `candidates.json`. A few minutes later the site redeploys and **auto-publishes** the new events; Slack says "Collect done". | Automated |
+| Right after each collect | The event check looks over the live list, hides sure-thing junk and posts to Slack what it hid and anything to look at | Automated |
+| Every 15 min | AI review of free submissions: good ones go live (the submitter gets a "you're live" email), doubtful ones wait in the Submissions tab | Automated |
+| Mon 7:43 AM | Newsletter sends automatically (or press Send in admin) | Automated |
+| When Slack asks | Open [www.thevic361.com/admin.html](https://www.thevic361.com/admin.html): Home tab for what needs you, Events tab to edit or remove an event, then **Save & Publish** | **You** |
 
-The Sunday digest email is for awareness only — there is **no reply-to-email approval anymore**. Picking events happens on `/admin.html` (landing in a follow-up PR; until then publish via direct edits to `docs/events.json`).
+Never edit `docs/events.json` by hand: it's only a fallback copy, and the live list is in the database.
 
 ---
 
@@ -69,7 +74,7 @@ For each new event, add a row:
 | **Added By** | Your name | Tristen |
 | **Status** | Leave blank or "new" | new |
 
-That's it. The collector script picks up new rows automatically during the Sunday 6 PM run. Add new rows by Sunday 5:45 PM Central so they're included in that week's collection.
+That's it. The collector picks up new rows on its next run (Sunday and Wednesday, 3:23 PM Central). Add rows by 3 PM on Sunday or Wednesday so that run includes them.
 
 ---
 
@@ -128,7 +133,7 @@ Add these to the Google Sheet as one-time events.
 ## Troubleshooting
 
 **"The site doesn't show my event"**
-→ Events are pulled from the Google Sheet during the Sunday 6 PM run. If you add something later in the week, it won't show up until the next Sunday's run unless you manually trigger the **Weekly Collect** workflow:
+→ Events are pulled from the Google Sheet during the Sunday and Wednesday 3:23 PM runs. If you add something after a run, it shows up after the next one, or right away if you add it in the admin Events tab or manually trigger the **Weekly Collect** workflow:
 
 ```bash
 gh workflow run "Weekly Collect"
@@ -171,9 +176,9 @@ you to review and commit by hand. It does not run on any schedule.
 
 ## AI Steps (OpenAI)
 
-OpenAI does two jobs each Sunday: it pulls dated events out of FB/IG posts
-(below), and it rewrites each candidate's description and icons before
-you see them in the admin. Both need the `OPENAI_API_KEY` repo secret.
+OpenAI does two jobs on each collect (Sunday and Wednesday): it pulls dated
+events out of FB/IG posts (below), and it rewrites each candidate's
+description and icons before they publish. Both need the `OPENAI_API_KEY` repo secret.
 Perplexity web search was removed in Oct 2026.
 
 ---

@@ -31,11 +31,11 @@ import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys } from './eventcheck.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { createMailer, renderSubmissionReceived, renderSubmissionLive } from './notify.js';
-import { registerSubmissionReview } from './submissionReview.js';
-import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage } from './sponsors.js';
+import { registerSubmissionReview, isPaidPick } from './submissionReview.js';
+import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage, sameEvent } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
-import { createAutoPublish, unpublishEvent } from './autopublish.js';
+import { createAutoPublish, unpublishEvent, replacePublishedEvent, forgetRemoved } from './autopublish.js';
 import { createScheduler, schedulerEnabled } from './scheduler.js';
 import * as sponsorsModule from './sponsors.js';
 import crypto from 'node:crypto';
@@ -62,6 +62,20 @@ const WEEKLY_COLLECT_WORKFLOW = 'weekly-collect.yml';
 // new collect in this many days (it runs Sunday and Wednesday), alerts.
 const MIN_UPCOMING = 10;
 const STALE_COLLECT_DAYS = 8;
+
+const BASE_CSP = "frame-ancestors 'self'; object-src 'none'; base-uri 'self'";
+
+// The admin page keeps its session token in localStorage, so it gets a
+// script CSP: only its own files and its inline theme snippet (allowed by
+// hash, computed here so editing the snippet can't silently break it) may
+// run. It loads no analytics, pixel or Turnstile.
+async function adminPageCsp() {
+  let html = '';
+  try { html = await fsp.readFile(path.join(DOCS_DIR, 'admin.html'), 'utf8'); } catch (_) { /* no admin page */ }
+  const hashes = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map(m => ` 'sha256-${crypto.createHash('sha256').update(m[1]).digest('base64')}'`);
+  return `script-src 'self'${hashes.join('')}; ${BASE_CSP}`;
+}
 
 async function readJsonFile(file) {
   const raw = await fsp.readFile(file, 'utf8');
@@ -105,23 +119,35 @@ export async function createApp(opts = {}) {
   const canonicalHost = new URL(siteUrl).host;
   const apexHost = canonicalHost.replace(/^www\./, '');
   app.use((req, res, next) => {
+    // Squarespace's domain forwarding (which answers the bare domain)
+    // sends thevic361.com/about to www.thevic361.com//about, which no route
+    // matches. Collapse the leading slashes. The result always starts with
+    // a single "/", so it stays on this site (never "//evil.example").
+    const url = req.originalUrl.replace(/^\/{2,}/, '/');
     if (apexHost !== canonicalHost && req.hostname === apexHost) {
-      return res.redirect(301, siteUrl + req.originalUrl);
+      return res.redirect(301, siteUrl + url);
     }
+    if (url !== req.originalUrl) return res.redirect(301, url);
     next();
   });
 
-  // Baseline security headers. No full script CSP yet: the site relies on
-  // inline scripts plus Google Analytics and Turnstile, so the CSP
-  // only locks down framing, plugins and <base> hijacking for now.
+  // Baseline security headers. Public pages get no script CSP: they rely on
+  // inline scripts (GA bootstrap, JSON-LD, page scripts in seo.js and
+  // sponsors.js), inline onload/onclick handlers, Google Analytics, the Meta
+  // Pixel and Turnstile, so a useful script-src needs per-response nonces
+  // and no inline handlers first. Their CSP only locks down framing,
+  // plugins and <base> hijacking; the admin page gets script-src too.
+  app.disable('x-powered-by');
+  const adminCsp = await adminPageCsp();
   app.use((req, res, next) => {
+    const isAdminPage = req.path === '/admin.html' || req.path === '/admin';
     res.set({
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'X-Frame-Options': 'SAMEORIGIN',
       'Strict-Transport-Security': 'max-age=31536000',
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-      'Content-Security-Policy': "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+      'Content-Security-Policy': isAdminPage ? adminCsp : BASE_CSP
     });
     next();
   });
@@ -165,7 +191,7 @@ export async function createApp(opts = {}) {
 
   // Note crawler hits on public pages for the admin Traffic tab. Registered
   // before every route so it sees the server-rendered pages too.
-  if (typeof store.recordTraffic === 'function') app.use(crawlerMiddleware(store));
+  if (typeof store.recordTraffic === 'function') app.use(crawlerMiddleware(store, () => (opts.now || (() => new Date()))()));
 
   const submitLimiter = opts.submitLimiter || createRateLimiter({
     windowMs: 60 * 1000, max: 5
@@ -189,11 +215,18 @@ export async function createApp(opts = {}) {
     store, siteUrl, config: stripeCfg, slack, mailer, mailAddress: newsletter.address,
     nowFn: () => (opts.now || (() => new Date()))(),
     stripe: opts.stripe || createStripe(stripeCfg.secretKey),
-    getVenues: () => venues
+    getVenues: () => venues,
+    // The public events before placements, to show in the Sponsors tab when
+    // a paid Vic's Pick isn't on the site.
+    getPayload: () => loadPublicPayload()
   });
   sponsors.registerWebhook(app);
 
-  app.use(express.json({ limit: '64kb' }));
+  // The admin's sponsor edit can carry a new logo (a data URL, shrunk in
+  // the browser), so it alone gets a bigger JSON limit.
+  const smallJson = express.json({ limit: '64kb' });
+  const sponsorEditJson = express.json({ limit: '600kb' });
+  app.use((req, res, next) => (/^\/api\/admin\/sponsors\/[^/]+$/.test(req.path) ? sponsorEditJson : smallJson)(req, res, next));
   // The sponsor checkout form can carry a logo (a data URL, shrunk in the
   // browser), so it alone gets a bigger limit.
   const smallForms = express.urlencoded({ extended: false, limit: '64kb' });
@@ -366,7 +399,7 @@ export async function createApp(opts = {}) {
       fields: [['Event', ev.name], ['When', [ev.date, ev.time].filter(Boolean).join(' ')], ['Venue', ev.venue],
         ['From', [row.submitter_name, row.submitter_email].filter(Boolean).join(' · ')]],
       text: ev.description ? ev.description.slice(0, 300) : '',
-      link: `${siteUrl}/admin.html`, footer: 'The AI review will publish it or flag it for you within the hour'
+      link: `${siteUrl}/admin.html`, footer: 'The AI review will publish it or flag it for you, usually within the hour'
     });
     // Tell them it worked and what happens next (no-op without Resend).
     if (row.submitter_email && receiptLimiter.check(row.submitter_email.toLowerCase()).ok) {
@@ -464,26 +497,70 @@ export async function createApp(opts = {}) {
     if (typeof body.admin_notes === 'string') {
       patch.admin_notes = body.admin_notes.slice(0, 2000);
     }
+    const oldKey = eventKeyOf(row.payload || {});
+    const rekeyed = Boolean(patch.payload) && eventKeyOf(patch.payload) !== oldKey;
     const history = Array.isArray(row.review_history) ? row.review_history.slice() : [];
     history.push({
       at: nowIso(),
       action: patch.status ? ('status:' + patch.status) : 'edit',
-      note: typeof body.note === 'string' ? body.note.slice(0, 500) : ''
+      note: typeof body.note === 'string' ? body.note.slice(0, 500) : '',
+      // The key it had before this edit, so a later un-approve can still
+      // find the live event if it kept the old one.
+      ...(rekeyed ? { prev_key: oldKey } : {})
     });
     patch.review_history = history;
 
+    const now = (opts.now || (() => new Date()))();
+    const wasApproved = row.status === 'approved';
+    const isApproved = (patch.status || row.status) === 'approved';
     const updated = await store.update(req.params.id, patch);
+    const result = { ok: true, submission: updated, unpublished: false };
+
+    // Editing an approved (live) submission updates the live event too.
+    if (wasApproved && isApproved && patch.payload) {
+      try {
+        result.updated_live = await replacePublishedEvent(store, oldKey, patch.payload, now);
+        if (result.updated_live) archiveEvents(((await store.getPublished()) || {}).events || []);
+      } catch (err) {
+        console.warn('[admin] live update after edit failed:', err.message);
+        result.updated_live = false;
+      }
+    }
+
     // Un-approving takes it off the site too (it may have gone live through
     // auto-publish or the AI review); otherwise it would stay published.
-    let unpublished = false;
-    if (row.status === 'approved' && patch.status && patch.status !== 'approved') {
+    // Tries every key it has had, so an edit before the reject can't leave
+    // the old version up.
+    if (wasApproved && !isApproved) {
+      const keys = [oldKey, eventKeyOf((updated || {}).payload || {}),
+        ...history.map(h => h && h.prev_key).filter(Boolean)];
       try {
-        unpublished = await unpublishEvent(store, eventKeyOf(row.payload || {}), (opts.now || (() => new Date()))());
+        result.unpublished = await unpublishEvent(store, keys, now);
       } catch (err) {
         console.warn('[admin] unpublish after un-approve failed:', err.message);
       }
     }
-    res.json({ ok: true, submission: updated, unpublished });
+    // Someone paid for this one: turning it away needs a refund or a fix.
+    if (isPaidPick(row) && (patch.status === 'rejected' || patch.status === 'duplicate') && patch.status !== row.status) {
+      slack.notify({ channel: 'sales', title: `⚠️ Paid Vic’s Pick marked ${patch.status}: ${(row.payload || {}).name}`,
+        text: `${row.submitter_name || 'The buyer'} (${row.submitter_email || 'no email'}) paid for this pick. ` +
+          (patch.status === 'duplicate'
+            ? 'Check the Sponsors tab shows it on the site (the pin has to find the listed event); if not, refund it in Stripe.'
+            : 'Refund it in Stripe and hide the order in the Sponsors tab.'),
+        link: `${siteUrl}/admin.html` });
+    }
+
+    // Approving by hand publishes it now (approved submissions only, like
+    // the AI review) and emails the submitter once it's live.
+    if (!wasApproved && isApproved && updated) {
+      try { await forgetRemoved(store, eventKeyOf(updated.payload || {})); } catch (err) {
+        console.warn('[admin] clearing removed mark failed:', err.message);
+      }
+      const res2 = await publishApproved([updated]);
+      result.published = res2.published;
+      result.live = res2.live[0];
+    }
+    res.json(result);
   }));
 
   // ─── Admin: candidates fetch ──────────────────────────────────────────
@@ -1110,18 +1187,33 @@ export async function createApp(opts = {}) {
     return r.ok;
   }
 
+  // Cron secrets, one per endpoint: NEWSLETTER_CRON_SECRET (newsletter
+  // send), EVENT_CHECK_SECRET (hide events), SUBMISSION_REVIEW_SECRET
+  // (approve and publish submissions). The fallbacks below (and the same
+  // chain in event-check.yml / submission-review.yml) keep setups made
+  // before the later two existed working, but then one leaked value grants
+  // all three, so the setup checklist flags a shared secret.
+  const eventCheckSecret = opts.eventCheckSecret ??
+    (process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || '');
+  const submissionReviewSecret = opts.submissionReviewSecret ??
+    (process.env.SUBMISSION_REVIEW_SECRET || process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || '');
+
   // ─── Newsletter (Resend; see server/newsletter.js) ───
   // Event check (server/eventcheck.js): hide what the weekly check is sure
   // about, restore from admin Home.
   registerEventCheck(app, {
     store, requireAdmin, nowFn: () => (opts.now || (() => new Date()))(),
-    secret: opts.eventCheckSecret ?? (process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || ''),
+    secret: eventCheckSecret,
     loadVisibleKeyed: async () => visibleFrom((await store.getPublished()) || {})
   });
 
   const newsletterApi = registerNewsletter(app, {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
     getPublicPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman,
+    // Monday's run also sends last week's sponsor click reports. A daily
+    // scheduler can call sponsors.sendSponsorReports(now) as well; it's
+    // idempotent (each order records report_sent).
+    onCron: now => sponsors.sendSponsorReports(now),
     withNav: async (html, path) => {
       const payload = await getPublicPayload();
       return fillSeasonalNav(html, activeSeasons(payload.events, await listArchived(), nowFn()), path);
@@ -1212,14 +1304,14 @@ export async function createApp(opts = {}) {
   // otherwise treat "<slug>.ics" as a slug.
   app.get('/events/:slug.ics', pageHandler(async (req, res, payload, ctx) => {
     const ev = await findEvent(payload, `/events/${req.params.slug}`);
-    if (!ev) return res.status(404).type('text/plain').send('Not found');
+    if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), 404);
     res.set('Content-Disposition', `attachment; filename="${String(req.params.slug).replace(/[^a-z0-9-]/gi, '') || 'event'}.ics"`);
     res.type('text/calendar; charset=utf-8').send(renderIcs(ev, ctx));
   }));
 
   app.get('/events/:slug', pageHandler(async (req, res, payload, ctx) => {
     const ev = await findEvent(payload, `/events/${req.params.slug}`);
-    if (!ev) return sendHtml(res, renderNotFoundPage(ctx), 404);
+    if (!ev) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'event' }), 404);
     const venue = venueFor(ev, venues);
     sendHtml(res, renderEventPage(ev, payload.events, {
       ...ctx, extras: eventActionsHtml(ev, siteUrl), venuePath: venue ? venue.path : null
@@ -1232,7 +1324,7 @@ export async function createApp(opts = {}) {
 
   app.get('/venues/:slug', pageHandler(async (req, res, payload, ctx) => {
     const venue = venues.find(v => v.slug === req.params.slug);
-    if (!venue) return sendHtml(res, renderNotFoundPage(ctx), 404);
+    if (!venue) return sendHtml(res, renderNotFoundPage({ ...ctx, kind: 'venue' }), 404);
     sendHtml(res, renderVenuePage(venue, payload.events, ctx.archived, ctx));
   }));
 
@@ -1240,6 +1332,11 @@ export async function createApp(opts = {}) {
     app.get(season.path, pageHandler(async (req, res, payload, ctx) => {
       sendHtml(res, renderSeasonPage(season, payload.events, ctx.archived, ctx));
     }));
+    // People guess the short form (/halloween for /halloween-events).
+    const short = season.path.replace(/-events$/, '');
+    if (short !== season.path) {
+      app.get(short, (req, res) => res.redirect(301, season.path + (req.originalUrl.match(/\?.*$/) || [''])[0]));
+    }
   }
 
   app.get('/advertise', pageHandler(async (req, res, payload, ctx) => {
@@ -1249,7 +1346,7 @@ export async function createApp(opts = {}) {
   // Contact form → Slack; replaces publishing an email address.
   registerContact(app, { siteUrl, slack, store, requireAdmin, createRateLimiter, sendHtml, verifyHuman });
 
-  sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman });
+  sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman, analyticsSecret });
 
   app.get('/about', pageHandler(async (req, res, payload, ctx) => {
     sendHtml(res, renderAboutPage(ctx));
@@ -1295,28 +1392,54 @@ export async function createApp(opts = {}) {
   app.post('/api/admin/auto-publish', requireAdmin, async (req, res, next) => {
     try { res.json(await autoPublish.run({ force: true })); } catch (err) { next(err); }
   });
-  // ─── AI review of free submissions (server/submissionReview.js) ───
+  // ─── Approved submissions go live (AI review and manual approval) ───
+  // True when the event is on the public site; then "You're live" goes out
+  // with a link to its page. A paid Vic's Pick also counts when it matched
+  // an event already listed (the pin finds that one).
+  async function notifyLive(row) {
+    const key = eventKeyOf(row.payload);
+    const events = (await getPublicPayload()).events || [];
+    const paid = isPaidPick(row);
+    const live = events.find(e => eventKeyOf(e) === key) || (paid ? events.find(e => sameEvent(row.payload, e)) : null);
+    if (!live) return false;
+    if (row.submitter_email) {
+      const mail = renderSubmissionLive(paid ? { ...row.payload, name: live.name, featured: true } : row.payload, {
+        siteUrl, address: newsletter.address, upgradeUrl: upgradeUrlFor(row), pick: paid,
+        pageUrl: live.page ? `${siteUrl}${live.page}` : ''
+      });
+      await mailer.send(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
+    }
+    return true;
+  }
+
+  // Publish approved submissions now (never the collector's candidates) and
+  // say which of `rows` made it onto the site.
+  async function publishApproved(rows) {
+    let published;
+    try {
+      published = await autoPublish.run({ force: true, quiet: true, submissionsOnly: true });
+    } catch (err) {
+      console.error('[submissions] publish failed:', err.message);
+      return { published: false, live: rows.map(() => false) };
+    }
+    const live = [];
+    for (const row of rows) {
+      try { live.push(published && published.ok ? await notifyLive(row) : false); } catch (err) {
+        console.warn('[submissions] live check/email failed:', err.message);
+        live.push(null);
+      }
+    }
+    return { published: Boolean(published && published.ok), live };
+  }
+
+  // ─── AI review of submissions (server/submissionReview.js) ───
   registerSubmissionReview(app, {
     store, slack, siteUrl,
     nowFn: () => (opts.now || (() => new Date()))(),
-    secret: opts.submissionReviewSecret ?? (process.env.SUBMISSION_REVIEW_SECRET || process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || ''),
+    secret: submissionReviewSecret,
     autoApprove: opts.submissionAutoApprove ?? process.env.SUBMISSION_AUTOAPPROVE !== '0',
     publish: () => autoPublish.run({ force: true, quiet: true, submissionsOnly: true }),
-    // True when the event is on the public site; then "You're live" goes
-    // out with a link to its page.
-    async onApproved(row) {
-      const key = eventKeyOf(row.payload);
-      const live = ((await getPublicPayload()).events || []).find(e => eventKeyOf(e) === key);
-      if (!live) return false;
-      if (row.submitter_email) {
-        const mail = renderSubmissionLive(row.payload, {
-          siteUrl, address: newsletter.address, upgradeUrl: upgradeUrlFor(row),
-          pageUrl: live.page ? `${siteUrl}${live.page}` : ''
-        });
-        await mailer.send(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
-      }
-      return true;
-    }
+    onApproved: notifyLive
   });
 
   const autoOnBoot = opts.autoPublish ??
@@ -1410,6 +1533,7 @@ export async function createApp(opts = {}) {
   app.get('/api/admin/setup', requireAdmin, async (req, res) => {
     const env = process.env;
     const ghSecrets = `https://github.com/${github.owner}/${github.repo}/settings/secrets/actions`;
+    const cronSecrets = [newsletter.cronSecret, eventCheckSecret, submissionReviewSecret].filter(Boolean);
     const checks = [
       { key: 'database', label: 'Database', ok: storeBundle.kind === 'postgres', level: 'required',
         fix: 'Add a Postgres database in Railway so events and subscribers survive deploys.' },
@@ -1431,21 +1555,23 @@ export async function createApp(opts = {}) {
         fix: scheduler.state.dispatchBlocked
           ? `GitHub refused the token (HTTP ${scheduler.state.dispatchBlocked.status}). Give GITHUB_TOKEN in Railway Actions: write (and Contents: write) on this repo.`
           : 'Set GITHUB_TOKEN in Railway: a fine-grained token on this repo with Actions: write and Contents: write. Without it these wait for GitHub\'s own schedule, which runs hours late (the newsletter is sent on time either way).' },
-      { key: 'ai_review', label: 'AI review of free submissions',
-        ok: Boolean(opts.submissionReviewSecret ?? (env.SUBMISSION_REVIEW_SECRET || env.EVENT_CHECK_SECRET || env.NEWSLETTER_CRON_SECRET)), level: 'recommended', link: ghSecrets,
+      { key: 'submission_review', label: 'AI review publishes good free submissions',
+        ok: Boolean(submissionReviewSecret), level: 'recommended', link: ghSecrets,
         fix: 'Set SUBMISSION_REVIEW_SECRET in Railway and as a GitHub secret (the same long random string), plus OPENAI_API_KEY in GitHub. Until then new submissions wait for you in the Submissions tab.' },
       { key: 'meta_pixel', label: 'Meta Pixel (ad tracking)', ok: Boolean(pixelId(opts.metaPixelId ?? env.META_PIXEL_ID)), level: 'recommended',
         fix: 'Set META_PIXEL_ID in Railway (the digits from Meta Events Manager) so ad visits and signups are counted.' },
       { key: 'meta_ads', label: 'Daily Meta ads report', ok: null, level: 'recommended', link: ghSecrets,
-        fix: 'In GitHub secrets: META_ADS_TOKEN (a system-user token with ads_read and ads_management, the ad account assigned). The Page token can\'t see the ad account.' },
+        fix: 'In GitHub secrets: META_ADS_TOKEN (a system-user token with ads_read and ads_management, the ad account assigned). Without it the report uses the Page token, which works once the ad account is assigned to its system user.' },
       { key: 'instagram', label: 'Instagram posting', ok: null, level: 'recommended', link: ghSecrets,
         fix: 'In GitHub secrets: IG_USER_ID (the Instagram business account linked to the Facebook Page). Without it only Facebook gets the daily post.' },
       { key: 'stripe', label: 'Sponsor payments (Stripe)', ok: stripeCfg.enabled, level: 'recommended',
         fix: 'In Stripe: create a restricted key (Checkout Sessions, Products and Prices: write) and a webhook to ' + siteUrl +
           '/api/stripe/webhook on API version 2026-09-30.endive. Put them in Railway as STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.' },
       { key: 'event_check', label: 'Event check hides church events, non-events and duplicates',
-        ok: Boolean(opts.eventCheckSecret ?? (env.EVENT_CHECK_SECRET || env.NEWSLETTER_CRON_SECRET)), level: 'recommended', link: ghSecrets,
+        ok: Boolean(eventCheckSecret), level: 'recommended', link: ghSecrets,
         fix: 'Set EVENT_CHECK_SECRET in Railway and as a GitHub secret (any long random string, the same in both). Until then the check only reports to Slack.' },
+      { key: 'separate_secrets', label: 'Each automation has its own secret', ok: new Set(cronSecrets).size === cronSecrets.length, level: 'optional', link: ghSecrets,
+        fix: 'NEWSLETTER_CRON_SECRET, EVENT_CHECK_SECRET and SUBMISSION_REVIEW_SECRET share a value (or one is unset and borrows another), so one leak could send the newsletter, hide events and publish submissions. Give each its own long random string, the same in Railway and GitHub.' },
       { key: 'spam', label: 'Spam protection on forms (Turnstile)', ok: Boolean(turnstileSecret && turnstileSiteKey), level: 'optional',
         fix: 'In Cloudflare Turnstile, add a widget (or add www.thevic361.com to an existing one) in Managed mode, then set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY in Railway. Protects Submit, Contact, newsletter signup and sponsor checkout.' },
       { key: 'social', label: 'Auto-post to Facebook + Instagram', ok: null, level: 'recommended', link: ghSecrets,
@@ -1476,12 +1602,34 @@ export async function createApp(opts = {}) {
   });
 
   // ─── Static site ───
-  app.use(express.static(DOCS_DIR, { extensions: ['html'], index: false }));
+  // Images and icons rarely change: a day's cache saves a mobile visitor
+  // ~10 revalidations per page. CSS/JS have no cache-busting ?v=, so keep
+  // theirs short enough that a deploy shows up quickly. Social-kit files
+  // are rebuilt daily under the same names. HTML and JSON stay revalidated.
+  app.use(express.static(DOCS_DIR, {
+    extensions: ['html'],
+    index: false,
+    setHeaders(res, file) {
+      const rel = path.relative(DOCS_DIR, file).split(path.sep).join('/');
+      let cc = 'public, max-age=0';
+      if (rel.startsWith('social/')) cc = 'public, max-age=300';
+      else if (/\.(png|jpe?g|webp|gif|svg|ico|woff2?)$/i.test(rel)) cc = 'public, max-age=86400';
+      else if (/\.(css|js)$/i.test(rel)) cc = 'public, max-age=600';
+      res.setHeader('Cache-Control', cc);
+    }
+  }));
 
   // ─── 404 + error handlers ───
   app.use((req, res) => {
     if (req.path.startsWith('/api/')) {
       return res.status(404).json({ ok: false, error: 'not-found' });
+    }
+    // A person following a mistyped or old link gets the site, not a dead
+    // end; images, scripts and other files keep the short text answer.
+    const wantsPage = /text\/html/.test(req.get('accept') || '') ||
+      (!/\.[a-z0-9]+$/i.test(req.path) && req.accepts(['html', 'text']) === 'html');
+    if ((req.method === 'GET' || req.method === 'HEAD') && wantsPage) {
+      return sendHtml(res, renderNotFoundPage({ siteUrl, kind: req.path.startsWith('/venues/') ? 'venue' : req.path.startsWith('/events/') ? 'event' : 'page' }), 404);
     }
     res.status(404).type('text/plain').send('Not found');
   });

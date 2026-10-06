@@ -190,7 +190,8 @@ describe('server-rendered pages', () => {
     const r = await get('/events/2026-10-09-friday-live-music');
     expect(r.status).toBe(200);
     expect(r.text).toContain('<h1 class="page-title">Friday Live Music</h1>');
-    expect(r.text).toContain('is on Friday, October 9, 2026 at 8pm - 11pm at Moonshine in Victoria, TX.');
+    expect(r.text).toContain('is on Friday, October 9, 2026 from 8 PM to 11 PM at Moonshine in Victoria, TX.');
+    expect(r.text).toContain('<title>Friday Live Music at Moonshine · Oct 9 | The Vic 361</title>');
     expect(r.text).toContain('href="https://example.com/music"');
     const ld = ldBlocks(r.text);
     expect(ld[0]['@type']).toBe('Event');
@@ -253,6 +254,24 @@ describe('site hardening', () => {
     expect(r.headers.get('x-frame-options')).toBe('SAMEORIGIN');
     expect(r.headers.get('content-security-policy')).toContain("frame-ancestors 'self'");
     expect(r.headers.get('content-encoding')).toBe('gzip');
+    expect(r.headers.get('content-security-policy')).not.toContain('script-src'); // inline scripts, GA, pixel
+    expect(r.headers.get('x-powered-by')).toBeNull();
+  });
+
+  it('limits scripts on the admin page to its own files and inline theme snippet', async () => {
+    await startApp();
+    const crypto = await import('node:crypto');
+    const html = await fs.readFile(new URL('../docs/admin.html', import.meta.url), 'utf8');
+    const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+    expect(inline.length).toBeGreaterThan(0);
+    for (const p of ['/admin.html', '/admin']) {
+      const csp = (await fetch(baseUrl + p)).headers.get('content-security-policy');
+      expect(csp).toMatch(/^script-src 'self' /);
+      for (const s of inline) expect(csp).toContain(`'sha256-${crypto.createHash('sha256').update(s).digest('base64')}'`);
+      expect(csp).toContain("frame-ancestors 'self'");
+    }
+    // Every other script on the page is a same-origin file.
+    for (const m of html.matchAll(/<script\s+[^>]*src="([^"]+)"/g)) expect(m[1]).toMatch(/^\.?\/[^/]/);
   });
 
   it('serves favicon.ico', async () => {
