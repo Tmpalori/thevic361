@@ -375,6 +375,25 @@ describe('signup flow', () => {
   });
 });
 
+describe('rejected signups are logged with their reason', () => {
+  it('a bad email and a failed bot check each log why, never the address', async () => {
+    const fakeFetch = async () => ({ ok: true, json: async () => ({ success: false, 'error-codes': ['timeout-or-duplicate'] }) });
+    await startApp({ turnstileSecret: 'fake-secret', fetch: fakeFetch });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect((await post('/api/subscribe', { email: 'bad' })).status).toBe(400);
+      expect((await post('/api/subscribe', { email: 'fan@example.com', turnstile_token: 't' },
+        { 'User-Agent': 'Mozilla/5.0 (iPhone) [FBAN/FBIOS;FBAV/581.0]' })).status).toBe(400);
+      const lines = warn.mock.calls.map(c => c.join(' '));
+      expect(lines).toContain('[newsletter] signup rejected: invalid email');
+      expect(lines).toContain('[turnstile] rejected: /api/subscribe verification-failed timeout-or-duplicate in-app: facebook');
+      expect(lines.join('\n')).not.toContain('fan@example.com');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
 describe('signup page', () => {
   it('/subscribe has the pitch, a form tagged subscribe-page, and the next week of events', async () => {
     await startApp();

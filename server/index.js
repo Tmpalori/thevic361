@@ -1547,6 +1547,14 @@ export async function createApp(opts = {}) {
     const r = await verifyTurnstile(typeof token === 'string' ? token : '', {
       secret: turnstileSecret, remoteip: req.ip, fetch: opts.fetch
     });
+    // The visitor only sees "try again", so the reason is logged here: a
+    // pattern of failures from the Facebook/Instagram in-app browser (where
+    // ad taps land) is a form bug worth fixing, a lone one isn't.
+    if (!r.ok) {
+      const ua = String(req.get('user-agent') || '');
+      const inApp = /FBAN|FBAV/.test(ua) ? 'facebook' : /Instagram/.test(ua) ? 'instagram' : 'no';
+      console.warn('[turnstile] rejected:', req.path, r.error, (r.codes || []).join(',') || '-', 'in-app:', inApp);
+    }
     return r.ok;
   }
 

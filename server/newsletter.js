@@ -603,7 +603,12 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     // Honeypot: a hidden field people never fill. Pretend it worked.
     if (body.company) return res.json({ ok: true });
     const email = normalizeEmail(body.email);
-    if (!email) return res.status(400).json({ ok: false, message: 'Enter a valid email address.' });
+    // Logged without the address: enough to tell a typo from a bot-check
+    // failure ([turnstile] rejected) when a signup is turned away.
+    if (!email) {
+      console.warn('[newsletter] signup rejected: invalid email');
+      return res.status(400).json({ ok: false, message: 'Enter a valid email address.' });
+    }
     if (!(await verifyHuman(req))) return res.status(400).json({ ok: false, error: 'turnstile-failed', message: "We couldn't confirm you're not a bot. Please try again." });
     // Every outcome (new, waiting to confirm, already subscribed) gets the
     // same answer, so the form can't be used to find out who's on the list.
