@@ -286,8 +286,9 @@ export function renderSponsorTooLate(order, { siteUrl, address }) {
 // Weekly sponsors get theirs the Monday after their week, Vic's Picks the
 // day after their event (server/sponsors.js sendSponsorReports /
 // sendPickReports). People are counted once a day each, so a double tap or
-// a mail scanner doesn't pad the number. Newsletter opens aren't tracked,
-// so the newsletter line only ever says how many it was sent to.
+// a mail scanner doesn't pad the number. Newsletter opens are tracked
+// (email_opens) but left out here: Apple Mail's image preloading inflates
+// them, so a sponsor's newsletter line only says how many it was sent to.
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const people = n => plural(n, 'person', 'people');

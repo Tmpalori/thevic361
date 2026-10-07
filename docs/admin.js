@@ -992,8 +992,16 @@
     const sends = document.getElementById('email-nl-sends');
     if (sends) {
       sends.innerHTML = (d.sends || []).length
-        ? d.sends.map(s => '<tr><td class="traffic-label">' + escapeHtml(s.subject || s.week_key) + '</td><td class="traffic-num">' +
-          s.recipients + (s.failed ? ' (' + s.failed + ' failed)' : '') + '</td></tr>').join('')
+        ? '<tr><th class="traffic-label"></th><th class="traffic-num">Sent</th><th class="traffic-num">Opened</th></tr>' +
+          d.sends.map(s => {
+            const n = Number(s.recipients) || 0;
+            // Opens: unique per subscriber, from the tracking image.
+            const opened = typeof s.opens === 'number'
+              ? s.opens + (n ? ' (' + Math.round(100 * s.opens / n) + '%)' : '') : '—';
+            return '<tr><td class="traffic-label">' + escapeHtml(s.subject || s.week_key) + '</td><td class="traffic-num">' +
+              n + (s.failed ? ' (' + Number(s.failed) + ' failed)' : '') + '</td><td class="traffic-num">' + escapeHtml(opened) + '</td></tr>';
+          }).join('') +
+          '<tr><td class="traffic-empty" colspan="3"><small>Opens read high: Apple Mail loads every email\u2019s images for its users, and some work mail scanners do too.</small></td></tr>'
         : '<tr><td class="traffic-empty">No newsletters sent yet.</td></tr>';
     }
   }
@@ -1834,7 +1842,7 @@
       if (!res.ok || !json || !json.ok) throw new Error((json && (json.message || json.error)) || ('HTTP ' + res.status));
       tr.innerHTML = '<td colspan="7"><table class="sponsor-report">' +
         sponsorReportRows(json).map(([k, v]) => '<tr><th scope="row">' + escapeHtml(k) + '</th><td>' + escapeHtml(v) + '</td></tr>').join('') +
-        '</table><small>Some browsers block our counter, so real numbers can be a bit higher. Newsletter opens aren’t tracked.</small></td>';
+        '</table><small>Some browsers block our counter, so real numbers can be a bit higher. Newsletter opens aren’t in sponsor reports (Apple Mail inflates them).</small></td>';
     } catch (err) {
       tr.innerHTML = '<td colspan="7">' + escapeHtml('Report unavailable: ' + (err.message || String(err))) + '</td>';
     }

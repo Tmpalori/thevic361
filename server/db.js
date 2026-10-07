@@ -225,19 +225,20 @@ class FileStore {
       const raw = await fs.readFile(this.file, 'utf8');
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') {
-        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], sponsor_orders: [] };
+        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], email_opens: [], sponsor_orders: [] };
       }
       if (!Array.isArray(parsed.submissions)) parsed.submissions = [];
       if (!parsed.event_archive || typeof parsed.event_archive !== 'object') parsed.event_archive = {};
       if (!Array.isArray(parsed.traffic)) parsed.traffic = [];
       if (!Array.isArray(parsed.subscribers)) parsed.subscribers = [];
       if (!Array.isArray(parsed.newsletter_sends)) parsed.newsletter_sends = [];
+      if (!Array.isArray(parsed.email_opens)) parsed.email_opens = [];
       if (!Array.isArray(parsed.sponsor_orders)) parsed.sponsor_orders = [];
       if (!Array.isArray(parsed.event_edits)) parsed.event_edits = [];
       return parsed;
     } catch (err) {
       if (err.code === 'ENOENT') {
-        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], sponsor_orders: [] };
+        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], email_opens: [], sponsor_orders: [] };
       }
       throw err;
     }
@@ -472,6 +473,30 @@ class FileStore {
   async listNewsletterSends(limit = 10) {
     const data = await this._read();
     return data.newsletter_sends.slice().sort((a, b) => (a.sent_at < b.sent_at ? 1 : -1)).slice(0, limit);
+  }
+
+  // Newsletter opens (the tracking image): one row per issue and
+  // subscriber, so the count is unique opens. An id that isn't a
+  // subscriber is ignored, so made-up image URLs can't pad the number.
+  async recordEmailOpen({ week_key, subscriber_id }) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      if (!data.subscribers.some(x => x.id === subscriber_id)) return false;
+      const row = data.email_opens.find(x => x.week_key === week_key && x.subscriber_id === subscriber_id);
+      if (row) Object.assign(row, { opens: (row.opens || 1) + 1, last_opened_at: nowIso() });
+      else data.email_opens.push({ week_key, subscriber_id, opens: 1, first_opened_at: nowIso(), last_opened_at: nowIso() });
+      await this._write(data);
+      return true;
+    });
+  }
+
+  // { week_key: unique opens } for the given issues.
+  async countEmailOpens(weekKeys) {
+    const data = await this._read();
+    const want = new Set(weekKeys);
+    const out = {};
+    for (const r of data.email_opens) if (want.has(r.week_key)) out[r.week_key] = (out[r.week_key] || 0) + 1;
+    return out;
   }
 
   // ─── Sponsor orders (server/sponsors.js) ───
@@ -833,6 +858,18 @@ class PgStore {
         await addColumn('newsletter_sends', 'failed_emails', `ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS failed_emails JSONB NOT NULL DEFAULT '[]'::jsonb`);
         // Paid Vic's Pick order ids the issue starred, for their reports.
         await addColumn('newsletter_sends', 'picks', 'ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS picks JSONB');
+        // Newsletter opens (see FileStore.recordEmailOpen): one row per
+        // issue and subscriber.
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS email_opens (
+            week_key TEXT NOT NULL,
+            subscriber_id TEXT NOT NULL,
+            opens INT NOT NULL DEFAULT 1,
+            first_opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            last_opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (week_key, subscriber_id)
+          );
+        `);
         // Sponsor orders (server/sponsors.js). Low volume, read whole; the
         // order itself lives in payload so new fields need no migration.
         await this.pool.query(`
@@ -1109,8 +1146,8 @@ class PgStore {
   async listSubscribers({ status } = {}) {
     await this.ready();
     const r = status
-      ? await this.pool.query('SELECT email, status, token FROM subscribers WHERE status = $1 ORDER BY created_at', [status])
-      : await this.pool.query('SELECT email, status, token FROM subscribers ORDER BY created_at');
+      ? await this.pool.query('SELECT id, email, status, token FROM subscribers WHERE status = $1 ORDER BY created_at', [status])
+      : await this.pool.query('SELECT id, email, status, token FROM subscribers ORDER BY created_at');
     return r.rows;
   }
 
@@ -1205,6 +1242,26 @@ class PgStore {
     await this.ready();
     const r = await this.pool.query('SELECT * FROM newsletter_sends ORDER BY sent_at DESC LIMIT $1', [limit]);
     return r.rows;
+  }
+
+  // See FileStore.recordEmailOpen. The INSERT ... SELECT only inserts for
+  // a real subscriber id.
+  async recordEmailOpen({ week_key, subscriber_id }) {
+    await this.ready();
+    const r = await this.pool.query(
+      `INSERT INTO email_opens (week_key, subscriber_id)
+         SELECT $1::text, id FROM subscribers WHERE id = $2::text
+       ON CONFLICT (week_key, subscriber_id) DO UPDATE
+         SET opens = email_opens.opens + 1, last_opened_at = NOW()`,
+      [week_key, subscriber_id]);
+    return r.rowCount > 0;
+  }
+
+  async countEmailOpens(weekKeys) {
+    await this.ready();
+    const r = await this.pool.query(
+      'SELECT week_key, COUNT(*)::int AS n FROM email_opens WHERE week_key = ANY($1::text[]) GROUP BY week_key', [weekKeys]);
+    return Object.fromEntries(r.rows.map(x => [x.week_key, Number(x.n)]));
   }
 
   async getArchivedEvent(page) {

@@ -479,6 +479,52 @@ describe('signup page', () => {
   });
 });
 
+describe('open tracking', () => {
+  it('each copy carries its own tracking image; opens count once per subscriber and show in admin', async () => {
+    await startApp();
+    const h = await auth();
+    await post('/api/admin/newsletter/import', { emails: 'a@example.com, b@example.com' }, h);
+    expect((await post('/api/admin/newsletter/send', {}, h)).status).toBe(200);
+    const subs = await store.listSubscribers({ status: 'active' });
+    const pixels = sent.batches[0].msgs.map(m => m.html.match(/<img src="(https:\/\/www\.thevic361\.com\/email\/o\/[^"]+)"/)[1]);
+    expect(pixels.sort()).toEqual(subs.map(x => `https://www.thevic361.com/email/o/2026-10-05/${x.id}.gif`).sort());
+    // Not utm-tagged, and the token (which unsubscribes) isn't in it.
+    for (const p of pixels) expect(p).not.toMatch(/utm_|token/);
+    expect(sent.batches[0].msgs[0].text).not.toContain('/email/o/');
+
+    const open = (url) => fetch(url.replace('https://www.thevic361.com', baseUrl));
+    const r = await open(pixels[0]);
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toBe('image/gif');
+    expect(r.headers.get('cache-control')).toBe('no-store, private');
+    expect((await r.arrayBuffer()).byteLength).toBe(42);
+    await open(pixels[0]); // the same person again
+    // A made-up id and a bad week answer the image but count nothing.
+    expect((await fetch(`${baseUrl}/email/o/2026-10-05/00000000-0000-0000-0000-000000000000.gif`)).status).toBe(200);
+    expect((await fetch(`${baseUrl}/email/o/nope/${subs[0].id}.gif`)).status).toBe(200);
+
+    await vi.waitFor(async () => {
+      const st = await (await fetch(baseUrl + '/api/admin/newsletter', { headers: h })).json();
+      expect(st.sends[0]).toMatchObject({ week_key: '2026-10-05', recipients: 2, opens: 1 });
+    }, { timeout: 2000 });
+    expect(await store.countEmailOpens(['2026-10-05', '2026-09-28'])).toEqual({ '2026-10-05': 1 });
+  });
+
+  it('the welcome, confirmation and test emails have no tracking image', async () => {
+    await startApp();
+    const h = await auth();
+    await post('/api/subscribe', { email: 'new@example.com' });
+    await post('/api/admin/newsletter/test', { email: 'me@example.com' }, h);
+    await vi.waitFor(() => expect(sent.single).toHaveLength(2), { timeout: 2000 });
+    for (const m of sent.single) expect(m.html).not.toContain('/email/o/');
+  });
+
+  it('the privacy page discloses it', async () => {
+    await startApp();
+    expect(await (await fetch(baseUrl + '/privacy')).text()).toContain('Newsletter opens:');
+  });
+});
+
 describe('sending', () => {
   it('admin import, status, test and send; one send per week', async () => {
     await startApp();
