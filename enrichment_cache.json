@@ -1,1 +1,128 @@
-{}
+{
+ "2026-10-07|comedy night in victoria w crux crawford|moonshine drinkery": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-07|country|starlight dance studio": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "Starlight Dance Studio is hosting a Country dance event on Wednesday, October 7th."
+  }
+ },
+ "2026-10-07|create a fall cryptid|crossroads art house": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "Create a Fall Cryptid at Crossroads Art House. This event is happening on Wednesday, October 7th."
+  }
+ },
+ "2026-10-07|elizabeth payne paintings 1972 2026 roy fridge curious arts and other whittlings|five points museum of contemporary art": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "Two solo exhibitions, 'Elizabeth Payne: Paintings, 1972-2026' and 'Roy Fridge: Curious Arts and Other Whittlings', are on display at the Five Points Museum of Contemporary Art. The exhibitions run from August 29 to Oc…",
+   "url": "https://www.fivepointsmuseum.com/"
+  }
+ },
+ "2026-10-07|karaoke cantina night|la cantina tacos tequila": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-07|super mario galaxy fire prevention show|victoria fine arts center": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-07|varra wednesday night run|riverside stadium parking lot": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "The Victoria Area Road Runners Association (VARRA) holds a Wednesday night group run/walk at 6:30 PM at the Riverside Stadium Parking Lot. This is a free event open to all levels.",
+   "url": "https://runsignup.com/MemberOrg/VictoriaAreaRoadRunnersAssociation",
+   "time": "6:30 PM"
+  }
+ },
+ "2026-10-07|well appointed wednesdays|": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-08|ballroom|starlight dance studio": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-08|dine to donate for the calhoun high school band|texas roadhouse": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-08|elizabeth payne paintings 1972 2026 roy fridge curious arts and other whittlings|five points museum of contemporary art": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-08|finding nemo jr|leo j welder center for the performing arts": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "Theatre Victoria Youth Troupe presents Disney's Finding Nemo JR., a joyful, family-friendly musical that follows Marlin and his adventurous son Nemo on a journey across the ocean. Tickets are available for purchase, w…"
+  }
+ },
+ "2026-10-08|henry emiliano live|evan s fire brick oven pizza": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "Henry Emiliano will perform live music at Evan's Fire Brick Oven Pizza."
+  }
+ },
+ "2026-10-08|once upon a plant mixer with scenic root|moonshine drinkery": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-08|open mic|weber brewing": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-08|plant and sip with scenic root|moonshine drinkery": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-08|pre k race visd|victoria public library": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-08|scream by munch study|crossroads art house": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-08|story strolls audiobook walking group|riverside park": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-09|aaron boultinghouse|weber brewing": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "Aaron Boultinghouse Music is scheduled to perform at Weber Brewing on Friday, October 9th."
+  }
+ },
+ "2026-10-09|cuero turkeyfest|downtown cuero": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "Cuero's 53rd Annual Turkeyfest is a three-day event from October 9th to 11th, 2026, featuring live music, a carnival, a parade, and the Great Gobbler Gallop turkey race. On Thursday, October 9th, the carnival opens fr…",
+   "url": "https://turkeyfest.org/",
+   "time": "5:00 PM – 10:00 PM"
+  }
+ },
+ "2026-10-09|i want to talk about you|the nave museum": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "The Nave Museum presents the exhibition 'I want to talk about you,' which will be showing from October 9th to December 1st."
+  }
+ },
+ "2026-10-09|live band karaoke|moonshine drinkery": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "Moonshine Drinkery hosts Live Band Karaoke, a fan-favorite event with the All Request Piano crew. The event is scheduled for Friday, October 9th."
+  }
+ },
+ "2026-10-09|terror on tate road|outlaw pass family fun center": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "Terror on Tate Road is a brand-new haunted house and haunted hayride at Outlaw Pass Family Fun Center, running Fridays, Saturdays, and Sundays through October 2026. Gates open at 7:00 PM, with the last tickets sold at…",
+   "url": "https://terrorontate.com/",
+   "time": "7:00 PM – 11:00 PM",
+   "address": "78 Tate Rd., Victoria, TX 77904"
+  }
+ }
+}
