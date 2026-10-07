@@ -1,11 +1,12 @@
 /* server/newsletter.js — Own email newsletter, sent through Resend.
  *
- * The homepage signup form always shows. Until RESEND_API_KEY is set,
- * signups are saved straight to the list (nothing can be emailed yet, so
- * there's no confirmation step); once it's set, signups are double opt-in.
+ * The homepage signup form always shows. Signups are single opt-in: a new
+ * address goes straight on the list and, once RESEND_API_KEY is set, gets
+ * the welcome email right away.
  *
- *   - Signup: POST /api/subscribe → pending subscriber + confirmation email
- *     (double opt-in, so nobody can sign up someone else). Forms say where
+ *   - Signup: POST /api/subscribe → active subscriber + welcome email. Only
+ *     a comeback (someone who unsubscribed) gets a confirmation email
+ *     instead, so nobody else can sign them back up. Forms say where
  *     they are (`source`); docs/track.js adds ":ad" for visitors who
  *     arrived from a paid ad, so the Slack ping shows what's working.
  *   - GET /subscribe is the signup page every Subscribe button points at
@@ -22,6 +23,10 @@
  *     utm_source=newsletter) and sent with Resend's batch API,
  *     each copy with its own unsubscribe link. One send per week: a second
  *     attempt for the same week is refused unless forced.
+ *   - Open tracking: each weekly copy has a 1x1 image,
+ *     /email/o/<week>/<subscriber id>.gif, counted once per subscriber per
+ *     issue (email_opens) and shown as opens and open rate per send in the
+ *     admin. Welcome, confirmation and test emails have none.
  *   - Admin: counts, preview, test send, send now, CSV/paste import.
  *   - Automation: POST /api/newsletter/cron with X-Cron-Secret, called by
  *     .github/workflows/newsletter.yml on Monday mornings. The same run
@@ -186,7 +191,7 @@ export function darkSafe(html) {
 // stop at the preheader instead of running on into the header text.
 const PREHEADER_FILLER = '&#847;&zwnj;&nbsp;'.repeat(80);
 
-export function emailShell({ title, preheader, bodyHtml, footerHtml, siteUrl }) {
+export function emailShell({ title, preheader, bodyHtml, footerHtml, siteUrl, pixelUrl = '' }) {
   return darkSafe(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only"><title>${escHtml(title)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@400;700;800&display=swap" rel="stylesheet"></head>
@@ -200,7 +205,7 @@ export function emailShell({ title, preheader, bodyHtml, footerHtml, siteUrl }) 
 <tr><td style="background:${C.sky};padding:0;line-height:0;border-bottom:3px solid ${C.ink};"><img src="${siteUrl}/email/skyline.png" width="600" alt="" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>
 <tr><td style="padding:8px 22px 26px;font-family:${BODY};color:${C.ink};font-size:15px;line-height:1.5;">${bodyHtml}</td></tr>
 <tr><td style="background:${C.navy};padding:18px 24px;border-top:3px solid ${C.ink};font-family:${BODY};color:#D6CFFF;font-size:12px;line-height:1.6;font-weight:bold;">${footerHtml}</td></tr>
-</table></td></tr></table></body></html>`);
+</table></td></tr></table>${pixelUrl ? `<img src="${escHtml(pixelUrl)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;">` : ''}</body></html>`);
 }
 
 function footer({ siteUrl, unsubscribeUrl, address }) {
@@ -272,7 +277,7 @@ ${safeUrl(sponsor.url) && sponsor.cta ? `<a href="${escHtml(sponsorHref(sponsor,
 }
 
 // The weekly issue: the rest of this week (today through Sunday).
-export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, address }) {
+export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, address, openPixelUrl = '' }) {
   const today = localDateStr(now);
   const week = currentWeek(today).filter(d => d >= today);
   const byDay = week.map(d => ({ d, list: sortEvents(events.filter(e => e.date === d)) })).filter(x => x.list.length);
@@ -323,7 +328,7 @@ ${sponsorBlock}${days}
     .filter(e => e.featured && !e.editor_pick && e.sponsor_order).map(e => e.sponsor_order))];
   return {
     subject, total, picks,
-    html: utmTag(emailShell({ title: 'This week in Victoria', preheader, bodyHtml, siteUrl, footerHtml: footer({ siteUrl, unsubscribeUrl, address }) }), siteUrl, campaign),
+    html: utmTag(emailShell({ title: 'This week in Victoria', preheader, bodyHtml, siteUrl, pixelUrl: openPixelUrl, footerHtml: footer({ siteUrl, unsubscribeUrl, address }) }), siteUrl, campaign),
     text: utmTag(text, siteUrl, campaign, '&')
   };
 }
@@ -340,10 +345,13 @@ export function renderConfirmEmail({ siteUrl, confirmUrl, address }) {
   };
 }
 
-// Sent once, right after someone confirms: what to expect, a few events
-// they can use now (no waiting until Monday), the sponsor, and a nudge to
-// share.
+// Sent once, right after someone signs up (or a comeback confirms): what
+// to expect, a few events they can use now (no waiting until Monday), the
+// sponsor, and a nudge to share.
 const WELCOME_PICKS = 5;
+
+// A transparent 1x1 GIF, the newsletter's open-tracking image.
+const PIXEL_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeUrl, address }) {
   const today = localDateStr(now);
   const soon = sortEvents((events || []).filter(e => e.date >= today && e.date <= addDays(today, 6)));
@@ -396,7 +404,7 @@ export function signupFormHtml({ source = 'footer', button = 'Subscribe' } = {})
 f.addEventListener('submit',function(e){e.preventDefault();var b=f.querySelector('button');b.disabled=true;m.textContent='';
 (window.vicTurnstile?window.vicTurnstile.token(f):Promise.resolve('')).then(function(t){return fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value,turnstile_token:t,source:window.vic361Source?window.vic361Source(f.getAttribute('data-source')):f.getAttribute('data-source')})});})
 .then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});})
-.then(function(x){m.textContent=x.ok?(x.j.message||'Check your inbox to confirm.'):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';var was=false;try{was=localStorage.getItem('vic361-subscribed')==='1';localStorage.setItem('vic361-subscribed','1')}catch(e){}if(!was&&window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
+.then(function(x){m.textContent=x.ok?(x.j.message||"You're on the list! Check your inbox."):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';var was=false;try{was=localStorage.getItem('vic361-subscribed')==='1';localStorage.setItem('vic361-subscribed','1')}catch(e){}if(!was&&window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
 .catch(function(){m.textContent='Something went wrong. Try again.';}).then(function(){b.disabled=false;if(window.vicTurnstile)window.vicTurnstile.reset(f);});});})();
 </script>`;
 }
@@ -454,6 +462,8 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   const subscribeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10 });
   const confirmLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 3 });
   const supported = typeof store.addSubscriber === 'function';
+
+  const openPixel = (week, id) => `${siteUrl}/email/o/${week}/${encodeURIComponent(id)}.gif`;
 
   const page = (title, message) => layout({
     siteUrl, path: '/subscribe', nav: null, noindex: true, pixel: false, title: `${title} | ${SITE_NAME}`, description: title,
@@ -539,7 +549,10 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       const chunk = subs.slice(i, i + BATCH_SIZE);
       const msgs = chunk.map(s => {
         const unsubscribeUrl = `${siteUrl}/unsubscribe?token=${encodeURIComponent(s.token)}`;
-        const issue = renderWeekly(payload.events, { siteUrl, now, sponsor: payload.sponsor, unsubscribeUrl, address: config.address });
+        // Open tracking: a 1x1 image per copy, keyed by week and subscriber
+        // id (not the token, which unsubscribes). See /email/o below.
+        const openPixelUrl = s.id ? openPixel(key, s.id) : '';
+        const issue = renderWeekly(payload.events, { siteUrl, now, sponsor: payload.sponsor, unsubscribeUrl, address: config.address, openPixelUrl });
         return {
           from: config.from, to: [s.email], subject: issue.subject, html: issue.html, text: issue.text,
           ...(config.replyTo ? { reply_to: config.replyTo } : {}),
@@ -603,22 +616,33 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     // Honeypot: a hidden field people never fill. Pretend it worked.
     if (body.company) return res.json({ ok: true });
     const email = normalizeEmail(body.email);
-    if (!email) return res.status(400).json({ ok: false, message: 'Enter a valid email address.' });
+    // Logged without the address: enough to tell a typo from a bot-check
+    // failure ([turnstile] rejected) when a signup is turned away.
+    if (!email) {
+      console.warn('[newsletter] signup rejected: invalid email');
+      return res.status(400).json({ ok: false, message: 'Enter a valid email address.' });
+    }
     if (!(await verifyHuman(req))) return res.status(400).json({ ok: false, error: 'turnstile-failed', message: "We couldn't confirm you're not a bot. Please try again." });
     // Every outcome (new, waiting to confirm, already subscribed) gets the
     // same answer, so the form can't be used to find out who's on the list.
     // Whether it was a first signup is the browser's to know (docs/track.js
     // Lead), not the server's to say.
-    const done = config.enabled ? { ok: true } : { ok: true, message: "You're on the list! See you Monday." };
+    const done = { ok: true, message: config.enabled ? "You're on the list! Check your inbox." : "You're on the list! See you Monday." };
     try {
       const source = signupSource(body.source);
       const sub = await store.addSubscriber({ email, source });
       if (sub.status === 'active') return res.json(done);
-      // No email service yet: keep the signup (they asked for it on our own
-      // form) and skip the confirmation email we can't send.
-      if (!config.enabled) {
-        await store.confirmSubscriber(sub.token);
-        if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', email], ['From', source]] });
+      // Single opt-in: a new address is on the list right away and gets the
+      // welcome email (with its unsubscribe link) now. One of the first two
+      // ad-driven signups never finished the confirmation step, and the Turnstile
+      // check, honeypot and rate limit already keep out junk. The exception
+      // is a comeback (old_tokens): someone who unsubscribed must confirm
+      // from their own inbox, so nobody else can sign them back up.
+      const comeback = (sub.old_tokens || []).length > 0;
+      if (!comeback || !config.enabled) {
+        const confirmed = await store.confirmSubscriber(sub.token);
+        // Not awaited: the welcome email shouldn't hold up the form.
+        if (confirmed && confirmed.newly_confirmed) welcome(confirmed);
         return res.json(done);
       }
       // A few confirmation emails per address a day, whoever asks, so the
@@ -651,8 +675,28 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       }, `vic361-welcome-${sub.id || sub.token}`);
     } catch (err) {
       console.warn('[newsletter] welcome email failed:', err.message);
+      // The signup is saved either way, but with single opt-in this is the
+      // only email a new subscriber gets before Monday: a broken Resend key
+      // or domain should reach the owner (de-duplicated by key).
+      if (slack) slack.alert('newsletter-welcome-failed', 'Newsletter welcome emails are failing', err.message, `${siteUrl}/admin.html`);
     }
   }
+
+  // Open tracking pixel. Always answers the image (an email client showing
+  // a broken image would look bad), never cached, so each open asks again.
+  // Opens are counted once per subscriber per issue (store.recordEmailOpen
+  // ignores ids that aren't subscribers). Apple Mail loads images for its
+  // users in the background and some work mail scanners do too, so the
+  // rate reads higher than real opens; the admin tab says so.
+  app.get('/email/o/:week/:file', (req, res) => {
+    const m = /^([A-Za-z0-9-]{8,64})\.gif$/.exec(req.params.file);
+    if (m && /^\d{4}-\d{2}-\d{2}$/.test(req.params.week) && supported && typeof store.recordEmailOpen === 'function') {
+      store.recordEmailOpen({ week_key: req.params.week, subscriber_id: m[1] })
+        .catch(err => console.warn('[newsletter] recording an open failed:', err.message));
+    }
+    res.set({ 'Content-Type': 'image/gif', 'Cache-Control': 'no-store, private', 'Content-Length': String(PIXEL_GIF.length) });
+    res.end(PIXEL_GIF);
+  });
 
   app.get('/subscribe', async (req, res, next) => {
     try {
@@ -724,7 +768,16 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   app.get('/api/admin/newsletter', requireAdmin, async (req, res) => {
     if (!supported) return res.json({ ok: false, error: 'not-supported' });
     const counts = await store.countSubscribers();
-    const sends = await store.listNewsletterSends(8);
+    let sends = await store.listNewsletterSends(8);
+    // Unique opens per issue. A failed read leaves them off, not the tab.
+    if (typeof store.countEmailOpens === 'function' && sends.length) {
+      try {
+        const opens = await store.countEmailOpens(sends.map(x => x.week_key));
+        sends = sends.map(x => ({ ...x, opens: opens[x.week_key] || 0 }));
+      } catch (err) {
+        console.warn('[newsletter] reading opens failed:', err.message);
+      }
+    }
     const payload = await getPublicPayload();
     const issue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: '#', address: config.address });
     // A week whose send partly failed isn't "sent": the button stays on to

@@ -173,15 +173,16 @@ describe('review fixes: signups and privacy', () => {
   it('a comeback keeps its new source', async () => {
     await startApp();
     await post('/api/subscribe', { email: 'p@example.com', source: 'footer' });
-    const sub = (await store.listSubscribers({ status: 'pending' }))[0];
-    await store.confirmSubscriber(sub.token);
+    const sub = (await store.listSubscribers({ status: 'active' }))[0];
     await store.unsubscribe(sub.token);
     await post('/api/subscribe', { email: 'p@example.com', source: 'subscribe-page:ad' });
     expect((await store.listSubscribers({ status: 'pending' }))[0].source).toBe('subscribe-page:ad');
   });
 
-  it('sends at most 3 confirmation emails per address a day', async () => {
+  it('sends a comeback at most 3 confirmation emails a day', async () => {
     await startApp();
+    await store.importSubscribers(['flood@example.com'], 'import');
+    await store.unsubscribe((await store.listSubscribers({ status: 'active' }))[0].token);
     for (let i = 0; i < 5; i++) expect((await post('/api/subscribe', { email: 'flood@example.com' })).status).toBe(200);
     expect(sent.single.filter(m => m.to[0] === 'flood@example.com')).toHaveLength(3);
   });
@@ -190,15 +191,31 @@ describe('review fixes: signups and privacy', () => {
     const alerts = [];
     const resend = { send: async () => { throw new Error('Resend HTTP 401: bad key'); }, batch: async () => ({}) };
     await startApp({ resend, slack: { enabled: true, notify: async () => true, alert: async (key, title) => { alerts.push({ key, title }); } } });
+    await store.importSubscribers(['x@example.com'], 'import');
+    await store.unsubscribe((await store.listSubscribers({ status: 'active' }))[0].token);
     const r = await post('/api/subscribe', { email: 'x@example.com' });
     expect(r.status).toBe(500);
     expect(alerts).toEqual([{ key: 'newsletter-subscribe-failed', title: 'Newsletter signups are failing' }]);
   });
 
+  it('a welcome email that fails keeps the signup and alerts the owner in Slack', async () => {
+    const alerts = [];
+    const resend = { send: async () => { throw new Error('Resend HTTP 401: bad key'); }, batch: async () => ({}) };
+    await startApp({ resend, slack: { enabled: true, notify: async () => true, alert: async (key, title) => { alerts.push({ key, title }); } } });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect((await post('/api/subscribe', { email: 'x@example.com' })).status).toBe(200);
+      expect((await store.countSubscribers()).active).toBe(1);
+      await vi.waitFor(() => expect(alerts).toEqual([{ key: 'newsletter-welcome-failed', title: 'Newsletter welcome emails are failing' }]), { timeout: 2000 });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('pages reached by token links never load the Meta Pixel', async () => {
     await startApp();
     await post('/api/subscribe', { email: 't@example.com' });
-    const sub = (await store.listSubscribers({ status: 'pending' }))[0];
+    const sub = (await store.listSubscribers({ status: 'active' }))[0];
     const confirm = await (await fetch(`${baseUrl}/subscribe/confirm?token=${sub.token}`)).text();
     const unsub = await (await fetch(`${baseUrl}/unsubscribe?token=${sub.token}`)).text();
     expect(confirm).not.toContain('/pixel.js');
@@ -266,13 +283,41 @@ describe('welcome email', () => {
 });
 
 describe('signup flow', () => {
-  it('double opt-in: pending, confirmation email, confirm link activates', async () => {
-    await startApp();
+  it('single opt-in: a new address is active at once and gets one welcome email and one Slack ping', async () => {
+    const pings = [];
+    await startApp({ slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async () => {} } });
     expect((await post('/api/subscribe', { email: 'bad' })).status).toBe(400);
+    const r = await post('/api/subscribe', { email: 'New@Example.com' });
+    expect(r.status).toBe(200);
+    expect((await r.json()).message).toBe("You're on the list! Check your inbox.");
+    expect((await store.countSubscribers()).active).toBe(1);
+    await vi.waitFor(() => {
+      expect(sent.single.some(m => m.subject === 'Welcome to The Vic 361')).toBe(true);
+      expect(pings.some(p => p.title.includes('New newsletter subscriber'))).toBe(true);
+    }, { timeout: 2000 });
+    // Signing up again while active sends nothing more.
+    await post('/api/subscribe', { email: 'new@example.com' });
+    await new Promise(r => setTimeout(r, 50)); // room for a wrong second one
+    expect(sent.single).toHaveLength(1);
+    const [welcome] = sent.single;
+    expect(welcome.subject).toBe('Welcome to The Vic 361');
+    expect(welcome.to).toEqual(['new@example.com']);
+    expect(welcome.headers['List-Unsubscribe']).toContain('/unsubscribe?token=');
+    expect(welcome.html).toContain('Farmers Market');
+    expect(welcome.html).toContain('Acme Tacos');
+    expect(welcome.html).toContain('123 Main St, Victoria, TX 77901');
+    expect(pings.filter(p => p.title.includes('New newsletter subscriber'))).toHaveLength(1);
+  });
+
+  it('a comeback must confirm from its own inbox: confirmation email, GET shows a button, POST activates', async () => {
+    await startApp();
+    await store.importSubscribers(['fan@example.com'], 'import');
+    await store.unsubscribe((await store.listSubscribers({ status: 'active' }))[0].token);
     const r = await post('/api/subscribe', { email: 'Fan@Example.com' });
     expect(r.status).toBe(200);
     expect(sent.single).toHaveLength(1);
     expect(sent.single[0].to).toEqual(['fan@example.com']);
+    expect(sent.single[0].subject).toBe('Confirm your Vic 361 subscription');
     const link = sent.single[0].html.match(/https:\/\/www\.thevic361\.com\/subscribe\/confirm\?token=([^"&]+)/);
     expect(link).toBeTruthy();
     expect((await store.countSubscribers()).pending).toBe(1);
@@ -290,49 +335,30 @@ describe('signup flow', () => {
     expect(c.status).toBe(200);
     expect(await c.text()).toContain('You&#39;re subscribed');
     expect((await store.countSubscribers()).active).toBe(1);
+    await fetch(`${baseUrl}/subscribe/confirm?token=${link[1]}`, { method: 'POST' }); // second click
     // Opening the link again after confirming just says so.
     expect(await (await fetch(`${baseUrl}/subscribe/confirm?token=${link[1]}`)).text()).toContain('You&#39;re subscribed');
     expect((await fetch(`${baseUrl}/subscribe/confirm?token=nope`)).status).toBe(404);
-    // The welcome email goes out after the page.
+    // The welcome email goes out after the page, once.
     await vi.waitFor(() => expect(sent.single).toHaveLength(2), { timeout: 2000 });
-
-    // Signing up again while active sends nothing.
-    await post('/api/subscribe', { email: 'fan@example.com' });
-    expect(sent.single).toHaveLength(2);
+    await new Promise(r => setTimeout(r, 50));
+    expect(sent.single.filter(m => m.subject === 'Welcome to The Vic 361')).toHaveLength(1);
   });
 
-  it('sends one welcome email and one Slack ping on the first confirm only', async () => {
-    const pings = [];
-    await startApp({ slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async () => {} } });
-    await post('/api/subscribe', { email: 'new@example.com' });
-    const token = sent.single[0].html.match(/confirm\?token=([^"&]+)/)[1];
-    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`); // a mail scanner: nothing happens
-    await new Promise(r => setTimeout(r, 50));
-    expect(sent.single.filter(m => m.subject === 'Welcome to The Vic 361')).toHaveLength(0);
-    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`, { method: 'POST' });
-    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`, { method: 'POST' }); // second click
-    await vi.waitFor(() => {
-      expect(sent.single.some(m => m.subject === 'Welcome to The Vic 361')).toBe(true);
-      expect(pings.some(p => p.title.includes('New newsletter subscriber'))).toBe(true);
-    }, { timeout: 2000 });
-    await new Promise(r => setTimeout(r, 50)); // room for a wrong second one
-    const welcomes = sent.single.filter(m => m.subject === 'Welcome to The Vic 361');
-    expect(welcomes).toHaveLength(1);
-    expect(welcomes[0].to).toEqual(['new@example.com']);
-    expect(welcomes[0].headers['List-Unsubscribe']).toContain('/unsubscribe?token=');
-    expect(welcomes[0].html).toContain('Farmers Market');
-    expect(welcomes[0].html).toContain('Acme Tacos');
-    expect(welcomes[0].html).toContain('123 Main St, Victoria, TX 77901');
-    expect(pings.filter(p => p.title.includes('New newsletter subscriber'))).toHaveLength(1);
+  it('a signup left pending under the old double opt-in is activated when they sign up again', async () => {
+    await startApp();
+    await store.addSubscriber({ email: 'old@example.com', source: 'footer' }); // pending, as before this change
+    expect((await post('/api/subscribe', { email: 'old@example.com' })).status).toBe(200);
+    expect((await store.countSubscribers()).active).toBe(1);
+    await vi.waitFor(() => expect(sent.single.map(m => m.subject)).toEqual(['Welcome to The Vic 361']), { timeout: 2000 });
   });
 
   it('holds the welcome email when no mailing address is set', async () => {
     await startApp({ newsletterAddress: '' });
     await post('/api/subscribe', { email: 'new@example.com' });
-    const token = sent.single[0].html.match(/confirm\?token=([^"&]+)/)[1];
-    await fetch(`${baseUrl}/subscribe/confirm?token=${token}`, { method: 'POST' });
     await new Promise(r => setTimeout(r, 50)); // checks an email is NOT sent, so a fixed wait
-    expect(sent.single.filter(m => m.subject === 'Welcome to The Vic 361')).toHaveLength(0);
+    expect((await store.countSubscribers()).active).toBe(1);
+    expect(sent.single).toHaveLength(0);
   });
 
   it('honeypot submissions are dropped silently', async () => {
@@ -372,6 +398,25 @@ describe('signup flow', () => {
     expect((await r.json()).message).toContain('on the list');
     expect(sent.single).toHaveLength(0);
     expect((await store.countSubscribers()).active).toBe(1);
+  });
+});
+
+describe('rejected signups are logged with their reason', () => {
+  it('a bad email and a failed bot check each log why, never the address', async () => {
+    const fakeFetch = async () => ({ ok: true, json: async () => ({ success: false, 'error-codes': ['timeout-or-duplicate'] }) });
+    await startApp({ turnstileSecret: 'fake-secret', fetch: fakeFetch });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect((await post('/api/subscribe', { email: 'bad' })).status).toBe(400);
+      expect((await post('/api/subscribe', { email: 'fan@example.com', turnstile_token: 't' },
+        { 'User-Agent': 'Mozilla/5.0 (iPhone) [FBAN/FBIOS;FBAV/581.0]' })).status).toBe(400);
+      const lines = warn.mock.calls.map(c => c.join(' '));
+      expect(lines).toContain('[newsletter] signup rejected: invalid email');
+      expect(lines).toContain('[turnstile] rejected: /api/subscribe verification-failed timeout-or-duplicate in-app: facebook');
+      expect(lines.join('\n')).not.toContain('fan@example.com');
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
@@ -431,6 +476,52 @@ describe('signup page', () => {
       siteUrl: 'https://www.thevic361.com', now: NOW, sponsor: null, unsubscribeUrl: 'u', address: 'a'
     });
     expect(issue.html).toContain('Forwarded this? <a href="https://www.thevic361.com/subscribe?utm_source=newsletter');
+  });
+});
+
+describe('open tracking', () => {
+  it('each copy carries its own tracking image; opens count once per subscriber and show in admin', async () => {
+    await startApp();
+    const h = await auth();
+    await post('/api/admin/newsletter/import', { emails: 'a@example.com, b@example.com' }, h);
+    expect((await post('/api/admin/newsletter/send', {}, h)).status).toBe(200);
+    const subs = await store.listSubscribers({ status: 'active' });
+    const pixels = sent.batches[0].msgs.map(m => m.html.match(/<img src="(https:\/\/www\.thevic361\.com\/email\/o\/[^"]+)"/)[1]);
+    expect(pixels.sort()).toEqual(subs.map(x => `https://www.thevic361.com/email/o/2026-10-05/${x.id}.gif`).sort());
+    // Not utm-tagged, and the token (which unsubscribes) isn't in it.
+    for (const p of pixels) expect(p).not.toMatch(/utm_|token/);
+    expect(sent.batches[0].msgs[0].text).not.toContain('/email/o/');
+
+    const open = (url) => fetch(url.replace('https://www.thevic361.com', baseUrl));
+    const r = await open(pixels[0]);
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toBe('image/gif');
+    expect(r.headers.get('cache-control')).toBe('no-store, private');
+    expect((await r.arrayBuffer()).byteLength).toBe(42);
+    await open(pixels[0]); // the same person again
+    // A made-up id and a bad week answer the image but count nothing.
+    expect((await fetch(`${baseUrl}/email/o/2026-10-05/00000000-0000-0000-0000-000000000000.gif`)).status).toBe(200);
+    expect((await fetch(`${baseUrl}/email/o/nope/${subs[0].id}.gif`)).status).toBe(200);
+
+    await vi.waitFor(async () => {
+      const st = await (await fetch(baseUrl + '/api/admin/newsletter', { headers: h })).json();
+      expect(st.sends[0]).toMatchObject({ week_key: '2026-10-05', recipients: 2, opens: 1 });
+    }, { timeout: 2000 });
+    expect(await store.countEmailOpens(['2026-10-05', '2026-09-28'])).toEqual({ '2026-10-05': 1 });
+  });
+
+  it('the welcome, confirmation and test emails have no tracking image', async () => {
+    await startApp();
+    const h = await auth();
+    await post('/api/subscribe', { email: 'new@example.com' });
+    await post('/api/admin/newsletter/test', { email: 'me@example.com' }, h);
+    await vi.waitFor(() => expect(sent.single).toHaveLength(2), { timeout: 2000 });
+    for (const m of sent.single) expect(m.html).not.toContain('/email/o/');
+  });
+
+  it('the privacy page discloses it', async () => {
+    await startApp();
+    expect(await (await fetch(baseUrl + '/privacy')).text()).toContain('Newsletter opens:');
   });
 });
 
