@@ -1,11 +1,12 @@
 /* server/newsletter.js — Own email newsletter, sent through Resend.
  *
- * The homepage signup form always shows. Until RESEND_API_KEY is set,
- * signups are saved straight to the list (nothing can be emailed yet, so
- * there's no confirmation step); once it's set, signups are double opt-in.
+ * The homepage signup form always shows. Signups are single opt-in: a new
+ * address goes straight on the list and, once RESEND_API_KEY is set, gets
+ * the welcome email right away.
  *
- *   - Signup: POST /api/subscribe → pending subscriber + confirmation email
- *     (double opt-in, so nobody can sign up someone else). Forms say where
+ *   - Signup: POST /api/subscribe → active subscriber + welcome email. Only
+ *     a comeback (someone who unsubscribed) gets a confirmation email
+ *     instead, so nobody else can sign them back up. Forms say where
  *     they are (`source`); docs/track.js adds ":ad" for visitors who
  *     arrived from a paid ad, so the Slack ping shows what's working.
  *   - GET /subscribe is the signup page every Subscribe button points at
@@ -340,9 +341,9 @@ export function renderConfirmEmail({ siteUrl, confirmUrl, address }) {
   };
 }
 
-// Sent once, right after someone confirms: what to expect, a few events
-// they can use now (no waiting until Monday), the sponsor, and a nudge to
-// share.
+// Sent once, right after someone signs up (or a comeback confirms): what
+// to expect, a few events they can use now (no waiting until Monday), the
+// sponsor, and a nudge to share.
 const WELCOME_PICKS = 5;
 export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeUrl, address }) {
   const today = localDateStr(now);
@@ -396,7 +397,7 @@ export function signupFormHtml({ source = 'footer', button = 'Subscribe' } = {})
 f.addEventListener('submit',function(e){e.preventDefault();var b=f.querySelector('button');b.disabled=true;m.textContent='';
 (window.vicTurnstile?window.vicTurnstile.token(f):Promise.resolve('')).then(function(t){return fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value,turnstile_token:t,source:window.vic361Source?window.vic361Source(f.getAttribute('data-source')):f.getAttribute('data-source')})});})
 .then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});})
-.then(function(x){m.textContent=x.ok?(x.j.message||'Check your inbox to confirm.'):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';var was=false;try{was=localStorage.getItem('vic361-subscribed')==='1';localStorage.setItem('vic361-subscribed','1')}catch(e){}if(!was&&window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
+.then(function(x){m.textContent=x.ok?(x.j.message||"You're on the list! Check your inbox."):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';var was=false;try{was=localStorage.getItem('vic361-subscribed')==='1';localStorage.setItem('vic361-subscribed','1')}catch(e){}if(!was&&window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
 .catch(function(){m.textContent='Something went wrong. Try again.';}).then(function(){b.disabled=false;if(window.vicTurnstile)window.vicTurnstile.reset(f);});});})();
 </script>`;
 }
@@ -614,16 +615,22 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     // same answer, so the form can't be used to find out who's on the list.
     // Whether it was a first signup is the browser's to know (docs/track.js
     // Lead), not the server's to say.
-    const done = config.enabled ? { ok: true } : { ok: true, message: "You're on the list! See you Monday." };
+    const done = { ok: true, message: config.enabled ? "You're on the list! Check your inbox." : "You're on the list! See you Monday." };
     try {
       const source = signupSource(body.source);
       const sub = await store.addSubscriber({ email, source });
       if (sub.status === 'active') return res.json(done);
-      // No email service yet: keep the signup (they asked for it on our own
-      // form) and skip the confirmation email we can't send.
-      if (!config.enabled) {
-        await store.confirmSubscriber(sub.token);
-        if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', email], ['From', source]] });
+      // Single opt-in: a new address is on the list right away and gets the
+      // welcome email (with its unsubscribe link) now. One of the first two
+      // ad-driven signups never finished the confirmation step, and the Turnstile
+      // check, honeypot and rate limit already keep out junk. The exception
+      // is a comeback (old_tokens): someone who unsubscribed must confirm
+      // from their own inbox, so nobody else can sign them back up.
+      const comeback = (sub.old_tokens || []).length > 0;
+      if (!comeback || !config.enabled) {
+        const confirmed = await store.confirmSubscriber(sub.token);
+        // Not awaited: the welcome email shouldn't hold up the form.
+        if (confirmed && confirmed.newly_confirmed) welcome(confirmed);
         return res.json(done);
       }
       // A few confirmation emails per address a day, whoever asks, so the
@@ -656,6 +663,10 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       }, `vic361-welcome-${sub.id || sub.token}`);
     } catch (err) {
       console.warn('[newsletter] welcome email failed:', err.message);
+      // The signup is saved either way, but with single opt-in this is the
+      // only email a new subscriber gets before Monday: a broken Resend key
+      // or domain should reach the owner (de-duplicated by key).
+      if (slack) slack.alert('newsletter-welcome-failed', 'Newsletter welcome emails are failing', err.message, `${siteUrl}/admin.html`);
     }
   }
 

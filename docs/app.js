@@ -289,7 +289,7 @@
       }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
       }).then(function (x) {
-        msg.textContent = x.ok ? (x.j.message || 'Check your inbox to confirm.') : (x.j.message || 'Something went wrong. Try again.');
+        msg.textContent = x.ok ? (x.j.message || "You're on the list! Check your inbox.") : (x.j.message || 'Something went wrong. Try again.');
         if (x.ok) {
           form.email.value = '';
           // Only a first signup from this browser counts as a Lead. The
