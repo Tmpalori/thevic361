@@ -25,6 +25,11 @@ body {
 img, picture, video, canvas, svg { display: block; max-width: 100%; height: auto; }
 ul[role="list"], ol[role="list"] { list-style: none; }
 input, button, textarea, select { font: inherit; color: inherit; }
+/* The hidden attribute must win over component display rules: the
+   homepage filter chips hide events with li.hidden, and .event-entry's
+   display:flex was keeping every one of them on screen. Same rule as
+   admin.css and submit.css. */
+[hidden] { display: none !important; }
 
 h1, h2, h3, h4, h5, h6 { text-wrap: balance; line-height: 1.15; }
 p, li, figcaption { text-wrap: pretty; max-width: 72ch; }
