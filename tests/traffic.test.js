@@ -237,7 +237,8 @@ describe('Meta Pixel script', () => {
 
   it('never runs on token pages', async () => {
     const js = await (await fetch(await pixelApp('123456789012345'))).text();
-    expect(js).toContain("/[?&](token|from|cancelled|order)=/.test(location.search)");
+    // ref: a referral code maps to a subscriber, so Meta doesn't get it either.
+    expect(js).toContain("/[?&](token|from|cancelled|order|ref)=/.test(location.search)");
     expect(js).toContain("'/subscribe/confirm'");
     expect(js).toContain("'/unsubscribe'");
   });

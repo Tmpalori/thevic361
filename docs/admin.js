@@ -1004,6 +1004,19 @@
           '<tr><td class="traffic-empty" colspan="3"><small>Opens read high: Apple Mail loads every email\u2019s images for its users, and some work mail scanners do too.</small></td></tr>'
         : '<tr><td class="traffic-empty">No newsletters sent yet.</td></tr>';
     }
+    // Referral program: who's sharing. "Counted" is a friend still subscribed
+    // a day after signing up; "pending" is still in that hold. Rewards are
+    // sent by hand (Slack lists who's due every Monday).
+    const refs = document.getElementById('email-nl-referrers');
+    if (refs) {
+      const tiers = (d.referral_tiers || []).map(t => t.n + ': ' + t.reward).join(' · ');
+      refs.innerHTML = (d.referrers || []).length
+        ? '<tr><th class="traffic-label"></th><th class="traffic-num">Counted</th><th class="traffic-num">Pending</th></tr>' +
+          d.referrers.map(r => '<tr><td class="traffic-label">' + escapeHtml(r.email) + '</td><td class="traffic-num">' +
+            Number(r.referrals) + '</td><td class="traffic-num">' + Number(r.pending) + '</td></tr>').join('') +
+          '<tr><td class="traffic-empty" colspan="3"><small>Rewards: ' + escapeHtml(tiers) + '</small></td></tr>'
+        : '<tr><td class="traffic-empty">No referrals yet. Every subscriber gets a share link in the welcome and Monday emails.</td></tr>';
+    }
   }
 
   async function loadEmailNewsletter() {

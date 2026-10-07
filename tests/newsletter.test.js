@@ -479,6 +479,125 @@ describe('signup page', () => {
   });
 });
 
+describe('referral program', () => {
+  // Backdate a subscriber's signup, past the 24-hour hold.
+  async function age(email, hours = 25) {
+    await store._withWrite(async () => {
+      const data = await store._read();
+      const sub = data.subscribers.find(x => x.email === email);
+      sub.confirmed_at = new Date(Date.now() - hours * 3600e3).toISOString();
+      await store._write(data);
+    });
+  }
+  const codeOf = async (email) => (await store._read()).subscribers.find(x => x.email === email).ref_code;
+  const subOf = async (email) => (await store._read()).subscribers.find(x => x.email === email);
+
+  it('/r/<code> sends people to the signup page with the code; a bad code just goes to signup', async () => {
+    await startApp();
+    const r = await fetch(`${baseUrl}/r/abc2345`, { redirect: 'manual' });
+    expect(r.status).toBe(302);
+    expect(r.headers.get('location')).toBe('/subscribe?ref=abc2345');
+    const bad = await fetch(`${baseUrl}/r/<script>`, { redirect: 'manual' });
+    expect(bad.headers.get('location')).toBe('/subscribe');
+    expect(await (await fetch(`${baseUrl}/subscribe?ref=abc2345`)).text()).toContain('A friend invited you');
+    expect(await (await fetch(`${baseUrl}/subscribe`)).text()).not.toContain('A friend invited you');
+  });
+
+  it('the welcome email carries the new subscriber\'s own share link and the reward tiers', async () => {
+    await startApp();
+    await post('/api/subscribe', { email: 'fan@example.com' });
+    await vi.waitFor(() => expect(sent.single).toHaveLength(1), { timeout: 2000 });
+    const code = await codeOf('fan@example.com');
+    expect(code).toMatch(/^[a-z2-9]{7}$/);
+    const [w] = sent.single;
+    expect(w.html).toContain(`https://www.thevic361.com/r/${code}`);
+    expect(w.html).not.toContain(`/r/${code}?utm_`);
+    expect(w.html).toContain('Share The Vic 361');
+    expect(w.html).toContain('1 more and you get an entry in our monthly $50 local gift card drawing.');
+    expect(w.html).toContain('1 friend: an entry');
+    expect(w.html).toContain('3 friends: a Vic 361 sticker pack');
+    expect(w.text).toContain(`Send friends your link: https://www.thevic361.com/r/${code}`);
+  });
+
+  it('a signup through a link credits the friend; not yourself, not an inactive code, not a returning reader', async () => {
+    await startApp();
+    await store.importSubscribers(['sharer@example.com', 'gone@example.com', 'old@example.com'], 'import');
+    const subs = await store.listSubscribers({ status: 'active' });
+    const codes = await store.ensureRefCodes(subs.map(x => x.id));
+    const code = codes[subs.find(x => x.email === 'sharer@example.com').id];
+    const goneCode = codes[subs.find(x => x.email === 'gone@example.com').id];
+    await store.unsubscribe(subs.find(x => x.email === 'gone@example.com').token);
+    await store.unsubscribe(subs.find(x => x.email === 'old@example.com').token);
+
+    await post('/api/subscribe', { email: 'friend@example.com', ref: code.toUpperCase() });
+    expect((await subOf('friend@example.com')).referred_by).toBe(code);
+    await post('/api/subscribe', { email: 'other@example.com', ref: goneCode });
+    expect((await subOf('other@example.com')).referred_by).toBeUndefined();
+    await post('/api/subscribe', { email: 'sharer@example.com', ref: code });
+    expect((await subOf('sharer@example.com')).referred_by).toBeUndefined();
+    await post('/api/subscribe', { email: 'old@example.com', ref: code }); // a comeback confirms by email
+    expect((await subOf('old@example.com')).referred_by).toBeUndefined();
+    await post('/api/subscribe', { email: 'junk@example.com', ref: 'nope' });
+    expect((await subOf('junk@example.com')).referred_by).toBeUndefined();
+
+    // Counted only after the 24-hour hold, and only while still subscribed.
+    expect(await store.countReferrals([code])).toEqual({});
+    await age('friend@example.com');
+    expect(await store.countReferrals([code])).toEqual({ [code]: 1 });
+    await store.unsubscribe((await subOf('friend@example.com')).token);
+    expect(await store.countReferrals([code])).toEqual({});
+  });
+
+  it('every Monday copy has its reader\'s link and count; the owner hears once per reward tier', async () => {
+    const pings = [];
+    await startApp({ slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async () => {} } });
+    await store.importSubscribers(['sharer@example.com', 'plain@example.com'], 'import');
+    const [sharer] = (await store.listSubscribers({ status: 'active' })).filter(x => x.email === 'sharer@example.com');
+    const code = (await store.ensureRefCodes([sharer.id]))[sharer.id];
+    for (const e of ['f1@example.com', 'f2@example.com', 'f3@example.com']) {
+      await post('/api/subscribe', { email: e, ref: code });
+      await age(e);
+    }
+    await post('/api/subscribe', { email: 'f4@example.com', ref: code }); // still in the hold
+    await vi.waitFor(() => expect(sent.single).toHaveLength(4), { timeout: 2000 });
+    pings.length = 0;
+
+    const h = await auth();
+    expect((await post('/api/admin/newsletter/send', {}, h)).status).toBe(200);
+    const msgs = sent.batches.flatMap(b => b.msgs);
+    const mine = msgs.find(m => m.to[0] === 'sharer@example.com');
+    expect(mine.html).toContain(`/r/${code}`);
+    expect(mine.text).toContain("You've brought in 3 friends so far. 7 more and you get a $25 gift card to a Victoria favorite.");
+    expect(mine.html).toContain('You&#39;ve brought in 3 friends so far.');
+    const other = msgs.find(m => m.to[0] === 'plain@example.com');
+    expect(other.html).toMatch(/\/r\/[a-z2-9]{7}/);
+    expect(other.html).not.toContain(`/r/${code}`);
+
+    const rewards = pings.filter(p => p.title === '🎁 Referral rewards to send');
+    expect(rewards).toHaveLength(1);
+    expect(rewards[0].fields).toEqual([
+      ['sharer@example.com', '3 referrals: an entry in our monthly $50 local gift card drawing'],
+      ['sharer@example.com', '3 referrals: a Vic 361 sticker pack']
+    ]);
+    expect((await subOf('sharer@example.com')).ref_tier).toBe(3);
+
+    // The admin shows counted and pending referrals.
+    const st = await (await fetch(baseUrl + '/api/admin/newsletter', { headers: h })).json();
+    expect(st.referrers[0]).toMatchObject({ email: 'sharer@example.com', referrals: 3, pending: 1 });
+    expect(st.referral_tiers.map(t => t.n)).toEqual([1, 3, 10]);
+  });
+
+  it('the forms send the code the browser kept, and the pixel skips referral URLs', async () => {
+    await startApp();
+    const html = await (await fetch(baseUrl + '/subscribe')).text();
+    expect(html).toContain("ref:window.vic361Ref?window.vic361Ref():''");
+    const app = await fs.readFile(path.join(process.cwd(), 'docs/app.js'), 'utf8');
+    expect(app).toContain("ref: window.vic361Ref ? window.vic361Ref() : ''");
+    const track = await fs.readFile(path.join(process.cwd(), 'docs/track.js'), 'utf8');
+    expect(track).toContain("sessionStorage.setItem('vic361-ref', refQ)");
+  });
+});
+
 describe('open tracking', () => {
   it('each copy carries its own tracking image; opens count once per subscriber and show in admin', async () => {
     await startApp();

@@ -100,6 +100,16 @@
   // pages later still counts as one (server/newsletter.js signupSource).
   // Same paid mediums as server/analytics.js PAID_MEDIUMS.
   if (/^\s*(paid|paid_social|paidsocial|cpc|ppc|ads?)\s*$/i.test(utmMedium)) { try { sessionStorage.setItem('vic361-ad', '1'); } catch (e) { /* storage blocked */ } }
+  // A referral link (/r/<code> → /subscribe?ref=<code>): keep the code for
+  // this visit so a signup on any page credits the friend who shared it
+  // (server/newsletter.js). Codes are 7 letters/digits; anything else is ignored.
+  try {
+    var refQ = (new URLSearchParams(location.search).get('ref') || '').toLowerCase();
+    if (/^[a-z2-9]{7}$/.test(refQ)) sessionStorage.setItem('vic361-ref', refQ);
+  } catch (e) { /* old browser or storage blocked */ }
+  window.vic361Ref = function () {
+    try { return sessionStorage.getItem('vic361-ref') || ''; } catch (e) { return ''; }
+  };
   window.vic361Source = function (base) {
     var ad = false;
     try { ad = sessionStorage.getItem('vic361-ad') === '1'; } catch (e) { /* storage blocked */ }

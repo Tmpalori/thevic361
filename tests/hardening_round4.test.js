@@ -171,7 +171,7 @@ describe('database', () => {
   it('boot skips ALTER TABLE for columns that already exist', async () => {
     const { PgStore } = await import('../server/db.js');
     const all = [['event_submissions', 'ai_review'], ['traffic', 'ad'], ['newsletter_sends', 'failed_emails'], ['newsletter_sends', 'picks'],
-      ['subscribers', 'old_tokens']]
+      ['subscribers', 'old_tokens'], ['subscribers', 'ref_code'], ['subscribers', 'referred_by'], ['subscribers', 'ref_tier']]
       .map(([table_name, column_name]) => ({ table_name, column_name }));
     const pool = fakePool(all);
     await new PgStore(pool).ready();
@@ -179,7 +179,10 @@ describe('database', () => {
     const fresh = fakePool([{ table_name: 'traffic', column_name: 'ad' }]);
     await new PgStore(fresh).ready();
     const alters = fresh.calls.filter(c => /ALTER TABLE/.test(c.text)).map(c => c.text);
-    expect(alters).toHaveLength(4);
+    expect(alters).toHaveLength(7);
+    // The referral-code index is built with its column, not on every boot.
+    expect(pool.calls.some(c => /CREATE UNIQUE INDEX/.test(c.text))).toBe(false);
+    expect(fresh.calls.some(c => /CREATE UNIQUE INDEX IF NOT EXISTS subscribers_ref_code_idx/.test(c.text))).toBe(true);
     expect(alters.some(t => /traffic/.test(t))).toBe(false);
   });
 });
