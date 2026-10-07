@@ -6,7 +6,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-const APP_JS = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'app.js'), 'utf8');
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const APP_JS = readFileSync(resolve(ROOT, 'docs', 'app.js'), 'utf8');
 
 function day(idx, entries) {
   return `<section class="day-section" id="day-${idx}"><ul class="event-list">` +
@@ -29,6 +30,20 @@ function boot() {
 }
 
 const visible = () => [...document.querySelectorAll('.event-entry')].filter(li => !li.hidden && !li.closest('.day-section').hidden).map(li => li.textContent);
+
+// jsdom doesn't lay pages out, so the tests above only see li.hidden. The
+// browser shows a hidden element anyway when a display rule beats the
+// attribute (.event-entry is display:flex): base.css must force it.
+describe('hidden events really disappear', () => {
+  it('base.css makes [hidden] display:none !important, and every public page loads it', () => {
+    const css = readFileSync(resolve(ROOT, 'docs', 'base.css'), 'utf8');
+    expect(css).toMatch(/\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}/);
+    const seo = readFileSync(resolve(ROOT, 'server', 'seo.js'), 'utf8');
+    expect(seo).toContain('<link rel="stylesheet" href="/base.css">');
+    const index = readFileSync(resolve(ROOT, 'docs', 'index.html'), 'utf8');
+    expect(index).toContain('href="./base.css"');
+  });
+});
 
 describe('homepage filters', () => {
   it('renders the chip bar above the list', () => {
