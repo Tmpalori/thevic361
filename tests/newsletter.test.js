@@ -1267,3 +1267,156 @@ describe('referral rewards engine', () => {
       .rejects.toThrow('Not enough money in the Tremendous balance');
   });
 });
+
+describe('referral rewards: failures from the code review', () => {
+  const localDate = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  const NOW_R = new Date('2026-10-20T13:00:00Z'); // nothing in last month's drawing
+  // A store with one referrer who has 5 counted friends.
+  async function fiveFriends() {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-rr-'));
+    const st = new FileStore(path.join(tmpDir, 's.json'));
+    await st.importSubscribers(['sharer@example.com'], 'import');
+    const [s] = await st.listSubscribers({ status: 'active' });
+    const code = (await st.ensureRefCodes([s.id]))[s.id];
+    const friends = ['maria.g@gmail.com', 'tomr@yahoo.com', 'jess.k@outlook.com', 'li.wei@icloud.com', 'bob@aol.com'];
+    for (const [i, email] of friends.entries()) {
+      const f = await st.addSubscriber({ email, source: 'site', referredBy: code });
+      await st.confirmSubscriber(f.token);
+      await st._withWrite(async () => {
+        const data = await st._read();
+        data.subscribers.find(x => x.email === email).confirmed_at = new Date(Date.UTC(2026, 9, 10 + i, 15)).toISOString();
+        await st._write(data);
+      });
+    }
+    return { st, code };
+  }
+  const paying = () => {
+    const orders = [];
+    return { orders, tremendous: { enabled: true, sendReward: async (o) => { orders.push(o); return { orderId: 'O' + orders.length, status: 'EXECUTED' }; } } };
+  };
+  const quiet = { notify: async () => {}, alert: async () => {} };
+
+  it('a failed insert leaves the tier due, so next Monday still creates and pays it', async () => {
+    const { st, code } = await fiveFriends();
+    const { orders, tremendous } = paying();
+    let boom = true;
+    const flaky = Object.create(st);
+    flaky.addReferralReward = async (row) => { if (boom) { boom = false; throw new Error('db blip'); } return st.addReferralReward(row); };
+    const rewards = createReferralRewards({ store: flaky, slack: quiet, tremendous, localDate, nowFn: () => NOW_R });
+    expect(await rewards.run({ [code]: 5 })).toEqual([]);
+    expect((await st.listRefTiers([code]))[code].ref_tier).toBe(0); // not marked reached
+    const done = await rewards.run({ [code]: 5 });
+    expect(done).toMatchObject([{ key: `tier:${code}:5`, status: 'sent' }]);
+    expect(orders).toHaveLength(1);
+    expect((await st.listRefTiers([code]))[code].ref_tier).toBe(5);
+  });
+
+  it('a reward left half-sent is retried later; one bad record doesn\'t stop the others', async () => {
+    const { st, code } = await fiveFriends();
+    const { orders, tremendous } = paying();
+    let failUpdate = true;
+    const flaky = Object.create(st);
+    flaky.updateReferralReward = async (id, patch) => {
+      if (failUpdate && patch.status === 'sent') { failUpdate = false; throw new Error('db blip'); }
+      return st.updateReferralReward(id, patch);
+    };
+    // Real time here: the store stamps updated_at with the real clock.
+    const rewards = createReferralRewards({ store: flaky, slack: quiet, tremendous, localDate, nowFn: () => new Date() });
+    const first = await rewards.run({ [code]: 5 });
+    expect(first).toMatchObject([{ status: 'failed' }]);
+    expect(orders).toHaveLength(1); // Tremendous took it, the record didn't save
+    const [row] = await st.listReferralRewards();
+    expect(row.status).toBe('pending');
+    // Too fresh to retry (it may still be sending)...
+    expect(await rewards.approve(row.id)).toMatchObject({ ok: false, status: 409 });
+    // ...but once it's stale, the admin can send it and Monday retries it,
+    // with the same external_id (Tremendous answers with the same order).
+    await st._withWrite(async () => {
+      const data = await st._read();
+      data.referral_rewards[0].updated_at = new Date(Date.now() - 11 * 60e3).toISOString();
+      await st._write(data);
+    });
+    const again = await rewards.run({ [code]: 5 });
+    expect(again).toMatchObject([{ status: 'sent' }]);
+    expect(orders.map(o => o.externalId)).toEqual([`vic361-tier-${code}-5`, `vic361-tier-${code}-5`]);
+  });
+
+  it('when the friends can\'t be read, the reward is held, not paid', async () => {
+    const { st, code } = await fiveFriends();
+    const { orders, tremendous } = paying();
+    const flaky = Object.create(st);
+    flaky.listReferredFriends = async () => { throw new Error('db blip'); };
+    const rewards = createReferralRewards({ store: flaky, slack: quiet, tremendous, localDate, nowFn: () => NOW_R });
+    expect(await rewards.run({ [code]: 5 })).toMatchObject([{ status: 'held', flags: 'couldn\'t check this reader\'s friends' }]);
+    expect(orders).toHaveLength(0);
+  });
+
+  it('a Tremendous order that comes back FAILED or CANCELED isn\'t marked sent', async () => {
+    const { st, code } = await fiveFriends();
+    const tremendous = { enabled: true, sendReward: async () => ({ orderId: 'OX', status: 'CANCELED' }) };
+    const rewards = createReferralRewards({ store: st, slack: quiet, tremendous, localDate, nowFn: () => NOW_R });
+    const [row] = await rewards.run({ [code]: 5 });
+    expect(row).toMatchObject({ status: 'failed', order_id: 'OX' });
+    expect(row.reason).toMatch(/^Tremendous order CANCELED/);
+  });
+
+  it('the newsletter goes out before any gift card is ordered', async () => {
+    const order = [];
+    const tremendous = { enabled: true, sendReward: async () => { order.push('gift card'); return { orderId: 'O', status: 'EXECUTED' }; } };
+    const resend = fakeResend();
+    const batch = resend.batch;
+    resend.batch = async (...a) => { order.push('newsletter'); return batch(...a); };
+    await startApp({ tremendous, resend });
+    await store.importSubscribers(['sharer@example.com'], 'import');
+    const [s] = await store.listSubscribers({ status: 'active' });
+    const code = (await store.ensureRefCodes([s.id]))[s.id];
+    for (const [i, e] of ['maria.g@gmail.com', 'tomr@yahoo.com', 'jess.k@outlook.com', 'li.wei@icloud.com', 'bob@aol.com'].entries()) {
+      const f = await store.addSubscriber({ email: e, source: 'site', referredBy: code });
+      await store.confirmSubscriber(f.token);
+      await store._withWrite(async () => {
+        const data = await store._read();
+        data.subscribers.find(x => x.email === e).confirmed_at = new Date(NOW.getTime() - (30 + i * 10) * 3600e3).toISOString();
+        await store._write(data);
+      });
+    }
+    expect((await post('/api/admin/newsletter/send', {}, await auth())).status).toBe(200);
+    expect(order).toEqual(['newsletter', 'gift card']);
+  });
+
+  it('the admin reward buttons answer with an error when the store is down', async () => {
+    await startApp();
+    const h = await auth();
+    store.getReferralReward = async () => { throw new Error('db down'); };
+    const r = await post('/api/admin/newsletter/rewards/abc/approve', {}, h);
+    expect(r.status).toBe(503);
+    expect((await r.json()).message).toMatch(/db down/);
+  });
+});
+
+describe('referral signups: holes from the code review', () => {
+  const ALMOST = 'Almost there! Check your inbox and tap Confirm to start getting it.';
+
+  it('sending a referred address again without the code doesn\'t skip the confirmation', async () => {
+    await startApp();
+    await store.importSubscribers(['sharer@example.com'], 'import');
+    const [s] = await store.listSubscribers({ status: 'active' });
+    const code = (await store.ensureRefCodes([s.id]))[s.id];
+    expect((await (await post('/api/subscribe', { email: 'fake1@nowhere.test', ref: code })).json()).message).toBe(ALMOST);
+    expect((await (await post('/api/subscribe', { email: 'fake1@nowhere.test' })).json()).message).toBe(ALMOST);
+    const sub = (await store._read()).subscribers.find(x => x.email === 'fake1@nowhere.test');
+    expect(sub).toMatchObject({ status: 'pending', referred_by: code });
+    expect(await store.countReferrals([code], { counted: false })).toEqual({});
+  });
+
+  it('the reply doesn\'t reveal which address owns a share code', async () => {
+    await startApp();
+    await store.importSubscribers(['owner@gmail.com'], 'import');
+    const [s] = await store.listSubscribers({ status: 'active' });
+    const code = (await store.ensureRefCodes([s.id]))[s.id];
+    for (const guess of ['owner@gmail.com', 'o.w.n.e.r+x@gmail.com', 'someone.else@gmail.com', 'nobody@example.com']) {
+      expect((await (await post('/api/subscribe', { email: guess, ref: code })).json()).message).toBe(ALMOST);
+    }
+    // A made-up code gets the same answer too.
+    expect((await (await post('/api/subscribe', { email: 'x@example.com', ref: 'zzzzzzz' })).json()).message).toBe(ALMOST);
+  });
+});

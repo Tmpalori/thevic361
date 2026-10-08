@@ -180,9 +180,11 @@ describe('database', () => {
     await new PgStore(fresh).ready();
     const alters = fresh.calls.filter(c => /ALTER TABLE/.test(c.text)).map(c => c.text);
     expect(alters).toHaveLength(7);
-    // The referral-code index is built with its column, not on every boot.
+    // The referral code's unique constraint comes with its column (one
+    // statement), never as a separate index build on boot.
     expect(pool.calls.some(c => /CREATE UNIQUE INDEX/.test(c.text))).toBe(false);
-    expect(fresh.calls.some(c => /CREATE UNIQUE INDEX IF NOT EXISTS subscribers_ref_code_idx/.test(c.text))).toBe(true);
+    expect(fresh.calls.some(c => /CREATE UNIQUE INDEX/.test(c.text))).toBe(false);
+    expect(alters).toContain('ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS ref_code TEXT UNIQUE');
     expect(alters.some(t => /traffic/.test(t))).toBe(false);
   });
 });

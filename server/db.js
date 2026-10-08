@@ -1046,12 +1046,10 @@ class PgStore {
         // still unsubscribe, so links in older issues keep working.
         await addColumn('subscribers', 'old_tokens', `ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS old_tokens TEXT[] NOT NULL DEFAULT '{}'`);
         // Referrals: each subscriber's own code, and the code of whoever
-        // brought them in (see FileStore.ensureRefCodes). The unique index is
-        // built with the column, not on every boot (it would take a lock).
-        if (!have.has('subscribers.ref_code')) {
-          await this.pool.query('ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS ref_code TEXT');
-          await this.pool.query('CREATE UNIQUE INDEX IF NOT EXISTS subscribers_ref_code_idx ON subscribers(ref_code)');
-        }
+        // brought them in (see FileStore.ensureRefCodes). The column and its
+        // unique constraint come in one statement, so neither can exist
+        // without the other (and no index is built on every boot).
+        await addColumn('subscribers', 'ref_code', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS ref_code TEXT UNIQUE');
         await addColumn('subscribers', 'referred_by', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS referred_by TEXT');
         await addColumn('subscribers', 'ref_tier', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS ref_tier INT NOT NULL DEFAULT 0');
         await this.pool.query(`
@@ -1339,11 +1337,14 @@ class PgStore {
     if (!token) return null;
     await this.ready();
     // newly_confirmed: was pending until this call (the welcome email goes out once).
+    // confirmed_at is when they (re)joined, as in FileStore: a comeback starts
+    // a new referral hold and counts in the month they came back.
     const r = await this.pool.query(
       `WITH prev AS (
          SELECT id, status FROM subscribers WHERE token = $1 AND status <> 'unsubscribed' FOR UPDATE
        )
-       UPDATE subscribers s SET status = 'active', confirmed_at = COALESCE(s.confirmed_at, NOW())
+       UPDATE subscribers s SET status = 'active',
+         confirmed_at = CASE WHEN prev.status <> 'active' THEN NOW() ELSE s.confirmed_at END
        FROM prev WHERE s.id = prev.id
        RETURNING s.*, (prev.status <> 'active') AS newly_confirmed`, [token]);
     return r.rows[0] || null;
@@ -1473,7 +1474,7 @@ class PgStore {
         out.skipped_unsubscribed++;
       } else {
         await this.pool.query(
-          `UPDATE subscribers SET status = 'active', confirmed_at = COALESCE(confirmed_at, NOW()) WHERE email = $1`, [email]);
+          `UPDATE subscribers SET status = 'active', confirmed_at = CASE WHEN status <> 'active' THEN NOW() ELSE confirmed_at END WHERE email = $1`, [email]);
         out.already++;
       }
     }

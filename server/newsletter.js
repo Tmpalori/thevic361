@@ -560,14 +560,14 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     }
   }
 
-  // Monday's send: each recipient's code and count. Also sends the rewards
-  // that came due (server/referralRewards.js).
+  // Monday's send: each recipient's code and count. The rewards that came
+  // due go out after the newsletter (rewards.run below), so a slow gift
+  // card service can't hold up the issue.
   async function referralsForSend(subs) {
     if (typeof store.ensureRefCodes !== 'function') return { codes: {}, counts: {} };
     try {
       const codes = await store.ensureRefCodes(subs.map(s => s.id).filter(Boolean));
       const counts = await store.countReferrals(Object.values(codes));
-      await rewards.run(counts);
       return { codes, counts };
     } catch (err) {
       console.warn('[newsletter] referral links failed:', err.message);
@@ -718,6 +718,8 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       if (failures.length) slack.alert(`newsletter-failed-${key}`, 'Newsletter send partly failed', `${sent} sent, ${record.failed} failed.\n${failures[0]}`, `${siteUrl}/admin.html`);
       else slack.notify({ title: '📧 Newsletter sent', fields: [['Recipients', sent], ['Subject', probe.subject], ['Events', probe.total]] });
     }
+    // Referral rewards, once the issue is out (never throws).
+    await rewards.run(refs.counts);
     return { ok: failures.length === 0, ...record, refused: refusedEmails.map(r => r.email), errors: failures.slice(0, 3) };
   }
 
@@ -763,16 +765,22 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
         console.warn('[newsletter] referral lookup failed:', err.message);
       }
     }
-    // Unverified and referred signups all get the confirm message, whatever
-    // the address's state, so it can't be used to tell who's subscribed.
-    const confirmFirst = unverified || Boolean(referredBy);
-    const done = confirmFirst && config.enabled
-      ? { ok: true, message: 'Almost there! Check your inbox and tap Confirm to start getting it.' }
+    // Unverified signups and any signup carrying a referral code all get the
+    // confirm message, whatever the address's state or whose code it is, so
+    // the form can't tell anyone who's subscribed or who owns a code.
+    const almost = { ok: true, message: 'Almost there! Check your inbox and tap Confirm to start getting it.' };
+    const confirmFirst = unverified || Boolean(ref);
+    let done = confirmFirst && config.enabled
+      ? almost
       : { ok: true, message: config.enabled ? "You're on the list! Check your inbox." : "You're on the list! See you Monday." };
     try {
       const source = signupSource(body.source);
       const sub = await store.addSubscriber({ email, source, referredBy });
       if (sub.status === 'active') return res.json(done);
+      // A referred address still waiting to confirm stays that way when it's
+      // sent again without the code: only its inbox can put it on the list.
+      const needsConfirm = confirmFirst || Boolean(sub.referred_by);
+      if (needsConfirm && config.enabled) done = almost;
       // Single opt-in: a new address is on the list right away and gets the
       // welcome email (with its unsubscribe link) now. One of the first two
       // ad-driven signups never finished the confirmation step, and the Turnstile
@@ -782,7 +790,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       // friend from a referral link: a made-up address can't tap Confirm, so
       // it never counts toward a reward.
       const comeback = (sub.old_tokens || []).length > 0;
-      if ((!comeback && !confirmFirst) || !config.enabled) {
+      if ((!comeback && !needsConfirm) || !config.enabled) {
         const confirmed = await store.confirmSubscriber(sub.token);
         // Not awaited: the welcome email shouldn't hold up the form.
         if (confirmed && confirmed.newly_confirmed) welcome(confirmed);
@@ -989,8 +997,13 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   app.post('/api/admin/newsletter/rewards/:id/:action', requireAdmin, async (req, res) => {
     const { id, action } = req.params;
     if (!['approve', 'skip'].includes(action)) return res.status(404).json({ ok: false, message: 'Unknown action.' });
-    const out = action === 'approve' ? await rewards.approve(id) : await rewards.skip(id);
-    res.status(out.status).json({ ok: out.ok, message: out.message, reward: out.reward });
+    try {
+      const out = action === 'approve' ? await rewards.approve(id) : await rewards.skip(id);
+      res.status(out.status).json({ ok: out.ok, message: out.message, reward: out.reward });
+    } catch (err) {
+      console.error('[referrals] admin reward action failed:', err.message);
+      res.status(503).json({ ok: false, message: `Couldn't update the reward: ${err.message}` });
+    }
   });
 
   app.post('/api/admin/newsletter/send', requireAdmin, async (req, res) => {

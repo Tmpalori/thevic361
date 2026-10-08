@@ -29,6 +29,7 @@ export const REFERRAL_TIERS = [
 
 const TREMENDOUS_API = { live: 'https://api.tremendous.com/api/v2', sandbox: 'https://testflight.tremendous.com/api/v2' };
 const TREMENDOUS_TIMEOUT_MS = 15000;
+const STALE_MS = 10 * 60 * 1000;
 
 export function tremendousConfig(env = process.env, opts = {}) {
   const apiKey = opts.tremendousApiKey ?? env.TREMENDOUS_API_KEY ?? '';
@@ -151,11 +152,15 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
       : `$${row.amount} gift card for reaching ${row.tier} friends`;
   }
 
-  // Sends one pending (or failed, or approved) reward. Never throws.
+  // Sends one pending (or failed, or approved) reward and records the
+  // result. Only the record can throw: if it does after Tremendous took
+  // the order, the row stays 'pending' and a later run (or the admin)
+  // sends it again, which Tremendous answers with the same order.
   async function deliver(row) {
     if (!tremendous || !tremendous.enabled) {
       return store.updateReferralReward(row.id, { status: 'manual', reason: 'Tremendous isn\'t set up: send it by hand.' });
     }
+    let patch;
     try {
       const message = row.kind === 'drawing'
         ? `You won The Vic 361's ${monthName(row.month)} referral drawing! Thanks for sharing the newsletter with your friends.`
@@ -164,24 +169,32 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
         externalId: `vic361-${row.key.replace(/:/g, '-')}`, amount: row.amount,
         email: row.email, name: row.email.split('@')[0], message
       });
-      return store.updateReferralReward(row.id, { status: 'sent', order_id: r.orderId,
-        reason: r.status && r.status !== 'EXECUTED' ? `Tremendous order ${r.status}` : null });
+      patch = /^(FAILED|CANCELED)$/.test(r.status || '')
+        ? { status: 'failed', order_id: r.orderId, reason: `Tremendous order ${r.status}. Check it in Tremendous, then send it another way and Skip it here.` }
+        : { status: 'sent', order_id: r.orderId, reason: r.status && r.status !== 'EXECUTED' ? `Tremendous order ${r.status}` : null };
     } catch (err) {
       console.warn('[referrals] reward send failed:', err.message);
-      return store.updateReferralReward(row.id, { status: 'failed', reason: err.message });
+      patch = { status: 'failed', reason: err.message };
     }
+    return store.updateReferralReward(row.id, patch);
   }
 
+  // null when the read fails: callers must not treat that as "no friends"
+  // (that would skip the made-up-friends check and pay automatically).
   async function friendsOf(codes) {
+    if (typeof store.listReferredFriends !== 'function') return [];
     try {
-      return typeof store.listReferredFriends === 'function' ? await store.listReferredFriends(codes) : [];
+      return await store.listReferredFriends(codes);
     } catch (err) {
       console.warn('[referrals] reading friends failed:', err.message);
-      return [];
+      return null;
     }
   }
 
   // Gift cards for each tier newly reached. counts: { code: counted friends }.
+  // A code's ref_tier goes up only once its reward rows exist, so a failure
+  // in between leaves the tier due for next time (the row key stops a
+  // second row).
   async function tierRewards(counts) {
     const earned = Object.entries(counts).filter(([, n]) => n >= REFERRAL_TIERS[0].n);
     if (!earned.length || typeof store.listRefTiers !== 'function') return [];
@@ -192,17 +205,20 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
       const k = known[code];
       if (!k || !reached || k.ref_tier >= reached.n) continue;
       // Every tier crossed since last time (someone can jump from 1 to 5).
-      for (const t of REFERRAL_TIERS.filter(t => t.n > k.ref_tier && t.n <= n && t.amount)) due.push({ code, email: k.email, tier: t });
-      await store.setRefTier(code, reached.n);
+      due.push({ code, email: k.email, reached: reached.n, tiers: REFERRAL_TIERS.filter(t => t.n > k.ref_tier && t.n <= n && t.amount) });
     }
     if (!due.length) return [];
-    const friends = await friendsOf([...new Set(due.map(d => d.code))]);
+    const withCards = due.filter(d => d.tiers.length);
+    const friends = withCards.length ? await friendsOf(withCards.map(d => d.code)) : [];
     const rows = [];
     for (const d of due) {
-      const flags = referralFlags(friends.filter(f => f.referred_by === d.code));
-      const row = await store.addReferralReward({ key: `tier:${d.code}:${d.tier.n}`, kind: 'tier', ref_code: d.code, email: d.email,
-        tier: d.tier.n, amount: d.tier.amount, status: flags.length ? 'held' : 'pending', flags: flags.join('; ') || null });
-      if (row) rows.push(row);
+      const flags = friends ? referralFlags(friends.filter(f => f.referred_by === d.code)) : ['couldn\'t check this reader\'s friends'];
+      for (const t of d.tiers) {
+        const row = await store.addReferralReward({ key: `tier:${d.code}:${t.n}`, kind: 'tier', ref_code: d.code, email: d.email,
+          tier: t.n, amount: t.amount, status: flags.length ? 'held' : 'pending', flags: flags.join('; ') || null });
+        if (row) rows.push(row);
+      }
+      await store.setRefTier(d.code, d.reached);
     }
     return rows;
   }
@@ -211,7 +227,9 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
   async function drawing(now) {
     const month = drawingMonth(localDate(now));
     if (!month) return null;
-    const entries = drawingEntries(await friendsOf(null), month, { now: now.getTime(), localDate });
+    const friends = await friendsOf(null);
+    if (!friends) return null; // tried again next Monday
+    const entries = drawingEntries(friends, month, { now: now.getTime(), localDate });
     const codes = Object.keys(entries).sort();
     const total = codes.reduce((n, c) => n + entries[c].keys.size, 0);
     if (!total) return null;
@@ -226,13 +244,17 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
       status: flags.length ? 'held' : 'pending', flags: flags.join('; ') || null });
   }
 
+  // A 'pending' row nobody has touched for a while was left by a crash or
+  // restart mid-send: safe to send again (same Tremendous external_id).
+  const stale = (row, now) => row.status === 'pending' && now - new Date(row.updated_at).getTime() > STALE_MS;
+
   function line(row, friends = []) {
     const what = describe(row);
     if (row.status === 'sent') return `${what}. Sent ✅`;
     if (row.status === 'manual') return `${what}. Send it by hand (Tremendous isn't set up).`;
     if (row.status === 'failed') return `${what}. Failed: ${row.reason} It's retried every Monday.`;
     if (row.status === 'held') {
-      const mine = friends.filter(f => f.referred_by === row.ref_code);
+      const mine = (friends || []).filter(f => f.referred_by === row.ref_code);
       const list = mine.slice(0, 12).map(f => f.email).join(', ') + (mine.length > 12 ? ` and ${mine.length - 12} more` : '');
       return `${what}.\n👀 Held for your OK (Admin → Newsletter → Referral rewards): ${row.flags}.\nFriends: ${list}`;
     }
@@ -240,21 +262,31 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
   }
 
   return {
-    // Monday's send: new tier rewards, last month's drawing, and retries of
-    // earlier failures; then one Slack note about all of it. Never throws.
+    // Monday's run (after the newsletter has gone out): new tier rewards,
+    // last month's drawing, and retries of earlier failures and of rows a
+    // crash left half-sent; then one Slack note about all of it. Never throws.
     async run(counts) {
       if (!supported) return [];
       try {
         const fresh = [...await tierRewards(counts)];
         const won = await drawing(nowFn());
         if (won) fresh.push(won);
-        const retry = await store.listReferralRewards({ statuses: ['failed'], limit: 50 });
+        const now = nowFn().getTime();
+        const retry = (await store.listReferralRewards({ statuses: ['failed', 'pending'], limit: 50 }))
+          .filter(r => r.status === 'failed' || stale(r, now));
         const done = [];
         for (const row of [...fresh, ...retry.filter(r => !fresh.some(f => f.id === r.id))]) {
-          done.push(row.status === 'held' ? row : await deliver(row));
+          // One reward's trouble doesn't stop the rest.
+          try {
+            done.push(row.status === 'held' ? row : await deliver(row));
+          } catch (err) {
+            console.error('[referrals] recording a reward failed:', err.message);
+            done.push({ ...row, status: 'failed', reason: `Couldn't record it (${err.message}); it's tried again next Monday.` });
+          }
         }
         if (done.length && slack) {
-          const friends = await friendsOf([...new Set(done.filter(r => r.status === 'held').map(r => r.ref_code))]);
+          const held = done.filter(r => r.status === 'held');
+          const friends = held.length ? await friendsOf([...new Set(held.map(r => r.ref_code))]) : [];
           slack.notify({ title: '🎁 Referral rewards', fields: done.map(r => [r.email, line(r, friends)]) });
           const failed = done.filter(r => r.status === 'failed');
           if (failed.length) slack.alert('referral-reward-failed', 'A referral gift card didn\'t send', failed[0].reason);
@@ -262,16 +294,19 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
         return done;
       } catch (err) {
         console.error('[referrals] rewards run failed:', err.message);
+        if (slack) slack.alert('referral-rewards-run-failed', 'Referral rewards didn\'t run this week', `${err.message}\nThey're tried again next Monday.`);
         return [];
       }
     },
 
-    // Admin: send a held, failed or by-hand reward now (or, without
+    // Admin: send a held, failed, by-hand or stuck reward now (or, without
     // Tremendous, mark it sent by hand).
     async approve(id) {
       const row = await store.getReferralReward(id);
       if (!row) return { ok: false, status: 404, message: 'No such reward.' };
-      if (!['held', 'failed', 'manual'].includes(row.status)) return { ok: false, status: 409, message: `It's already ${row.status}.` };
+      if (!(['held', 'failed', 'manual'].includes(row.status) || stale(row, nowFn().getTime()))) {
+        return { ok: false, status: 409, message: `It's already ${row.status}.` };
+      }
       // Without Tremendous, "Mark sent" records that the owner sent it.
       const out = tremendous && tremendous.enabled ? await deliver(row)
         : await store.updateReferralReward(id, { status: 'sent', reason: 'Sent by hand' });
