@@ -289,9 +289,12 @@
       }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
       }).then(function (x) {
-        msg.textContent = x.ok ? (x.j.message || "You're on the list! Check your inbox.") : (x.j.message || 'Something went wrong. Try again.');
+        msg.textContent = x.ok ? '✅ ' + (x.j.message || "You're on the list! Check your inbox.") : (x.j.message || 'Something went wrong. Try again.');
         if (x.ok) {
           form.email.value = '';
+          // Done: the field and button go away (a second tap on an empty form
+          // used to show "Enter a valid email address" right after success).
+          form.classList.add('is-done');
           // Only a first signup from this browser counts as a Lead. The
           // server answers the same for new and existing addresses (so the
           // form can't reveal who's subscribed), so this device decides.

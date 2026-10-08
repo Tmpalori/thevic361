@@ -1002,6 +1002,9 @@ a.logo-group { color: inherit; text-decoration: none; }
   color: var(--color-text);
 }
 .signup-msg { flex-basis: 100%; margin: 0; font-size: var(--text-sm); color: var(--color-text-muted); min-height: 1.2em; }
+/* After a successful signup only the confirmation shows, big enough to notice. */
+.signup-form.is-done input, .signup-form.is-done button { display: none; }
+.signup-form.is-done .signup-msg { font-size: var(--text-base); font-weight: 800; color: inherit; padding: var(--space-2) 0; }
 .hp-field { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
