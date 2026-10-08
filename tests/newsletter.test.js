@@ -1229,7 +1229,8 @@ describe('referral rewards engine', () => {
     const slack = { notify: async (m) => { pings.push(m); }, alert: async () => {} };
     const picks = [];
     const rewards = createReferralRewards({ store: st, slack, tremendous, localDate, nowFn: () => new Date('2026-10-05T13:00:00Z'),
-      randomInt: (n) => { picks.push(n); return 2; } }); // entries: ann 0-1, ben 2
+      // Entries run in code order: ann's 2 and ben's 1. Pick ben's.
+      randomInt: (n) => { picks.push(n); return code('ben@example.com') < code('ann@example.com') ? 0 : 2; } });
     const done = await rewards.run({});
     expect(picks).toEqual([3]);
     expect(done).toMatchObject([{ kind: 'drawing', month: '2026-09', email: 'ben@example.com', entries: 1, total_entries: 3, amount: 25, status: 'sent' }]);
