@@ -164,6 +164,10 @@ describe('event URLs that move or go away', () => {
     let r = await get('/events/2026-10-10-jazz-nite');
     expect(r.status).toBe(301);
     expect(r.headers.get('location')).toBe('/events/2026-10-10-jazz-night');
+    // A shared link (?s=sh) or an ad's tags survive the redirect.
+    r = await get('/events/2026-10-10-jazz-nite?s=sh&utm_source=fb');
+    expect(r.headers.get('location')).toBe('/events/2026-10-10-jazz-night?s=sh&utm_source=fb');
+    expect(await (await get('/events/2026-10-10-jazz-night')).text()).toContain(encodeURIComponent('https://www.thevic361.com/events/2026-10-10-jazz-night?s=sh'));
     r = await get('/events/2026-10-10-jazz-nite.ics');
     expect(r.status).toBe(301);
     expect(r.headers.get('location')).toBe('/events/2026-10-10-jazz-night.ics');

@@ -20,6 +20,9 @@
     return cfgP;
   }
 
+  // Settles even when Cloudflare's script never arrives (an ad blocker, a
+  // strict in-app browser, a network error): then there's no widget, the
+  // form sends no token, and the server asks the reader to confirm by email.
   function loadScript() {
     if (scriptP) return scriptP;
     scriptP = new Promise(function (resolve) {
@@ -28,6 +31,8 @@
       var s = document.createElement('script');
       s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=__vicTsLoaded&render=explicit';
       s.async = true;
+      s.onerror = function () { resolve(); };
+      setTimeout(resolve, 8000);
       document.head.appendChild(s);
     });
     return scriptP;
@@ -38,12 +43,13 @@
     form.__vicTs = config().then(function (c) {
       if (!c.turnstile_site_key) return null;
       return loadScript().then(function () {
+        if (!window.turnstile || !window.turnstile.render) return null; // never loaded
         var box = document.createElement('div');
         box.className = 'ts-mount';
         var btn = form.querySelector('[type=submit]');
         form.insertBefore(box, btn || null);
-        return new Promise(function (resolve) {
-          var state = { token: '', waiters: [] };
+        var state = { token: '', waiters: [] };
+        try {
           state.id = window.turnstile.render(box, {
             sitekey: c.turnstile_site_key,
             appearance: 'interaction-only',
@@ -51,17 +57,18 @@
             'expired-callback': function () { state.token = ''; },
             'error-callback': function () { state.token = ''; }
           });
-          resolve(state);
-        });
+        } catch (err) { return null; }
+        return state;
       });
-    });
+    }).catch(function () { return null; });
     return form.__vicTs;
   }
 
   // Resolves with the token ('' when Turnstile is off), waiting briefly for
   // Cloudflare to finish if needed.
+  // Never hangs: whatever goes wrong, the form gets '' within 12 seconds.
   function token(form) {
-    return mount(form).then(function (state) {
+    var answer = mount(form).then(function (state) {
       if (!state) return '';
       if (state.token) return state.token;
       return new Promise(function (resolve) {
@@ -69,6 +76,7 @@
         setTimeout(function () { resolve(state.token || ''); }, 10000);
       });
     });
+    return Promise.race([answer, new Promise(function (resolve) { setTimeout(function () { resolve(''); }, 12000); })]);
   }
 
   function reset(form) {

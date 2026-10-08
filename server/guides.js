@@ -557,9 +557,10 @@ export function eventActionsHtml(ev, siteUrl) {
   const url = `${siteUrl}${ev.page}`;
   const text = `${ev.name} · ${formatDay(ev.date, { weekday: 'short', month: 'short', day: 'numeric' })}`;
   const share = [
-    ['Facebook', `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`],
-    ['X', `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`],
-    ['Text', `sms:?&body=${encodeURIComponent(`${text} ${url}`)}`]
+    // ?s=sh: visits from the shared link count as "Shared link" (docs/track.js).
+    ['Facebook', `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${url}?s=sh`)}`],
+    ['X', `https://twitter.com/intent/tweet?url=${encodeURIComponent(`${url}?s=sh`)}&text=${encodeURIComponent(text)}`],
+    ['Text', `sms:?&body=${encodeURIComponent(`${text} ${url}?s=sh`)}`]
   ];
   return `<div class="event-actions">
       <a class="btn btn--outline" href="${escHtml(ev.page)}.ics" data-track="add_to_calendar">Add to calendar</a>
