@@ -1,137 +1,135 @@
 {
-  "last_run_at": "2026-10-07T11:35:58-05:00",
+  "last_run_at": "2026-10-07T19:50:13-05:00",
   "window_start": "2026-10-05",
   "window_end": "2026-10-21",
   "days_ahead": 14,
   "candidates_only": true,
-  "merged_count": 337,
-  "raw_count": 457,
+  "merged_count": 333,
+  "raw_count": 448,
   "sources": [
     {
       "name": "local_events",
       "count": 186,
       "status": "ok",
-      "started_at": "2026-10-07T11:00:14-05:00",
-      "finished_at": "2026-10-07T11:00:14-05:00"
+      "started_at": "2026-10-07T19:14:57-05:00",
+      "finished_at": "2026-10-07T19:14:57-05:00"
     },
     {
       "name": "google_sheet",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-10-07T11:00:14-05:00",
-      "finished_at": "2026-10-07T11:00:15-05:00"
+      "started_at": "2026-10-07T19:14:57-05:00",
+      "finished_at": "2026-10-07T19:14:58-05:00"
     },
     {
       "name": "city_calendar",
       "count": 23,
       "status": "ok",
-      "started_at": "2026-10-07T11:00:15-05:00",
-      "finished_at": "2026-10-07T11:00:48-05:00"
+      "started_at": "2026-10-07T19:14:58-05:00",
+      "finished_at": "2026-10-07T19:15:28-05:00"
     },
     {
       "name": "chamber",
       "count": 4,
       "status": "ok",
-      "started_at": "2026-10-07T11:00:48-05:00",
-      "finished_at": "2026-10-07T11:00:50-05:00"
+      "started_at": "2026-10-07T19:15:28-05:00",
+      "finished_at": "2026-10-07T19:15:31-05:00"
     },
     {
       "name": "library",
       "count": 24,
       "status": "ok",
-      "started_at": "2026-10-07T11:00:50-05:00",
-      "finished_at": "2026-10-07T11:00:51-05:00"
+      "started_at": "2026-10-07T19:15:31-05:00",
+      "finished_at": "2026-10-07T19:15:32-05:00"
     },
     {
       "name": "moonshine",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-10-07T11:00:51-05:00",
-      "finished_at": "2026-10-07T11:00:52-05:00",
+      "started_at": "2026-10-07T19:15:32-05:00",
+      "finished_at": "2026-10-07T19:15:34-05:00",
       "message": "site lists 6 dates, none in the window"
     },
     {
       "name": "vtx_artwalk",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-10-07T11:00:52-05:00",
-      "finished_at": "2026-10-07T11:00:54-05:00"
+      "started_at": "2026-10-07T19:15:34-05:00",
+      "finished_at": "2026-10-07T19:15:34-05:00"
     },
     {
       "name": "jwelch",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-10-07T11:00:54-05:00",
-      "finished_at": "2026-10-07T11:00:59-05:00"
+      "started_at": "2026-10-07T19:15:34-05:00",
+      "finished_at": "2026-10-07T19:15:38-05:00"
     },
     {
       "name": "theatre_victoria",
       "count": 3,
       "status": "ok",
-      "started_at": "2026-10-07T11:00:59-05:00",
-      "finished_at": "2026-10-07T11:00:59-05:00"
+      "started_at": "2026-10-07T19:15:38-05:00",
+      "finished_at": "2026-10-07T19:15:39-05:00"
     },
     {
       "name": "generals",
       "count": 0,
       "status": "empty",
-      "started_at": "2026-10-07T11:00:59-05:00",
-      "finished_at": "2026-10-07T11:01:00-05:00"
+      "started_at": "2026-10-07T19:15:39-05:00",
+      "finished_at": "2026-10-07T19:15:39-05:00"
     },
     {
       "name": "allevents",
-      "count": 35,
+      "count": 34,
       "status": "partial",
-      "started_at": "2026-10-07T11:01:00-05:00",
-      "finished_at": "2026-10-07T11:01:26-05:00",
+      "started_at": "2026-10-07T19:15:39-05:00",
+      "finished_at": "2026-10-07T19:15:55-05:00",
       "message": "partial: all returned 45 (capped)"
     },
     {
       "name": "gemini_search",
-      "count": 38,
+      "count": 22,
       "status": "ok",
-      "started_at": "2026-10-07T11:01:26-05:00",
-      "finished_at": "2026-10-07T11:02:44-05:00"
+      "started_at": "2026-10-07T19:15:55-05:00",
+      "finished_at": "2026-10-07T19:17:28-05:00"
     },
     {
       "name": "apify_facebook",
-      "count": 27,
+      "count": 25,
       "status": "partial",
-      "started_at": "2026-10-07T11:02:44-05:00",
-      "finished_at": "2026-10-07T11:05:32-05:00",
-      "message": "partial: apify~facebook-events-scraper hit the 50-event cap, alfalfa~facebook-events-scraper hit the 50-event cap"
+      "started_at": "2026-10-07T19:17:28-05:00",
+      "finished_at": "2026-10-07T19:18:57-05:00",
+      "message": "partial: alfalfa~facebook-events-scraper hit the 50-event cap"
     },
     {
       "name": "apify_eventbrite",
       "count": 16,
       "status": "partial",
-      "started_at": "2026-10-07T11:05:32-05:00",
-      "finished_at": "2026-10-07T11:06:32-05:00",
+      "started_at": "2026-10-07T19:18:57-05:00",
+      "finished_at": "2026-10-07T19:19:57-05:00",
       "message": "partial: hit the 60-result cap"
     },
     {
       "name": "apify_facebook_posts",
-      "count": 81,
+      "count": 85,
       "status": "ok",
-      "started_at": "2026-10-07T11:06:32-05:00",
-      "finished_at": "2026-10-07T11:25:41-05:00"
+      "started_at": "2026-10-07T19:19:57-05:00",
+      "finished_at": "2026-10-07T19:39:34-05:00"
     },
     {
       "name": "apify_instagram_posts",
-      "count": 20,
+      "count": 26,
       "status": "ok",
-      "started_at": "2026-10-07T11:25:41-05:00",
-      "finished_at": "2026-10-07T11:30:34-05:00",
+      "started_at": "2026-10-07T19:39:34-05:00",
+      "finished_at": "2026-10-07T19:45:18-05:00",
       "message": "stopped at the 30-minute scrape budget; skipped 8 of 20 accounts"
     }
   ],
   "warnings": {
-    "count": 3,
+    "count": 1,
     "first": [
-      "FB posts actor HTTP error (venue=Shadow's Bar status=502 body=<html>  <head><title>502 Bad Gateway</title></head>  <body>  <center><h1>502 Bad Gateway</h1></center>  </body>  </html>  )",
-      "FB posts actor HTTP error (venue=Texas Roadhouse status=502 body=<html>  <head><title>502 Bad Gateway</title></head>  <body>  <center><h1>502 Bad Gateway</h1></center>  </body>  </html>  )",
       "[Apify IG Posts] scrape budget reached (skipped=8)"
     ],
-    "summary": "3 warnings: FB posts actor HTTP error (venue=Shadow's Bar status=502 body=<html>  <head><title>502 Bad Gateway</; FB posts actor HTTP error (venue=Texas Roadhouse status=502 body=<html>  <head><title>502 Bad Gatewa; [Apify IG Posts] scrape budget reached (skipped=8)"
+    "summary": "1 warning: [Apify IG Posts] scrape budget reached (skipped=8)"
   }
 }

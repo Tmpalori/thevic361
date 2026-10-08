@@ -2015,6 +2015,9 @@ export async function createApp(opts = {}) {
           : undefined,
       health: async now => {
         await retryAutoPublish();
+        // Hourly: the one "tap to confirm" reminder to yesterday's
+        // unconfirmed signups (server/newsletter.js).
+        try { await newsletterApi.sendConfirmReminders(now); } catch (err) { console.warn('[newsletter] confirm reminders failed:', err.message); }
         return healthCheck(now);
       }
     }
@@ -2249,7 +2252,7 @@ export async function createApp(opts = {}) {
   });
 
   await archiveReady;
-  return { app, store, storeBundle, slack, scheduler, submissionReview, healthCheck };
+  return { app, store, storeBundle, slack, scheduler, submissionReview, healthCheck, newsletter: newsletterApi };
 }
 
 // Start the server when invoked directly. Importing this module (e.g. from

@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore, } from '../server/db.js';
 import { withPages } from '../server/seo.js';
-import { renderWeekly, renderWelcomeEmail, normalizeEmail, signupSource, renderSubscribePage, darkSafe, createResend, referralFlags } from '../server/newsletter.js';
+import { renderWeekly, renderWelcomeEmail, normalizeEmail, signupSource, renderSubscribePage, darkSafe, createResend, referralFlags, renderConfirmEmail } from '../server/newsletter.js';
 import { createReferralRewards, createTremendous, tremendousConfig, drawingMonth } from '../server/referralRewards.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -22,7 +22,7 @@ const EVENTS = [
   { date: '2026-10-03', name: 'Last Week', time: '7 PM' }
 ];
 
-let tmpDir, server, baseUrl, store, sent;
+let tmpDir, server, baseUrl, store, sent, nlApi;
 
 function fakeResend() {
   sent = { single: [], batches: [] };
@@ -37,12 +37,14 @@ async function startApp(extra = {}) {
   const eventsFile = path.join(tmpDir, 'events.json');
   await fs.writeFile(eventsFile, JSON.stringify({ events: EVENTS, sponsor: { name: 'Acme Tacos', text: 'Best tacos.', cta: 'Order', url: 'https://acme.example' } }));
   store = new FileStore(path.join(tmpDir, 's.json'));
-  const { app } = await createApp({
+  const made = await createApp({
     storeBundle: { kind: 'file', store }, eventsFile, trustProxy: false, now: () => NOW,
     siteUrl: 'https://www.thevic361.com', adminUsername: 'a', adminPassword: 'b', adminSessionSecret: 'c',
     resendApiKey: 're_test', newsletterAddress: '123 Main St, Victoria, TX 77901',
     newsletterCronSecret: 'cron-secret', resend: fakeResend(), ...extra
   });
+  const { app } = made;
+  nlApi = made.newsletter;
   server = http.createServer(app);
   await new Promise(r => server.listen(0, r));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -1418,5 +1420,58 @@ describe('referral signups: holes from the code review', () => {
     }
     // A made-up code gets the same answer too.
     expect((await (await post('/api/subscribe', { email: 'x@example.com', ref: 'zzzzzzz' })).json()).message).toBe(ALMOST);
+  });
+});
+
+describe('confirm reminders', () => {
+  // A pending signup made `hours` ago.
+  async function pendingFor(email, hours, now = NOW) {
+    const sub = await store.addSubscriber({ email, source: 'site' });
+    await store._withWrite(async () => {
+      const data = await store._read();
+      data.subscribers.find(x => x.email === email).created_at = new Date(now.getTime() - hours * 3600e3).toISOString();
+      await store._write(data);
+    });
+    return sub;
+  }
+
+  it('one reminder a day after signing up, only to recent pending signups', async () => {
+    await startApp();
+    const due = await pendingFor('forgot@example.com', 26);
+    await pendingFor('just-now@example.com', 3);       // not a day yet
+    await pendingFor('long-ago@example.com', 24 * 9);   // older than a week: left alone
+    await store.importSubscribers(['on@example.com'], 'import'); // already on the list
+    expect(await nlApi.sendConfirmReminders(NOW)).toEqual({ sent: 1 });
+    expect(sent.single).toHaveLength(1);
+    const [m] = sent.single;
+    expect(m.to).toEqual(['forgot@example.com']);
+    expect(m.subject).toBe("Still want Victoria's events? Tap to confirm");
+    expect(m.html).toContain(`/subscribe/confirm?token=${due.token}`);
+    expect(m.text).toContain("You asked for The Vic 361 yesterday but haven't confirmed yet.");
+    // Once only.
+    expect(await nlApi.sendConfirmReminders(new Date(NOW.getTime() + 3600e3))).toEqual({ sent: 0 });
+    // The confirm link still works and puts them on the list.
+    expect((await fetch(`${baseUrl}/subscribe/confirm?token=${due.token}`, { method: 'POST' })).status).toBe(200);
+    expect((await store._read()).subscribers.find(x => x.email === 'forgot@example.com').status).toBe('active');
+  });
+
+  it('a reminder that fails to send is tried again next hour', async () => {
+    const resend = fakeResend();
+    let fail = true;
+    const send = resend.send;
+    resend.send = async (...a) => { if (fail) { fail = false; throw new Error('resend down'); } return send(...a); };
+    await startApp({ resend });
+    await pendingFor('forgot@example.com', 30);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(await nlApi.sendConfirmReminders(NOW)).toEqual({ sent: 0 });
+    } finally { warn.mockRestore(); }
+    expect(await nlApi.sendConfirmReminders(NOW)).toEqual({ sent: 1 });
+    expect(sent.single.map(m => m.to[0])).toEqual(['forgot@example.com']);
+  });
+
+  it('the first-time confirm email is unchanged', () => {
+    const m = renderConfirmEmail({ siteUrl: 'https://www.thevic361.com', confirmUrl: 'https://x/c', address: 'a' });
+    expect(m.subject).toBe('Confirm your Vic 361 subscription');
   });
 });

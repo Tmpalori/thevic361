@@ -467,6 +467,32 @@ class FileStore {
     });
   }
 
+  // Pending signups (asked between `from` and `to`, ISO times) that haven't
+  // had their one confirm reminder (newsletter.js sendConfirmReminders).
+  async listConfirmReminders({ from, to, limit = 100 }) {
+    const data = await this._read();
+    return data.subscribers
+      .filter(x => x.status === 'pending' && !x.reminded_at && x.created_at >= from && x.created_at <= to)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at)).slice(0, limit)
+      .map(x => ({ id: x.id, email: x.email, token: x.token }));
+  }
+
+  // Claims the reminder for one subscriber: true only for the first caller,
+  // so two servers (old and new container in a deploy) can't both send it.
+  // done=false gives the claim back (the send failed; try next hour).
+  async markReminded(id, done = true) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const sub = data.subscribers.find(x => x.id === id);
+      if (!sub) return false;
+      if (!done) { delete sub.reminded_at; await this._write(data); return true; }
+      if (sub.reminded_at) return false;
+      sub.reminded_at = nowIso();
+      await this._write(data);
+      return true;
+    });
+  }
+
   // Addresses Resend refused outright (newsletter.js sendWeekly). Only
   // active ones change: someone who unsubscribed stays unsubscribed.
   async markSubscribersBounced(emails) {
@@ -937,7 +963,8 @@ class PgStore {
         // which of the added columns exist and only ALTER for missing ones.
         const added = [['event_submissions', 'ai_review'], ['traffic', 'ad'],
           ['newsletter_sends', 'failed_emails'], ['newsletter_sends', 'picks'], ['subscribers', 'old_tokens'],
-          ['subscribers', 'ref_code'], ['subscribers', 'referred_by'], ['subscribers', 'ref_tier']];
+          ['subscribers', 'ref_code'], ['subscribers', 'referred_by'], ['subscribers', 'ref_tier'],
+          ['subscribers', 'reminded_at']];
         const cols = await this.pool.query(
           `SELECT table_name, column_name FROM information_schema.columns
             WHERE table_schema = current_schema() AND column_name = ANY($1::text[])`,
@@ -1052,6 +1079,8 @@ class PgStore {
         await addColumn('subscribers', 'ref_code', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS ref_code TEXT UNIQUE');
         await addColumn('subscribers', 'referred_by', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS referred_by TEXT');
         await addColumn('subscribers', 'ref_tier', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS ref_tier INT NOT NULL DEFAULT 0');
+        // When a pending signup got its one "tap to confirm" reminder.
+        await addColumn('subscribers', 'reminded_at', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS reminded_at TIMESTAMPTZ');
         await this.pool.query(`
           CREATE TABLE IF NOT EXISTS newsletter_sends (
             week_key TEXT PRIMARY KEY,
@@ -1355,6 +1384,24 @@ class PgStore {
     await this.ready();
     const r = await this.pool.query(
       `UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = NOW() WHERE token = $1 OR $1 = ANY(old_tokens)`, [token]);
+    return r.rowCount > 0;
+  }
+
+  // See FileStore.listConfirmReminders.
+  async listConfirmReminders({ from, to, limit = 100 }) {
+    await this.ready();
+    const r = await this.pool.query(
+      `SELECT id, email, token FROM subscribers
+        WHERE status = 'pending' AND reminded_at IS NULL AND created_at >= $1 AND created_at <= $2
+        ORDER BY created_at LIMIT $3`, [from, to, limit]);
+    return r.rows;
+  }
+
+  async markReminded(id, done = true) {
+    await this.ready();
+    const r = done
+      ? await this.pool.query('UPDATE subscribers SET reminded_at = NOW() WHERE id = $1 AND reminded_at IS NULL', [id])
+      : await this.pool.query('UPDATE subscribers SET reminded_at = NULL WHERE id = $1', [id]);
     return r.rowCount > 0;
   }
 
