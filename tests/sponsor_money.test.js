@@ -174,6 +174,12 @@ describe('bank debits close to the date', () => {
     expect((await store.listSponsorOrders())[0].newsletter_missed_both).toBe(true);
     expect(sent[0].text).toMatch(/wasn’t in them/);
     expect(sent[0].text).not.toMatch(/Thursday’s weekend issue/);
+    // Their report the Monday after doesn't credit them with those issues' copies.
+    const later = setup(store, { mailer, slack, now: () => new Date('2026-10-26T18:00:00Z') });
+    await later.sendSponsorReports(new Date('2026-10-26T18:00:00Z'));
+    const report = sent.find(m => /sponsor week/i.test(m.subject || ''));
+    expect(report).toBeTruthy();
+    expect(report.text).not.toMatch(/Newsletter copies/);
   });
 });
 

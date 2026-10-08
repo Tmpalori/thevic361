@@ -32,7 +32,7 @@ import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys, keyedEvents
 import { registerGrowth } from './growth.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { createTremendous, tremendousConfig } from './referralRewards.js';
-import { createMailer, renderSubmissionReceived, renderSubmissionLive } from './notify.js';
+import { createMailer, renderSubmissionReceived, renderSubmissionLive, setWeekendIssue } from './notify.js';
 import { registerSubmissionReview, isPaidPick } from './submissionReview.js';
 import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage, sameEvent, eventWeekStats, LEAD_IN_DAYS } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
@@ -294,6 +294,8 @@ export async function createApp(opts = {}) {
   const stripeCfg = stripeConfig(process.env, opts);
   // Resend: the newsletter and the "we got it" emails (server/notify.js).
   const newsletter = newsletterConfig(process.env, opts);
+  // Sales and confirmation copy only promise the Thursday issue while it's on.
+  setWeekendIssue(newsletter.weekend);
   const nlResend = opts.resend || createResend(newsletter.apiKey);
   // Referral gift cards (server/referralRewards.js); unset means the owner
   // sends them by hand from the admin list.
@@ -2177,7 +2179,7 @@ export async function createApp(opts = {}) {
         fix: slackRefusedText() || 'Set SLACK_WEBHOOK_URL in Railway (and as a GitHub secret) to get pings for breakage, sponsors and submissions. Optional: SLACK_SALES_WEBHOOK_URL, SLACK_ACTIVITY_WEBHOOK_URL and SLACK_ALERTS_WEBHOOK_URL send each kind to its own channel.' },
       { key: 'newsletter', label: 'Email newsletter (Resend)', ok: newsletter.enabled && Boolean(newsletter.address), level: 'recommended',
         fix: newsletter.enabled ? 'Set NEWSLETTER_ADDRESS (a mailing address is required by law in every email).' : 'Set RESEND_API_KEY and NEWSLETTER_ADDRESS in Railway.' },
-      { key: 'newsletter_auto', label: 'Newsletter sends itself (Mondays 7:43 AM, Thursdays 7:00 AM)', ok: newsletter.enabled && newsletter.autosend, level: 'recommended',
+      { key: 'newsletter_auto', label: newsletter.weekend ? 'Newsletter sends itself (Mondays 7:43 AM, Thursdays 7:00 AM)' : 'Newsletter sends itself (Mondays 7:43 AM)', ok: newsletter.enabled && newsletter.autosend, level: 'recommended',
         fix: !newsletter.enabled ? 'Set RESEND_API_KEY in Railway first.'
           : 'NEWSLETTER_AUTOSEND=0 is set in Railway; remove it to send automatically. (Optional backup: NEWSLETTER_CRON_SECRET in Railway and GitHub lets GitHub retry later in the day.)' },
       { key: 'reply_to', label: 'Customer email replies reach you', ok: Boolean(newsletter.replyTo), level: 'recommended',

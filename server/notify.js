@@ -17,6 +17,12 @@ import { C, btn, emailShell, eventRow } from './newsletter.js';
 // an issue that is still ahead with a day to spare for the review (we
 // approve paid picks "usually within a day"): bought on Tuesday for
 // Saturday, Monday's issue has gone out but Thursday's hasn't.
+// Whether Thursday's weekend issue goes out (NEWSLETTER_WEEKEND, set by
+// createApp): with it off, nothing promises it.
+let weekendIssue = true;
+export function setWeekendIssue(on) { weekendIssue = Boolean(on); }
+export function weekendIssueOn() { return weekendIssue; }
+
 const boughtOn = at => {
   if (!at) return null;
   const when = at instanceof Date ? at : new Date(at);
@@ -29,6 +35,7 @@ export function newsletterCovers(dateStr, at) {
 }
 // Thursday's weekend issue: Friday to Sunday events, booked by Tuesday.
 export function weekendCovers(dateStr, at) {
+  if (!weekendIssue) return false;
   const day = boughtOn(at);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '') || !day) return false;
   const week = currentWeek(dateStr);
@@ -39,7 +46,9 @@ export function weekendCovers(dateStr, at) {
 // (the checkout preview, the thank-you page and the confirmation email).
 export function pickWhere(dateStr, at) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '')) {
-    return 'starred in the newsletter when it’s booked before the issue goes out (Monday’s covers the week, Thursday’s the weekend), and featured first in our social posts';
+    return weekendIssue
+      ? 'starred in the newsletter when it’s booked before the issue goes out (Monday’s covers the week, Thursday’s the weekend), and featured first in our social posts'
+      : 'starred in the Monday newsletter when it’s booked before its week’s issue, and featured first in our social posts';
   }
   const long = d => formatDay(d, { month: 'long', day: 'numeric' });
   const week = currentWeek(dateStr);
@@ -216,7 +225,8 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
       ? (order.newsletter_missed_both
         ? 'Your payment cleared after that week’s newsletters went out, so your block wasn’t in them. We’ll be in touch to make that up to you.'
         : 'Your payment cleared after that Monday’s newsletter went out, so your block wasn’t in it; it will be at the top of Thursday’s weekend issue. We’ll be in touch to make up for Monday’s.')
-      : 'It’s also the sponsor spot at the top of that week’s newsletters: Monday’s, and Thursday’s weekend issue.';
+      : weekendIssue ? 'It’s also the sponsor spot at the top of that week’s newsletters: Monday’s, and Thursday’s weekend issue.'
+        : 'It’s also the sponsor spot at the top of that Monday’s newsletter.';
     const bodyHtml =
       p(`Thanks, ${escHtml(business)}! Your payment went through and <strong>the week of ${escHtml(week)}</strong> is yours.`) +
       `<h2 style="font-size:18px;margin:20px 0 4px;">What happens next</h2>` +
@@ -343,7 +353,8 @@ export function renderSponsorReport(order, stats, { siteUrl, address }) {
     ...(views ? [['Your block was seen on thevic361.com', plural(views, 'time', 'times')]] : []),
     ['Clicked your button on thevic361.com', people(stats.site_people)],
     ['Clicked your button in our emails', people(stats.email_people)],
-    ...(stats.newsletter_recipients ? [['Newsletter copies with your block (Monday and Thursday)', String(stats.newsletter_recipients)]] : []),
+    ...(stats.newsletter_recipients ? [[stats.newsletter_issues > 1 ? 'Newsletter copies with your block (Monday and Thursday issues)' : 'Newsletter copies with your block',
+      String(stats.newsletter_recipients)]] : []),
     ...(stats.site_visitors ? [['Visits to thevic361.com that week', String(stats.site_visitors)]] : [])
   ];
   const bodyHtml =

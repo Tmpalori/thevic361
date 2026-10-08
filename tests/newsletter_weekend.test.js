@@ -270,3 +270,31 @@ describe('second review fixes', () => {
     expect(sent.batches[0].msgs[0].html).not.toContain('/email-prefs');
   });
 });
+
+describe('multi-agent review fixes', () => {
+  it('a weekly sponsor\'s report counts only the issues their block was in', async () => {
+    const { sponsorStats } = await import('../server/sponsors.js');
+    const { renderSponsorReport } = await import('../server/notify.js');
+    const order = { id: 'w1', kind: 'weekly', business: 'Acme', week_start: '2026-10-05' };
+    const one = sponsorStats(order, [], { recipients: 950, issues: 1 });
+    expect(renderSponsorReport(order, one, { siteUrl: 'https://x' }).text).toContain('Newsletter copies with your block: 950');
+    const two = sponsorStats(order, [], { recipients: 1950, issues: 2 });
+    expect(renderSponsorReport(order, two, { siteUrl: 'https://x' }).text).toContain('Newsletter copies with your block (Monday and Thursday issues): 1950');
+  });
+
+  it('with NEWSLETTER_WEEKEND=0 nothing promises the Thursday issue', async () => {
+    await startApp({ newsletterWeekend: '0' });
+    const tue = new Date('2026-10-06T15:00:00Z');
+    expect(weekendCovers('2026-10-10', tue)).toBe(false);
+    expect(pickWhere('2026-10-10', tue)).not.toMatch(/Thursday/);
+    const { renderSponsorConfirmed } = await import('../server/notify.js');
+    const mail = renderSponsorConfirmed({ kind: 'weekly', business: 'Acme', week_start: '2026-10-12', sponsor: { name: 'Acme' } }, { siteUrl: 'https://x' });
+    expect(mail.text).toContain('top of that Monday’s newsletter');
+    expect(mail.text).not.toMatch(/Thursday/);
+    // A fresh app with it on promises it again.
+    await new Promise(r => server.close(r)); server = null;
+    await fs.rm(tmpDir, { recursive: true, force: true }); tmpDir = null;
+    await startApp();
+    expect(weekendCovers('2026-10-10', tue)).toBe(true);
+  });
+});

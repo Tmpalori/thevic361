@@ -55,7 +55,7 @@ import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
 import { normalizeEmail } from './newsletter.js';
 import { venueFor } from './guides.js';
-import { renderSponsorConfirmed, renderSponsorReport, renderPickReport, renderSponsorTooLate, newsletterCovers, weekendCovers, pickWhere } from './notify.js';
+import { renderSponsorConfirmed, renderSponsorReport, renderPickReport, renderSponsorTooLate, newsletterCovers, weekendCovers, weekendIssueOn, pickWhere } from './notify.js';
 import { botName, visitorHash, pageType, PAGE_TYPES, rowCount, SHARED_LINK } from './analytics.js';
 
 export { newsletterCovers, pickWhere };
@@ -419,7 +419,7 @@ function whereItRan(impressions) {
 }
 
 // Counts are weighted by `n` (PgStore.listTraffic groups rows; rowCount).
-export function sponsorStats(order, rows, { recipients = 0 } = {}) {
+export function sponsorStats(order, rows, { recipients = 0, issues = recipients ? 1 : 0 } = {}) {
   const start = order.week_start;
   const end = addDays(start, 6);
   const inWeek = (rows || []).filter(r => r.day >= start && r.day <= end);
@@ -435,7 +435,8 @@ export function sponsorStats(order, rows, { recipients = 0 } = {}) {
     site_clicks: rowCount(site), site_people: peopleIn(site),
     email_clicks: rowCount(email), email_people: peopleIn(email),
     site_visitors: peopleIn(inWeek.filter(r => r.kind === 'view')),
-    newsletter_recipients: Number(recipients) || 0
+    newsletter_recipients: Number(recipients) || 0,
+    newsletter_issues: Number(recipients) ? Number(issues) || 1 : 0
   };
 }
 
@@ -717,7 +718,7 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
       url: safeUrl(normalizeUrl(clean(v.url, 300))) || '#',
       address: clean(v.address, 120)
     });
-    return `<p class="co-preview-where">Shown on every page of thevic361.com for your week, and at the top of that week’s newsletters (Monday’s and Thursday’s).</p>${block}`;
+    return `<p class="co-preview-where">Shown on every page of thevic361.com for your week, and at the top of that week’s ${weekendIssueOn() ? 'newsletters (Monday’s and Thursday’s)' : 'Monday newsletter'}.</p>${block}`;
   }
   // Vic’s Pick: the event as it will look, pinned above the rest of its day.
   const date = /^\d{4}-\d{2}-\d{2}$/.test(val('date')) ? val('date') : '';
@@ -905,7 +906,7 @@ export function renderThanksPage(order, { siteUrl, now = new Date() }) {
     if (order.kind === 'weekly') {
       const week = formatDay(order.week_start, { weekday: 'long', month: 'long', day: 'numeric' });
       msg = `You're booked for the week of ${escHtml(week)}.`;
-      next = [`Your sponsor block goes live on its own on ${escHtml(week)}, on every page of the site and at the top of that week’s Monday and Thursday newsletters.`,
+      next = [`Your sponsor block goes live on its own on ${escHtml(week)}, on every page of the site and at the top of that week’s ${weekendIssueOn() ? 'Monday and Thursday newsletters' : 'Monday newsletter'}.`,
         `${emailed ? 'We’ve emailed you' : 'We’ll email you'} a confirmation with a copy of your block. Stripe sends your receipt separately.`,
         'Want to change the wording or link before it goes live? Reply to that email.'];
     } else if (order.kind === 'partner') {
@@ -1199,7 +1200,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     const since = due.map(o => o.week_start).sort()[0];
     const rows = typeof store.listTraffic === 'function' ? await store.listTraffic(since) : [];
     for (const order of due) {
-      const stats = sponsorStats(order, rows, { recipients: await recipientsFor(order.week_start) });
+      const stats = sponsorStats(order, rows, await recipientsFor(order));
       const summary = [['Sponsor', order.business], ['Week', order.week_start], ['Views on the site', stats.views],
         ['Clicked on the site', stats.site_people], ['Clicked in emails', stats.email_people]];
       if (!mailer || !mailer.enabled) {
@@ -1240,10 +1241,15 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
   }
 
   // Newsletter copies a weekly sponsor's block went out in: Monday's issue
-  // and Thursday's weekend issue both carry the week's sponsor.
-  async function recipientsFor(week) {
-    const sends = await Promise.all([newsletterSend(week), newsletterSend(addDays(week, 3))]);
-    return sends.reduce((n, nl) => n + (nl ? Number(nl.recipients) || 0 : 0), 0);
+  // and Thursday's weekend issue both carry the week's sponsor, unless the
+  // payment cleared after one went out (newsletter_missed: Monday's;
+  // newsletter_missed_both: Thursday's too). → { recipients, issues }
+  async function recipientsFor(order) {
+    const week = order.week_start;
+    const [mon, thu] = await Promise.all([newsletterSend(week), newsletterSend(addDays(week, 3))]);
+    const sent = [!order.newsletter_missed && mon, !order.newsletter_missed_both && thu]
+      .filter(nl => nl && Number(nl.recipients) > 0);
+    return { recipients: sent.reduce((n, nl) => n + Number(nl.recipients), 0), issues: sent.length };
   }
 
   // Where a paid pick ran: the live and archived events it matches (by the
@@ -1297,7 +1303,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
   async function orderReport(order, list) {
     if (order.kind === 'weekly' && order.week_start) {
       const rows = typeof store.listTraffic === 'function' ? await store.listTraffic(order.week_start) : [];
-      return { kind: 'weekly', stats: sponsorStats(order, rows, { recipients: await recipientsFor(order.week_start) }) };
+      return { kind: 'weekly', stats: sponsorStats(order, rows, await recipientsFor(order)) };
     }
     if (order.kind === 'featured' && order.event && order.event.date) {
       const { place, stats } = await pickStatsFor(order, list);
@@ -1592,7 +1598,8 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         // weekend issue still carries it unless that has gone out too.
         if (order.kind === 'weekly' && await newsletterSend(order.week_start)) {
           order.newsletter_missed = nowIso();
-          const both = Boolean(await newsletterSend(addDays(order.week_start, 3)));
+          // With the weekend issue off, Thursday's never carries it either.
+          const both = !weekendIssueOn() || Boolean(await newsletterSend(addDays(order.week_start, 3)));
           order.newsletter_missed_both = both;
           if (slack) {
             slack.alert(`sponsor-newsletter-missed:${order.id}`, `${order.business} paid after their week's newsletter went out`,

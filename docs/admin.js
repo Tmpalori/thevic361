@@ -978,7 +978,7 @@
         : d.weekend.failed ? ('Partly sent (' + d.weekend.failed + ' failed)')
         : d.weekend.sent ? 'Sent' : (d.weekend.next.events + ' events ready')) +
         item('Skip Thursdays', d.weekend.opted_out || 0) : '') +
-      item('Auto-send', d.autosend ? 'On, Mondays and Thursdays' : 'Off');
+      item('Auto-send', d.autosend ? (d.weekend && d.weekend.enabled === false ? 'On, Mondays' : 'On, Mondays and Thursdays') : 'Off');
     const warn = document.getElementById('email-nl-warning');
     const issues = [];
     if (!d.configured) issues.push('Add RESEND_API_KEY in Railway to turn on sending. Signups are being saved in the meantime.');
@@ -1736,7 +1736,7 @@
     if (issues) {
       const pct = v => (v == null ? '—' : v + '%');
       issues.innerHTML = (g.issues || []).length
-        ? '<thead><tr><th>Issue</th><th class="num">Sent</th><th class="num">Opened</th><th class="num">Clicked that day</th><th class="num">Reader visits that week</th><th>Top events from the email</th><th class="num">Left</th></tr></thead><tbody>' +
+        ? '<thead><tr><th>Issue</th><th class="num">Sent</th><th class="num">Opened</th><th class="num">Clicked that day</th><th class="num">Reader visits until the next issue</th><th>Top events from the email</th><th class="num">Left</th></tr></thead><tbody>' +
           g.issues.map(x => '<tr><td>' + escapeHtml((x.edition === 'weekend' ? 'Thu ' : 'Mon ') + fmtDay(x.week)) + (x.edition === 'weekend' ? ' <span class="muted">weekend</span>' : '') + '</td><td class="num">' + x.sent + '</td><td class="num">' + x.opens + ' (' + pct(x.open_rate) + ')' +
             '</td><td class="num">' + x.clickers + ' (' + pct(x.click_rate) + ')</td><td class="num">' + (x.reader_days || 0) + '</td><td class="muted">' +
             escapeHtml(x.top_events.map(e => e.name + ' (' + e.views + ')').join(', ') || '—') + '</td><td class="num">' + (x.unsubscribed || '') + '</td></tr>').join('') + '</tbody>'
@@ -2033,7 +2033,7 @@
       ? [['Week', s.week_start + ' to ' + s.week_end], ['Block seen', n(s.views) + ' times (' + n(s.view_people) + ' people)'],
         ['Clicked on the site', n(s.site_people) + ' people (' + n(s.site_clicks) + ' clicks)'],
         ['Clicked in emails', n(s.email_people) + ' people (' + n(s.email_clicks) + ' clicks)'],
-        ['Newsletter copies with the block (Mon + Thu)', n(s.newsletter_recipients)], ['Site visitors that week', n(s.site_visitors)]]
+        ['Newsletter copies with the block' + (s.newsletter_issues > 1 ? ' (Mon + Thu)' : ''), n(s.newsletter_recipients)], ['Site visitors that week', n(s.site_visitors)]]
       : [['Counting', s.start + ' to ' + s.end], ['Shown in lists as a Vic’s Pick', n(s.shown) + ' times (' + n(s.shown_people) + ' people)'],
         ['Event page views', n(s.page_views) + ' (' + n(s.page_people) + ' people)'],
         ['Clicked their link', n(s.link_people) + ' people (' + n(s.link_clicks) + ' clicks)'],
@@ -2203,11 +2203,14 @@
     const list = bits.length > 1 ? bits.slice(0, -1).join(', ') + ' and ' + bits[bits.length - 1] : bits[0];
     // The newsletter's reach that week, not a claim this event was in it
     // (an issue shows a few events a day, from the day it's sent).
-    const wk = (d.newsletter && d.newsletter.weekend) || {};
-    const nl = d.newsletter && d.newsletter.recipients
-      ? ' Our Monday newsletter that week went to ' + d.newsletter.recipients + ' Victoria locals' + (d.newsletter.opens ? ' (' + d.newsletter.opens + ' opened it)' : '') +
-        (wk.recipients ? ', and Thursday\'s weekend issue to ' + wk.recipients + (wk.opens ? ' (' + wk.opens + ' opened it)' : '') : '') + '.'
-      : '';
+    const mon = d.newsletter || {};
+    const wk = mon.weekend || {};
+    const parts = [
+      mon.recipients ? 'Our Monday newsletter that week went to ' + mon.recipients + ' Victoria locals' + (mon.opens ? ' (' + mon.opens + ' opened it)' : '') : '',
+      wk.recipients ? (mon.recipients ? 'and Thursday\'s weekend issue to ' : 'Our Thursday weekend newsletter that week went to ') + wk.recipients +
+        (mon.recipients ? '' : ' Victoria locals') + (wk.opens ? ' (' + wk.opens + ' opened it)' : '') : ''
+    ].filter(Boolean);
+    const nl = parts.length ? ' ' + parts.join(', ') + '.' : '';
     return 'Hi ' + (ev.venue || 'there') + '!\n\n' +
       'We featured ' + ev.name + ' on The Vic 361, Victoria\'s free events guide, and it got ' + list + '.' + nl + '\n\n' +
       'Want your next event front and center? A Vic\'s Pick pins it to the top of its day on the site (booked in time, it\'s starred in the newsletter too): ' +
@@ -2221,9 +2224,12 @@
     if (label) label.textContent = '(' + d.week_start + ' to ' + d.week_end + (d.this_week ? ', so far' : '') + ')';
     if (next) next.disabled = Boolean(d.this_week);
     const msg = document.getElementById('event-stats-msg');
-    if (msg) msg.textContent = d.newsletter && d.newsletter.recipients
-      ? 'Newsletter that week: Monday sent to ' + d.newsletter.recipients + ', opened by ' + d.newsletter.opens +
-        (d.newsletter.weekend && d.newsletter.weekend.recipients ? '; Thursday sent to ' + d.newsletter.weekend.recipients + ', opened by ' + d.newsletter.weekend.opens : '') + '.' : '';
+    const nlw = (d.newsletter && d.newsletter.weekend) || {};
+    const nlLines = [
+      d.newsletter && d.newsletter.recipients ? 'Monday sent to ' + d.newsletter.recipients + ', opened by ' + d.newsletter.opens : '',
+      nlw.recipients ? 'Thursday sent to ' + nlw.recipients + ', opened by ' + nlw.opens : ''
+    ].filter(Boolean);
+    if (msg) msg.textContent = nlLines.length ? 'Newsletter that week: ' + nlLines.join('; ') + '.' : '';
     if (!table) return;
     const n = v => Number(v) || 0;
     table.innerHTML = (d.events || []).length
