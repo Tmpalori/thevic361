@@ -349,6 +349,9 @@ ${referral ? referralHtml({ siteUrl, ...referral }) : ''}`;
 
 // reminder: the one follow-up a day later to someone who hasn't tapped it
 // (sendConfirmReminders), with a subject that says what it's for.
+// One inbox, one key for rate limits (same as emailKey in db.js).
+export const inboxKey = emailKey;
+
 export function renderConfirmEmail({ siteUrl, confirmUrl, address, reminder = false }) {
   const lead = reminder
     ? 'You asked for The Vic 361 yesterday but haven\'t confirmed yet. One tap and Victoria\'s best events land in your inbox every Monday.'
@@ -549,6 +552,13 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   const rewards = createReferralRewards({ store, slack, tremendous, nowFn, localDate: localDateStr });
   const subscribeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10 });
   const confirmLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 3 });
+  // Signups without a bot-check token can ask for a confirmation email
+  // without passing the check, so they share one hourly budget: a script
+  // can't use the form to mail strangers at scale (and hurt the domain).
+  const unverifiedLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30 });
+  // The open pixel writes on every hit: a per-IP cap keeps a loop from
+  // filling the table (one person opening every issue is a handful).
+  const pixelLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120 });
   const supported = typeof store.addSubscriber === 'function';
 
   const openPixel = (week, id) => `${siteUrl}/email/o/${week}/${encodeURIComponent(id)}.gif`;
@@ -804,12 +814,25 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
         if (confirmed && confirmed.newly_confirmed) welcome(confirmed);
         return res.json(done);
       }
-      // A few confirmation emails per address a day, whoever asks, so the
-      // form can't be used to flood someone's inbox.
-      if (!confirmLimiter.check(email).ok) return res.json(done);
+      // A few confirmation emails per inbox a day, whoever asks (a +tag or
+      // Gmail dots don't make a new inbox), so the form can't be used to
+      // flood someone's inbox.
+      if (!confirmLimiter.check(inboxKey(email)).ok) return res.json(done);
+      if (unverified && !unverifiedLimiter.check('all').ok) {
+        console.warn('[newsletter] hourly cap on confirmation emails for signups without a bot check reached');
+        return res.json(done);
+      }
       const confirmUrl = `${siteUrl}/subscribe/confirm?token=${encodeURIComponent(sub.token)}`;
       const mail = renderConfirmEmail({ siteUrl, confirmUrl, address: config.address });
-      await resend.send({ from: config.from, to: [email], subject: mail.subject, html: mail.html, text: mail.text });
+      // Same answer whether or not the email went: a failure here must not
+      // tell anyone this address needed confirming (an unsubscribed or
+      // waiting address) when a new one gets "You're on the list".
+      try {
+        await resend.send({ from: config.from, to: [email], subject: mail.subject, html: mail.html, text: mail.text });
+      } catch (err) {
+        console.error('[newsletter] confirmation email failed:', err.message);
+        if (slack) slack.alert('newsletter-subscribe-failed', 'Newsletter confirmation emails are failing', err.message, `${siteUrl}/admin.html`);
+      }
       res.json(done);
     } catch (err) {
       console.error('[newsletter] subscribe failed:', err.message);
@@ -833,7 +856,10 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
         from: config.from, to: [sub.email], subject: mail.subject, html: mail.html, text: mail.text,
         ...(config.replyTo ? { reply_to: config.replyTo } : {}),
         headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
-      }, `vic361-welcome-${sub.id || sub.token}`);
+      // One key per confirmation: a comeback's welcome (new token, new
+      // unsubscribe link) isn't a repeat of the first one, and reusing the
+      // key would make Resend refuse it.
+      }, `vic361-welcome-${sub.id || sub.token}-${new Date(sub.confirmed_at || 0).getTime() || 0}`);
     } catch (err) {
       console.warn('[newsletter] welcome email failed:', err.message);
       // The signup is saved either way, but with single opt-in this is the
@@ -849,9 +875,14 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   // ignores ids that aren't subscribers). Apple Mail loads images for its
   // users in the background and some work mail scanners do too, so the
   // rate reads higher than real opens; the admin tab says so.
+  // Only issues from the last six months count, and each IP has an hourly
+  // cap, so made-up URLs can't pad the table.
   app.get('/email/o/:week/:file', (req, res) => {
     const m = /^([A-Za-z0-9-]{8,64})\.gif$/.exec(req.params.file);
-    if (m && /^\d{4}-\d{2}-\d{2}$/.test(req.params.week) && supported && typeof store.recordEmailOpen === 'function') {
+    const week = req.params.week;
+    const today = localDateStr(nowFn());
+    const recent = /^\d{4}-\d{2}-\d{2}$/.test(week) && week <= today && week >= addDays(today, -183);
+    if (m && recent && pixelLimiter.check(req.ip || '').ok && supported && typeof store.recordEmailOpen === 'function') {
       store.recordEmailOpen({ week_key: req.params.week, subscriber_id: m[1] })
         .catch(err => console.warn('[newsletter] recording an open failed:', err.message));
     }

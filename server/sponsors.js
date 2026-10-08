@@ -477,12 +477,19 @@ export function pickStats(order, rows, { start, end, pages = [], urls = [], reci
 }
 
 // ─── Every event's week (admin "Event stats") ───────────────────────────
-// How each event listed between `start` and `end` did, for pitching its
+// How each event dated between `start` and `end` did, for pitching its
 // venue a Vic's Pick ("your event got 120 views and 9 shares last week").
-// Same counting as pickStats, per event page. `events`: live and archived
-// events (each with page, name, venue, date, url).
+// Each event counts its traffic from LEAD_IN_DAYS before its date through
+// its date (people look things up ahead of time; a Monday event's views
+// are mostly the week before). Like pickStats: a link tap is one on its own
+// page for its link, or one anywhere else whose link is its link; a share
+// is one of its page's link (a share button on it, or the "Also on"
+// list's icon elsewhere), or a Facebook/X/Text button on its page.
+// `rows` must reach back LEAD_IN_DAYS before `start`. `events`: live and
+// archived events (each with page, name, venue, date, url).
+export const LEAD_IN_DAYS = 7;
+const PAGE_SHARE_BUTTONS = new Set(['share_facebook', 'share_x', 'share_text']);
 export function eventWeekStats(rows, events, { start, end }) {
-  const inRange = (rows || []).filter(r => r.day >= start && r.day <= end);
   const byPage = new Map();
   for (const ev of events || []) {
     if (!ev || !ev.page || !ev.date || ev.date < start || ev.date > end) continue;
@@ -492,14 +499,18 @@ export function eventWeekStats(rows, events, { start, end }) {
   }
   const out = [];
   for (const e of byPage.values()) {
+    const from = addDays(e.date, -LEAD_IN_DAYS);
+    const inRange = (rows || []).filter(r => r.day >= from && r.day <= e.date);
     const onPage = r => pathOf(r.path) === e.page;
+    const ours = u => [...e.urls].some(x => sameLink(u, x));
     const views = inRange.filter(r => r.kind === 'view' && onPage(r));
     const clicks = type => inRange.filter(r => r.kind === 'click' && (typeof type === 'function' ? type(r.click_type) : r.click_type === type));
-    const link = clicks('event_click').filter(r => onPage(r) || [...e.urls].some(u => sameLink(r.click_url, u)));
-    const shares = clicks(t => /^share_/.test(t || '')).filter(r => onPage(r) || pathOf(r.click_url) === e.page);
+    const link = clicks('event_click').filter(r => ours(r.click_url) && (onPage(r) || !/^\/events\//.test(pathOf(r.path))));
+    const shares = clicks(t => /^share_/.test(t || ''))
+      .filter(r => pathOf(r.click_url) === e.page || (onPage(r) && PAGE_SHARE_BUTTONS.has(r.click_type)));
     const fromShares = views.filter(r => r.ref_source === SHARED_LINK);
     out.push({
-      page: e.page, name: e.name, venue: e.venue, date: e.date,
+      page: e.page, name: e.name, venue: e.venue, date: e.date, counted_from: from,
       page_views: rowCount(views), page_people: peopleIn(views),
       link_clicks: rowCount(link), link_people: peopleIn(link),
       calendar_adds: rowCount(clicks('add_to_calendar').filter(onPage)),

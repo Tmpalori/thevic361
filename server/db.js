@@ -428,7 +428,7 @@ class FileStore {
       if (!sub) {
         // referred_by is only ever set here, on a first signup: a comeback
         // or a re-submit isn't a new reader anyone brought in.
-        sub = { id: newId(), email, status: 'pending', token: newToken(), source, created_at: now,
+        sub = { id: newId(), email, status: 'pending', token: newToken(), source, created_at: now, pending_since: now,
           ...(referredBy ? { referred_by: referredBy } : {}) };
         data.subscribers.push(sub);
         fresh = true;
@@ -437,8 +437,10 @@ class FileStore {
         // it also confirms and the old one sits in every issue they got
         // (forwarded ones too); but the old one is kept for unsubscribing,
         // so those issues' links still work (see PgStore.addSubscriber).
+        // pending_since: when this signup asked, for the confirm reminder; a
+        // comeback is a new ask and gets its own reminder.
         Object.assign(sub, { status: 'pending', token: newToken(), unsubscribed_at: null, source,
-          old_tokens: [...(sub.old_tokens || []), sub.token] });
+          old_tokens: [...(sub.old_tokens || []), sub.token], pending_since: now, reminded_at: null });
         fresh = true;
       }
       await this._write(data);
@@ -473,13 +475,14 @@ class FileStore {
     });
   }
 
-  // Pending signups (asked between `from` and `to`, ISO times) that haven't
+  // Pending signups (asked between `from` and `to`, ISO times: pending_since,
+  // or created_at for rows from before it was recorded) that haven't
   // had their one confirm reminder (newsletter.js sendConfirmReminders).
   async listConfirmReminders({ from, to, limit = 100 }) {
     const data = await this._read();
     return data.subscribers
-      .filter(x => x.status === 'pending' && !x.reminded_at && x.created_at >= from && x.created_at <= to)
-      .sort((a, b) => a.created_at.localeCompare(b.created_at)).slice(0, limit)
+      .filter(x => x.status === 'pending' && !x.reminded_at && (x.pending_since || x.created_at) >= from && (x.pending_since || x.created_at) <= to)
+      .sort((a, b) => (a.pending_since || a.created_at).localeCompare(b.pending_since || b.created_at)).slice(0, limit)
       .map(x => ({ id: x.id, email: x.email, token: x.token }));
   }
 
@@ -975,7 +978,7 @@ class PgStore {
         const added = [['event_submissions', 'ai_review'], ['traffic', 'ad'],
           ['newsletter_sends', 'failed_emails'], ['newsletter_sends', 'picks'], ['subscribers', 'old_tokens'],
           ['subscribers', 'ref_code'], ['subscribers', 'referred_by'], ['subscribers', 'ref_tier'],
-          ['subscribers', 'reminded_at']];
+          ['subscribers', 'reminded_at'], ['subscribers', 'pending_since']];
         const cols = await this.pool.query(
           `SELECT table_name, column_name FROM information_schema.columns
             WHERE table_schema = current_schema() AND column_name = ANY($1::text[])`,
@@ -1092,6 +1095,9 @@ class PgStore {
         await addColumn('subscribers', 'ref_tier', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS ref_tier INT NOT NULL DEFAULT 0');
         // When a pending signup got its one "tap to confirm" reminder.
         await addColumn('subscribers', 'reminded_at', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS reminded_at TIMESTAMPTZ');
+        // When a pending signup asked (a first signup or a comeback), so the
+        // reminder goes a day after the ask, not a day after the first signup.
+        await addColumn('subscribers', 'pending_since', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS pending_since TIMESTAMPTZ');
         await this.pool.query(`
           CREATE TABLE IF NOT EXISTS newsletter_sends (
             week_key TEXT PRIMARY KEY,
@@ -1328,6 +1334,8 @@ class PgStore {
     // Prune now and then instead of on a schedule.
     if (Math.random() < 0.002) {
       await this.pool.query(`DELETE FROM traffic WHERE day < CURRENT_DATE - $1::int`, [TRAFFIC_RETENTION_DAYS]);
+      // Newsletter opens are kept as long as traffic.
+      await this.pool.query(`DELETE FROM email_opens WHERE first_opened_at < NOW() - make_interval(days => $1::int)`, [TRAFFIC_RETENTION_DAYS]);
     }
   }
 
@@ -1360,13 +1368,13 @@ class PgStore {
       // unsubscribing (Gmail's Unsubscribe on an older issue still works).
       const row = (await this.pool.query(
         `UPDATE subscribers SET status = 'pending', old_tokens = array_append(old_tokens, token), token = $2,
-           unsubscribed_at = NULL, source = $3 WHERE email = $1 RETURNING *`,
+           unsubscribed_at = NULL, source = $3, pending_since = NOW(), reminded_at = NULL WHERE email = $1 RETURNING *`,
         [email, newToken(), source])).rows[0];
       return { ...row, new_signup: true };
     }
     // xmax = 0 means this statement inserted the row (not the conflict path).
     const row = (await this.pool.query(
-      `INSERT INTO subscribers (id, email, status, token, source, referred_by) VALUES ($1, $2, 'pending', $3, $4, $5)
+      `INSERT INTO subscribers (id, email, status, token, source, referred_by, pending_since) VALUES ($1, $2, 'pending', $3, $4, $5, NOW())
        ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING *, (xmax = 0) AS inserted`,
       [newId(), email, newToken(), source, referredBy])).rows[0];
     const { inserted, ...sub } = row;
@@ -1403,8 +1411,9 @@ class PgStore {
     await this.ready();
     const r = await this.pool.query(
       `SELECT id, email, token FROM subscribers
-        WHERE status = 'pending' AND reminded_at IS NULL AND created_at >= $1 AND created_at <= $2
-        ORDER BY created_at LIMIT $3`, [from, to, limit]);
+        WHERE status = 'pending' AND reminded_at IS NULL
+          AND COALESCE(pending_since, created_at) >= $1 AND COALESCE(pending_since, created_at) <= $2
+        ORDER BY COALESCE(pending_since, created_at) LIMIT $3`, [from, to, limit]);
     return r.rows;
   }
 

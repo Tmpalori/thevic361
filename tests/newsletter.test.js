@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore, } from '../server/db.js';
 import { withPages } from '../server/seo.js';
-import { renderWeekly, renderWelcomeEmail, normalizeEmail, signupSource, renderSubscribePage, darkSafe, createResend, referralFlags, renderConfirmEmail } from '../server/newsletter.js';
+import { renderWeekly, renderWelcomeEmail, normalizeEmail, signupSource, renderSubscribePage, darkSafe, createResend, referralFlags, renderConfirmEmail, inboxKey } from '../server/newsletter.js';
 import { createReferralRewards, createTremendous, tremendousConfig, drawingMonth } from '../server/referralRewards.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -196,9 +196,15 @@ describe('review fixes: signups and privacy', () => {
     await startApp({ resend, slack: { enabled: true, notify: async () => true, alert: async (key, title) => { alerts.push({ key, title }); } } });
     await store.importSubscribers(['x@example.com'], 'import');
     await store.unsubscribe((await store.listSubscribers({ status: 'active' }))[0].token);
-    const r = await post('/api/subscribe', { email: 'x@example.com' });
-    expect(r.status).toBe(500);
-    expect(alerts).toEqual([{ key: 'newsletter-subscribe-failed', title: 'Newsletter signups are failing' }]);
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      // Same answer as any other signup (a 500 here would tell anyone the
+      // address had unsubscribed); the owner hears about it instead.
+      const r = await post('/api/subscribe', { email: 'x@example.com' });
+      expect(r.status).toBe(200);
+      expect((await r.json()).message).toBe("You're on the list! Check your inbox.");
+      expect(alerts).toEqual([{ key: 'newsletter-subscribe-failed', title: 'Newsletter confirmation emails are failing' }]);
+    } finally { err.mockRestore(); }
   });
 
   it('a welcome email that fails keeps the signup and alerts the owner in Slack', async () => {
@@ -1433,7 +1439,8 @@ describe('confirm reminders', () => {
     const sub = await store.addSubscriber({ email, source: 'site' });
     await store._withWrite(async () => {
       const data = await store._read();
-      data.subscribers.find(x => x.email === email).created_at = new Date(now.getTime() - hours * 3600e3).toISOString();
+      const row = data.subscribers.find(x => x.email === email);
+      row.created_at = row.pending_since = new Date(now.getTime() - hours * 3600e3).toISOString();
       await store._write(data);
     });
     return sub;
@@ -1460,6 +1467,21 @@ describe('confirm reminders', () => {
     // Confirming sends the welcome email in the background: wait for it, or
     // it lands in the next test's outbox.
     await vi.waitFor(() => expect(sent.single.map(m => m.subject)).toHaveLength(2), { timeout: 2000 });
+  });
+
+  it('a comeback is reminded a day after coming back, not right away', async () => {
+    await startApp();
+    await store.importSubscribers(['back@example.com'], 'import');
+    const [s] = await store.listSubscribers({ status: 'active' });
+    await store._withWrite(async () => {
+      const data = await store._read();
+      data.subscribers.find(x => x.email === 'back@example.com').created_at = new Date(NOW.getTime() - 3 * 864e5).toISOString();
+      await store._write(data);
+    });
+    await store.unsubscribe(s.token);
+    await store.addSubscriber({ email: 'back@example.com', source: 'site' }); // comes back now (the store's real clock)
+    expect(await nlApi.sendConfirmReminders(new Date())).toEqual({ sent: 0 });
+    expect(await nlApi.sendConfirmReminders(new Date(Date.now() + 25 * 3600e3))).toEqual({ sent: 1 });
   });
 
   it('a reminder that fails to send is tried again next hour', async () => {
@@ -1536,5 +1558,55 @@ describe('referral rewards: second review', () => {
     const list = await rewards.list(20);
     expect(list.some(r => r.id === held.id)).toBe(true);
     expect(list).toHaveLength(21);
+  });
+});
+
+describe('review fixes: email limits', () => {
+  it('one inbox is one key for the per-inbox confirmation cap (+tags and Gmail dots)', () => {
+    expect(inboxKey('V.I.C.T.I.M+x@GoogleMail.com')).toBe('victim@gmail.com');
+    expect(inboxKey('pat+news@yahoo.com')).toBe('pat@yahoo.com');
+    expect(inboxKey('pat.smith@yahoo.com')).toBe('pat.smith@yahoo.com');
+  });
+
+  it('signups without a bot check share an hourly budget of confirmation emails', async () => {
+    const pass = async () => ({ ok: true, json: async () => ({ success: true }) });
+    await startApp({ turnstileSecret: 'fake-secret', fetch: pass, trustProxy: true });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      for (let i = 0; i < 35; i++) {
+        const r = await fetch(baseUrl + '/api/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `10.0.0.${i}` },
+          body: JSON.stringify({ email: `person${i}@example.com` }) });
+        expect((await r.json()).message).toBe('Almost there! Check your inbox and tap Confirm to start getting it.');
+      }
+    } finally { warn.mockRestore(); }
+    expect(sent.single).toHaveLength(30);
+  });
+
+  it('a comeback\'s welcome email gets its own idempotency key', async () => {
+    const keys = [];
+    const resend = fakeResend();
+    const send = resend.send;
+    resend.send = async (msg, key) => { keys.push(key); return send(msg, key); };
+    await startApp({ resend });
+    await post('/api/subscribe', { email: 'back@example.com' });
+    await vi.waitFor(() => expect(keys).toHaveLength(1), { timeout: 2000 });
+    const sub = (await store._read()).subscribers.find(x => x.email === 'back@example.com');
+    await store.unsubscribe(sub.token);
+    const again = await store.addSubscriber({ email: 'back@example.com', source: 'site' });
+    await new Promise(r => setTimeout(r, 5));
+    expect((await fetch(`${baseUrl}/subscribe/confirm?token=${again.token}`, { method: 'POST' })).status).toBe(200);
+    await vi.waitFor(() => expect(keys.filter(k => /^vic361-welcome-/.test(k))).toHaveLength(2), { timeout: 2000 });
+    const [a, b] = keys.filter(k => /^vic361-welcome-/.test(k));
+    expect(a).not.toBe(b);
+  });
+
+  it('the open pixel ignores issues more than six months old or in the future', async () => {
+    await startApp();
+    await store.importSubscribers(['a@example.com'], 'import');
+    const [s] = await store.listSubscribers({ status: 'active' });
+    for (const week of ['2025-01-06', '2027-01-04', '2026-10-05']) {
+      expect((await fetch(`${baseUrl}/email/o/${week}/${s.id}.gif`)).headers.get('content-type')).toBe('image/gif');
+    }
+    await vi.waitFor(async () => expect(await store.countEmailOpens(['2025-01-06', '2027-01-04', '2026-10-05'])).toEqual({ '2026-10-05': 1 }), { timeout: 2000 });
   });
 });
