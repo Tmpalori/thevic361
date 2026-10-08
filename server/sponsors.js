@@ -610,7 +610,7 @@ export function validateOrder(kind, input, { now, orders, venues }) {
     }
   } else if (kind === 'featured') {
     const v = validateSubmission({
-      name: input.event_name, date: input.date, time: input.time, venue: input.venue,
+      name: input.event_name, date: input.date, time: input.time, end_time: input.end_time, venue: input.venue,
       address: input.address, description: input.description, url: input.url
     }, { adminEdit: true });
     if (!v.ok) Object.assign(errors, v.errors);
@@ -641,6 +641,37 @@ function field({ name, label, value = '', error, type = 'text', hint = '', requi
     : `<input type="${type}" ${attrs} value="${escHtml(value)}">`;
   return `<div class="co-field"><label for="${id}">${escHtml(label)}</label>${input}` +
     (hint ? `<small class="co-hint">${escHtml(hint)}</small>` : '') +
+    (error ? `<small class="co-error">${escHtml(error)}</small>` : '') + '</div>';
+}
+
+// Start and end time choices, as on the submit form (docs/submit.js
+// buildTimeOptions): every half hour from 5:00 AM to 1:30 AM.
+export const TIME_CHOICES = (() => {
+  const out = [];
+  for (let m = 5 * 60; m <= 25 * 60 + 30; m += 30) {
+    const hh = Math.floor(m / 60) % 24;
+    out.push(`${((hh + 11) % 12) + 1}:${String(m % 60).padStart(2, '0')} ${hh < 12 ? 'AM' : 'PM'}`);
+  }
+  return out;
+})();
+
+// A prefilled time ("06:30 PM", "7pm") as the matching choice, so the
+// select shows it; anything else as given.
+export function timeChoice(value) {
+  const s = clean(value, 60);
+  const m = s.match(/^0?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?$/i);
+  return m ? `${Number(m[1])}:${m[2] || '00'} ${m[3].toUpperCase()}M` : s;
+}
+
+function timeField({ name, label, value, error, required = true, hint = '' }) {
+  const v = timeChoice(value);
+  // A time that isn't on the half hour (6:45 PM) stays selectable.
+  const opts = v && !TIME_CHOICES.includes(v) ? [v, ...TIME_CHOICES] : TIME_CHOICES;
+  return `<div class="co-field"><label for="f-${name}">${escHtml(label)}</label>` +
+    `<select id="f-${name}" name="${name}"${required ? ' required' : ''}${error ? ' aria-invalid="true"' : ''}>` +
+    `<option value="">${required ? 'Choose…' : 'None'}</option>` +
+    opts.map(t => `<option value="${escHtml(t)}"${t === v ? ' selected' : ''}>${escHtml(t)}</option>`).join('') +
+    '</select>' + (hint ? `<small class="co-hint">${escHtml(hint)}</small>` : '') +
     (error ? `<small class="co-error">${escHtml(error)}</small>` : '') + '</div>';
 }
 
@@ -689,9 +720,11 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
   }
   // Vic’s Pick: the event as it will look, pinned above the rest of its day.
   const date = /^\d{4}-\d{2}-\d{2}$/.test(val('date')) ? val('date') : '';
+  const start = clean(v.time, 60) || '7:00 PM';
+  const end = clean(v.end_time, 60);
   const ev = {
     name: clean(v.event_name, 200) || 'Your event name',
-    time: clean(v.time, 60) || '7:00 PM',
+    time: end ? `${start} – ${end}` : start,
     venue: clean(v.venue, 200) || 'Your venue',
     description: clean(v.description, 300) || 'Your description shows here.',
     featured: true
@@ -739,7 +772,8 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
   } else {
     fields = field({ name: 'event_name', label: 'Event name', value: v.event_name, error: e.name, max: 200 }) +
       field({ name: 'date', label: 'Date', type: 'date', value: v.date, error: e.date }) +
-      field({ name: 'time', label: 'Start time', value: v.time, error: e.time, max: 60, hint: 'e.g. 7:00 PM' }) +
+      timeField({ name: 'time', label: 'Start time', value: v.time, error: e.time }) +
+      timeField({ name: 'end_time', label: 'End time', value: v.end_time, error: e.end_time, required: false, hint: 'Optional.' }) +
       field({ name: 'venue', label: 'Venue', value: v.venue, error: e.venue, max: 200 }) +
       field({ name: 'address', label: 'Address', value: v.address, error: e.address, max: 300 }) +
       field({ name: 'description', label: 'Description', value: v.description, error: e.description, max: 2000, rows: 4 }) +
@@ -1431,7 +1465,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     const ev = o.event || {};
     return o.kind === 'weekly'
       ? { week: o.week_start, business: o.business, text: s.text, url: s.url, cta: s.cta, address: s.address, email: o.email }
-      : { event_name: ev.name, date: ev.date, time: ev.time, venue: ev.venue, address: ev.address, description: ev.description,
+      : { event_name: ev.name, date: ev.date, time: ev.time, end_time: ev.end_time, venue: ev.venue, address: ev.address, description: ev.description,
         url: ev.url, business: o.business, email: o.email };
   }
 
@@ -1715,14 +1749,14 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         // once it's listed) always are. The page then drops the id from the
         // address bar (history.replaceState in renderCheckoutPage), and the
         // Pixel and Google tag leave it out of the URLs they report.
-        const PREFILL = ['event_name', 'date', 'time', 'venue', 'address', 'description', 'url'];
+        const PREFILL = ['event_name', 'date', 'time', 'end_time', 'venue', 'address', 'description', 'url'];
         let values = Object.fromEntries(PREFILL.filter(k => typeof req.query[k] === 'string').map(k => [k, req.query[k].slice(0, 2000)]));
         const from = typeof req.query.from === 'string' && /^[0-9a-f-]{36}$/i.test(req.query.from) ? req.query.from : '';
         const sub = from && typeof store.get === 'function' ? await store.get(from).catch(() => null) : null;
         if (sub && (sub.source || 'submission') === 'submission') {
           const p = sub.payload || {};
           const fresh = sub.status === 'pending' && nowFn().getTime() - Date.parse(sub.created_at) < PREFILL_CONTACT_MS;
-          for (const [k, v] of [['event_name', p.name], ['date', p.date], ['time', p.time], ['venue', p.venue], ['address', p.address],
+          for (const [k, v] of [['event_name', p.name], ['date', p.date], ['time', p.time], ['end_time', p.end_time], ['venue', p.venue], ['address', p.address],
             ['description', p.description], ['url', p.url], ...(fresh ? [['business', sub.submitter_name], ['email', sub.submitter_email]] : [])]) {
             if (v) values[k] = String(v).slice(0, 2000);
           }

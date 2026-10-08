@@ -219,6 +219,24 @@ def test_allevents_reads_several_pages_and_dedupes_by_url():
     assert sorted(e["name"] for e in out) == ["A", "B"]
 
 
+def test_allevents_keeps_the_listing_text_for_icons(monkeypatch):
+    # "Spooky Starry Night" is a painting class. Without its text the icons
+    # and the AI review guessed from the name alone and tagged it music.
+    monkeypatch.setattr(ce, "in_window", lambda d: True)
+    html_text = "<html><body><script type=\"application/ld+json\">" + json.dumps({
+        "@type": "Event", "name": "Spooky Starry Night", "startDate": "2026-10-10T18:30:00-05:00",
+        "url": "https://allevents.in/victoria/spooky-starry-night/200030777754000",
+        "description": "Give a classic starry-night painting a spooky seasonal twist!\n\nSpend the evening creating your own canvas. &amp; more",
+        "location": {"name": "2914 N Laurent St.", "address": {"addressLocality": "Victoria", "streetAddress": "2914 N Laurent St"}},
+    }) + "</script></body></html>"
+    events = []
+    ce._parse_allevents_page(html_text, events, set())
+    [ev] = events
+    assert ev["description"] == ("Give a classic starry-night painting a spooky seasonal twist! "
+                                 "Spend the evening creating your own canvas. & more")
+    assert "arts" in ev["icons"] and "music" not in ev["icons"]
+
+
 # ─── FB posts placeholder items ───────────────────────────────────────────
 
 def test_fb_posts_ignores_apify_error_placeholders(monkeypatch):
