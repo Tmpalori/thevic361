@@ -2022,7 +2022,7 @@ _AI_REVIEW_SYSTEM_PROMPT = """You are an editor for The Vic 361, a weekly commun
 
 For each event you receive, return:
   - description: ≤160 characters, max 2 short sentences. Neutral, friendly local-newsletter tone. NO emojis. Do NOT repeat the event name, venue name, address, date, or time (the site already shows those). If the input description has no useful info beyond what's already in the name/venue, write a brief 1-line description of what attendees can expect based on the event type.
-  - icons: 1–3 strings from this exact set: food, music, family, drinks, arts, shopping, outdoors, community, free. Order by relevance (most representative first). Use "free" only when the event is genuinely free to attend.
+  - icons: 1–3 strings from this exact set: food, music, family, drinks, arts, shopping, outdoors, community, free. Order by relevance (most representative first). Use "free" only when the event is genuinely free to attend. Only use an icon the name or description actually supports: never add music unless it mentions music, a band, a DJ, a concert, karaoke or an open mic. When the input says little, use fewer icons rather than guessing.
   - free: boolean, true if the event is free to attend.
   - appeal: integer 1–5. How many people in Victoria would want to hear about this, and how special it is. 5: a big one-time draw for the whole town (festival, parade, big concert, fair, holiday lighting, rodeo). 4: a notable one-time event with broad appeal (touring act, community celebration, big fundraiser, family carnival). 3: an ordinary good outing (live music at a bar, trivia, a market, a kids' event). 2: routine or narrow (weekly bingo, a club or group meeting, a class or workshop for a few people, a store's kids craft). 1: very niche or barely an event (a support group, an orientation, a promo or deal).
   - keep: boolean. false when this is NOT a real event someone can attend at a set time and place, for example a job or internship posting, "now booking" field trips or parties, a menu or daily special with nothing happening, a "National ___ Day" post, a giveaway, a closure or holiday-hours notice, or registration for something that isn't on this date. When unsure, keep: true.
@@ -3849,7 +3849,10 @@ def _parse_allevents_page(html_text, events, seen_urls):
             import html as _html
             name = _html.unescape(name)
 
-            description = ""
+            # The listing's own text, so the icons and the AI review go by
+            # what the event is, not a guess from its name ("Spooky Starry
+            # Night", a painting class, came out tagged music).
+            description = re.sub(r"\s+", " ", _html.unescape(str(ev.get("description") or ""))).strip()[:500]
             free = guess_free(name, description, venue)
 
             events.append({

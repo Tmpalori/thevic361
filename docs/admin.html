@@ -419,14 +419,16 @@
           </label>
           <label class="event-edit-form__field">
             <span>Start time <em data-time-required>*</em></span>
-            <input type="text" name="time" maxlength="60" required
-                   placeholder="e.g. 6:00 PM">
+            <select name="time" required data-time-select>
+              <option value="">Choose…</option>
+            </select>
             <span class="event-edit-form__field-error" data-error-for="time"></span>
           </label>
           <label class="event-edit-form__field">
             <span>End time</span>
-            <input type="text" name="end_time" maxlength="60"
-                   placeholder="e.g. 9:00 PM">
+            <select name="end_time" data-time-select>
+              <option value="">None</option>
+            </select>
             <span class="event-edit-form__field-error" data-error-for="end_time"></span>
           </label>
           <label class="event-edit-form__field event-edit-form__field--wide">

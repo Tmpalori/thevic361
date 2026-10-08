@@ -1136,6 +1136,37 @@
   // never let the admin click through to a javascript: URL or similar. The
   // Copy button + display show whenever there's any URL text at all (even a
   // partial URL the admin is fixing) so it's always copy-able.
+  // Start and end time choices, as on the submit form (docs/submit.js
+  // buildTimeOptions): every half hour from 5:00 AM to 1:30 AM.
+  const TIME_CHOICES = (function () {
+    const out = [];
+    for (let m = 5 * 60; m <= 25 * 60 + 30; m += 30) {
+      const hh = Math.floor(m / 60) % 24;
+      out.push(((hh + 11) % 12 + 1) + ':' + String(m % 60).padStart(2, '0') + (hh < 12 ? ' AM' : ' PM'));
+    }
+    return out;
+  })();
+
+  // Select an event's time; "06:30 PM" or "7pm" picks the matching choice,
+  // and a time that isn't one (6:45 PM, "Doors 7, show 8") is added so
+  // opening the editor never drops it.
+  const TIME_RE = /^0?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?$/i;
+  function setTimeSelect(select, value) {
+    let v = String(value || '').trim();
+    const m = v.match(TIME_RE);
+    if (m) v = Number(m[1]) + ':' + (m[2] || '00') + ' ' + m[3].toUpperCase() + 'M';
+    if (select.options.length < 2) {
+      for (const t of TIME_CHOICES) select.add(new Option(t, t));
+    }
+    Array.from(select.querySelectorAll('option[data-extra]')).forEach(o => o.remove());
+    if (v && !TIME_CHOICES.includes(v)) {
+      const o = new Option(v, v);
+      o.dataset.extra = '1';
+      select.add(o, 1);
+    }
+    select.value = v;
+  }
+
   function syncEditUrlOpenLink() {
     const input = document.getElementById('event-edit-url');
     const link = document.getElementById('event-edit-url-open');
@@ -1215,14 +1246,20 @@
     // Prefill fields from the current event shape.
     form.elements['name'].value = ev.name || '';
     form.elements['date'].value = ev.date || '';
-    form.elements['time'].value = ev.time || '';
+    // A collected range ("9:00 AM – 1:00 PM") opens as its start and end;
+    // the site joins them back the same way.
+    let start = ev.time || '';
+    let end = ev.end_time || '';
+    const range = !end && String(start).match(/^\s*([^–—-]+?)\s*[–—-]\s*([^–—-]+?)\s*$/);
+    if (range && TIME_RE.test(range[1]) && TIME_RE.test(range[2])) { start = range[1]; end = range[2]; }
+    setTimeSelect(form.elements['time'], start);
     // An event collected without a time can be corrected without inventing
     // one (validateEventEdit allows it blank); one that had a time keeps it.
     const timeRequired = Boolean(String(ev.time || '').trim());
     form.elements['time'].required = timeRequired;
     const timeMark = form.querySelector('[data-time-required]');
     if (timeMark) timeMark.hidden = !timeRequired;
-    form.elements['end_time'].value = ev.end_time || '';
+    setTimeSelect(form.elements['end_time'], end);
     form.elements['venue'].value = ev.venue || '';
     form.elements['address'].value = ev.address || '';
     form.elements['description'].value = ev.description || '';
