@@ -111,6 +111,8 @@ export function referrerSource(ref, siteHost) {
   return { source: 'Other sites', host: bare };
 }
 
+export const SHARED_LINK = 'Shared link';
+
 export function visitorHash(ip, ua, day, secret) {
   return crypto.createHash('sha256').update(`${secret}|${day}|${ip}|${ua}`).digest('hex').slice(0, 16);
 }
@@ -123,7 +125,7 @@ export const CLICK_TYPES = new Set([
 const CLICK_LABELS = {
   event_click: 'Event links', sponsor_click: 'Sponsor clicks', subscribe_click: 'Subscribe clicks',
   advertise_click: 'Advertise page clicks', add_to_calendar: 'Added to calendar',
-  share_native: 'Shares (share sheet / copy)', share_from_list: 'Shares from the event list', share_facebook: 'Shares to Facebook',
+  share_native: 'Shares (sent or copied)', share_from_list: 'Shares from the event list', share_facebook: 'Shares to Facebook',
   share_x: 'Shares to X', share_text: 'Shares by text', filter: 'Filter taps'
 };
 
@@ -171,6 +173,9 @@ export function beaconRow(body, { ip, ua, secret, siteHost, now }) {
     let { source, host } = referrerSource(String(body.ref || '').slice(0, 500), siteHost);
     const tagged = paidSource(body.utm, body.utm_medium, source) || (source === 'Direct' ? utmSource(body.utm) : null);
     if (tagged) source = tagged;
+    // A link someone shared with a share button (?s=sh, docs/track.js),
+    // whatever app it was opened from.
+    if (body.via === 'share') source = SHARED_LINK;
     return { ...base, kind: 'view', ref_source: source, ref_host: host };
   }
   if (body.kind === 'click' && CLICK_TYPES.has(body.type)) {

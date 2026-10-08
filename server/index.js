@@ -33,7 +33,7 @@ import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } fr
 import { createTremendous, tremendousConfig } from './referralRewards.js';
 import { createMailer, renderSubmissionReceived, renderSubmissionLive } from './notify.js';
 import { registerSubmissionReview, isPaidPick } from './submissionReview.js';
-import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage, sameEvent } from './sponsors.js';
+import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage, sameEvent, eventWeekStats } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
 import { renderEventCard, eventCardVersion } from './ogImage.js';
@@ -46,7 +46,7 @@ import net from 'node:net';
 import {
   HUB_PAGES, localDateStr, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderPrivacyPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
-  , fillSeasonalNav
+  , fillSeasonalNav, currentWeek, addDays
 } from './seo.js';
 import {
   buildVenues, venueFor, renderVenuePage, renderVenueIndex, venuesWithEvents,
@@ -1331,6 +1331,35 @@ export async function createApp(opts = {}) {
     } catch (err) {
       console.error('[traffic] summary failed:', err.message);
       res.status(500).json({ ok: false, error: 'traffic-failed', message: err.message });
+    }
+  });
+
+  // Every event's week, for pitching venues a Vic's Pick (admin Traffic →
+  // Event stats). ?week=<Monday>; default last week. Live and archived
+  // events listed that week, plus the week's newsletter reach.
+  app.get('/api/admin/event-stats', requireAdmin, async (req, res) => {
+    if (typeof store.listTraffic !== 'function') return res.json({ ok: false, error: 'not-supported' });
+    try {
+      const thisMonday = currentWeek(localDateStr(nowFn()))[0];
+      const asked = String(req.query.week || '');
+      const start = /^\d{4}-\d{2}-\d{2}$/.test(asked) ? currentWeek(asked)[0] : addDays(thisMonday, -7);
+      const end = addDays(start, 6);
+      const [rows, payload, archived] = await Promise.all([
+        store.listTraffic(start), getPublicPayload(), listArchived().catch(() => [])
+      ]);
+      const events = [...((payload && payload.events) || []), ...(archived || [])];
+      let recipients = 0, opens = 0;
+      try {
+        const sent = typeof store.getNewsletterSend === 'function' ? await store.getNewsletterSend(start) : null;
+        recipients = sent ? Number(sent.recipients) || 0 : 0;
+        if (typeof store.countEmailOpens === 'function') opens = (await store.countEmailOpens([start]))[start] || 0;
+      } catch { /* the table still shows without the newsletter line */ }
+      res.set('Cache-Control', 'no-store');
+      res.json({ ok: true, week_start: start, week_end: end, this_week: start === thisMonday,
+        newsletter: { recipients, opens }, events: eventWeekStats(rows, events, { start, end }) });
+    } catch (err) {
+      console.error('[traffic] event stats failed:', err.message);
+      res.status(500).json({ ok: false, error: 'event-stats-failed', message: err.message });
     }
   });
 

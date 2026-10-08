@@ -158,7 +158,8 @@ describe('share icon on each list item', () => {
     const btn = document.querySelector('.event-share');
     btn.click();
     await Promise.resolve();
-    expect(writes).toEqual([`${location.origin}/events/2026-10-08-bad`]);
+    // Tagged so the visits it brings count as from a share (docs/track.js).
+    expect(writes).toEqual([`${location.origin}/events/2026-10-08-bad?s=sh`]);
     expect(btn.classList.contains('is-copied')).toBe(true);
     expect(btn.querySelector('svg')).not.toBeNull(); // the icon stays
     expect(sent.some(b => b.kind === 'click' && b.type === 'share_from_list')).toBe(true);

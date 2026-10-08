@@ -59,11 +59,20 @@
   window.vic361Track = track;  // app.js filter chips report through this
 
   // utm_medium=paid marks a tap on an ad (server/analytics.js paidSource).
-  var utm = '', utmMedium = '';
+  // ?s=sh marks a link someone shared from the site (share buttons below):
+  // the view counts as "Shared link", and the tag comes off the address
+  // bar so a reload or a copied URL doesn't count again.
+  var utm = '', utmMedium = '', viaShare = false;
   try {
     var q = new URLSearchParams(location.search);
     utm = q.get('utm_source') || '';
     utmMedium = q.get('utm_medium') || '';
+    if (q.get('s') === 'sh') {
+      viaShare = true;
+      q.delete('s');
+      var rest = q.toString();
+      if (window.history && history.replaceState) history.replaceState(history.state, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    }
   } catch (e) { /* old browser */ }
   // A page view counts once someone engages: they scroll, tap, click or
   // type, or the page has been on screen for 5 seconds. Bots that run
@@ -79,7 +88,9 @@
     clearTimeout(timer);
     ENGAGE_EVENTS.forEach(function (t) { window.removeEventListener(t, sendView, true); });
     document.removeEventListener('visibilitychange', onVisibility);
-    beacon({ kind: 'view', ref: document.referrer || '', utm: utm, utm_medium: utmMedium });
+    var view = { kind: 'view', ref: document.referrer || '', utm: utm, utm_medium: utmMedium };
+    if (viaShare) view.via = 'share';
+    beacon(view);
   }
   function onVisibility() {
     if (document.visibilityState === 'visible') {
@@ -198,30 +209,42 @@
   // Share buttons (event pages, list headers, and the icon on each event in
   // a list): the phone's share sheet when there is one, otherwise copy the
   // link. List items carry a site-relative path; resolve it so the copied
-  // link works anywhere.
+  // link works anywhere. The shared link carries ?s=sh, so visits it brings
+  // count as "Shared link" (see above). A share counts once it's sent or
+  // copied, not when the sheet is opened and closed.
+  function shareLink(raw) {
+    try {
+      var u = new URL(raw, location.href);
+      u.searchParams.set('s', 'sh');
+      return u.href;
+    } catch (err) { return raw; }  // old browser: keep as is
+  }
   document.addEventListener('click', function (e) {
     var btn = e.target && e.target.closest ? e.target.closest('[data-share-url]') : null;
     if (!btn) return;
-    var url = btn.getAttribute('data-share-url');
-    try { url = new URL(url, location.href).href; } catch (err) { /* old browser: keep as is */ }
+    var page = btn.getAttribute('data-share-url');
+    try { page = new URL(page, location.href).href; } catch (err) { /* old browser: keep as is */ }
+    var url = shareLink(page);
     var text = btn.getAttribute('data-share-text') || '';
     var fromList = btn.classList.contains('event-share');
-    track(fromList ? 'share_from_list' : 'share_native', { link_url: url }, btn);
+    function shared() { track(fromList ? 'share_from_list' : 'share_native', { link_url: page }, btn); }
     if (navigator.share) {
-      navigator.share({ title: text, text: text, url: url }).catch(function () {});  // user closed the sheet
+      navigator.share({ title: text, text: text, url: url }).then(shared, function () {});  // closed the sheet: not a share
       return;
     }
     function copied() {
+      shared();
       if (!fromList) { btn.textContent = 'Link copied'; return; }
       // The list button is an icon; flag it instead of replacing the icon.
       btn.classList.add('is-copied');
       btn.setAttribute('aria-label', 'Link copied');
       setTimeout(function () { btn.classList.remove('is-copied'); btn.setAttribute('aria-label', 'Share ' + text); }, 2000);
     }
+    function manual() { shared(); window.prompt('Copy this link:', url); }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(copied, function () { window.prompt('Copy this link:', url); });
+      navigator.clipboard.writeText(url).then(copied, manual);
     } else {
-      window.prompt('Copy this link:', url);
+      manual();
     }
   });
 })();
