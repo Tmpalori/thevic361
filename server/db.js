@@ -1699,13 +1699,15 @@ class PgStore {
 
   async saveAdSpend(rows) {
     await this.ready();
-    for (const x of rows) {
-      await this.pool.query(
-        `INSERT INTO ad_spend (day, spend, impressions, clicks, leads, updated_at) VALUES ($1, $2, $3, $4, $5, NOW())
-         ON CONFLICT (day) DO UPDATE SET spend = EXCLUDED.spend, impressions = EXCLUDED.impressions,
-           clicks = EXCLUDED.clicks, leads = EXCLUDED.leads, updated_at = NOW()`,
-        [x.day, x.spend, x.impressions, x.clicks, x.leads]);
-    }
+    if (!rows.length) return 0;
+    // One statement, so a bad row saves nothing rather than half the days.
+    await this.pool.query(
+      `INSERT INTO ad_spend (day, spend, impressions, clicks, leads, updated_at)
+       SELECT x.day, x.spend, x.impressions, x.clicks, x.leads, NOW()
+         FROM jsonb_to_recordset($1::jsonb) AS x(day date, spend numeric, impressions int, clicks int, leads int)
+       ON CONFLICT (day) DO UPDATE SET spend = EXCLUDED.spend, impressions = EXCLUDED.impressions,
+         clicks = EXCLUDED.clicks, leads = EXCLUDED.leads, updated_at = NOW()`,
+      [JSON.stringify(rows)]);
     return rows.length;
   }
 

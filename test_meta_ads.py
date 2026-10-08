@@ -288,7 +288,14 @@ def test_report_sends_daily_spend_to_the_site_and_adds_the_real_cost(monkeypatch
     assert ma.main(["report"], session=WithSite()) == 0
     [(url, k)] = posted
     assert url == f"{ma.SITE}/api/ads/spend" and k["headers"]["X-Cron-Secret"] == "s3cret"
-    assert k["json"] == {"days": [{"day": "2026-10-07", "spend": 28.37, "impressions": 1500, "clicks": 57, "leads": 9}]}
+    days = k["json"]["days"]
+    # 30 days ending yesterday (Central); days Meta left out are $0.
+    assert len(days) == 30
+    assert days[-1]["day"] == (ma.dt.datetime.now(ma.CENTRAL).date() - ma.dt.timedelta(days=1)).isoformat()
+    by_day = {d["day"]: d for d in days}
+    if "2026-10-07" in by_day:
+        assert by_day["2026-10-07"] == {"day": "2026-10-07", "spend": 28.37, "impressions": 1500, "clicks": 57, "leads": 9}
+    assert all(d["spend"] == 0 for d in days if d["day"] != "2026-10-07")
     assert TOKEN not in str(k)
     assert "✅ Real, from the site: yesterday: 31 new subscribers ($0.92 each) · last 7 days: 120 new subscribers ($1.05 each)" in sent[0][0]
 
@@ -304,3 +311,30 @@ def test_report_still_goes_out_when_the_site_is_down(monkeypatch, capsys):
     assert ma.main(["report"], session=SiteDown()) == 0
     assert len(sent) == 1 and "Real" not in sent[0][0]
     assert "Couldn't send ad spend" in capsys.readouterr().out
+
+
+def test_daily_rows_fill_days_meta_left_out_with_zero():
+    class Rows(FakeMeta):
+        def request(self, method, url, **k):
+            if url.endswith("/insights"):
+                return Resp({"data": [{"date_start": "2026-10-07", "spend": "28.37", "impressions": "1500", "inline_link_clicks": "57"}]})
+            return super().request(method, url, **k)
+    api = ma.Api(TOKEN, Rows())
+    rows = ma.daily_rows(api, "act_1", today=ma.dt.date(2026, 10, 9))
+    assert [r["day"] for r in rows][:1] == ["2026-09-09"] and rows[-1]["day"] == "2026-10-08"
+    assert {r["day"]: r["spend"] for r in rows}["2026-10-07"] == 28.37
+    assert {r["day"]: r["spend"] for r in rows}["2026-10-08"] == 0
+
+
+def test_a_quiet_week_still_sends_the_days(monkeypatch):
+    monkeypatch.setenv("ADS_SPEND_SECRET", "s3cret")
+    posted = []
+
+    class Quiet(FakeMeta):
+        def request(self, method, url, **k):
+            if url.startswith(ma.SITE):
+                posted.append(k["json"])
+                return Resp({"ok": True})
+            return super().request(method, url, **k)
+    assert ma.main(["report"], session=Quiet(spend="0")) == 0
+    assert len(posted) == 1 and len(posted[0]["days"]) == 30

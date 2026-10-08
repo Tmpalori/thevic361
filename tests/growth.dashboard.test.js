@@ -65,7 +65,8 @@ describe('growth numbers', () => {
     const subs = [sub('u', '2026-09-01', { status: 'unsubscribed', unsubscribed_at: at('2026-10-06') })];
     const out = issueReport(sends, { '2026-10-05': 20 }, subs, rows, [{ name: 'Trivia', page }]);
     expect(out.map(x => x.week)).toEqual(['2026-10-12', '2026-10-05']);
-    expect(out[1]).toMatchObject({ sent: 40, opens: 20, open_rate: 50, clickers: 3, click_rate: 7.5, visits: 4,
+    // Clicked that day: only the send day's readers (visitor ids are per day).
+    expect(out[1]).toMatchObject({ sent: 40, opens: 20, open_rate: 50, clickers: 1, click_rate: 2.5, reader_days: 3, visits: 4,
       top_events: [{ name: 'Trivia', views: 3 }], unsubscribed: 1 });
     // The second issue's week starts the day it went out.
     expect(out[0]).toMatchObject({ clickers: 1, opens: 0, unsubscribed: 0 });
@@ -75,10 +76,11 @@ describe('growth numbers', () => {
     const subs = [sub('a', '2026-10-06'), sub('b', '2026-10-07', { status: 'unsubscribed' }), sub('c', '2026-10-13'),
       sub('i', '2026-10-13', { source: 'import' })];
     const weeks = signupWeeks(subs, [{ week_key: '2026-10-12', subscriber_id: 'a' }, { week_key: '2026-09-28', subscriber_id: 'c' }],
-      ['2026-10-12', '2026-10-05'], { today: TODAY });
+      ['2026-10-12', '2026-10-05'], { today: TODAY, lastSentAt: '2026-10-12T12:43:00.000Z' });
     expect(weeks).toEqual([
-      { week: '2026-10-12', joined: 1, active: 1, opened: 0 },
-      { week: '2026-10-05', joined: 2, active: 1, opened: 1 }
+      // Joined after the latest issue went out: nothing to open yet.
+      { week: '2026-10-12', joined: 1, active: 1, sent: 0, opened: null },
+      { week: '2026-10-05', joined: 2, active: 1, sent: 2, opened: 1 }
     ]);
   });
 
@@ -106,12 +108,24 @@ describe('growth numbers', () => {
 
   it('projects when the list reaches 10,000 at the last two weeks’ pace', () => {
     const subs = Array.from({ length: 70 }, (_, i) => sub('s' + i, '2026-10-01'));
-    const daily = Array.from({ length: 14 }, (_, i) => ({ net: 10, day: String(i) }));
+    // 14 whole days of +10, plus today (still going) and an import day that don't count.
+    const day = n => new Date(Date.UTC(2026, 8, 30 + n)).toISOString().slice(0, 10); // Sep 30 + n
+    const daily = [
+      { net: 500, day: day(-1), by_source: { Imported: 500 } },
+      ...Array.from({ length: 14 }, (_, i) => ({ net: 10, day: day(i) })), // Sep 30 – Oct 13
+      { net: 0, day: TODAY }
+    ];
     const g = goals(subs, daily, { cents: 0 }, TODAY);
     expect(g.subscribers).toMatchObject({ active: 70, goal: 10000, per_week: 70 });
     // 9,930 to go at 10 a day.
     expect(g.subscribers.eta).toBe('2029-07-03');
-    expect(goals(subs, [{ net: 0 }], { cents: 0 }, TODAY).subscribers.eta).toBeNull();
+    expect(goals(subs, [{ net: 0, day: '2026-10-13' }], { cents: 0 }, TODAY).subscribers.eta).toBeNull();
+  });
+
+  it('a bad timestamp is skipped, not a broken report', () => {
+    const subs = [sub('a', '2026-10-13'), sub('b', '2026-10-13', { confirmed_at: 'garbage', unsubscribed_at: 'nope' })];
+    expect(dailyGrowth(subs, [], { today: TODAY, days: 2 })[0]).toMatchObject({ day: '2026-10-13', joined: 1 });
+    expect(monthRevenue([{ status: 'paid', amount: 100, paid_at: 'bad' }], TODAY)).toMatchObject({ cents: 0 });
   });
 });
 
@@ -140,6 +154,8 @@ describe('growth endpoints', () => {
   it('takes Meta’s daily spend with the secret only, and answers with the site’s own count', async () => {
     const store = await start();
     expect((await postSpend({ days: [{ day: '2026-10-13', spend: 9 }] }, 'wrong')).status).toBe(401);
+    // Not a real date: dropped, not a failed save.
+    expect(await (await postSpend({ days: [{ day: '2026-02-30', spend: 1 }] })).json()).toMatchObject({ ok: true, saved: 0 });
     const r = await postSpend({ days: [{ day: '2026-10-13', spend: '9.00', impressions: 900, clicks: 30, leads: 1 },
       { day: '2026-10-12', spend: 4 }, { day: 'nope', spend: 1 }, { day: '2026-10-11', spend: -5 }] });
     const j = await r.json();
@@ -162,7 +178,10 @@ describe('growth endpoints', () => {
       goals: { subscribers: { active: 3, goal: 10000 }, revenue: { cents: 0, goal_cents: 1000000 } },
       totals: { joined: 3, spend: 8, cost_per_sub: 4 }, yesterday: { day: '2026-10-13', joined: 2, cost_per_sub: 4 } });
     expect(g.daily).toHaveLength(7);
-    expect(g.signup_weeks).toEqual([{ week: '2026-10-12', joined: 3, active: 3, opened: 0 }]);
+    expect(g.signup_weeks).toEqual([{ week: '2026-10-12', joined: 3, active: 3, sent: 0, opened: null }]);
+    // Home asks for the goals only.
+    const home = await (await fetch(baseUrl + '/api/admin/growth?goals=1', { headers: h })).json();
+    expect(home).toEqual({ ok: true, today: TODAY, goals: g.goals });
 
     // And the admin page draws it.
     const html = await fs.readFile(path.join(process.cwd(), 'docs/admin.html'), 'utf8');

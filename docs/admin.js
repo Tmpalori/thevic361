@@ -1722,9 +1722,9 @@
     if (issues) {
       const pct = v => (v == null ? '—' : v + '%');
       issues.innerHTML = (g.issues || []).length
-        ? '<thead><tr><th>Issue</th><th class="num">Sent</th><th class="num">Opened</th><th class="num">Clicked</th><th>Top events from the email</th><th class="num">Left</th></tr></thead><tbody>' +
+        ? '<thead><tr><th>Issue</th><th class="num">Sent</th><th class="num">Opened</th><th class="num">Clicked that day</th><th class="num">Reader visits that week</th><th>Top events from the email</th><th class="num">Left</th></tr></thead><tbody>' +
           g.issues.map(x => '<tr><td>' + escapeHtml(fmtDay(x.week)) + '</td><td class="num">' + x.sent + '</td><td class="num">' + x.opens + ' (' + pct(x.open_rate) + ')' +
-            '</td><td class="num">' + x.clickers + ' (' + pct(x.click_rate) + ')</td><td class="muted">' +
+            '</td><td class="num">' + x.clickers + ' (' + pct(x.click_rate) + ')</td><td class="num">' + (x.reader_days || 0) + '</td><td class="muted">' +
             escapeHtml(x.top_events.map(e => e.name + ' (' + e.views + ')').join(', ') || '—') + '</td><td class="num">' + (x.unsubscribed || '') + '</td></tr>').join('') + '</tbody>'
         : '<tbody><tr><td class="traffic-empty">No issues sent yet.</td></tr></tbody>';
     }
@@ -1735,7 +1735,7 @@
       cohorts.innerHTML = (g.signup_weeks || []).length
         ? '<thead><tr><th>Week of</th><th class="num">Joined</th><th class="num">Still on</th><th class="num">Opened lately</th></tr></thead><tbody>' +
           g.signup_weeks.map(w => '<tr><td>' + escapeHtml(fmtDay(w.week)) + '</td><td class="num">' + w.joined + '</td><td class="num">' + share(w.active, w.joined) +
-            '</td><td class="num">' + share(w.opened, w.joined) + '</td></tr>').join('') + '</tbody>'
+            '</td><td class="num">' + (w.opened == null ? 'no issue yet' : share(w.opened, w.sent)) + '</td></tr>').join('') + '</tbody>'
         : '<tbody><tr><td class="traffic-empty">No signups yet.</td></tr></tbody>';
     }
 
@@ -1748,7 +1748,9 @@
     }
   }
 
+  let growthSeq = 0;
   async function loadGrowth() {
+    const seq = ++growthSeq;
     const loadEl = document.getElementById('growth-loading');
     const errEl = document.getElementById('growth-error');
     const body = document.getElementById('growth-body');
@@ -1761,6 +1763,7 @@
     if (errEl) errEl.hidden = true;
     try {
       const { res, json } = await adminFetch('/api/admin/growth?days=' + encodeURIComponent(days));
+      if (seq !== growthSeq) return; // a newer request (another period) is on its way
       if (!res.ok || !json || !json.ok) throw new Error((json && json.message) || ('Failed to load growth (HTTP ' + res.status + ').'));
       renderGrowth(json);
       if (body) body.hidden = false;
@@ -1777,7 +1780,7 @@
     const el = document.getElementById('home-goals');
     if (!el || publishMode() !== 'server') return;
     try {
-      const { res, json } = await adminFetch('/api/admin/growth?days=30');
+      const { res, json } = await adminFetch('/api/admin/growth?goals=1');
       if (!res.ok || !json || !json.ok) return;
       el.innerHTML = goalsHtml(json.goals);
       el.hidden = false;

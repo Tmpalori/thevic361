@@ -34,6 +34,7 @@ import datetime as dt
 import os
 import re
 import sys
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -48,6 +49,7 @@ GRAPH_VERSION = GRAPH_VERSION if GRAPH_VERSION.startswith("v") else f"v{GRAPH_VE
 GRAPH = f"https://graph.facebook.com/{GRAPH_VERSION}"
 MAX_DAILY_BUDGET = 50  # dollars; a typo like 1000 shouldn't go live
 SITE = (os.environ.get("SITE_URL", "").strip() or "https://www.thevic361.com").rstrip("/")
+CENTRAL = ZoneInfo("America/Chicago")
 NEEDS = ("ads_read", "ads_management")
 
 
@@ -254,15 +256,20 @@ def running_ads(campaigns, adsets, ads, now=None):
     return [a for a in ads if a.get("effective_status") == "ACTIVE" and a.get("adset_id") in live_adsets]
 
 
-def daily_rows(api, account_id):
-    """The last 30 days, one row per day, for the site."""
+def daily_rows(api, account_id, today=None):
+    """The last 30 days (in the ad account's time zone, Central for this
+    account), one row per day for the site. Meta leaves out days nothing
+    spent; those are sent as $0, not left blank."""
     rows = api.call("GET", f"{account_id}/insights", fields="spend,impressions,inline_link_clicks,actions",
                     date_preset="last_30d", time_increment=1, level="account", limit=100).get("data") or []
-    return [{"day": r.get("date_start"), "spend": float(r.get("spend") or 0),
-             "impressions": int(float(r.get("impressions") or 0)),
-             "clicks": int(float(r.get("inline_link_clicks") or 0)),
-             "leads": action(r, "lead") or action(r, "offsite_conversion.fb_pixel_lead")}
-            for r in rows if r.get("date_start")]
+    got = {r["date_start"]: {"day": r["date_start"], "spend": float(r.get("spend") or 0),
+                             "impressions": int(float(r.get("impressions") or 0)),
+                             "clicks": int(float(r.get("inline_link_clicks") or 0)),
+                             "leads": action(r, "lead") or action(r, "offsite_conversion.fb_pixel_lead")}
+           for r in rows if r.get("date_start")}
+    today = today or dt.datetime.now(CENTRAL).date()
+    days = [(today - dt.timedelta(days=n)).isoformat() for n in range(30, 0, -1)]
+    return [got.get(d) or {"day": d, "spend": 0.0, "impressions": 0, "clicks": 0, "leads": 0} for d in days]
 
 
 def push_spend(api, account):
@@ -307,6 +314,9 @@ def real_cost(site):
 
 def cmd_report(api, account, out):
     spend7, week = summarize(insights(api, account["id"], "last_7d"))
+    # Every report sends the days (quiet weeks too: Meta revises recent
+    # days, and a pause should show as $0 on the site).
+    site = push_spend(api, account)
     campaigns, adsets, ads = structure(api, account["id"])
     problems = [f"⚠️ Ad *{a['name']}* is {a['effective_status'].lower()}: check it in Ads Manager"
                 for a in ads if a.get("effective_status") in ("DISAPPROVED", "WITH_ISSUES")]
@@ -339,7 +349,7 @@ def cmd_report(api, account, out):
         out.append(text)
         return text
     _, yday = summarize(insights(api, account["id"], "yesterday"))
-    real = real_cost(push_spend(api, account))
+    real = real_cost(site)
     text = "\n".join([f"📈 Meta ads: yesterday {yday}", f"Last 7 days: {week}"] + ([real] if real else []) + problems)
     out.append(text)
     return text

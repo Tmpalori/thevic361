@@ -11,9 +11,11 @@
  *   cost per subscriber: Meta's spend that day over the subscribers who
  *   actually joined, not Meta's own "signups" (its pixel misses iPhones,
  *   in-app browsers and blockers).
- * - Each Monday issue: sent, unique opens, visits from the email in the
- *   week after it went out (links carry utm_source=newsletter; a visit is
- *   credited to the issue sent before it), top events those visits opened,
+ * - Each Monday issue: sent, unique opens, readers who came to the site
+ *   from it (links carry utm_source=newsletter; a visit is credited to the
+ *   issue sent before it): on the day it went out (the click rate; the
+ *   visitor id changes daily, so later days can't be told apart from new
+ *   readers) and reader-days over its week, top events those visits opened,
  *   and unsubscribes that week.
  * - Signup weeks: of each week's new subscribers, how many are still
  *   subscribed and how many opened one of the last two issues.
@@ -31,7 +33,11 @@ const ISSUE_WINDOW_DAYS = 7;
 const KEPT = new Set(['paid', 'active', 'hidden', 'cancelled']);
 
 const weight = r => (Number(r.n) > 0 ? Number(r.n) : 1);
-const dayOf = iso => (iso ? localDateStr(new Date(iso)) : null);
+// A bad timestamp counts as no date rather than breaking the report.
+const dayOf = iso => {
+  const d = iso ? new Date(iso) : null;
+  return d && !Number.isNaN(d.getTime()) ? localDateStr(d) : null;
+};
 const pathOf = p => String(p || '').split(/[?#]/)[0].replace(/\/$/, '') || '/';
 
 function secretOk(given, want) {
@@ -103,7 +109,10 @@ export function issueReport(sends, opens, subs, rows, events) {
     const until = addDays(from, ISSUE_WINDOW_DAYS - 1);
     const end = next && addDays(next, -1) < until ? addDays(next, -1) : until;
     const visits = fromEmail.filter(r => r.day >= from && r.day <= end);
-    const visitors = new Set(visits.map(r => `${r.day}|${r.visitor}`)).size;
+    // Visitor ids are per day (analytics.js), so only the send day's
+    // readers are unique; the week's figure is reader-days.
+    const readerDays = new Set(visits.map(r => `${r.day}|${r.visitor}`)).size;
+    const firstDay = new Set(visits.filter(r => r.day === from).map(r => r.visitor)).size;
     const top = new Map();
     for (const r of visits) {
       const name = pageEvent.get(pathOf(r.path));
@@ -115,7 +124,7 @@ export function issueReport(sends, opens, subs, rows, events) {
     return {
       week: s.week_key, subject: s.subject || '', sent_at: s.sent_at, sent, opens: opened,
       open_rate: sent ? Math.round(opened / sent * 1000) / 10 : null,
-      clickers: visitors, click_rate: sent ? Math.round(visitors / sent * 1000) / 10 : null,
+      clickers: firstDay, click_rate: sent ? Math.round(firstDay / sent * 1000) / 10 : null, reader_days: readerDays,
       visits: visits.reduce((a, r) => a + weight(r), 0),
       top_events: [...top.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, views]) => ({ name, views })),
       unsubscribed
@@ -125,8 +134,9 @@ export function issueReport(sends, opens, subs, rows, events) {
 }
 
 // Of each signup week's subscribers: still subscribed, and opened one of
-// the last two issues. Newest week first.
-export function signupWeeks(subs, openRows, lastTwo, { today, weeks = 8 }) {
+// the last two issues, out of those who had been sent one (joined before
+// the latest went out; null when none had). Newest week first.
+export function signupWeeks(subs, openRows, lastTwo, { today, weeks = 8, lastSentAt = null }) {
   const opened = new Set((openRows || []).filter(r => lastTwo.includes(r.week_key)).map(r => r.subscriber_id));
   const first = addDays(currentWeek(today)[0], -7 * (weeks - 1));
   const by = new Map();
@@ -136,13 +146,15 @@ export function signupWeeks(subs, openRows, lastTwo, { today, weeks = 8 }) {
     if (!d) continue;
     const wk = currentWeek(d)[0];
     if (wk < first) continue;
-    if (!by.has(wk)) by.set(wk, { week: wk, joined: 0, active: 0, opened: 0 });
+    if (!by.has(wk)) by.set(wk, { week: wk, joined: 0, active: 0, sent: 0, opened: 0 });
     const r = by.get(wk);
     r.joined++;
     if (s.status === 'active') r.active++;
+    if (lastSentAt && s.confirmed_at < lastSentAt) r.sent++;
     if (opened.has(s.id)) r.opened++;
   }
-  return [...by.values()].sort((a, b) => (a.week < b.week ? 1 : -1));
+  return [...by.values()].map(r => (r.sent ? r : { ...r, opened: null }))
+    .sort((a, b) => (a.week < b.week ? 1 : -1));
 }
 
 // Event page views and link taps by category (an event counts for each icon).
@@ -182,8 +194,9 @@ export function monthRevenue(orders, today) {
 
 export function goals(subs, daily, revenue, today) {
   const active = subs.filter(s => s.status === 'active').length;
-  const last14 = daily.slice(-14);
-  const perDay = last14.length ? last14.reduce((a, d) => a + d.net, 0) / last14.length : 0;
+  // The last 14 whole days (today is still going), imports left out.
+  const last14 = daily.filter(d => d.day < today).slice(-14);
+  const perDay = last14.length ? last14.reduce((a, d) => a + d.net - ((d.by_source && d.by_source.Imported) || 0), 0) / last14.length : 0;
   const left = Math.max(0, SUBSCRIBER_GOAL - active);
   const days = perDay > 0 ? Math.ceil(left / perDay) : null;
   return {
@@ -202,7 +215,8 @@ export function registerGrowth(app, { store, requireAdmin, nowFn = () => new Dat
     if (typeof store.saveAdSpend !== 'function') return res.status(501).json({ ok: false, error: 'not-supported' });
     const rows = Array.isArray((req.body || {}).days) ? req.body.days : [];
     const num = v => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : 0);
-    const clean = rows.filter(r => r && /^\d{4}-\d{2}-\d{2}$/.test(String(r.day))).slice(0, 120)
+    const realDay = d => /^\d{4}-\d{2}-\d{2}$/.test(d) && new Date(`${d}T12:00:00Z`).toISOString().slice(0, 10) === d;
+    const clean = rows.filter(r => r && realDay(String(r.day))).slice(0, 120)
       .map(r => ({ day: String(r.day), spend: round2(num(r.spend)), impressions: Math.round(num(r.impressions)),
         clicks: Math.round(num(r.clicks)), leads: Math.round(num(r.leads)) }));
     try {
@@ -225,24 +239,32 @@ export function registerGrowth(app, { store, requireAdmin, nowFn = () => new Dat
     try {
       const now = nowFn();
       const today = localDateStr(now);
-      // Enough history for the 14-day pace and the issue windows.
-      const span = Math.max(days, 63);
-      const since = addDays(today, -(span - 1));
-      const [subs, spend, sends, rows, events, orders] = await Promise.all([
+      // ?goals=1 (Home's goal bars): just subscribers and orders.
+      if (req.query.goals === '1') {
+        const [subs, orders] = await Promise.all([store.listSubscriberStats(), getOrders().catch(() => [])]);
+        res.set('Cache-Control', 'no-store');
+        return res.json({ ok: true, today, goals: goals(subs, dailyGrowth(subs, [], { today, days: 15 }), monthRevenue(orders, today), today) });
+      }
+      const sends = typeof store.listNewsletterSends === 'function' ? await store.listNewsletterSends(8).catch(() => []) : [];
+      // Enough history for the 14-day pace and every listed issue's week.
+      const oldestSend = sends.map(s => dayOf(s.sent_at)).filter(Boolean).sort()[0];
+      const since = [addDays(today, -(Math.max(days, 15) - 1)), oldestSend].filter(Boolean).sort()[0];
+      const [subs, spend, rows, events, orders] = await Promise.all([
         store.listSubscriberStats(),
         typeof store.listAdSpend === 'function' ? store.listAdSpend(since).catch(() => []) : [],
-        typeof store.listNewsletterSends === 'function' ? store.listNewsletterSends(8).catch(() => []) : [],
         typeof store.listTraffic === 'function' ? store.listTraffic(since).catch(() => []) : [],
         getEvents().catch(() => []),
         getOrders().catch(() => [])
       ]);
+      const span = Math.max(days, 15);
       const weekKeys = sends.map(s => s.week_key);
       const [opens, openRows] = weekKeys.length && typeof store.listEmailOpens === 'function'
         ? await Promise.all([store.countEmailOpens(weekKeys).catch(() => ({})), store.listEmailOpens(weekKeys).catch(() => [])])
         : [{}, []];
       const all = dailyGrowth(subs, spend, { today, days: span });
       const daily = all.slice(-days);
-      const lastTwo = sends.slice().sort((a, b) => (a.sent_at < b.sent_at ? 1 : -1)).slice(0, 2).map(s => s.week_key);
+      const newest = sends.slice().sort((a, b) => (a.sent_at < b.sent_at ? 1 : -1));
+      const lastTwo = newest.slice(0, 2).map(s => s.week_key);
       res.set('Cache-Control', 'no-store');
       res.json({
         ok: true, days, today,
@@ -253,7 +275,7 @@ export function registerGrowth(app, { store, requireAdmin, nowFn = () => new Dat
         pending: subs.filter(s => s.status === 'pending').length,
         spend_reported: spend.length > 0,
         issues: issueReport(sends, opens, subs, rows, events),
-        signup_weeks: signupWeeks(subs, openRows, lastTwo, { today }),
+        signup_weeks: signupWeeks(subs, openRows, lastTwo, { today, lastSentAt: newest[0] ? new Date(newest[0].sent_at).toISOString() : null }),
         categories: categoryStats(rows, events, { start: addDays(today, -(days - 1)) })
       });
     } catch (err) {
