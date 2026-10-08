@@ -1649,10 +1649,142 @@
       el.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => activateTab(b.dataset.goto)));
       renderHiddenOnHome();
       renderMessagesOnHome();
+      loadHomeGoals();
     } catch (e) {
       err.hidden = false;
       err.textContent = e.message || String(e);
     }
+  }
+
+  // ─── GROWTH TAB ───
+  // GET /api/admin/growth (server/growth.js): the two goals, subscribers
+  // per day with the real cost per subscriber, each Monday issue, signup
+  // weeks and categories. The goals also show at the top of Home.
+  const money = (n, cents) => '$' + (cents ? n / 100 : n).toLocaleString('en-US', { minimumFractionDigits: cents ? 0 : 2, maximumFractionDigits: 2 });
+  const fmtDay = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  function goalsHtml(g) {
+    if (!g) return '';
+    const s = g.subscribers || {};
+    const r = g.revenue || {};
+    const pct = (n, of) => Math.max(0, Math.min(100, of ? n / of * 100 : 0));
+    const goal = (label, value, p, note) => '<div class="goal"><div class="goal__label">' + escapeHtml(label) + '</div>' +
+      '<div class="goal__value">' + escapeHtml(value) + '</div>' +
+      '<div class="goal__bar"><span class="goal__fill" style="width:' + p.toFixed(1) + '%"></span></div>' +
+      '<div class="goal__note">' + escapeHtml(note) + '</div></div>';
+    const pace = s.per_week > 0
+      ? '+' + s.per_week + ' a week lately' + (s.eta ? ' · 10,000 by ' + new Date(s.eta + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) + ' at this pace' : '')
+      : 'Not growing over the last two weeks';
+    const month = r.month ? new Date(r.month + '-15T12:00:00').toLocaleDateString('en-US', { month: 'long' }) : 'This month';
+    return goal('Subscribers', (s.active || 0).toLocaleString('en-US') + ' / ' + (s.goal || 10000).toLocaleString('en-US'), pct(s.active, s.goal), pace) +
+      goal(month + ' sponsor revenue', money(r.cents || 0, true) + ' / ' + money(r.goal_cents || 1000000, true), pct(r.cents, r.goal_cents),
+        (r.orders || 0) + ' paid placement' + (r.orders === 1 ? '' : 's') + (r.recurring_cents ? ' (incl. ' + money(r.recurring_cents, true) + ' monthly partners)' : ''));
+  }
+
+  function renderGrowth(g) {
+    const goals = document.getElementById('growth-goals');
+    if (goals) goals.innerHTML = goalsHtml(g.goals);
+    const t = g.totals || {};
+    const item = (label, value) => '<div class="sources-summary__item"><span class="sources-summary__label">' + escapeHtml(label) +
+      '</span><span class="sources-summary__value">' + escapeHtml(String(value)) + '</span></div>';
+    const y = g.yesterday;
+    const totals = document.getElementById('growth-totals');
+    if (totals) totals.innerHTML =
+      (y ? item('Yesterday', y.joined + ' new' + (y.cost_per_sub != null ? ' · ' + money(y.cost_per_sub) + ' each' : '')) : '') +
+      item('Last ' + g.days + ' days', t.joined + ' new · ' + t.unsubscribed + ' left · net ' + (t.net >= 0 ? '+' : '') + t.net) +
+      item('Ad spend', t.spend != null ? money(t.spend) : 'not reported yet') +
+      item('Real cost per subscriber', t.cost_per_sub != null ? money(t.cost_per_sub) : '—') +
+      item('Where they came from', Object.entries(t.by_source || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + v).join(' · ') || '—') +
+      item('Waiting to confirm', g.pending || 0);
+
+    const chart = document.getElementById('growth-chart');
+    if (chart) {
+      const max = Math.max(1, ...g.daily.map(d => d.joined));
+      chart.innerHTML = g.daily.map(d => '<div class="traffic-col" title="' + escapeHtml(fmtDay(d.day) + ': ' + d.joined + ' new, ' + d.unsubscribed + ' left' +
+        (d.spend != null ? ', ' + money(d.spend) + ' spent' : '')) + '"><span class="traffic-col-bar" style="height:' + Math.round(d.joined / max * 100) + '%"></span></div>').join('');
+    }
+    const note = document.getElementById('growth-spend-note');
+    if (note) note.textContent = g.spend_reported
+      ? 'Real cost per subscriber is Meta’s spend that day divided by the people who actually joined (imported addresses left out). Meta’s own “signups” miss iPhones, in-app browsers and ad blockers, so this is the number to trust. Facebook ads counts only signups the site could tie to an ad, so some ad signups show as Site.'
+      : 'Ad spend shows here once the daily Meta ads report runs (8:37 AM). It sends each day’s spend to the site.';
+
+    const daily = document.getElementById('growth-daily');
+    if (daily) {
+      const rows = g.daily.slice().reverse();
+      daily.innerHTML = '<thead><tr><th>Day</th><th class="num">New</th><th>From</th><th class="num">Left</th><th class="num">Spend</th><th class="num">Per sub</th></tr></thead><tbody>' +
+        rows.map(d => '<tr><td>' + escapeHtml(fmtDay(d.day)) + '</td><td class="num">' + d.joined + '</td><td class="muted">' +
+          escapeHtml(Object.entries(d.by_source).map(([k, v]) => k + ' ' + v).join(', ')) + '</td><td class="num">' + (d.unsubscribed || '') +
+          '</td><td class="num">' + (d.spend != null ? money(d.spend) : '') + '</td><td class="num">' + (d.cost_per_sub != null ? money(d.cost_per_sub) : '') + '</td></tr>').join('') +
+        '</tbody>';
+    }
+
+    const issues = document.getElementById('growth-issues');
+    if (issues) {
+      const pct = v => (v == null ? '—' : v + '%');
+      issues.innerHTML = (g.issues || []).length
+        ? '<thead><tr><th>Issue</th><th class="num">Sent</th><th class="num">Opened</th><th class="num">Clicked that day</th><th class="num">Reader visits that week</th><th>Top events from the email</th><th class="num">Left</th></tr></thead><tbody>' +
+          g.issues.map(x => '<tr><td>' + escapeHtml(fmtDay(x.week)) + '</td><td class="num">' + x.sent + '</td><td class="num">' + x.opens + ' (' + pct(x.open_rate) + ')' +
+            '</td><td class="num">' + x.clickers + ' (' + pct(x.click_rate) + ')</td><td class="num">' + (x.reader_days || 0) + '</td><td class="muted">' +
+            escapeHtml(x.top_events.map(e => e.name + ' (' + e.views + ')').join(', ') || '—') + '</td><td class="num">' + (x.unsubscribed || '') + '</td></tr>').join('') + '</tbody>'
+        : '<tbody><tr><td class="traffic-empty">No issues sent yet.</td></tr></tbody>';
+    }
+
+    const cohorts = document.getElementById('growth-cohorts');
+    if (cohorts) {
+      const share = (n, of) => of ? Math.round(n / of * 100) + '%' : '—';
+      cohorts.innerHTML = (g.signup_weeks || []).length
+        ? '<thead><tr><th>Week of</th><th class="num">Joined</th><th class="num">Still on</th><th class="num">Opened lately</th></tr></thead><tbody>' +
+          g.signup_weeks.map(w => '<tr><td>' + escapeHtml(fmtDay(w.week)) + '</td><td class="num">' + w.joined + '</td><td class="num">' + share(w.active, w.joined) +
+            '</td><td class="num">' + (w.opened == null ? 'no issue yet' : share(w.opened, w.sent)) + '</td></tr>').join('') + '</tbody>'
+        : '<tbody><tr><td class="traffic-empty">No signups yet.</td></tr></tbody>';
+    }
+
+    const cats = document.getElementById('growth-categories');
+    if (cats) {
+      cats.innerHTML = (g.categories || []).length
+        ? '<thead><tr><th>Category</th><th class="num">Page views</th><th class="num">Link taps</th></tr></thead><tbody>' +
+          g.categories.map(c => '<tr><td>' + escapeHtml(c.category) + '</td><td class="num">' + c.views + '</td><td class="num">' + c.taps + '</td></tr>').join('') + '</tbody>'
+        : '<tbody><tr><td class="traffic-empty">No event views yet.</td></tr></tbody>';
+    }
+  }
+
+  let growthSeq = 0;
+  async function loadGrowth() {
+    const seq = ++growthSeq;
+    const loadEl = document.getElementById('growth-loading');
+    const errEl = document.getElementById('growth-error');
+    const body = document.getElementById('growth-body');
+    const days = (document.getElementById('growth-days') || {}).value || '30';
+    if (publishMode() !== 'server') {
+      if (errEl) { errEl.hidden = false; errEl.textContent = 'Sign in to the server to view growth.'; }
+      return;
+    }
+    if (loadEl) loadEl.hidden = false;
+    if (errEl) errEl.hidden = true;
+    try {
+      const { res, json } = await adminFetch('/api/admin/growth?days=' + encodeURIComponent(days));
+      if (seq !== growthSeq) return; // a newer request (another period) is on its way
+      if (!res.ok || !json || !json.ok) throw new Error((json && json.message) || ('Failed to load growth (HTTP ' + res.status + ').'));
+      renderGrowth(json);
+      if (body) body.hidden = false;
+    } catch (err) {
+      console.error(err);
+      if (errEl) { errEl.hidden = false; errEl.textContent = err.message || String(err); }
+    } finally {
+      if (loadEl) loadEl.hidden = true;
+    }
+  }
+
+  // The goals on Home; a failure just leaves them off.
+  async function loadHomeGoals() {
+    const el = document.getElementById('home-goals');
+    if (!el || publishMode() !== 'server') return;
+    try {
+      const { res, json } = await adminFetch('/api/admin/growth?goals=1');
+      if (!res.ok || !json || !json.ok) return;
+      el.innerHTML = goalsHtml(json.goals);
+      el.hidden = false;
+    } catch (_) { /* Home works without it */ }
   }
 
   // ─── TABS ───
@@ -1661,6 +1793,7 @@
     tabs.forEach(t => t.classList.toggle('is-active', t.dataset.tab === name));
     const panels = {
       home: document.getElementById('tab-home'),
+      growth: document.getElementById('tab-growth'),
       picker: document.getElementById('tab-picker'),
       submissions: document.getElementById('tab-submissions'),
       preview: document.getElementById('tab-preview'),
@@ -1677,6 +1810,7 @@
     const counts = document.getElementById('count-summary');
     if (counts) counts.hidden = name !== 'picker' && name !== 'preview';
     if (name === 'home') loadHome();
+    if (name === 'growth') loadGrowth();
     if (name === 'preview') refreshPreview();
     if (name === 'newsletter') { refreshNewsletter(); loadEmailNewsletter(); }
     if (name === 'sources') loadSources();
@@ -2544,6 +2678,10 @@
     const trafficRefresh = document.getElementById('traffic-refresh');
     if (trafficDays) trafficDays.addEventListener('change', loadTraffic);
     if (trafficRefresh) trafficRefresh.addEventListener('click', loadTraffic);
+    const growthDays = document.getElementById('growth-days');
+    const growthRefresh = document.getElementById('growth-refresh');
+    if (growthDays) growthDays.addEventListener('change', loadGrowth);
+    if (growthRefresh) growthRefresh.addEventListener('click', loadGrowth);
 
     const sponsorsRefresh = document.getElementById('sponsors-refresh');
     if (sponsorsRefresh) sponsorsRefresh.addEventListener('click', loadSponsors);
@@ -2703,6 +2841,7 @@
     isHttpUrl, shortenUrl,
     _state: state,
     renderTraffic: renderTraffic,
+    renderGrowth, goalsHtml,
     _constants: {
       WEEKDAY_TARGET_MIN, WEEKDAY_TARGET_MAX,
       WEEKEND_TARGET_MIN, WEEKEND_TARGET_MAX,

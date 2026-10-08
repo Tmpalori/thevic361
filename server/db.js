@@ -730,6 +730,39 @@ class FileStore {
     return out;
   }
 
+  // ─── Growth (server/growth.js) ───
+  // Every subscriber's status, source and dates, without the address.
+  async listSubscriberStats() {
+    const data = await this._read();
+    return data.subscribers.map(x => ({ id: x.id, status: x.status, source: x.source || null, referred_by: x.referred_by || null,
+      created_at: x.created_at || null, confirmed_at: x.confirmed_at || null, unsubscribed_at: x.unsubscribed_at || null }));
+  }
+
+  // Who opened the given issues: [{ week_key, subscriber_id }].
+  async listEmailOpens(weekKeys) {
+    const data = await this._read();
+    const want = new Set(weekKeys);
+    return data.email_opens.filter(r => want.has(r.week_key)).map(r => ({ week_key: r.week_key, subscriber_id: r.subscriber_id }));
+  }
+
+  // Meta's ad results per day (scripts/meta_ads.py posts them): a day's
+  // row is replaced each time, since Meta revises the last few days.
+  async saveAdSpend(rows) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const byDay = new Map((data.ad_spend || []).map(r => [r.day, r]));
+      for (const r of rows) byDay.set(r.day, { ...r, updated_at: nowIso() });
+      data.ad_spend = [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
+      await this._write(data);
+      return rows.length;
+    });
+  }
+
+  async listAdSpend(sinceDay) {
+    const data = await this._read();
+    return (data.ad_spend || []).filter(r => r.day >= sinceDay);
+  }
+
   // ─── Sponsor orders (server/sponsors.js) ───
   async saveSponsorOrder(order) {
     return this._withWrite(async () => {
@@ -1196,6 +1229,18 @@ class PgStore {
             payload JSONB NOT NULL
           );
         `);
+        // Meta's ad results per day (FileStore.saveAdSpend), for the
+        // admin's real cost per subscriber.
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS ad_spend (
+            day DATE PRIMARY KEY,
+            spend NUMERIC(12,2) NOT NULL DEFAULT 0,
+            impressions INT NOT NULL DEFAULT 0,
+            clicks INT NOT NULL DEFAULT 0,
+            leads INT NOT NULL DEFAULT 0,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `);
         if (created.length && typeof this.onTablesCreated === 'function') {
           try { this.onTablesCreated(created); } catch (err) { console.warn('[db] fresh-table hook failed:', err.message); }
         }
@@ -1635,6 +1680,43 @@ class PgStore {
     const r = await this.pool.query(
       'SELECT week_key, COUNT(*)::int AS n FROM email_opens WHERE week_key = ANY($1::text[]) GROUP BY week_key', [weekKeys]);
     return Object.fromEntries(r.rows.map(x => [x.week_key, Number(x.n)]));
+  }
+
+  async listSubscriberStats() {
+    await this.ready();
+    const r = await this.pool.query(
+      'SELECT id, status, source, referred_by, created_at, confirmed_at, unsubscribed_at FROM subscribers ORDER BY created_at');
+    const iso = v => (v instanceof Date ? v.toISOString() : v || null);
+    return r.rows.map(x => ({ id: x.id, status: x.status, source: x.source || null, referred_by: x.referred_by || null,
+      created_at: iso(x.created_at), confirmed_at: iso(x.confirmed_at), unsubscribed_at: iso(x.unsubscribed_at) }));
+  }
+
+  async listEmailOpens(weekKeys) {
+    await this.ready();
+    const r = await this.pool.query('SELECT week_key, subscriber_id FROM email_opens WHERE week_key = ANY($1::text[])', [weekKeys]);
+    return r.rows.map(x => ({ week_key: x.week_key, subscriber_id: x.subscriber_id }));
+  }
+
+  async saveAdSpend(rows) {
+    await this.ready();
+    if (!rows.length) return 0;
+    // One statement, so a bad row saves nothing rather than half the days.
+    await this.pool.query(
+      `INSERT INTO ad_spend (day, spend, impressions, clicks, leads, updated_at)
+       SELECT x.day, x.spend, x.impressions, x.clicks, x.leads, NOW()
+         FROM jsonb_to_recordset($1::jsonb) AS x(day date, spend numeric, impressions int, clicks int, leads int)
+       ON CONFLICT (day) DO UPDATE SET spend = EXCLUDED.spend, impressions = EXCLUDED.impressions,
+         clicks = EXCLUDED.clicks, leads = EXCLUDED.leads, updated_at = NOW()`,
+      [JSON.stringify(rows)]);
+    return rows.length;
+  }
+
+  async listAdSpend(sinceDay) {
+    await this.ready();
+    const r = await this.pool.query(
+      `SELECT to_char(day, 'YYYY-MM-DD') AS day, spend::float AS spend, impressions, clicks, leads
+         FROM ad_spend WHERE day >= $1::date ORDER BY day`, [sinceDay]);
+    return r.rows.map(x => ({ day: x.day, spend: Number(x.spend), impressions: Number(x.impressions), clicks: Number(x.clicks), leads: Number(x.leads) }));
   }
 
   async addReferralReward(row) {

@@ -20,6 +20,11 @@ Needs (GitHub Actions):
                       system user; falls back to META_PAGE_TOKEN
   META_AD_ACCOUNT_ID  repo variable, e.g. act_123 (optional when the token
                       sees exactly one ad account)
+  ADS_SPEND_SECRET    optional: the daily report also sends the last 30 days'
+                      spend per day to the site (Admin → Growth) and adds the
+                      real cost per subscriber, from the site's own count, to
+                      the Slack report. Same value as Railway's ADS_SPEND_SECRET
+                      (meta-ads.yml falls back to SUBMISSION_REVIEW_SECRET).
 
 The token goes in the Authorization header, never a URL, and errors never
 include it.
@@ -29,6 +34,7 @@ import datetime as dt
 import os
 import re
 import sys
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -42,6 +48,8 @@ GRAPH_VERSION = os.environ.get("GRAPH_API_VERSION", "").strip() or "v23.0"
 GRAPH_VERSION = GRAPH_VERSION if GRAPH_VERSION.startswith("v") else f"v{GRAPH_VERSION}"
 GRAPH = f"https://graph.facebook.com/{GRAPH_VERSION}"
 MAX_DAILY_BUDGET = 50  # dollars; a typo like 1000 shouldn't go live
+SITE = (os.environ.get("SITE_URL", "").strip() or "https://www.thevic361.com").rstrip("/")
+CENTRAL = ZoneInfo("America/Chicago")
 NEEDS = ("ads_read", "ads_management")
 
 
@@ -248,8 +256,67 @@ def running_ads(campaigns, adsets, ads, now=None):
     return [a for a in ads if a.get("effective_status") == "ACTIVE" and a.get("adset_id") in live_adsets]
 
 
+def daily_rows(api, account_id, today=None):
+    """The last 30 days (in the ad account's time zone, Central for this
+    account), one row per day for the site. Meta leaves out days nothing
+    spent; those are sent as $0, not left blank."""
+    rows = api.call("GET", f"{account_id}/insights", fields="spend,impressions,inline_link_clicks,actions",
+                    date_preset="last_30d", time_increment=1, level="account", limit=100).get("data") or []
+    got = {r["date_start"]: {"day": r["date_start"], "spend": float(r.get("spend") or 0),
+                             "impressions": int(float(r.get("impressions") or 0)),
+                             "clicks": int(float(r.get("inline_link_clicks") or 0)),
+                             "leads": action(r, "lead") or action(r, "offsite_conversion.fb_pixel_lead")}
+           for r in rows if r.get("date_start")}
+    today = today or dt.datetime.now(CENTRAL).date()
+    days = [(today - dt.timedelta(days=n)).isoformat() for n in range(30, 0, -1)]
+    return [got.get(d) or {"day": d, "spend": 0.0, "impressions": 0, "clicks": 0, "leads": 0} for d in days]
+
+
+def push_spend(api, account):
+    """Send the daily spend to the site; it answers with its own subscriber
+    counts. None (with a warning) when that isn't set up or fails: the
+    Slack report goes out either way."""
+    secret = os.environ.get("ADS_SPEND_SECRET", "").strip()
+    if not secret:
+        return None
+    try:
+        days = daily_rows(api, account["id"])
+        r = api.s.request("POST", f"{SITE}/api/ads/spend", json={"days": days}, timeout=30,
+                          headers={"X-Cron-Secret": secret, "User-Agent": "vic361-meta-ads"})
+        body = r.json() if r.status_code == 200 else {}
+    except (requests.RequestException, AdsError, ValueError) as e:
+        print(f"::warning::Couldn't send ad spend to the site: {type(e).__name__}")
+        return None
+    if not body.get("ok"):
+        print(f"::warning::The site didn't take the ad spend (HTTP {r.status_code})")
+        return None
+    return body
+
+
+def real_cost(site):
+    """'✅ Real: 31 new subscribers yesterday ($0.92 each) · last 7 days: …'"""
+    y = (site or {}).get("yesterday") or {}
+    w = (site or {}).get("last_7_days") or {}
+    if not y and not w:
+        return None
+
+    def part(row, label):
+        joined = int(row.get("joined") or 0)
+        each = f" (${row['cost_per_sub']:,.2f} each)" if row.get("cost_per_sub") is not None else ""
+        return f"{label}: {joined} new subscriber{'' if joined == 1 else 's'}{each}"
+    bits = []
+    if y:
+        bits.append(part(y, "yesterday"))
+    if w:
+        bits.append(part(w, "last 7 days"))
+    return "✅ Real, from the site: " + " · ".join(bits)
+
+
 def cmd_report(api, account, out):
     spend7, week = summarize(insights(api, account["id"], "last_7d"))
+    # Every report sends the days (quiet weeks too: Meta revises recent
+    # days, and a pause should show as $0 on the site).
+    site = push_spend(api, account)
     campaigns, adsets, ads = structure(api, account["id"])
     problems = [f"⚠️ Ad *{a['name']}* is {a['effective_status'].lower()}: check it in Ads Manager"
                 for a in ads if a.get("effective_status") in ("DISAPPROVED", "WITH_ISSUES")]
@@ -282,7 +349,8 @@ def cmd_report(api, account, out):
         out.append(text)
         return text
     _, yday = summarize(insights(api, account["id"], "yesterday"))
-    text = "\n".join([f"📈 Meta ads: yesterday {yday}", f"Last 7 days: {week}"] + problems)
+    real = real_cost(site)
+    text = "\n".join([f"📈 Meta ads: yesterday {yday}", f"Last 7 days: {week}"] + ([real] if real else []) + problems)
     out.append(text)
     return text
 

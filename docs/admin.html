@@ -82,6 +82,7 @@
       </div>
       <nav class="admin-tabs" role="tablist">
         <button class="tab-btn is-active" data-tab="home" role="tab">Home</button>
+        <button class="tab-btn" data-tab="growth" role="tab">Growth</button>
         <button class="tab-btn" data-tab="picker" role="tab">Events</button>
         <button class="tab-btn" data-tab="submissions" role="tab">
           Submissions <span id="submissions-pending-badge" class="tab-badge" hidden>0</span>
@@ -116,6 +117,7 @@
       <p class="tab-intro">The site runs itself: events are collected Sunday and Wednesday afternoons and go live automatically, social posts go out every morning around 8:45, and the newsletter goes out Monday at 7:43 AM (Central). Check here for anything that needs you.</p>
       <div id="home-error" class="empty-state empty-state--error" hidden></div>
       <div id="home-body" hidden>
+        <div id="home-goals" class="goal-strip" hidden></div>
         <div id="home-tiles" class="home-tiles"></div>
         <div id="home-hidden" hidden>
           <h2 class="traffic-h">Hidden by the event check</h2>
@@ -128,6 +130,45 @@
         </div>
         <h2 class="traffic-h">Setup <span id="home-setup-count" class="home-setup-count"></span></h2>
         <ul id="home-checks" class="home-checks" role="list"></ul>
+      </div>
+    </section>
+
+    <!-- ─── GROWTH TAB ─── -->
+    <section id="tab-growth" class="tab-panel" role="tabpanel" hidden>
+      <div class="traffic-head">
+        <label for="growth-days">Show</label>
+        <select id="growth-days">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <button id="growth-refresh" type="button" class="btn btn--outline">Refresh</button>
+      </div>
+      <div id="growth-loading" class="empty-state" hidden>Loading growth…</div>
+      <div id="growth-error" class="empty-state empty-state--error" hidden></div>
+      <div id="growth-body" hidden>
+        <div id="growth-goals" class="goal-strip"></div>
+        <div class="sources-summary" id="growth-totals"></div>
+        <h3 class="traffic-h">New subscribers per day</h3>
+        <div id="growth-chart" class="traffic-chart" role="img" aria-label="New subscribers per day"></div>
+        <p class="traffic-note" id="growth-spend-note"></p>
+        <h3 class="traffic-h">Day by day</h3>
+        <div class="table-scroll"><table class="growth-table" id="growth-daily"></table></div>
+        <h3 class="traffic-h">Each Monday issue</h3>
+        <div class="table-scroll"><table class="growth-table" id="growth-issues"></table></div>
+        <p class="traffic-note">Opened: unique readers whose email loaded its images (Apple Mail opens some on its own, so it runs high). Clicked that day: readers who came to the site from the email the day it went out, the click rate to give sponsors (it runs a little low: visitors are counted per day, so later clicks can't be told from repeat ones). Reader visits that week: each reader once per day they came from it.</p>
+        <div class="traffic-grid">
+          <div>
+            <h3 class="traffic-h">Signup weeks</h3>
+            <table class="growth-table" id="growth-cohorts"></table>
+            <p class="traffic-note">Of each week's new subscribers: how many are still on the list, and how many opened one of the last two issues (out of those who joined before the latest one went out).</p>
+          </div>
+          <div>
+            <h3 class="traffic-h">What readers look at, by category</h3>
+            <table class="growth-table" id="growth-categories"></table>
+            <p class="traffic-note">Event page views and link taps in the period, by the event's category (an event can be in more than one).</p>
+          </div>
+        </div>
       </div>
     </section>
 
