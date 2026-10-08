@@ -731,6 +731,14 @@ describe('Traffic totals', () => {
     expect(text).toContain('Last 90 days90 visitors');
     expect(text).toContain('Last 7 days');
   });
+
+  it('totals shares sent and the views shared links brought', () => {
+    const api = bootDom();
+    api.renderTraffic({ ...base, days: 30, totals: { today: v(1), week: v(7), range: v(30) },
+      clicks: [{ key: 'event_click', count: 9 }, { key: 'share_native', count: 3 }, { key: 'share_facebook', count: 2 }],
+      sources: [{ key: 'Direct', count: 40 }, { key: 'Shared link', count: 6 }] });
+    expect(document.getElementById('traffic-totals').textContent).toContain('Shares, last 30 days5 sent · 6 views from shared links');
+  });
 });
 
 describe('Events tab safety', () => {
