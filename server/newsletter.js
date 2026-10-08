@@ -461,7 +461,7 @@ export function signupFormHtml({ source = 'footer', button = 'Subscribe' } = {})
 f.addEventListener('submit',function(e){e.preventDefault();var b=f.querySelector('button');b.disabled=true;m.textContent='';
 (window.vicTurnstile?window.vicTurnstile.token(f):Promise.resolve('')).then(function(t){return fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value,turnstile_token:t,source:window.vic361Source?window.vic361Source(f.getAttribute('data-source')):f.getAttribute('data-source'),ref:window.vic361Ref?window.vic361Ref():''})});})
 .then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});})
-.then(function(x){m.textContent=x.ok?(x.j.message||"You're on the list! Check your inbox."):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';var was=false;try{was=localStorage.getItem('vic361-subscribed')==='1';localStorage.setItem('vic361-subscribed','1')}catch(e){}if(!was&&window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
+.then(function(x){m.textContent=x.ok?'✅ '+(x.j.message||"You're on the list! Check your inbox."):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';f.classList.add('is-done');var was=false;try{was=localStorage.getItem('vic361-subscribed')==='1';localStorage.setItem('vic361-subscribed','1')}catch(e){}if(!was&&window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
 .catch(function(){m.textContent='Something went wrong. Try again.';}).then(function(){b.disabled=false;if(window.vicTurnstile)window.vicTurnstile.reset(f);});});})();
 </script>`;
 }
@@ -729,12 +729,26 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       console.warn('[newsletter] signup rejected: invalid email');
       return res.status(400).json({ ok: false, message: 'Enter a valid email address.' });
     }
-    if (!(await verifyHuman(req))) return res.status(400).json({ ok: false, error: 'turnstile-failed', message: "We couldn't confirm you're not a bot. Please try again." });
+    // The bot check. A token that fails is a 400. No token at all usually
+    // means the check never loaded (the Facebook/Instagram in-app browser,
+    // where ad taps land, lost about 1 in 9 signups this way on Oct 7), so
+    // that signup isn't refused: it gets a confirmation email instead, the
+    // same as a comeback. A real reader taps it; an address a bot typed in
+    // never gets on the list.
+    const human = await verifyHuman(req);
+    const hasToken = Boolean(body['cf-turnstile-response'] || body.turnstile_token);
+    if (!human && hasToken) return res.status(400).json({ ok: false, error: 'turnstile-failed', message: "We couldn't confirm you're not a bot. Please try again." });
+    const unverified = !human;
+    if (unverified) console.warn('[newsletter] signup without a bot-check token: sending a confirmation email instead');
     // Every outcome (new, waiting to confirm, already subscribed) gets the
     // same answer, so the form can't be used to find out who's on the list.
     // Whether it was a first signup is the browser's to know (docs/track.js
     // Lead), not the server's to say.
-    const done = { ok: true, message: config.enabled ? "You're on the list! Check your inbox." : "You're on the list! See you Monday." };
+    // Unverified signups all get the confirm message, whatever the address's
+    // state, so it can't be used to tell who's subscribed.
+    const done = unverified && config.enabled
+      ? { ok: true, message: 'Almost there! Check your inbox and tap Confirm to start getting it.' }
+      : { ok: true, message: config.enabled ? "You're on the list! Check your inbox." : "You're on the list! See you Monday." };
     try {
       const source = signupSource(body.source);
       // A referral link (/r/<code>) the browser carried to this form. It only
@@ -758,7 +772,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       // is a comeback (old_tokens): someone who unsubscribed must confirm
       // from their own inbox, so nobody else can sign them back up.
       const comeback = (sub.old_tokens || []).length > 0;
-      if (!comeback || !config.enabled) {
+      if ((!comeback && !unverified) || !config.enabled) {
         const confirmed = await store.confirmSubscriber(sub.token);
         // Not awaited: the welcome email shouldn't hold up the form.
         if (confirmed && confirmed.newly_confirmed) welcome(confirmed);
