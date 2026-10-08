@@ -316,6 +316,14 @@
           <div><h3 class="traffic-h">Other referring sites</h3><table class="traffic-table" id="traffic-referrers"></table></div>
         </div>
         <p class="traffic-note">Counted on our own server: no cookies, bots filtered out, and visits from this browser (signed into admin) aren't counted. Multi-day totals add up each day's visitors.</p>
+        <div class="traffic-head event-stats-head">
+          <h3 class="traffic-h">Event stats <span id="event-stats-week"></span></h3>
+          <button id="event-stats-prev" type="button" class="btn btn--outline">‹ Week before</button>
+          <button id="event-stats-next" type="button" class="btn btn--outline">Week after ›</button>
+        </div>
+        <p class="traffic-note">How each event did that week: views of its page, taps on its link, shares sent and the visits those shares brought. "Copy pitch" copies an email you can send the venue offering a Vic's Pick.</p>
+        <div id="event-stats-msg" class="traffic-note" role="status"></div>
+        <table class="traffic-table" id="event-stats"></table>
       </div>
     </section>
 

@@ -1821,6 +1821,7 @@
         ['Event page views', n(s.page_views) + ' (' + n(s.page_people) + ' people)'],
         ['Clicked their link', n(s.link_people) + ' people (' + n(s.link_clicks) + ' clicks)'],
         ['Added to calendar', n(s.calendar_adds)], ['Shares', n(s.shares)],
+        ['Visits from shares', n(s.share_visits) + ' (' + n(s.share_people) + ' people)'],
         ['Newsletter', s.newsletter_starred ? 'Starred, sent to ' + n(s.newsletter_recipients) + ' subscribers' : 'Not starred'],
         ...(r.on_site === false ? [['On the site', 'Never matched a listed event']] : [])];
     (s.where || []).forEach(w => rows.push(['Seen on ' + w.type, n(w.views)]));
@@ -1938,12 +1939,74 @@
       state.traffic = json;
       renderTraffic(json);
       if (body) body.hidden = false;
+      loadEventStats(state.eventStatsWeek || '');
     } catch (err) {
       console.error(err);
       if (errEl) { errEl.hidden = false; errEl.textContent = err.message || String(err); }
     } finally {
       if (loadEl) loadEl.hidden = true;
     }
+  }
+
+  // ─── EVENT STATS (Traffic tab) ───
+  // Each event's week (GET /api/admin/event-stats), with a ready-to-send
+  // pitch per event: "your event got X views ... want it to be a Vic's Pick?"
+  async function loadEventStats(week) {
+    const table = document.getElementById('event-stats');
+    if (!table) return;
+    try {
+      const { res, json } = await adminFetch('/api/admin/event-stats' + (week ? '?week=' + encodeURIComponent(week) : ''));
+      if (!res.ok || !json || !json.ok) throw new Error((json && json.message) || ('HTTP ' + res.status));
+      state.eventStats = json;
+      state.eventStatsWeek = json.week_start;
+      renderEventStats(json);
+    } catch (err) {
+      const msg = document.getElementById('event-stats-msg');
+      if (msg) msg.textContent = 'Could not load event stats: ' + (err.message || err);
+    }
+  }
+
+  function shiftWeek(ymd, days) {
+    const d = new Date(ymd + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function eventPitch(ev, d) {
+    const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+    const bits = [plural(ev.page_views, 'view', 'views') + ' of its page'];
+    if (ev.link_people) bits.push(plural(ev.link_people, 'person', 'people') + ' tapped through to your link');
+    if (ev.calendar_adds) bits.push(plural(ev.calendar_adds, 'calendar add', 'calendar adds'));
+    if (ev.shares) bits.push('it was shared ' + plural(ev.shares, 'time', 'times') + (ev.share_visits ? ', bringing in ' + plural(ev.share_visits, 'more visit', 'more visits') : ''));
+    const list = bits.length > 1 ? bits.slice(0, -1).join(', ') + ' and ' + bits[bits.length - 1] : bits[0];
+    const nl = d.newsletter && d.newsletter.recipients
+      ? ' It was also in our Monday newsletter, which went to ' + d.newsletter.recipients + ' Victoria locals' + (d.newsletter.opens ? ' (' + d.newsletter.opens + ' opened it)' : '') + '.'
+      : '';
+    return 'Hi ' + (ev.venue || 'there') + '!\n\n' +
+      'We featured ' + ev.name + ' on The Vic 361, Victoria\'s free events guide, and it got ' + list + '.' + nl + '\n\n' +
+      'Want your next event front and center? A Vic\'s Pick pins it to the top of its day on the site, and booked before Monday it\'s starred in our newsletter too: ' +
+      location.origin + '/advertise\n\nThanks!\nThe Vic 361';
+  }
+
+  function renderEventStats(d) {
+    const table = document.getElementById('event-stats');
+    const label = document.getElementById('event-stats-week');
+    const next = document.getElementById('event-stats-next');
+    if (label) label.textContent = '(' + d.week_start + ' to ' + d.week_end + (d.this_week ? ', so far' : '') + ')';
+    if (next) next.disabled = Boolean(d.this_week);
+    const msg = document.getElementById('event-stats-msg');
+    if (msg) msg.textContent = d.newsletter && d.newsletter.recipients
+      ? 'Newsletter that week: sent to ' + d.newsletter.recipients + ', opened by ' + d.newsletter.opens + '.' : '';
+    if (!table) return;
+    const n = v => Number(v) || 0;
+    table.innerHTML = (d.events || []).length
+      ? '<tr><th class="traffic-label">Event</th><th class="traffic-num">Views</th><th class="traffic-num">Link taps</th>' +
+        '<th class="traffic-num">Shares</th><th class="traffic-num">From shares</th><th class="traffic-num"></th></tr>' +
+        d.events.map((ev, i) => '<tr><td class="traffic-label">' + escapeHtml(ev.name) + '<br><small>' + escapeHtml((ev.venue ? ev.venue + ' · ' : '') + ev.date) + '</small></td>' +
+          '<td class="traffic-num">' + n(ev.page_views) + '</td><td class="traffic-num">' + n(ev.link_people) + '</td>' +
+          '<td class="traffic-num">' + n(ev.shares) + '</td><td class="traffic-num">' + n(ev.share_visits) + '</td>' +
+          '<td class="traffic-num"><button type="button" class="btn btn--outline" data-pitch="' + i + '">Copy pitch</button></td></tr>').join('')
+      : '<tr><td class="traffic-empty">No events listed that week.</td></tr>';
   }
 
   // ─── SOURCES TAB ─────────────────────────────────────────────────────
@@ -2372,6 +2435,25 @@
       { emails: (document.getElementById('email-nl-import-text') || {}).value },
       j => 'Imported ' + j.added + ' new, ' + j.already + ' already subscribed' +
         (j.skipped_unsubscribed ? ', ' + j.skipped_unsubscribed + ' skipped (unsubscribed)' : '') + '.'));
+
+    const evStats = document.getElementById('event-stats');
+    if (evStats) evStats.addEventListener('click', async (e) => {
+      const b = e.target.closest('button[data-pitch]');
+      const d = state.eventStats;
+      if (!b || !d) return;
+      const text = eventPitch(d.events[Number(b.dataset.pitch)], d);
+      try {
+        await navigator.clipboard.writeText(text);
+        b.textContent = 'Copied!';
+        setTimeout(() => { b.textContent = 'Copy pitch'; }, 2000);
+      } catch (_) {
+        window.prompt('Copy this pitch:', text);
+      }
+    });
+    const evPrev = document.getElementById('event-stats-prev');
+    const evNext = document.getElementById('event-stats-next');
+    if (evPrev) evPrev.addEventListener('click', () => state.eventStatsWeek && loadEventStats(shiftWeek(state.eventStatsWeek, -7)));
+    if (evNext) evNext.addEventListener('click', () => state.eventStatsWeek && loadEventStats(shiftWeek(state.eventStatsWeek, 7)));
 
     const trafficDays = document.getElementById('traffic-days');
     const trafficRefresh = document.getElementById('traffic-refresh');

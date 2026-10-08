@@ -360,6 +360,7 @@ export function renderPickReport(order, stats, { siteUrl, address }) {
     ['Clicked through to your link', people(stats.link_people || 0)],
     ['Added it to their calendar', String(stats.calendar_adds || 0)],
     ['Shared it', String(stats.shares || 0)],
+    ['Opened it from a shared link', people(stats.share_people || 0)],
     ...(stats.newsletter_starred ? [['Starred in the Monday newsletter, sent to', `${stats.newsletter_recipients} subscribers`]] : [])
   ];
   const headline = `${name} was seen ${plural(shown, 'time', 'times')} as a Vic’s Pick.`;
