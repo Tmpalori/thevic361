@@ -1453,6 +1453,9 @@ describe('confirm reminders', () => {
     // The confirm link still works and puts them on the list.
     expect((await fetch(`${baseUrl}/subscribe/confirm?token=${due.token}`, { method: 'POST' })).status).toBe(200);
     expect((await store._read()).subscribers.find(x => x.email === 'forgot@example.com').status).toBe('active');
+    // Confirming sends the welcome email in the background: wait for it, or
+    // it lands in the next test's outbox.
+    await vi.waitFor(() => expect(sent.single.map(m => m.subject)).toHaveLength(2), { timeout: 2000 });
   });
 
   it('a reminder that fails to send is tried again next hour', async () => {
@@ -1467,7 +1470,7 @@ describe('confirm reminders', () => {
       expect(await nlApi.sendConfirmReminders(NOW)).toEqual({ sent: 0 });
     } finally { warn.mockRestore(); }
     expect(await nlApi.sendConfirmReminders(NOW)).toEqual({ sent: 1 });
-    expect(sent.single.map(m => m.to[0])).toEqual(['forgot@example.com']);
+    expect(sent.single.filter(m => /Tap to confirm/.test(m.subject)).map(m => m.to[0])).toEqual(['forgot@example.com']);
   });
 
   it('the first-time confirm email is unchanged', () => {
