@@ -56,7 +56,7 @@ import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
 import { normalizeEmail } from './newsletter.js';
 import { venueFor } from './guides.js';
 import { renderSponsorConfirmed, renderSponsorReport, renderPickReport, renderSponsorTooLate, newsletterCovers, pickWhere } from './notify.js';
-import { botName, visitorHash, pageType, PAGE_TYPES, rowCount } from './analytics.js';
+import { botName, visitorHash, pageType, PAGE_TYPES, rowCount, SHARED_LINK } from './analytics.js';
 
 export { newsletterCovers, pickWhere };
 
@@ -447,7 +447,8 @@ export function sponsorStats(order, rows, { recipients = 0 } = {}) {
 //   link       taps on the buyer's own link, from a list (data-ad) or its
 //              page (the "event details" button); compared like sameLink
 //   calendar   "Add to calendar" / Google Calendar taps on its page
-//   shares     share taps on its page, or anywhere for its page's link
+//   shares     shares sent from its page, or anywhere for its page's link
+//   from shares views of its page from a link someone shared (?s=sh)
 // `pages`: its event page paths (one per day it's listed); `urls`: the
 // link(s) it carries; `starred`: whether the Monday issue starred it.
 function pathOf(u) {
@@ -463,14 +464,49 @@ export function pickStats(order, rows, { start, end, pages = [], urls = [], reci
   const link = clicks('event_click').filter(r => (r.ad === order.id || onPage(r)) && urls.some(u => sameLink(r.click_url, u)));
   const calendar = clicks('add_to_calendar').filter(onPage);
   const shares = clicks(t => /^share_/.test(t || '')).filter(r => onPage(r) || pages.includes(pathOf(r.click_url)));
+  const fromShares = views.filter(r => r.ref_source === SHARED_LINK);
   return {
     start, end, pages,
     shown: rowCount(seen), shown_people: peopleIn(seen), where: whereItRan(seen),
     page_views: rowCount(views), page_people: peopleIn(views),
     link_clicks: rowCount(link), link_people: peopleIn(link),
     calendar_adds: rowCount(calendar), shares: rowCount(shares),
+    share_visits: rowCount(fromShares), share_people: peopleIn(fromShares),
     newsletter_starred: Boolean(starred), newsletter_recipients: starred ? Number(recipients) || 0 : 0
   };
+}
+
+// ─── Every event's week (admin "Event stats") ───────────────────────────
+// How each event listed between `start` and `end` did, for pitching its
+// venue a Vic's Pick ("your event got 120 views and 9 shares last week").
+// Same counting as pickStats, per event page. `events`: live and archived
+// events (each with page, name, venue, date, url).
+export function eventWeekStats(rows, events, { start, end }) {
+  const inRange = (rows || []).filter(r => r.day >= start && r.day <= end);
+  const byPage = new Map();
+  for (const ev of events || []) {
+    if (!ev || !ev.page || !ev.date || ev.date < start || ev.date > end) continue;
+    const page = pathOf(ev.page);
+    if (!byPage.has(page)) byPage.set(page, { page, name: ev.name || '', venue: ev.venue || '', date: ev.date, urls: new Set() });
+    if (ev.url) byPage.get(page).urls.add(ev.url);
+  }
+  const out = [];
+  for (const e of byPage.values()) {
+    const onPage = r => pathOf(r.path) === e.page;
+    const views = inRange.filter(r => r.kind === 'view' && onPage(r));
+    const clicks = type => inRange.filter(r => r.kind === 'click' && (typeof type === 'function' ? type(r.click_type) : r.click_type === type));
+    const link = clicks('event_click').filter(r => onPage(r) || [...e.urls].some(u => sameLink(r.click_url, u)));
+    const shares = clicks(t => /^share_/.test(t || '')).filter(r => onPage(r) || pathOf(r.click_url) === e.page);
+    const fromShares = views.filter(r => r.ref_source === SHARED_LINK);
+    out.push({
+      page: e.page, name: e.name, venue: e.venue, date: e.date,
+      page_views: rowCount(views), page_people: peopleIn(views),
+      link_clicks: rowCount(link), link_people: peopleIn(link),
+      calendar_adds: rowCount(clicks('add_to_calendar').filter(onPage)),
+      shares: rowCount(shares), share_visits: rowCount(fromShares)
+    });
+  }
+  return out.sort((a, b) => (b.page_views + b.link_clicks + b.shares) - (a.page_views + a.link_clicks + a.shares) || a.date.localeCompare(b.date));
 }
 
 // The sponsor's link with our UTM tags (unless it already has its own), so
@@ -1268,7 +1304,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       }
       const summary = [['Buyer', order.business], ['Event', `${name} (${place.lastDate})`],
         ['Shown in lists', stats.shown], ['Event page views', stats.page_views], ['Clicked their link', stats.link_people],
-        ['Added to calendar', stats.calendar_adds], ['Shares', stats.shares],
+        ['Added to calendar', stats.calendar_adds], ['Shares', stats.shares], ['Visits from shares', stats.share_visits],
         ['Newsletter', stats.newsletter_starred ? `Starred, sent to ${stats.newsletter_recipients}` : 'Not in it']];
       if (!mailer || !mailer.enabled) {
         if (!order.report_slack_sent && slack) {
