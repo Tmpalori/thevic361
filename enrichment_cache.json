@@ -26,6 +26,10 @@
   "checked": "2026-10-07",
   "found": {}
  },
+ "2026-10-07|midweek market|victoria farmers market": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
  "2026-10-07|super mario galaxy fire prevention show|victoria fine arts center": {
   "checked": "2026-10-07",
   "found": {}
@@ -38,7 +42,23 @@
    "time": "6:30 PM"
   }
  },
+ "2026-10-07|victoria farmers market|victoria farmers market": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-07|wednesday market|victoria farmers market": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-07|weekly karaoke|casa jalisco": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
  "2026-10-07|well appointed wednesdays|": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-07|wildcard wednesdays|weber brewing": {
   "checked": "2026-10-07",
   "found": {}
  },
@@ -74,6 +94,10 @@
   "checked": "2026-10-07",
   "found": {}
  },
+ "2026-10-08|open studio|crossroads art house": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
  "2026-10-08|plant and sip with scenic root|moonshine drinkery": {
   "checked": "2026-10-07",
   "found": {}
@@ -87,6 +111,18 @@
   "found": {}
  },
  "2026-10-08|story strolls audiobook walking group|riverside park": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-08|the scream by edvard munch study|crossroads art house": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-08|weekly karaoke|dodge city saloon": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-09|aaron boultinghouse music|weber brewing": {
   "checked": "2026-10-07",
   "found": {}
  },
@@ -104,17 +140,46 @@
    "time": "5:00 PM – 10:00 PM"
   }
  },
+ "2026-10-09|finding nemo jr|leo j welder center for the performing arts": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "Live theatre: Theatre Victoria presents Disney's Finding Nemo Jr. with performance dates from October 8-10, 2026. Tickets can be purchased at theatrevictoria.org.",
+   "url": "https://theatrevictoria.org/season/2027season/nemo.htm",
+   "time": "7:30 PM",
+   "address": "214 N. Main St., Victoria, TX"
+  }
+ },
+ "2026-10-09|friday happy hour|evan s fire brick oven pizza": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-09|i want to talk about you the art of stella alesi|the nave museum": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
  "2026-10-09|i want to talk about you|the nave museum": {
   "checked": "2026-10-07",
   "found": {
    "description": "The Nave Museum presents the exhibition 'I want to talk about you,' which will be showing from October 9th to December 1st."
   }
  },
+ "2026-10-09|jessica coleman music live|evan s fire brick oven pizza": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
  "2026-10-09|live band karaoke|moonshine drinkery": {
   "checked": "2026-10-07",
   "found": {
    "description": "Moonshine Drinkery hosts Live Band Karaoke, a fan-favorite event with the All Request Piano crew. The event is scheduled for Friday, October 9th."
   }
+ },
+ "2026-10-09|open studio|crossroads art house": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-09|practice party|starlight dance studio": {
+  "checked": "2026-10-07",
+  "found": {}
  },
  "2026-10-09|terror on tate road|outlaw pass family fun center": {
   "checked": "2026-10-07",
@@ -124,5 +189,49 @@
    "time": "7:00 PM – 11:00 PM",
    "address": "78 Tate Rd., Victoria, TX 77904"
   }
+ },
+ "2026-10-10|caturday spooktacular|petsmart": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-10|cuero turkeyfest|downtown cuero": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-10|delphine s dream|palapa": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-10|jcpenney kids craft|jcpenney": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "Free kids craft event at JCPenney's Kids Zone to create a Dalmatian Fireman. Kids receive a free craft, ID badge, lanyard, and collector's pin, and parents get a 10% off coupon.",
+   "url": "https://www.jcpenney.com/dotcom/store-details/TX/Victoria/8106-N-NAVARRO-ST-1740.html"
+  }
+ },
+ "2026-10-10|legacy of hope fundraising banquet|texas a m university victoria": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-10|spooky starry night|crossroads art house": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-10|terror on tate road|outlaw pass family fun center": {
+  "checked": "2026-10-07",
+  "found": {
+   "description": "A brand-new haunted house and haunted hayride at Outlaw Pass Family Fun Center. It runs Fridays, Saturdays, and Sundays through October 2026. Tickets can be purchased online or in person at the ticket booth.",
+   "url": "https://terrorontate.com/",
+   "time": "7:00 PM – 11:00 PM",
+   "address": "78 Tate Rd., Victoria, TX"
+  }
+ },
+ "2026-10-10|train rides|the texas zoo": {
+  "checked": "2026-10-07",
+  "found": {}
+ },
+ "2026-10-10|world teachers day|children s discovery museum": {
+  "checked": "2026-10-07",
+  "found": {}
  }
 }

@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-10-07T11:35:58-05:00",
+  "last_updated": "2026-10-07T19:50:13-05:00",
   "events": [
     {
       "date": "2026-10-05",
@@ -23,7 +23,7 @@
       "time": "",
       "venue": "Moonshine Drinkery",
       "address": "",
-      "description": "Our first screening of the October series is officially underway.",
+      "description": "Community event at Moonshine Drinkery. Check the venue for details.",
       "icons": [
         "community"
       ],
@@ -51,23 +51,6 @@
     },
     {
       "date": "2026-10-05",
-      "name": "Kids Competition Class (Port Lavaca)",
-      "time": "5:30 to 6:30 PM",
-      "venue": "",
-      "address": "132 E. Main St.",
-      "description": "Final class in our Port Lavaca Competition Prep Series; drop-ins welcome for $18.",
-      "icons": [
-        "family",
-        "arts",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid02WwdipCB6PkQv89mgUoGwN84g9ozAxpgg93kCpa2vNfyj8HSAA7QM6ocChCdGX4Y7l",
-      "_source": "apify_facebook_posts",
-      "sources": 1
-    },
-    {
-      "date": "2026-10-05",
       "name": "Mixed Media Monday: Textured Art Ghosts",
       "time": "5:30PM \u2013 7:00PM",
       "venue": "Victoria Public Library",
@@ -88,7 +71,7 @@
       "time": "6:00 PM\u20139:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "Arts event at Starlight Dance Studio. Check the venue for details.",
+      "description": "Group lesson.",
       "icons": [
         "arts"
       ],
@@ -123,7 +106,7 @@
       "time": "7:00 PM",
       "venue": "Moonshine Drinkery",
       "address": "",
-      "description": "Screenings of horror classics every Monday in October starting with Psycho.",
+      "description": "screenings of horror classics every Monday in October, starting tonight with Alfred Hitchcock\u2019s Psycho at 7pm",
       "icons": [
         "drinks",
         "arts",
@@ -133,10 +116,7 @@
       "url": "https://www.facebook.com/moonshinedrinkery/posts/pfbid0j8SfEKMk5BJ1ixk2GbmEMffyFNeECHCAFWP77frPraNkRTQz8VmsYjJ2wfRScUS7l",
       "_source": "apify_facebook_posts",
       "recurring": true,
-      "_also_from": [
-        "apify_instagram_posts"
-      ],
-      "sources": 2
+      "sources": 1
     },
     {
       "date": "2026-10-05",
@@ -144,7 +124,7 @@
       "time": "7:00 PM",
       "venue": "Moonshine Drinkery",
       "address": "",
-      "description": "October Horror Film Series",
+      "description": "Community event at Moonshine Drinkery. Check the venue for details.",
       "icons": [
         "community"
       ],
@@ -154,18 +134,35 @@
       "sources": 1
     },
     {
+      "date": "2026-10-05",
+      "name": "Monday Movie Nights with Victoria Film Society",
+      "time": "7:00 PM",
+      "venue": "Moonshine Drinkery",
+      "address": "",
+      "description": "Screenings of horror classics every Monday in October.",
+      "icons": [
+        "drinks",
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.instagram.com/p/DeIZju3ieSu/",
+      "_source": "apify_instagram_posts",
+      "recurring": true,
+      "sources": 1
+    },
+    {
       "date": "2026-10-06",
       "name": "Taco Tuesday - $2 Birria Tacos",
       "time": "",
       "venue": "Weber Brewing",
       "address": "",
-      "description": "Food event at Weber Brewing. Check the venue for details.",
+      "description": "$2 Birria Taco night; Margaritas $6 all nite",
       "icons": [
         "food",
         "drinks"
       ],
       "free": false,
-      "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid02kmtgLE6c2zCX8D4mLt3s51upYYQ4mu9VA6HCyVXsvQbfm9hE5JrYvPmJscK7zV8xl&id=61555658972596",
+      "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid0Ug9Spe1hugYdosNUwLvzrVVuE35Zp6FXavQ4PjNj2nkBkw8s6oia4w2MwyfkyjcFl&id=61555658972596",
       "_source": "apify_facebook_posts",
       "recurring": true,
       "sources": 1
@@ -185,21 +182,24 @@
       "free": false,
       "url": "https://www.instagram.com/p/DeJvvaethIb/",
       "_source": "apify_instagram_posts",
+      "recurring": true,
       "sources": 1
     },
     {
       "date": "2026-10-06",
-      "name": "Itsy Bitsy Spider Handprint Activity",
-      "time": "10:00\u201311:30 AM",
-      "venue": "Crossroads Art House",
-      "address": "2914 N. Laurent",
-      "description": "Create a sweet little keepsake featuring your child\u2019s handprint.",
+      "name": "EPA 608 Certification Class",
+      "time": "10:00 AM",
+      "venue": "Pinnacle Pointe Apartments",
+      "address": "702 Salem Road",
+      "description": "The Victoria Apartment Association will be hosting an EPA 608 (Freon certification class) on Tuesday, October 6th at Pinnacle Pointe Apartments located at 702 Salem Rd. This is a one-day class with a certification test the same day. The class will start at 8 AM\ufffc and finish at 6",
       "icons": [
-        "arts"
+        "arts",
+        "shopping",
+        "community"
       ],
       "free": false,
-      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0iKowLYSspSuHF7uQ5Dt6BdioVmXLpxCGao853ER84fgvTekGRdyy3h89sRaMnzqyl",
-      "_source": "apify_facebook_posts",
+      "url": "https://www.facebook.com/events/1085706373845691/",
+      "_source": "apify_facebook",
       "sources": 1
     },
     {
@@ -274,28 +274,11 @@
     },
     {
       "date": "2026-10-06",
-      "name": "Free Cheese Sticks w/ Purchase of Any Pizza",
-      "time": "6:00 PM - 9:00 PM",
-      "venue": "Evan's Fire Brick Oven Pizza",
-      "address": "711 S. Bridge St.",
-      "description": "Tuesday only - Free Cheese Sticks w/ Purchase of Any Pizza!",
-      "icons": [
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid02JCwJxancju7LgLNxZC1Nk6Ms8sfoZ4CrkACEsz1Qp1zSLaQhpTbCDZfT9z68EFPRl&id=61565940617671",
-      "_source": "apify_facebook_posts",
-      "recurring": true,
-      "sources": 1
-    },
-    {
-      "date": "2026-10-06",
       "name": "Latin",
       "time": "6:00 PM\u20139:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "Arts event at Starlight Dance Studio. Check the venue for details.",
+      "description": "Group lesson.",
       "icons": [
         "arts"
       ],
@@ -323,18 +306,18 @@
     },
     {
       "date": "2026-10-06",
-      "name": "Members-Only Hand Building Clay Class",
+      "name": "Clay with Anahi (Members-Only Hand Building Clay)",
       "time": "6:00\u20138:00 PM",
       "venue": "Crossroads Art House",
-      "address": "2914 N. Laurent",
-      "description": "Members ages 16 and up can spend time creating with clay and working on their hand-built projects during the studio session.",
+      "address": "2914 N. Laurent St.",
+      "description": "Members ages 16 and up can hand-build clay projects during this studio session.",
       "icons": [
-        "arts",
-        "community"
+        "arts"
       ],
       "free": false,
-      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid02DMq6BgTdHBoRWMygPJ7TgpWJRqKM1grGvS8bAAGK1EajqvhcQAL1WsQQsc371Xm1l",
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid02xztDVwqV1djxGV9JHcdXh3w2zwseHsFLQS4CVj4X4axc2UdDo2UW6j35qS4xr4h5l",
       "_source": "apify_facebook_posts",
+      "recurring": true,
       "sources": 1
     },
     {
@@ -343,7 +326,7 @@
       "time": "7:00 PM",
       "venue": "Weber Brewing",
       "address": "",
-      "description": "Drinks event at Weber Brewing. Check the venue for details.",
+      "description": "by geeks who drink",
       "icons": [
         "drinks"
       ],
@@ -359,9 +342,9 @@
       "time": "",
       "venue": "Moonshine Drinkery",
       "address": "103 West Santa Rosa Street",
-      "description": "An evening of stand-up comedy featuring Crux Crawford and other local comics. Expect bar service and a lively crowd.",
+      "description": "A night of stand-up comedy featuring Crux Crawford. Expect drinks, laughs, and a lively crowd.",
       "icons": [
-        "community",
+        "arts",
         "drinks"
       ],
       "free": false,
@@ -372,72 +355,40 @@
     },
     {
       "date": "2026-10-07",
-      "name": "Well Appointed Wednesdays \ud83c\udf77 \ud83c\udf7a \u2615\ufe0f",
-      "time": "08:00 PM",
-      "venue": "",
-      "address": "501 E Juan Linn St",
-      "description": "A casual midweek social night with drinks and conversation. Drop in for an evening out with friends or coworkers.",
+      "name": "Weekly Karaoke",
+      "time": "",
+      "venue": "Casa Jalisco",
+      "address": "1706 N. Laurent Street, Victoria, TX 77901",
+      "description": "Sing your favorites at the weekly karaoke night. Open-mic style fun for locals and visitors alike.",
       "icons": [
-        "drinks",
-        "community"
+        "music",
+        "drinks"
       ],
       "free": false,
-      "url": "https://allevents.in/victoria/well-appointed-wednesdays/200030736432230",
-      "_source": "allevents",
-      "sources": 1,
-      "appeal": 2
-    },
-    {
-      "date": "2026-10-07",
-      "name": "Victoria Texas Historic Mystery",
-      "time": "12:00 PM",
-      "venue": "DeLeon City Plaza",
-      "address": "101 North Main Street",
-      "description": "Guided outdoor exploration of Victoria\u2019s historic sites with opportunities to discover local stories and landmarks. Family-friendly.",
-      "icons": [
-        "outdoors",
-        "community",
-        "family"
-      ],
-      "free": true,
-      "url": "https://www.eventbrite.com/e/spooky-season-victoria-historic-ghost-mystery-tickets-2001055487831",
-      "_source": "apify_eventbrite",
-      "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-07",
-      "name": "Elizabeth Payne: Paintings, 1972-2026 & Roy Fridge: Curious Arts and Other Whittlings",
-      "time": "12:00 PM - 5:00 PM",
-      "venue": "Five Points Museum of Contemporary Art",
-      "address": "1201 N Moody St, Victoria, TX 77901",
-      "description": "Two solo exhibitions: paintings by Elizabeth Payne and wood carvings by Roy Fridge. Gallery viewing during museum hours.",
-      "icons": [
-        "arts",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.fivepointsmuseum.com/",
+      "url": "",
       "_source": "gemini_search",
       "sources": 1,
       "appeal": 3
     },
     {
       "date": "2026-10-07",
-      "name": "Create a Fall Cryptid",
-      "time": "5:30\u20136:30 PM",
-      "venue": "Crossroads Art House",
-      "address": "2914 N. Laurent St.",
-      "description": "Make a seasonal 'cryptid' using mixed media in this hands-on art workshop. Materials and guidance provided.",
+      "name": "Wildcard Wednesdays",
+      "time": "",
+      "venue": "Weber Brewing",
+      "address": "",
+      "description": "Try the special Buffalo Chicken Mac with bacon alongside Weber Brewing's beers. Limited-time menu item.",
       "icons": [
-        "arts",
-        "family"
+        "food",
+        "drinks"
       ],
       "free": false,
-      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0QnC1oKU17MVLtMoGYivkiNMhSFvRWTC6miPbFi1H3tJbxcLjP4DSixxaB15J3KbNl",
+      "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid02ZBhmAohmvGAuc8bGseTBnvqFqQVncckLxmo3vuGPeQajPYnBEowyQYDDd2iiFVsLl&id=61555658972596",
       "_source": "apify_facebook_posts",
-      "sources": 1,
+      "recurring": true,
+      "_also_from": [
+        "apify_instagram_posts"
+      ],
+      "sources": 2,
       "appeal": 3
     },
     {
@@ -446,7 +397,7 @@
       "time": "6:00 PM \u2013 7:30 PM",
       "venue": "Youth Sports Complex",
       "address": "107 N Ben Wilson",
-      "description": "Open pickleball play for all skill levels\u2014great for exercise and meeting new people. Bring a paddle if you have one.",
+      "description": "Drop in for a social, beginner-friendly pickleball session. Equipment and tips often shared on site.",
       "icons": [
         "outdoors",
         "family",
@@ -456,9 +407,11 @@
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3970",
       "_source": "city_calendar",
       "_also_from": [
+        "apify_facebook",
+        "gemini_search",
         "library"
       ],
-      "sources": 2,
+      "sources": 4,
       "appeal": 3
     },
     {
@@ -467,11 +420,10 @@
       "time": "6:00 PM\u20139:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "Country social dance night with lessons and open dancing for all levels. Come ready to two-step and have fun.",
+      "description": "An evening of country dance instruction and social dancing for all levels. Bring comfortable shoes.",
       "icons": [
-        "music",
-        "community",
-        "arts"
+        "arts",
+        "community"
       ],
       "free": false,
       "url": "https://www.facebook.com/starlightvictoria/posts/pfbid0E84X8DfcY9uw519DVcswjpSnmY5s7GTWjBK92pe2cr5Br5H9716dguDLncoH4G7il",
@@ -486,7 +438,7 @@
       "time": "6:30 PM",
       "venue": "Riverside Stadium Parking Lot",
       "address": "Memorial Dr.",
-      "description": "Weekly group run/walk hosted by VARRA, open to runners and walkers of all paces. Free and all-ages welcome.",
+      "description": "Join a community group run/walk open to all paces and levels. Meetups are friendly and supportive.",
       "icons": [
         "outdoors",
         "community",
@@ -506,7 +458,7 @@
       "time": "6:30 PM",
       "venue": "Victoria Fine Arts Center",
       "address": "1002 Sam Houston Dr.",
-      "description": "A kid-friendly fire safety show with fun Super Mario Galaxy themes and live demos from Victoria Fire Department. Free tickets available at the Fire Marshal\u2019s office.",
+      "description": "A kid-focused fire prevention show with interactive demos and safety tips. Free tickets available in advance.",
       "icons": [
         "family",
         "community",
@@ -521,29 +473,11 @@
     },
     {
       "date": "2026-10-07",
-      "name": "I LOVE SCARY MOVIES! Dinner with Strangers Victoria",
-      "time": "7:00 PM",
-      "venue": "",
-      "address": "212 South Main Street",
-      "description": "Meet fellow horror-movie fans over dinner and swap recommendations and spooky film talk in a casual group setting.",
-      "icons": [
-        "food",
-        "community",
-        "arts"
-      ],
-      "free": false,
-      "url": "https://www.eventbrite.com/e/i-love-scary-movies-dinner-with-strangers-victoria-tickets-1835955916569",
-      "_source": "apify_eventbrite",
-      "sources": 1,
-      "appeal": 2
-    },
-    {
-      "date": "2026-10-07",
       "name": "Foodies + New Friends: Victoria | Dinner Meetup (DUOS EDITION)",
       "time": "7:00 PM",
       "venue": "",
       "address": "North Navarro Street",
-      "description": "Meet one new local over a meal at a rotating restaurant; a casual networking and friend-making dinner that gives back to the community.",
+      "description": "Meet new people over dinner at a rotating local restaurant. Casual networking with a giving-back focus.",
       "icons": [
         "food",
         "community"
@@ -556,11 +490,28 @@
     },
     {
       "date": "2026-10-07",
+      "name": "I LOVE SCARY MOVIES! Dinner with Strangers Victoria",
+      "time": "7:00 PM",
+      "venue": "",
+      "address": "212 South Main Street",
+      "description": "A themed dinner meetup for fans of scary movies \u2014 share favorites and chat with fellow horror fans over food and conversation.",
+      "icons": [
+        "community",
+        "food"
+      ],
+      "free": false,
+      "url": "https://www.eventbrite.com/e/i-love-scary-movies-dinner-with-strangers-victoria-tickets-1835955916569",
+      "_source": "apify_eventbrite",
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-07",
       "name": "VAMA Rock & Blues Open Mic",
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Weekly open-mic jam for rock and blues players and singers. All skill levels welcome\u2014bring your instrument or just come listen.",
+      "description": "Open-mic jam for rock and blues players of all levels; bring your instrument and join the community session.",
       "icons": [
         "music",
         "community",
@@ -580,7 +531,7 @@
       "time": "7:00 PM \u2013 close",
       "venue": "La Cantina Tacos & Tequila",
       "address": "212 S Main St.",
-      "description": "Weekly downtown karaoke with margarita and drink specials. Sing, eat, and enjoy a lively cantina atmosphere.",
+      "description": "Weekly karaoke night with margarita and drink specials \u2014 sing, eat, and unwind in a lively downtown spot.",
       "icons": [
         "music",
         "drinks",
@@ -596,27 +547,61 @@
     },
     {
       "date": "2026-10-07",
+      "name": "Wednesday Market",
+      "time": "9 AM\u20131 PM",
+      "venue": "Victoria Farmers Market",
+      "address": "",
+      "description": "Shop fresh local produce, baked goods, and artisan items from Victoria vendors in a relaxed outdoor market.",
+      "icons": [
+        "food",
+        "shopping",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid02UscUYhMsxQEV4GdKQVfqfXq5wTiCdAsQof2VFoTkNpp8rrpdGTtSG6hvFaTTvvW5l",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-07",
+      "name": "Midweek Market",
+      "time": "9 AM\u20131 PM",
+      "venue": "Victoria Farmers Market",
+      "address": "",
+      "description": "Browse local produce, baked goods, and crafts at the midweek market \u2014 a quick, convenient farmers market option.",
+      "icons": [
+        "food",
+        "shopping",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid0236dmu99ufNdCUEr9U6rNsV36F2CZc57HCgwdwV31z3YrjuRThkNeochU4GHWMr6El",
+      "_source": "apify_facebook_posts",
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-07",
       "name": "Victoria Farmers' Market",
       "time": "9:00 AM \u2013 1:00 PM",
       "venue": "Victoria Farmers Market",
       "address": "2805 N. Navarro St.",
-      "description": "Shop fresh local produce, pastured meats, honey, baked goods and more from Victoria vendors each week.",
+      "description": "Find fresh produce, pastured meats, honey, and homemade baked goods from Victoria growers and makers.",
       "icons": [
         "food",
         "shopping",
-        "outdoors"
+        "free"
       ],
       "free": true,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid02UscUYhMsxQEV4GdKQVfqfXq5wTiCdAsQof2VFoTkNpp8rrpdGTtSG6hvFaTTvvW5l",
+      "url": "https://www.facebook.com/VictoriaFarmersMarket",
       "_source": "local_events",
       "curated": true,
       "favorite": true,
       "recurring": true,
-      "_also_from": [
-        "apify_facebook_posts"
-      ],
-      "sources": 2,
-      "appeal": 4
+      "sources": 1,
+      "appeal": 3
     },
     {
       "date": "2026-10-07",
@@ -624,7 +609,7 @@
       "time": "9:30 PM \u2013 2:00 AM",
       "venue": "Shooters Bar",
       "address": "4705 N Navarro St.",
-      "description": "Late-night karaoke hosted by DJ Shane with a big dance floor and drink specials. Come sing or dance into the night.",
+      "description": "Late-night karaoke hosted by DJ Shane with a big dance floor and drink specials for a lively night out.",
       "icons": [
         "music",
         "drinks",
@@ -636,7 +621,25 @@
       "curated": true,
       "recurring": true,
       "sources": 1,
-      "appeal": 2
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-08",
+      "name": "Weekly Karaoke",
+      "time": "",
+      "venue": "Dodge City Saloon",
+      "address": "205 N Star Dr H, Victoria, TX 77904",
+      "description": "Casual weekly karaoke with a roomy dance floor and good tunes \u2014 a laid-back spot for singers and friends.",
+      "icons": [
+        "music",
+        "drinks",
+        "free"
+      ],
+      "free": true,
+      "url": "http://dcsaloon.com/",
+      "_source": "gemini_search",
+      "sources": 1,
+      "appeal": 3
     },
     {
       "date": "2026-10-08",
@@ -644,11 +647,10 @@
       "time": "",
       "venue": "Moonshine Drinkery",
       "address": "",
-      "description": "A social mixer for plant lovers to swap tips, meet other collectors, and browse or buy plants and supplies while enjoying drinks.",
+      "description": "An evening mixer featuring Scenic Root \u2014 mingle with plant lovers, see sample plants, and enjoy drinks in a casual social setting.",
       "icons": [
-        "community",
         "drinks",
-        "shopping"
+        "community"
       ],
       "free": false,
       "url": "https://www.facebook.com/moonshinedrinkery/posts/pfbid02rcmfB73GmX5wor4heaj8PbfVyWJZreMrG4eJJcBC5F5ezxghptSnHqBC6G8UvaVzl",
@@ -658,15 +660,15 @@
     },
     {
       "date": "2026-10-08",
-      "name": "Open Mic",
+      "name": "Open mic",
       "time": "",
       "venue": "Weber Brewing",
       "address": "",
-      "description": "Sign up to perform or enjoy local acts during an open-mic night. Expect a variety of singer-songwriters and spoken-word sets.",
+      "description": "Open-mic night with live local performers plus steak night specials\u2014eat, drink, and enjoy music all evening.",
       "icons": [
         "music",
-        "drinks",
-        "free"
+        "food",
+        "drinks"
       ],
       "free": true,
       "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid02BUwvxrdRXw39CzZBSh6oQQjjrifkZpCJiY13ayZoiMz9HtU3YcfJ1FG32rzugU6jl&id=61555658972596",
@@ -681,10 +683,9 @@
       "time": "",
       "venue": "Moonshine Drinkery",
       "address": "",
-      "description": "Guided planting while you enjoy drinks\u2014bring creativity and be ready to pot a plant with Scenic Root leading the session.",
+      "description": "A relaxed plant-and-sip evening with Scenic Root \u2014 casual plant activities alongside drinks and conversation.",
       "icons": [
         "drinks",
-        "arts",
         "community"
       ],
       "free": false,
@@ -695,15 +696,32 @@
     },
     {
       "date": "2026-10-08",
+      "name": "Victoria Texas Historic Mystery",
+      "time": "10:00 AM",
+      "venue": "DeLeon City Plaza",
+      "address": "101 North Main Street",
+      "description": "Explore local history with an outdoor mystery walk that highlights Victoria\u2019s landmarks and stories.",
+      "icons": [
+        "outdoors",
+        "community",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.eventbrite.com/e/spooky-season-victoria-historic-ghost-mystery-tickets-2001055490840",
+      "_source": "apify_eventbrite",
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-08",
       "name": "Toddler Story Time",
       "time": "10:30 AM \u2013 11:00 AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "High-energy songs, rhymes and movement designed to build fine motor skills for active toddlers and their caregivers.",
+      "description": "High-energy story time for toddlers with songs, rhymes, and movement to support early motor and language skills.",
       "icons": [
         "family",
-        "free",
-        "community"
+        "free"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3938",
@@ -716,28 +734,11 @@
     },
     {
       "date": "2026-10-08",
-      "name": "Elizabeth Payne: Paintings, 1972-2026 & Roy Fridge: Curious Arts and Other Whittlings",
-      "time": "12:00 PM - 5:00 PM",
-      "venue": "Five Points Museum of Contemporary Art",
-      "address": "1201 N Moody St, Victoria, TX 77901",
-      "description": "Two solo shows: a retrospective of Elizabeth Payne\u2019s paintings and Roy Fridge\u2019s carved wood pieces on view.",
-      "icons": [
-        "arts",
-        "free"
-      ],
-      "free": true,
-      "url": "",
-      "_source": "gemini_search",
-      "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-08",
       "name": "Dine to Donate for the Calhoun High School Band",
       "time": "3:00 PM \u2013 10:00 PM",
       "venue": "Texas Roadhouse",
       "address": "4908 N. Navarro St.",
-      "description": "Bring the flyer for dine-in or takeout and a portion of your bill supports the Calhoun High School band.",
+      "description": "Show the flyer when you dine in or take out and a portion of your food total supports the Calhoun High School Band.",
       "icons": [
         "food",
         "community"
@@ -751,35 +752,36 @@
     },
     {
       "date": "2026-10-08",
-      "name": "Members-Only Hand Building Clay Class",
-      "time": "5:00\u20137:00 PM",
+      "name": "Open Studio",
+      "time": "4-7 p.m.",
       "venue": "Crossroads Art House",
-      "address": "2914 N. Laurent",
-      "description": "Studio session for members 16+ to work on hand-built clay projects with access to shared tools and space.",
+      "address": "2914 N. Laurent St.",
+      "description": "Drop into the studio to work on your own art projects in a shared creative space; all skill levels welcome.",
       "icons": [
         "arts",
         "community"
       ],
       "free": false,
-      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid02DMq6BgTdHBoRWMygPJ7TgpWJRqKM1grGvS8bAAGK1EajqvhcQAL1WsQQsc371Xm1l",
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0nra1oPyjKNQEtksC6j2MSmSBpbpUU7uSRjrZ8CsUnC82X8hJZm9Lo4RdWJi9reQul",
       "_source": "apify_facebook_posts",
+      "recurring": true,
       "sources": 1,
-      "appeal": 2
+      "appeal": 3
     },
     {
       "date": "2026-10-08",
-      "name": "PTA Info Night",
-      "time": "5:30 PM",
-      "venue": "",
-      "address": "2200 E Red River St",
-      "description": "Learn about the Physical Therapist Assistant profession and program requirements at an information session for prospective students.",
+      "name": "Clay with Anahi (Members-Only Hand Building Clay)",
+      "time": "5:00\u20137:00 PM",
+      "venue": "Crossroads Art House",
+      "address": "2914 N. Laurent St.",
+      "description": "Members-only hand-building clay session for ages 16 and up to create pottery and small sculptures.",
       "icons": [
-        "community",
-        "free"
+        "arts"
       ],
-      "free": true,
-      "url": "https://www.facebook.com/events/1643033100773065/",
-      "_source": "apify_facebook",
+      "free": false,
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid02xztDVwqV1djxGV9JHcdXh3w2zwseHsFLQS4CVj4X4axc2UdDo2UW6j35qS4xr4h5l",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
       "sources": 1,
       "appeal": 2
     },
@@ -789,11 +791,11 @@
       "time": "5:30 PM \u2013 6:30 PM",
       "venue": "Riverside Park",
       "address": "405 Memorial Drive",
-      "description": "Walk along the Guadalupe River while listening to a shared audiobook; a casual group for walkers and readers.",
+      "description": "Walk the Guadalupe River while listening to a shared audiobook. A relaxed, social stroll for all ages and paces.",
       "icons": [
         "outdoors",
-        "free",
-        "community"
+        "community",
+        "free"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/1330/Parks-Recreation",
@@ -809,7 +811,7 @@
       "time": "5:30PM \u2013 6:30PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "An informational and activity session for preschool-aged children and their caregivers with resources on enrollment and readiness. Family-friendly and community focused.",
+      "description": "Family-friendly activities and early-learning resources for preschoolers and their caregivers. Drop in for play and info.",
       "icons": [
         "family",
         "community",
@@ -823,16 +825,17 @@
     },
     {
       "date": "2026-10-08",
-      "name": "Scream by Munch Study",
+      "name": "*The Scream* by Edvard Munch Study",
       "time": "5:30\u20136:30 PM",
       "venue": "Crossroads Art House",
       "address": "2914 N. Laurent St.",
-      "description": "Group study and discussion of Edvard Munch\u2019s The Scream, suitable for art lovers and students. Expect slide images, interpretation, and conversation.",
+      "description": "Hands-on art study for ages 5\u201312 exploring Edvard Munch\u2019s The Scream. Kids make art and learn about the painting.",
       "icons": [
         "arts",
-        "community"
+        "family",
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0QnC1oKU17MVLtMoGYivkiNMhSFvRWTC6miPbFi1H3tJbxcLjP4DSixxaB15J3KbNl",
       "_source": "apify_facebook_posts",
       "sources": 1,
@@ -844,7 +847,7 @@
       "time": "6:00 PM",
       "venue": "Vida Cafe & Market",
       "address": "105 Spring Green Blvd",
-      "description": "Casual open-play mahjong night with caf\u00e9 food available; bring your NMJL card and a willingness to play and meet others. New players welcome.",
+      "description": "Open-play mahjong night with food available. Bring your NMJL card and join regular players for casual games.",
       "icons": [
         "community",
         "food"
@@ -864,7 +867,7 @@
       "time": "6:00 PM \u2013 9:00 PM",
       "venue": "Evan's Fire Brick Oven Pizza",
       "address": "711 S. Bridge St.",
-      "description": "Live music while you dine\u2014an evening of songs performed by Henry Emiliano during regular service. Great for a relaxed night out with friends.",
+      "description": "Live music while you dine at the pizza house. Expect an evening of acoustic tunes and casual atmosphere.",
       "icons": [
         "music",
         "food"
@@ -882,7 +885,7 @@
       "time": "6:00 PM\u20139:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "Drop-in ballroom dance session for all levels \u2014 practice steps, learn new patterns, and enjoy social dancing. Comfortable shoes recommended.",
+      "description": "Group ballroom lesson focused on technique and partnered practice. Come ready to learn and dance.",
       "icons": [
         "arts",
         "community"
@@ -892,7 +895,7 @@
       "_source": "apify_facebook_posts",
       "recurring": true,
       "sources": 1,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-08",
@@ -900,10 +903,10 @@
       "time": "7:00 AM \u2013 2:00 PM",
       "venue": "The Club at Colony Creek",
       "address": "301 Colony Creek Dr",
-      "description": "Annual Chamber golf tournament with breakfast and lunch provided; a community fundraiser and networking event with morning registration and tee times.",
+      "description": "Chamber\u2019s annual golf tournament with breakfast and lunch provided. A full-day fundraising event with tee times and prizes.",
       "icons": [
-        "outdoors",
         "community",
+        "outdoors",
         "food"
       ],
       "free": false,
@@ -918,7 +921,7 @@
       "time": "7:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Weekly bingo night with doors opening an hour early; call to reserve a spot. Expect multiple games and a social crowd each week.",
+      "description": "Weekly bingo night with doors opening an hour early. Come for the games, prizes, and social atmosphere.",
       "icons": [
         "community",
         "family"
@@ -941,7 +944,7 @@
       "time": "7:30 PM",
       "venue": "Leo J. Welder Center for the Performing Arts",
       "address": "214 N. Main St.",
-      "description": "A family-friendly musical adaptation following Marlin and Nemo on an ocean adventure. Ideal for kids and adults; tickets required.",
+      "description": "A joyful, family-friendly musical retelling of the underwater adventure with memorable songs and colorful staging. Great for kids and adults alike.",
       "icons": [
         "arts",
         "family",
@@ -966,7 +969,7 @@
       "time": "8:00 AM",
       "venue": "",
       "address": "",
-      "description": "Three-day neighborhood sale with antiques, collectibles, tools and household items. Bargain hunting and treasure spotting for all ages.",
+      "description": "Multi-day neighborhood sale featuring antiques, collectibles, tools and household items. Early-bird shoppers can find hidden bargains.",
       "icons": [
         "shopping",
         "community",
@@ -976,7 +979,7 @@
       "url": "https://www.facebook.com/events/1823173055763457/",
       "_source": "apify_facebook",
       "sources": 1,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-08",
@@ -984,7 +987,7 @@
       "time": "8:00 PM \u2013 11:00 PM",
       "venue": "5D Tavern",
       "address": "213 S Main St.",
-      "description": "Weekly downtown karaoke in an upscale cocktail lounge. No cover and a menu of craft cocktails available.",
+      "description": "Weekly downtown karaoke with no cover and craft cocktails. Sing with friends or sit back and enjoy the show.",
       "icons": [
         "music",
         "drinks",
@@ -1004,7 +1007,7 @@
       "time": "8:00 PM \u2013 2:00 AM",
       "venue": "Dodge City Saloon",
       "address": "205 N Star Dr, Suite H",
-      "description": "Late-night karaoke hosted by DJ Rocketman with drink specials including $3 Fireball and margarita shots until midnight.",
+      "description": "Late-night karaoke hosted by DJ Rocketman with drink specials until midnight. Expect a lively crowd and sing-along favorites.",
       "icons": [
         "music",
         "drinks",
@@ -1024,11 +1027,10 @@
       "time": "7:00 PM \u2013 11:00 PM",
       "venue": "Outlaw Pass Family Fun Center",
       "address": "78 Tate Rd.",
-      "description": "Seasonal haunted attraction open weekend nights in October with multiple scare zones and ticketed entry.",
+      "description": "Seasonal haunted attraction offering scares and spooky fun on Friday\u2013Sunday nights throughout October. Buy tickets online for time slots.",
       "icons": [
-        "family",
         "outdoors",
-        "community"
+        "family"
       ],
       "free": false,
       "url": "https://terrorontate.com/",
@@ -1045,20 +1047,20 @@
       "time": "5:00 PM \u2013 10:00 PM",
       "venue": "Downtown Cuero",
       "address": "",
-      "description": "Annual small-town festival with food, live entertainment, vendors and family activities across downtown.",
+      "description": "Three days of family-friendly festivities in downtown Cuero with food, vendors, and community events. Plan for parades and live entertainment.",
       "icons": [
         "community",
         "food",
         "family"
       ],
-      "free": false,
+      "free": true,
       "url": "https://turkeyfest.org/",
       "_source": "local_events",
       "curated": true,
       "big": true,
       "town": "Cuero",
       "sources": 1,
-      "appeal": 5
+      "appeal": 4
     },
     {
       "date": "2026-10-09",
@@ -1066,7 +1068,7 @@
       "time": "",
       "venue": "Moonshine Drinkery",
       "address": "103 W Santa Rosa St",
-      "description": "Live band karaoke with the All Request Piano crew \u2014 bring your song and take the stage while enjoying drinks.",
+      "description": "Live band karaoke returns for a night of crowd-pleasing performances led by All Request Piano. Bring your song list and join the fun.",
       "icons": [
         "music",
         "drinks",
@@ -1083,31 +1085,33 @@
     },
     {
       "date": "2026-10-09",
-      "name": "I want to talk about you",
+      "name": "\u201cI want to talk about you\u201d The art of stella alesi",
       "time": "",
       "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "New exhibition at the museum showcasing contemporary works; runs October through December.",
+      "address": "306 W. Commercial St, Victoria, TX, United States, 77901",
+      "description": "A gallery show of paintings and sculptures focused on dynamic shapes, color and form. Suitable for art lovers and casual visitors.",
       "icons": [
         "arts",
-        "community"
+        "community",
+        "free"
       ],
-      "free": false,
-      "url": "https://www.facebook.com/TheNaveMuseum/posts/pfbid02TwSigB1fV4GgVAYLgk4VALG8DYRHJSn8NVpVJW6t2ir1FhQk7769V82rkc5ewuDyl",
+      "free": true,
+      "url": "https://www.facebook.com/reel/1950645878941014/",
       "_source": "apify_facebook_posts",
       "_also_from": [
+        "apify_instagram_posts",
         "gemini_search"
       ],
-      "sources": 2,
+      "sources": 3,
       "appeal": 3
     },
     {
       "date": "2026-10-09",
-      "name": "Aaron Boultinghouse",
+      "name": "Aaron Boultinghouse Music",
       "time": "",
       "venue": "Weber Brewing",
       "address": "",
-      "description": "Local singer-songwriter performing an evening set at the brewery; expect a relaxed night of live music and drinks.",
+      "description": "Live evening music at the brewery \u2014 expect local tunes and a relaxed atmosphere.",
       "icons": [
         "music",
         "drinks"
@@ -1124,14 +1128,13 @@
       "time": "",
       "venue": "Evan's Fire Brick Oven Pizza",
       "address": "711 S. Bridge St.",
-      "description": "Wind down with drink specials and a relaxed atmosphere\u2014perfect for after-work catch-ups and casual weekend plans.",
+      "description": "Weekly Friday happy hour with drink specials and casual pizza-friendly vibes.",
       "icons": [
         "drinks",
-        "food",
-        "community"
+        "food"
       ],
       "free": false,
-      "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid02mwvrPFf6Zysef4ToiAVCsxAK4QhrgfZ2EPv3QHa4DmT7bqeNcKEhPqF1HwvpY3Vfl&id=61565940617671",
+      "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid0iQHfU62jipt9NxMRnquAoZjHBvZtexC8YwuKzSKc3wrjpBggeoFbqFDYUsrUCVwpl&id=61565940617671",
       "_source": "apify_facebook_posts",
       "recurring": true,
       "sources": 1,
@@ -1143,15 +1146,18 @@
       "time": "06:30 PM",
       "venue": "Crossroads Art House",
       "address": "2914 N Laurent St",
-      "description": "Guided paint night for all skill levels \u2014 materials and step-by-step instruction included. Bring a friend and get creative.",
+      "description": "All-ages paint night featuring a strange, slightly spooky design; class is open to everyone.",
       "icons": [
         "arts",
-        "community"
+        "family"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/other-world-paint-night/200030777083923",
       "_source": "allevents",
-      "sources": 1,
+      "_also_from": [
+        "apify_facebook_posts"
+      ],
+      "sources": 2,
       "appeal": 3
     },
     {
@@ -1160,7 +1166,7 @@
       "time": "10:00 AM \u2013 11:00 AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "Gentle chair-based yoga suitable for all ages and abilities; bring a mat or towel if you prefer extra support.",
+      "description": "Gentle chair yoga in a welcoming weekly Friday session\u2014suitable for all abilities.",
       "icons": [
         "community",
         "free"
@@ -1176,19 +1182,36 @@
     },
     {
       "date": "2026-10-09",
-      "name": "Elizabeth Payne: Paintings, 1972-2026 & Roy Fridge: Curious Arts and Other Whittlings",
-      "time": "12:00 PM - 5:00 PM",
-      "venue": "Five Points Museum of Contemporary Art",
-      "address": "1201 N Moody St, Victoria, TX 77901",
-      "description": "Two solo exhibitions showcasing recent paintings and handcrafted wood carvings in the museum gallery.",
+      "name": "Open Studio",
+      "time": "4-7 p.m.",
+      "venue": "Crossroads Art House",
+      "address": "2914 N. Laurent St.",
+      "description": "Drop into the studio to work on your own art projects during open studio hours.",
       "icons": [
-        "arts",
-        "community",
-        "free"
+        "arts"
       ],
-      "free": true,
-      "url": "",
-      "_source": "gemini_search",
+      "free": false,
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0nra1oPyjKNQEtksC6j2MSmSBpbpUU7uSRjrZ8CsUnC82X8hJZm9Lo4RdWJi9reQul",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-09",
+      "name": "Hero day",
+      "time": "6:00 PM",
+      "venue": "J Welch Farms",
+      "address": "",
+      "description": "Special access: military, first responders, veterans and their immediate family receive free corn maze entry.",
+      "icons": [
+        "family",
+        "outdoors",
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.instagram.com/p/DeJ8xcCjzN9/",
+      "_source": "apify_instagram_posts",
       "sources": 1,
       "appeal": 3
     },
@@ -1198,7 +1221,7 @@
       "time": "6:00 PM \u2013 10:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Seasonal corn maze with extra attractions; kids 2 and under are free. Expect evening family fun and outdoor activities.",
+      "description": "Seasonal corn maze with extras like rock mining, potato cannon and paintballs; kids 2 and under free.",
       "icons": [
         "outdoors",
         "family"
@@ -1218,10 +1241,11 @@
       "time": "6:00 PM \u2013 9:00 PM",
       "venue": "Evan's Fire Brick Oven Pizza",
       "address": "711 S. Bridge St.",
-      "description": "Evening of live music alongside wood-fired pizza and casual dining\u2014drop in for a relaxed night out.",
+      "description": "Live music while you dine \u2014 enjoy dinner and drinks with evening entertainment.",
       "icons": [
         "music",
-        "food"
+        "food",
+        "drinks"
       ],
       "free": false,
       "url": "",
@@ -1232,34 +1256,14 @@
     },
     {
       "date": "2026-10-09",
-      "name": "Hero Day",
-      "time": "6PM - 10PM",
-      "venue": "J Welch Farms",
-      "address": "",
-      "description": "Special access for military, first responders, veterans and their immediate family to the corn maze area during this event.",
-      "icons": [
-        "community",
-        "family"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/jwelchfarms/posts/pfbid0GVtEnkW6JW3SgqjV3LtoNooSM4aTvJ3CbuvKJiucDoNeNbMiGDGqagEFWFp66k2jl",
-      "_source": "apify_facebook_posts",
-      "_also_from": [
-        "apify_instagram_posts"
-      ],
-      "sources": 2,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-09",
       "name": "Victorias ONLY Haunted Attraction!",
       "time": "7:00 PM",
       "venue": "",
       "address": "78 Tate Rd.",
-      "description": "Seasonal haunted house with weekend evening shows through October; tickets available online or at the box office.",
+      "description": "Walk-through haunt open weekends in October with actors, props and jump scares. Buy tickets online or at the gate; recommended for teens and adults.",
       "icons": [
         "community",
-        "arts"
+        "outdoors"
       ],
       "free": false,
       "url": "https://www.facebook.com/events/1980226375966804/",
@@ -1276,7 +1280,7 @@
       "time": "7:00 PM",
       "venue": "",
       "address": "South Main Street",
-      "description": "An informal dinner and networking night for local small-business owners to meet, share tips and enjoy a relaxed meal together.",
+      "description": "Casual networking dinner for small business owners to share ideas and build local connections over a meal.",
       "icons": [
         "food",
         "community"
@@ -1293,11 +1297,10 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Weekly Friday-night live music with rotating bands and solo acts. Check the venue's page for the lineup and drink specials.",
+      "description": "Weekly Friday-night live music featuring bands and solo artists; check the venue's social channels for the lineup.",
       "icons": [
         "music",
-        "drinks",
-        "community"
+        "drinks"
       ],
       "free": false,
       "url": "https://aerocrafters.pub",
@@ -1314,7 +1317,7 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Live music on the farm every Friday evening. Call ahead to reserve a spot and enjoy an outdoor show in a rural setting.",
+      "description": "Friday-night live music on the farm with a relaxed outdoor atmosphere; call to reserve seating.",
       "icons": [
         "music",
         "outdoors"
@@ -1337,17 +1340,18 @@
       "time": "7:30 PM",
       "venue": "Leo J. Welder Center for the Performing Arts",
       "address": "214 N. Main St.",
-      "description": "A family-friendly stage production of Finding Nemo Jr., presented by Theatre Victoria. Expect songs, colorful sets and kid-focused fun.",
+      "description": "Family-friendly stage production of Disney's Finding Nemo Jr.; a theatrical evening suitable for kids and parents.",
       "icons": [
         "arts",
-        "family"
+        "family",
+        "community"
       ],
       "free": false,
       "url": "https://theatrevictoria.org/season/2027season/nemo.htm",
       "_source": "theatre_victoria",
       "_also_from": [
-        "apify_instagram_posts",
-        "gemini_search"
+        "apify_facebook_posts",
+        "apify_instagram_posts"
       ],
       "sources": 3,
       "appeal": 4
@@ -1358,7 +1362,7 @@
       "time": "8:00 AM",
       "venue": "Gulf Bend Center",
       "address": "6502 Nursery Drive",
-      "description": "A structured training to recognize and respond to youth mental health crises, designed for community members and professionals.",
+      "description": "A training course that teaches how to recognize and respond to youth mental health challenges; registration required.",
       "icons": [
         "community"
       ],
@@ -1369,7 +1373,7 @@
         "allevents"
       ],
       "sources": 2,
-      "appeal": 2
+      "appeal": 3
     },
     {
       "date": "2026-10-09",
@@ -1377,7 +1381,7 @@
       "time": "8:00 PM\u201310:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "An open practice party for dancers to rehearse skills, meet other dancers and enjoy a social studio session.",
+      "description": "Open practice session at the dance studio for dancers to work on technique, choreography, and social dancing.",
       "icons": [
         "arts",
         "community"
@@ -1395,11 +1399,10 @@
       "time": "9:00 PM",
       "venue": "LA CANTINA",
       "address": "212 S. Main St.",
-      "description": "A monthly stand-up comedy show with a fresh lineup of comedians. Expect bar food, drinks and a lively crowd.",
+      "description": "Monthly comedy show with a rotating lineup of comics; expect bar service and a lively crowd.",
       "icons": [
         "community",
-        "drinks",
-        "food"
+        "drinks"
       ],
       "free": false,
       "url": "https://www.eventbrite.com/e/next-stop-comedy-at-la-cantina-victoria-tx-tickets-2000235273548",
@@ -1413,13 +1416,13 @@
     {
       "date": "2026-10-10",
       "name": "Terror on Tate Road",
-      "time": "",
+      "time": "7:00 PM \u2013 11:00 PM",
       "venue": "Outlaw Pass Family Fun Center",
       "address": "78 Tate Rd.",
-      "description": "A seasonal haunted attraction running weekends in October with walk-through scares and spooky sets. Check the site for tickets and hours.",
+      "description": "A walk-through haunted attraction with seasonal scares and effects, running weekend nights through October.",
       "icons": [
         "outdoors",
-        "family"
+        "community"
       ],
       "free": false,
       "url": "https://terrorontate.com/",
@@ -1436,7 +1439,7 @@
       "time": "",
       "venue": "Downtown Cuero",
       "address": "",
-      "description": "Day two of the town\u2019s annual festival with food, vendors, family activities and community fun throughout downtown.",
+      "description": "Day two of the town's lively festival with vendors, food, family activities, and community entertainment.",
       "icons": [
         "community",
         "food",
@@ -1449,7 +1452,7 @@
       "big": true,
       "town": "Cuero",
       "sources": 1,
-      "appeal": 5
+      "appeal": 4
     },
     {
       "date": "2026-10-10",
@@ -1457,13 +1460,14 @@
       "time": "",
       "venue": "JCPenney",
       "address": "Victoria Mall",
-      "description": "A free, hands-on craft session for kids\u2014supplies provided while supplies last. Family-friendly activity at the store.",
+      "description": "Free kids craft session to make a Dalmatian Fireman plus an ID badge, lanyard, collector pin and a parent coupon.",
       "icons": [
         "family",
+        "shopping",
         "free"
       ],
       "free": true,
-      "url": "",
+      "url": "https://www.jcpenney.com/dotcom/store-details/TX/Victoria/8106-N-NAVARRO-ST-1740.html",
       "_source": "local_events",
       "curated": true,
       "sources": 1,
@@ -1471,36 +1475,18 @@
     },
     {
       "date": "2026-10-10",
-      "name": "i want to talk about you--stella alesi",
+      "name": "Legacy of Hope Fundraising Banquet",
       "time": "",
-      "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "A solo exhibition that explores visceral aspects of the human experience through contemporary visual work.",
-      "icons": [
-        "arts",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.discovervictoriatexas.com/p/events/current-museum--art-exhibits",
-      "_source": "gemini_search",
-      "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-10",
-      "name": "Keeper chats",
-      "time": "",
-      "venue": "The Texas Zoo",
-      "address": "",
-      "description": "Short, scheduled talks and demonstrations by zookeepers throughout the day\u2014learn about animal care and behavior.",
+      "venue": "Texas A&M University-Victoria",
+      "address": "2506 E Red River St",
+      "description": "A fundraising banquet featuring dinner and community speakers to support the organization's programs; registration required.",
       "icons": [
         "community",
-        "family",
-        "outdoors"
+        "drinks"
       ],
       "free": false,
-      "url": "https://www.facebook.com/TheTexasZoo/posts/pfbid03rRqsdhhNXYuHTAQjjRyiZcUxvC89cJjy57Dj6M13uTuD2EBZVTSqoNA9vNj7u6ol",
-      "_source": "apify_facebook_posts",
+      "url": "https://allevents.in/victoria/legacy-of-hope-fundraising-banquet/200030561735210",
+      "_source": "allevents",
       "sources": 1,
       "appeal": 3
     },
@@ -1510,43 +1496,24 @@
       "time": "",
       "venue": "Petsmart",
       "address": "",
-      "description": "A Halloween-themed adoption event with treats for kids and many kittens available to meet and possibly adopt.",
+      "description": "Meet adoptable kittens and enjoy treats for kids while learning about pet adoption and care.",
       "icons": [
         "family",
-        "free",
         "community"
       ],
-      "free": true,
-      "url": "https://www.facebook.com/victoriatxtnr/posts/pfbid02q84Hnx97oM1YuNbESWA3q7MKobC58oC5Z827jKGdPzmC5s6RVXe6CmeDQyyQZq55l",
+      "free": false,
+      "url": "https://www.facebook.com/victoriatxtnr/posts/pfbid0maR6snWkxAfo47FebLBs1yad1do9EFfRfhQMLirhFBAooiZFR5m3L5rn4dEQL74ml",
       "_source": "apify_facebook_posts",
       "sources": 1,
       "appeal": 3
     },
     {
       "date": "2026-10-10",
-      "name": "Caturday",
-      "time": "",
-      "venue": "Petsmart",
-      "address": "",
-      "description": "An adoption meet-and-greet where visitors can meet a featured cat looking for a new home.",
-      "icons": [
-        "family",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/victoriatxtnr/posts/pfbid02Ca54nmE4Hx9iEB7WSLh7t1jHbStaydL3nmPrwZAuxSdSymAKPJQAEjJArg3eBWP3l",
-      "_source": "apify_facebook_posts",
-      "recurring": true,
-      "sources": 1,
-      "appeal": 2
-    },
-    {
-      "date": "2026-10-10",
-      "name": "World Teachers\u2019 Day 50% OFF admission",
+      "name": "World Teachers\u2019 Day",
       "time": "",
       "venue": "Children's Discovery Museum",
       "address": "1205 Sam Houston Dr.",
-      "description": "Teachers receive 50% off admission with valid ID for this special observance; check museum hours and details.",
+      "description": "Half-price museum admission with a valid teacher ID for World Teachers\u2019 Day; ideal for family visits and exhibits.",
       "icons": [
         "family",
         "arts"
@@ -1559,11 +1526,11 @@
     },
     {
       "date": "2026-10-10",
-      "name": "Delphine\u2019s Dream to the Palapa",
+      "name": "Delphine\u2019s Dream",
       "time": "",
       "venue": "Palapa",
       "address": "",
-      "description": "Live music with food and cold drinks available for a relaxed evening out at the Palapa.",
+      "description": "Evening of live music with food and cold drinks in a relaxed, social atmosphere.",
       "icons": [
         "music",
         "food",
@@ -1577,11 +1544,29 @@
     },
     {
       "date": "2026-10-10",
+      "name": "Spooky Starry Night",
+      "time": "06:30 PM",
+      "venue": "Crossroads Art House",
+      "address": "2914 N Laurent St",
+      "description": "An evening art event with spooky-themed work and a creative community vibe under the stars.",
+      "icons": [
+        "arts",
+        "community",
+        "music"
+      ],
+      "free": false,
+      "url": "https://allevents.in/victoria/spooky-starry-night/200030777754000",
+      "_source": "allevents",
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-10",
       "name": "Train rides",
       "time": "10:00 AM - 11:00 AM",
       "venue": "The Texas Zoo",
       "address": "",
-      "description": "Short scenic train rides around the zoo; a kid-friendly way to see exhibits and enjoy a brief break from walking.",
+      "description": "Take a short scenic train ride through the zoo. Family-friendly activity with limited seating\u2014arrive early.",
       "icons": [
         "family",
         "outdoors"
@@ -1598,7 +1583,7 @@
       "time": "10:00 AM \u2013 3:00 PM",
       "venue": "PetSmart",
       "address": "",
-      "description": "Adoptable kittens meet-and-greet plus trick-or-treating for kids each Saturday in October. Family-friendly and pet-focused.",
+      "description": "Adoption event with kittens available to meet and kids\u2019 trick-or-treating every Saturday in October. Family-friendly community activity.",
       "icons": [
         "family",
         "community",
@@ -1617,11 +1602,10 @@
       "time": "10:00 AM \u2013 4:00 PM",
       "venue": "",
       "address": "217 Rios Rd.",
-      "description": "A dachshund-focused celebration with contests, costumes and activities for dog lovers; registration details on The 1824 Club's Facebook.",
+      "description": "A dachshund-themed gathering with contests and activities for dog owners and families. Check the host\u2019s page for registration details.",
       "icons": [
         "family",
-        "community",
-        "outdoors"
+        "community"
       ],
       "free": false,
       "url": "",
@@ -1636,10 +1620,10 @@
       "time": "11:00 AM",
       "venue": "The Texas Zoo",
       "address": "",
-      "description": "A live animal presentation showcasing species and animal facts\u2014great for families and curious kids.",
+      "description": "A short live animal presentation with keeper commentary. Great for kids and curious adults.",
       "icons": [
         "family",
-        "outdoors"
+        "community"
       ],
       "free": false,
       "url": "https://www.facebook.com/TheTexasZoo/posts/pfbid03rRqsdhhNXYuHTAQjjRyiZcUxvC89cJjy57Dj6M13uTuD2EBZVTSqoNA9vNj7u6ol",
@@ -1653,10 +1637,10 @@
       "time": "11:00 AM \u2013 10:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Seasonal corn maze with extra attractions like mining, a potato cannon and paintballs; kids 2 and under free.",
+      "description": "Seasonal corn maze plus extras like rock mining, a potato cannon and paintball; kids 2 and under free. Leashed dogs welcome.",
       "icons": [
-        "family",
-        "outdoors"
+        "outdoors",
+        "family"
       ],
       "free": false,
       "url": "https://www.instagram.com/jwelchfarms/",
@@ -1673,7 +1657,7 @@
       "time": "12:00 PM - 2:00 PM",
       "venue": "The Texas Zoo",
       "address": "",
-      "description": "Face painting for kids and families\u2014drop in for colorful designs and quick makeovers.",
+      "description": "Face painting for kids and families; stop by for quick designs and seasonal looks.",
       "icons": [
         "arts",
         "family"
@@ -1686,28 +1670,11 @@
     },
     {
       "date": "2026-10-10",
-      "name": "Elizabeth Payne: Paintings, 1972-2026 & Roy Fridge: Curious Arts and Other Whittlings",
-      "time": "12:00 PM - 5:00 PM",
-      "venue": "Five Points Museum of Contemporary Art",
-      "address": "1201 N Moody St, Victoria, TX 77901",
-      "description": "Two solo shows: paintings by Elizabeth Payne and wood carvings by Roy Fridge on view at the museum.",
-      "icons": [
-        "arts",
-        "free"
-      ],
-      "free": true,
-      "url": "",
-      "_source": "gemini_search",
-      "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-10",
       "name": "Chess Club",
       "time": "12:00 PM \u2013 2:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Casual, all-ages chess play in the library's meeting room; players of any level are welcome.",
+      "description": "Drop in for casual games and practice in the Bronte Room. All ages and skill levels welcome.",
       "icons": [
         "community",
         "family",
@@ -1732,7 +1699,7 @@
       "time": "1:00 PM \u2013 3:00 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "Writers of all levels share work and give constructive feedback in a friendly peer group.",
+      "description": "Peer feedback and manuscript sharing for writers of all levels. Bring work to read or discuss.",
       "icons": [
         "arts",
         "community",
@@ -1742,11 +1709,10 @@
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3973",
       "_source": "city_calendar",
       "_also_from": [
-        "apify_facebook",
         "library"
       ],
-      "sources": 3,
-      "appeal": 3
+      "sources": 2,
+      "appeal": 2
     },
     {
       "date": "2026-10-10",
@@ -1754,14 +1720,31 @@
       "time": "2 to 3:30 PM or 4 to 5:30 PM",
       "venue": "Crossroads Art House",
       "address": "2914 N. Laurent St.",
-      "description": "Beginner-friendly pottery wheel class with hands-on instruction; two session times available.",
+      "description": "Beginner wheel-throwing class with step-by-step instruction from Claire. All materials provided; come ready to learn basic pottery techniques.",
       "icons": [
         "arts",
         "community"
       ],
       "free": false,
-      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0ZygVN7hxMaiBsx7oCXcqpvjvoRnK13p1S33A3kjNm8Tr15uXz8xgKA1fiRUSt1dDl",
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid02dq8CYndnD6P44BXU9BT1VUTzx9UocXeuPvwjbixKg331Q5g5DWwiUDTZazN5dg5pl",
       "_source": "apify_facebook_posts",
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-10",
+      "name": "Open Studio",
+      "time": "2-7 p.m.",
+      "venue": "Crossroads Art House",
+      "address": "2914 N. Laurent St.",
+      "description": "Drop in to use studio space and work on your own art projects during open studio hours. Suitable for experienced makers and casual creators.",
+      "icons": [
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0nra1oPyjKNQEtksC6j2MSmSBpbpUU7uSRjrZ8CsUnC82X8hJZm9Lo4RdWJi9reQul",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
       "sources": 1,
       "appeal": 3
     },
@@ -1771,20 +1754,20 @@
       "time": "3:00 PM",
       "venue": "Titan Factory Direct - Victoria",
       "address": "5402 Houston Highway",
-      "description": "Pick pumpkins and enjoy fall-themed photo ops and seasonal activities for all ages.",
+      "description": "Pick pumpkins and enjoy seasonal fall activities for all ages at this family-friendly patch. Expect photo ops and classic autumn fun.",
       "icons": [
         "family",
         "outdoors",
-        "shopping"
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://www.eventbrite.com/e/titan-factory-direct-pumpkin-patch-tickets-2002668728076",
       "_source": "apify_eventbrite",
       "_also_from": [
         "allevents"
       ],
       "sources": 2,
-      "appeal": 3
+      "appeal": 4
     },
     {
       "date": "2026-10-10",
@@ -1792,7 +1775,7 @@
       "time": "3:00 PM \u2013 6:00 PM",
       "venue": "Titan Factory Direct",
       "address": "",
-      "description": "Family-friendly trunk-or-treating with decorated vehicles and candy; RSVP requested.",
+      "description": "Drive-up trunk-or-treat with decorated trunks and candy for kids; RSVP requested. Family-friendly, costumed fun in a safe, festive setting.",
       "icons": [
         "family",
         "community",
@@ -1803,7 +1786,7 @@
       "_source": "local_events",
       "curated": true,
       "sources": 1,
-      "appeal": 3
+      "appeal": 4
     },
     {
       "date": "2026-10-10",
@@ -1811,15 +1794,16 @@
       "time": "3:30\u20134:30 PM",
       "venue": "Crossroads Art House",
       "address": "2914 N. Laurent St.",
-      "description": "Guided painting session inspired by 'Starry Night' with a playful cat theme; supplies provided.",
+      "description": "Youth canvas painting class inspired by a starry-night theme. Designed for ages 5\u201312; supplies and guided instruction included.",
       "icons": [
+        "family",
         "arts"
       ],
       "free": false,
       "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0QnC1oKU17MVLtMoGYivkiNMhSFvRWTC6miPbFi1H3tJbxcLjP4DSixxaB15J3KbNl",
       "_source": "apify_facebook_posts",
       "sources": 1,
-      "appeal": 2
+      "appeal": 3
     },
     {
       "date": "2026-10-10",
@@ -1827,20 +1811,21 @@
       "time": "4:00 PM \u2013 6:00 PM",
       "venue": "Riverside Bark Park",
       "address": "201 Memorial Dr.",
-      "description": "Pet-friendly Halloween celebration with costume fun and activities for dogs and their people.",
+      "description": "Halloween-themed event for dogs and their owners with pet-friendly activities and costume fun at the bark park. Bring leashes and water.",
       "icons": [
-        "outdoors",
         "family",
-        "community"
+        "outdoors",
+        "free"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3986",
       "_source": "local_events",
       "curated": true,
       "_also_from": [
-        "city_calendar"
+        "city_calendar",
+        "gemini_search"
       ],
-      "sources": 2,
+      "sources": 3,
       "appeal": 3
     },
     {
@@ -1849,11 +1834,11 @@
       "time": "4:00 PM \u2013 6:00 PM",
       "venue": "First United Methodist Church",
       "address": "407 N Bridge St",
-      "description": "Kid-focused fall activities, food, and trunk-or-treating hosted by the church community.",
+      "description": "Community family festival with trunk-or-treat, games and activities for kids. Church-hosted, kid-focused evening of fall fun.",
       "icons": [
         "family",
         "community",
-        "free"
+        "outdoors"
       ],
       "free": true,
       "url": "https://allevents.in/victoria/family-fest-and-trunk-or-treat/200030766206127",
@@ -1861,26 +1846,6 @@
       "curated": true,
       "_also_from": [
         "allevents"
-      ],
-      "sources": 2,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-10",
-      "name": "Legacy of Hope Fundraising Banquet",
-      "time": "5:00 PM",
-      "venue": "Texas A&M University-Victoria",
-      "address": "2506 E Red River St",
-      "description": "Fundraising banquet featuring dinner and stories to support Haven Clinic's free medical and support services.",
-      "icons": [
-        "community",
-        "food"
-      ],
-      "free": false,
-      "url": "https://allevents.in/victoria/legacy-of-hope-fundraising-banquet/200030561735210",
-      "_source": "allevents",
-      "_also_from": [
-        "gemini_search"
       ],
       "sources": 2,
       "appeal": 4
@@ -1891,7 +1856,7 @@
       "time": "5:30 PM \u2013 11:00 PM",
       "venue": "Palace Bingo",
       "address": "5306 Houston Hwy",
-      "description": "Evening bingo with multiple games and cash prizes. Expect a lively crowd and classic hall-style play.",
+      "description": "Evening bingo session with multiple games and cash prizes at the historic hall. Arrive early for seats and paper sales.",
       "icons": [
         "community"
       ],
@@ -1909,13 +1874,13 @@
       "time": "6:00 PM",
       "venue": "6th Realm Haus",
       "address": "",
-      "description": "A themed night market inspired by American Horror Story: Coven with vendors, art, and spooky atmosphere. Costumes welcome.",
+      "description": "An evening market with themed decor, local makers, food vendors and live entertainment. Costumes encouraged for the American Horror Story: Coven vibe.",
       "icons": [
         "shopping",
         "arts",
-        "free"
+        "food"
       ],
-      "free": true,
+      "free": false,
       "url": "",
       "_source": "local_events",
       "curated": true,
@@ -1928,7 +1893,7 @@
       "time": "6:00 PM",
       "venue": "Dodge City Saloon",
       "address": "205 N. Star Dr.",
-      "description": "Live music and drinks in a saloon setting. Expect bar service and an evening of local bands or sets.",
+      "description": "A night of live music and drinks at the saloon. Expect a lively crowd and local bands or DJs.",
       "icons": [
         "music",
         "drinks"
@@ -1946,19 +1911,16 @@
       "time": "6:00 PM",
       "venue": "",
       "address": "502 E. Juan Linn",
-      "description": "An evening night market with an American Horror Story: Coven theme, vendors, music, and spooky festivities. Family-friendly vibe varies by vendor.",
+      "description": "An evening market with themed decor, local makers, food vendors and live entertainment. Costumes encouraged for the American Horror Story: Coven vibe.",
       "icons": [
         "shopping",
         "arts",
-        "community"
+        "food"
       ],
-      "free": true,
+      "free": false,
       "url": "https://www.facebook.com/events/1719351969268833/",
       "_source": "apify_facebook",
-      "_also_from": [
-        "allevents"
-      ],
-      "sources": 2,
+      "sources": 1,
       "appeal": 4
     },
     {
@@ -1967,7 +1929,7 @@
       "time": "6:00 PM \u2013 9:00 PM",
       "venue": "Evan's Fire Brick Oven Pizza",
       "address": "711 S. Bridge St.",
-      "description": "Live acoustic set while you dine. Expect casual dinner service and an evening of local music.",
+      "description": "Live acoustic performance while you dine. Expect a relaxed evening of covers and originals at the pizza spot.",
       "icons": [
         "music",
         "food"
@@ -1981,31 +1943,11 @@
     },
     {
       "date": "2026-10-10",
-      "name": "Spooky Starry Night",
-      "time": "6:30 PM",
-      "venue": "Crossroads Art House",
-      "address": "2914 N Laurent St.",
-      "description": "Create a Halloween\u2011themed starry-night canvas in a relaxed, guided session. No painting experience required; materials provided for drop-ins.",
-      "icons": [
-        "arts",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/846795618454141/",
-      "_source": "apify_facebook",
-      "_also_from": [
-        "allevents"
-      ],
-      "sources": 2,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-10",
       "name": "Live Music at Aero Crafters",
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Weekly Saturday night live bands \u2014 check the venue's Facebook for the lineup each week. Expect a bar atmosphere and rotating acts.",
+      "description": "Weekly live bands every Saturday night. Check the venue's page for this week's lineup and cover or age rules.",
       "icons": [
         "music",
         "drinks"
@@ -2025,7 +1967,7 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Enjoy live music on the farm most Saturday nights. Call to reserve a table and check the weekly performer lineup.",
+      "description": "Enjoy live bands every Saturday night on the farm with a relaxed outdoor atmosphere. Call ahead for reservations and seating info.",
       "icons": [
         "music",
         "outdoors"
@@ -2044,56 +1986,42 @@
     },
     {
       "date": "2026-10-10",
-      "name": "Citizens Run Against Cancer Half Marathon & 5K",
-      "time": "7:30 AM",
-      "venue": "DeLeon Plaza",
-      "address": "101 N Main St, Victoria, TX 77901",
-      "description": "A half\u2011marathon and 5K fundraiser supporting local cancer patients. All ages and paces welcome; proceeds benefit community services.",
-      "icons": [
-        "outdoors",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.victoriatx.gov",
-      "_source": "gemini_search",
-      "sources": 1,
-      "appeal": 4
-    },
-    {
-      "date": "2026-10-10",
       "name": "Finding Nemo Jr.",
       "time": "7:30 PM",
       "venue": "Leo J. Welder Center for the Performing Arts",
       "address": "214 N. Main St.",
-      "description": "A family-friendly stage production brought to life by local performers. Suitable for kids and adults who enjoy theater adaptations.",
+      "description": "A family-friendly stage adaptation of the beloved Pixar tale, performed by Theatre Victoria. Expect colorful costumes and musical numbers.",
       "icons": [
         "arts",
-        "family"
+        "family",
+        "community"
       ],
       "free": false,
       "url": "https://theatrevictoria.org/season/2027season/nemo.htm",
       "_source": "theatre_victoria",
       "_also_from": [
-        "apify_instagram_posts",
-        "gemini_search"
+        "apify_facebook_posts",
+        "apify_instagram_posts"
       ],
       "sources": 3,
-      "appeal": 4
+      "appeal": 3
     },
     {
       "date": "2026-10-10",
-      "name": "Jerry James Band",
-      "time": "7PM",
-      "venue": "J Welch Farms",
+      "name": "Saturday Market",
+      "time": "9 AM\u20131 PM",
+      "venue": "Victoria Farmers Market",
       "address": "",
-      "description": "Live set by the Jerry James Band starting at 7 PM. Expect an evening of Americana and country in a relaxed farm setting.",
+      "description": "Shop local produce, baked goods and specialty vendors each Saturday morning. Great for fresh groceries and casual browsing.",
       "icons": [
-        "music",
-        "outdoors"
+        "food",
+        "shopping",
+        "free"
       ],
-      "free": false,
-      "url": "https://www.facebook.com/jwelchfarms/posts/pfbid0bq326aFWnKAQd381RLeKXa9BJbTZvDLtQQo2a1UyhG7UJRS8ohDbJtBmzGNx3VHal",
+      "free": true,
+      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid02UscUYhMsxQEV4GdKQVfqfXq5wTiCdAsQof2VFoTkNpp8rrpdGTtSG6hvFaTTvvW5l",
       "_source": "apify_facebook_posts",
+      "recurring": true,
       "sources": 1,
       "appeal": 3
     },
@@ -2103,22 +2031,19 @@
       "time": "9:00 AM \u2013 1:00 PM",
       "venue": "Victoria Farmers Market",
       "address": "2805 N. Navarro St.",
-      "description": "Shop fresh local produce, baked goods, honey and pasture-raised meats from area vendors. A regular market for weekday and weekend shopping.",
+      "description": "Find seasonal fruits, pasture-raised meats, honey and homemade baked goods midweek and Saturdays. A neighborhood spot for local foods.",
       "icons": [
         "food",
         "shopping",
-        "community"
+        "free"
       ],
       "free": true,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid02UscUYhMsxQEV4GdKQVfqfXq5wTiCdAsQof2VFoTkNpp8rrpdGTtSG6hvFaTTvvW5l",
+      "url": "https://www.facebook.com/VictoriaFarmersMarket",
       "_source": "local_events",
       "curated": true,
       "favorite": true,
       "recurring": true,
-      "_also_from": [
-        "apify_facebook_posts"
-      ],
-      "sources": 2,
+      "sources": 1,
       "appeal": 3
     },
     {
@@ -2127,10 +2052,10 @@
       "time": "",
       "venue": "Outlaw Pass Family Fun Center",
       "address": "78 Tate Rd.",
-      "description": "A seasonal haunted attraction running weekend nights in October. Tickets and show times vary; check the event site before you go.",
+      "description": "Walk through a haunted attraction with themed sets and scares on weekend nights throughout October; tickets required. Not recommended for young kids.",
       "icons": [
-        "arts",
-        "outdoors"
+        "outdoors",
+        "community"
       ],
       "free": false,
       "url": "https://terrorontate.com/",
@@ -2147,7 +2072,7 @@
       "time": "",
       "venue": "Downtown Cuero",
       "address": "",
-      "description": "Final day of the town's fall festival with food, live entertainment and family activities downtown. Expect parade-style fun and local vendors.",
+      "description": "Final-day festivities featuring food, live entertainment and family activities in downtown Cuero. A small-town celebration with local vendors.",
       "icons": [
         "community",
         "food",
@@ -2160,46 +2085,46 @@
       "big": true,
       "town": "Cuero",
       "sources": 1,
-      "appeal": 5
+      "appeal": 4
     },
     {
       "date": "2026-10-11",
-      "name": "i want to talk about you--stella alesi",
-      "time": "",
-      "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "A gallery show exploring raw, visceral portrayals of human experience through painting and mixed media. Suits art lovers and curious visitors.",
-      "icons": [
-        "arts",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.discovervictoriatexas.com/p/events/current-museum--art-exhibits",
-      "_source": "gemini_search",
-      "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-11",
-      "name": "HalloQUEEEN Drag Brunch",
+      "name": "HalloQUEEEN Drag Brunch with Champagne Sundaze",
       "time": "",
       "venue": "Moonshine Drinkery",
       "address": "",
-      "description": "A lively drag-hosted brunch with performances, music and a festive Halloween twist. Expect drinks, dancing and a party atmosphere.",
+      "description": "A lively drag brunch with bubbly, performances and a festive Halloween vibe. Expect brunch dishes, cocktails and a party atmosphere.",
       "icons": [
+        "drinks",
         "arts",
-        "music",
-        "drinks"
+        "food"
       ],
       "free": false,
-      "url": "https://www.instagram.com/p/Dd9hxb2CYyR/",
-      "_source": "apify_instagram_posts",
+      "url": "https://www.facebook.com/moonshinedrinkery/posts/pfbid02rcmfB73GmX5wor4heaj8PbfVyWJZreMrG4eJJcBC5F5ezxghptSnHqBC6G8UvaVzl",
+      "_source": "apify_facebook_posts",
       "_also_from": [
-        "apify_facebook_posts"
+        "apify_instagram_posts"
       ],
       "sources": 2,
       "appeal": 3
+    },
+    {
+      "date": "2026-10-11",
+      "name": "Sunday Brunch",
+      "time": "10:00 AM - 3:00 PM",
+      "venue": "The PumpHouse Riverside Restaurant & Bar",
+      "address": "",
+      "description": "Relax by the river with classic brunch favorites served all morning into midafternoon. Casual dining suitable for groups and families.",
+      "icons": [
+        "food",
+        "outdoors"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/VictoriaPumpHouse/posts/pfbid0VPD6kqnxyYL7isuJmfEj1bAbk9Mba436YC6Kz7XbrbjNhgvukkmHCLErtsSBcScQl",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 2
     },
     {
       "date": "2026-10-11",
@@ -2207,7 +2132,7 @@
       "time": "10:00 AM \u2013 3:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Farm-to-table Sunday brunch on the property with seasonal dishes and a relaxed rural setting. Reservations recommended.",
+      "description": "Farm-style Sunday brunch with seasonal dishes and outdoor seating. Reservations recommended.",
       "icons": [
         "food",
         "outdoors"
@@ -2230,10 +2155,11 @@
       "time": "10:00 AM \u2013 3:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Seasonal corn maze plus extra activities like rock mining, potato cannon and paintballs. Kids under 2 enter free; some attractions cost extra.",
+      "description": "Seasonal corn maze with extra activities like rock mining, a potato cannon and paintball for added thrills.",
       "icons": [
         "family",
-        "outdoors"
+        "outdoors",
+        "shopping"
       ],
       "free": false,
       "url": "https://www.instagram.com/jwelchfarms/",
@@ -2246,29 +2172,11 @@
     },
     {
       "date": "2026-10-11",
-      "name": "Elizabeth Payne: Paintings, 1972-2026 & Roy Fridge: Curious Arts and Other Whittlings",
-      "time": "12:00 PM - 5:00 PM",
-      "venue": "Five Points Museum of Contemporary Art",
-      "address": "1201 N Moody St, Victoria, TX 77901",
-      "description": "Two solo shows featuring Elizabeth Payne's paintings and Roy Fridge's wood carvings. Small-gallery experience highlighting local artists.",
-      "icons": [
-        "arts",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "",
-      "_source": "gemini_search",
-      "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-11",
       "name": "Champagne Sundaze Hallo-Queen Drag Loteria 2026",
       "time": "12:30 PM",
       "venue": "Moonshine Drinkery",
       "address": "103 West Santa Rosa Street",
-      "description": "An energetic drag loter\u00eda event with games, performances and cash prizes. Bring friends and money for rounds and raffles.",
+      "description": "An afternoon of drag performances and Loter\u00eda\u2014bring cash for games, tips and table play.",
       "icons": [
         "arts",
         "drinks",
@@ -2289,7 +2197,7 @@
       "time": "1:00 PM",
       "venue": "",
       "address": "110 Alysheba Drive",
-      "description": "Open house tour of a modern 3-bed, 2-bath move-in-ready home built in 2022. Stop by to view finishes and layout in person.",
+      "description": "Tour a modern 3-bed, 2-bath move-in-ready home built in 2022 with bright finishes and 1,505 sq ft.",
       "icons": [
         "community",
         "free"
@@ -2298,25 +2206,7 @@
       "url": "https://www.facebook.com/events/1853555468968808/",
       "_source": "apify_facebook",
       "sources": 1,
-      "appeal": 1
-    },
-    {
-      "date": "2026-10-11",
-      "name": "National Coming Out Day @ Victoria, TX",
-      "time": "1:00 PM",
-      "venue": "",
-      "address": "103 Santa Rosa Downtown",
-      "description": "A welcoming community celebration with vendors, local nonprofits, treats and opportunities to connect with allies and neighbors.",
-      "icons": [
-        "community",
-        "shopping",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/events/1569321798008643/",
-      "_source": "apify_facebook",
-      "sources": 1,
-      "appeal": 4
+      "appeal": 2
     },
     {
       "date": "2026-10-11",
@@ -2324,13 +2214,13 @@
       "time": "3:00 PM \u2013 7:00 PM",
       "venue": "Mitchell Event Annex",
       "address": "",
-      "description": "Family-friendly fall event with vendors, games, a bounce house and drag performances for all-ages celebration.",
+      "description": "Family-friendly celebration with vendors, games, a bounce house and drag performances.",
       "icons": [
         "community",
         "family",
         "arts"
       ],
-      "free": true,
+      "free": false,
       "url": "",
       "_source": "local_events",
       "curated": true,
@@ -2343,33 +2233,71 @@
       "time": "4\u20135pm",
       "venue": "Theatre Victoria",
       "address": "",
-      "description": "Weekly acting classes for ages 5\u201311 focusing on performance skills, games and stage confidence.",
+      "description": "Weekly acting classes for young performers ages 5\u201311 to build skills and confidence on stage.",
       "icons": [
         "arts",
-        "family"
+        "family",
+        "community"
       ],
       "free": false,
       "url": "https://www.facebook.com/TheatreVictoria/posts/pfbid026Z9LjEr89j4HFMWLkxVWfHPFfUMgzASx3XM9pxChbvmGsKmu7FzJVjrmGk9RG1Asl",
       "_source": "apify_facebook_posts",
       "recurring": true,
       "sources": 1,
-      "appeal": 2
+      "appeal": 3
     },
     {
       "date": "2026-10-12",
-      "name": "i want to talk about you--stella alesi",
+      "name": "Weekly Karaoke",
       "time": "",
-      "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "A solo exhibition exploring visceral aspects of the human experience through visual art by Stella Alesi.",
+      "venue": "The Hideaway Bar",
+      "address": "1807 Stolz St, Victoria, TX 77901",
+      "description": "Sing along at weekly karaoke nights; free pool available while you wait for your turn.",
       "icons": [
-        "arts"
+        "music",
+        "free",
+        "drinks"
       ],
-      "free": false,
-      "url": "https://www.discovervictoriatexas.com/p/events/current-museum--art-exhibits",
+      "free": true,
+      "url": "https://www.facebook.com/TheHideawayVictoriaTX",
       "_source": "gemini_search",
       "sources": 1,
       "appeal": 3
+    },
+    {
+      "date": "2026-10-12",
+      "name": "Pottery with Bill Bauer",
+      "time": "1:00 PM",
+      "venue": "Victoria Art League Gallery Venue",
+      "address": "905 S. Bridge St.",
+      "description": "A multi-week pottery course teaching handbuilding and wheel techniques; sessions run on Mondays.",
+      "icons": [
+        "arts",
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/1877838186956151/",
+      "_source": "apify_facebook",
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-12",
+      "name": "Hope of South Texas Presents 12th Annual Designer Purse Bingo",
+      "time": "4:00 PM",
+      "venue": "Victoria Community Center",
+      "address": "",
+      "description": "An evening of bingo with designer-purse prizes, food and a festive 'Practical Magic' prom vibe to support a local charity.",
+      "icons": [
+        "community",
+        "food",
+        "shopping"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/events/3299514670187114/",
+      "_source": "apify_facebook",
+      "sources": 1,
+      "appeal": 4
     },
     {
       "date": "2026-10-12",
@@ -2377,7 +2305,7 @@
       "time": "5:30 PM \u2013 10:30 PM",
       "venue": "Palace Bingo",
       "address": "5306 Houston Hwy",
-      "description": "Evening bingo session with cash prizes; cards available for purchase at the door.",
+      "description": "Evening bingo session with cash prizes; cards are sold at the door for multiple rounds.",
       "icons": [
         "community"
       ],
@@ -2395,17 +2323,16 @@
       "time": "6:00 PM\u20139:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "An evening swing session for dancers of varying skill\u2014expect social dancing and possibly lessons or practice time.",
+      "description": "Group swing lesson for all levels \u2014 learn basic steps, practice combos and dance with others.",
       "icons": [
-        "arts",
-        "community"
+        "arts"
       ],
       "free": false,
       "url": "https://www.facebook.com/starlightvictoria/posts/pfbid0E84X8DfcY9uw519DVcswjpSnmY5s7GTWjBK92pe2cr5Br5H9716dguDLncoH4G7il",
       "_source": "apify_facebook_posts",
       "recurring": true,
       "sources": 1,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-12",
@@ -2413,7 +2340,7 @@
       "time": "6:30 PM",
       "venue": "Riverside Stadium Parking Lot",
       "address": "Memorial Dr.",
-      "description": "Free, all-levels weekly group run/walk hosted by the local road runners association. Just show up and join the group.",
+      "description": "Weekly group run/walk for all paces hosted by local runners \u2014 just show up and join the route.",
       "icons": [
         "outdoors",
         "community",
@@ -2433,7 +2360,7 @@
       "time": "7:00 PM",
       "venue": "Moonshine Drinkery",
       "address": "103 W. Santa Rosa St.",
-      "description": "Monthly film night presenting Halloween; enjoy a community screening at the drinkery with food and drinks available.",
+      "description": "Screening of the horror classic Halloween with drinks available; part of the Film Society's October series.",
       "icons": [
         "arts",
         "drinks",
@@ -2445,25 +2372,27 @@
       "curated": true,
       "recurring": true,
       "_also_from": [
-        "apify_facebook_posts",
-        "apify_instagram_posts"
+        "apify_facebook_posts"
       ],
-      "sources": 3,
+      "sources": 2,
       "appeal": 3
     },
     {
-      "date": "2026-10-13",
-      "name": "i want to talk about you--stella alesi",
-      "time": "",
-      "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "A new body of work by Stella Alesi exploring visceral aspects of the human experience through painting and mixed media.",
+      "date": "2026-10-12",
+      "name": "Monday Movie Nights with Victoria Film Society",
+      "time": "7:00 PM",
+      "venue": "Moonshine Drinkery",
+      "address": "",
+      "description": "Weekly screenings of horror classics every Monday in October \u2014 expect cult favorites and themed crowds.",
       "icons": [
-        "arts"
+        "arts",
+        "drinks",
+        "community"
       ],
       "free": false,
-      "url": "https://www.discovervictoriatexas.com/p/events/current-museum--art-exhibits",
-      "_source": "gemini_search",
+      "url": "https://www.instagram.com/p/DeIZju3ieSu/",
+      "_source": "apify_instagram_posts",
+      "recurring": true,
       "sources": 1,
       "appeal": 3
     },
@@ -2473,14 +2402,33 @@
       "time": "",
       "venue": "Weber Brewing",
       "address": "",
-      "description": "Weekly taco special featuring $2 birria tacos alongside Weber Brewing's drink menu and relaxed taproom atmosphere.",
+      "description": "$2 birria tacos all night with $6 margaritas \u2014 casual taco night and drink specials at the brewery.",
       "icons": [
         "food",
         "drinks"
       ],
       "free": false,
-      "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid02kmtgLE6c2zCX8D4mLt3s51upYYQ4mu9VA6HCyVXsvQbfm9hE5JrYvPmJscK7zV8xl&id=61555658972596",
+      "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid0Ug9Spe1hugYdosNUwLvzrVVuE35Zp6FXavQ4PjNj2nkBkw8s6oia4w2MwyfkyjcFl&id=61555658972596",
       "_source": "apify_facebook_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-13",
+      "name": "Trivia Night",
+      "time": "",
+      "venue": "Weber Brewing",
+      "address": "",
+      "description": "Trivia night celebrating teachers with $2 birria tacos and $6 margaritas; teams welcome for a fun evening.",
+      "icons": [
+        "community",
+        "food",
+        "drinks"
+      ],
+      "free": true,
+      "url": "https://www.instagram.com/p/DeJvvaethIb/",
+      "_source": "apify_instagram_posts",
       "recurring": true,
       "sources": 1,
       "appeal": 3
@@ -2491,15 +2439,19 @@
       "time": "1:00 PM \u2013 3:00 PM",
       "venue": "Gary Moses Community Center",
       "address": "2905 E North St",
-      "description": "Afternoon bingo for local seniors with casual socializing and regular game play. Open to area residents.",
+      "description": "An afternoon of bingo with cash prizes, giveaways and complimentary refreshments for local seniors. Friendly, relaxed social time.",
       "icons": [
-        "community"
+        "community",
+        "free"
       ],
-      "free": false,
+      "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3987",
       "_source": "city_calendar",
-      "sources": 1,
-      "appeal": 2
+      "_also_from": [
+        "gemini_search"
+      ],
+      "sources": 2,
+      "appeal": 3
     },
     {
       "date": "2026-10-13",
@@ -2507,10 +2459,10 @@
       "time": "4:00 PM \u2013 5:00 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "Create and paint pumpkin-themed tote bags in this hands-on, family-friendly creative session at the library.",
+      "description": "Paint pumpkin-themed designs on tote bags in a relaxed, guided arts session \u2014 all supplies provided. Open to intermediate creatives.",
       "icons": [
         "arts",
-        "family",
+        "community",
         "free"
       ],
       "free": true,
@@ -2518,9 +2470,10 @@
       "_source": "city_calendar",
       "_also_from": [
         "apify_facebook",
+        "gemini_search",
         "library"
       ],
-      "sources": 3,
+      "sources": 4,
       "appeal": 3
     },
     {
@@ -2529,11 +2482,10 @@
       "time": "5:00 PM \u2013 8:00 PM",
       "venue": "Dodge City Saloon",
       "address": "205 N Star Dr, Suite H",
-      "description": "Play free pool on eight tables with drink specials during this weekly evening pool night.",
+      "description": "Play pool on eight tables for free during the early evening; drink specials available. Casual bar night with plenty of room to play.",
       "icons": [
-        "drinks",
-        "community",
-        "free"
+        "free",
+        "drinks"
       ],
       "free": true,
       "url": "https://dcsaloon.com",
@@ -2549,7 +2501,7 @@
       "time": "5:30 PM \u2013 10:30 PM",
       "venue": "Palace Bingo",
       "address": "5306 Houston Hwy",
-      "description": "Evening bingo session with multiple games and cash prizes; cards available for purchase at the door.",
+      "description": "Evening bingo session with multiple games and cash prizes; cards sold at the door. Classic community game night.",
       "icons": [
         "community"
       ],
@@ -2559,7 +2511,7 @@
       "curated": true,
       "recurring": true,
       "sources": 1,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-13",
@@ -2567,11 +2519,11 @@
       "time": "5:30 PM \u2013 6:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "A four-lesson cooking series teaching nutrition, food safety, and healthy techniques while exploring diverse cuisines.",
+      "description": "Part of a four-lesson series on healthy cooking and food safety that explores different cultural recipes and techniques.",
       "icons": [
         "food",
         "community",
-        "arts"
+        "free"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3974",
@@ -2588,17 +2540,33 @@
       "time": "6:00 PM\u20139:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "Practice Latin dance steps in a friendly, social class for all skill levels. Expect partner work, basic technique, and upbeat music.",
+      "description": "Group Latin dance lesson for adults to learn steps and practice partner work in a studio setting. Wear comfortable shoes.",
       "icons": [
-        "arts",
-        "music"
+        "arts"
       ],
       "free": false,
       "url": "https://www.facebook.com/starlightvictoria/posts/pfbid0E84X8DfcY9uw519DVcswjpSnmY5s7GTWjBK92pe2cr5Br5H9716dguDLncoH4G7il",
       "_source": "apify_facebook_posts",
       "recurring": true,
       "sources": 1,
-      "appeal": 3
+      "appeal": 2
+    },
+    {
+      "date": "2026-10-13",
+      "name": "Clay with Anahi (Members-Only Hand Building Clay)",
+      "time": "6:00\u20138:00 PM",
+      "venue": "Crossroads Art House",
+      "address": "2914 N. Laurent St.",
+      "description": "Members-only hand-building clay studio time for ages 16+ to work on personal projects with guidance available.",
+      "icons": [
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid02xztDVwqV1djxGV9JHcdXh3w2zwseHsFLQS4CVj4X4axc2UdDo2UW6j35qS4xr4h5l",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 1
     },
     {
       "date": "2026-10-13",
@@ -2606,7 +2574,7 @@
       "time": "7:00 PM",
       "venue": "Weber Brewing",
       "address": "",
-      "description": "Test your trivia knowledge over rounds of pop-culture and general-knowledge questions while enjoying the brewery atmosphere.",
+      "description": "Pub trivia hosted by Geeks Who Drink \u2014 bring a team or join one and enjoy craft beer while you play. Prizes for winners.",
       "icons": [
         "drinks",
         "community",
@@ -2625,9 +2593,10 @@
       "time": "9:00 AM",
       "venue": "",
       "address": "2525 N Main St",
-      "description": "Meet local employers, learn about openings, and bring resumes for on-the-spot conversations with hiring teams like PSC Group.",
+      "description": "Meet local employers hiring for operations and plant roles; bring resumes for on-site conversations and potential interviews.",
       "icons": [
         "community",
+        "shopping",
         "free"
       ],
       "free": true,
@@ -2638,20 +2607,39 @@
     },
     {
       "date": "2026-10-14",
-      "name": "i want to talk about you--stella alesi",
+      "name": "Weekly Karaoke",
       "time": "",
-      "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "A visual exhibition exploring the visceral nature of human experience through Stella Alesi\u2019s work. Expect evocative, personal pieces.",
+      "venue": "Casa Jalisco",
+      "address": "1706 N. Laurent Street, Victoria, TX 77901",
+      "description": "Sing your favorite songs at a weekly open-mic karaoke night \u2014 friendly crowd and casual atmosphere.",
       "icons": [
-        "arts",
+        "music",
+        "drinks",
         "free"
       ],
       "free": true,
-      "url": "https://www.discovervictoriatexas.com/p/events/current-museum--art-exhibits",
+      "url": "",
       "_source": "gemini_search",
       "sources": 1,
       "appeal": 3
+    },
+    {
+      "date": "2026-10-14",
+      "name": "Wildcard Wednesdays",
+      "time": "",
+      "venue": "Weber Brewing",
+      "address": "",
+      "description": "Weekly food special featuring Buffalo chicken mac with bacon alongside the brewery\u2019s regular beer list.",
+      "icons": [
+        "food",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://www.instagram.com/p/DeNfVN3Nmhe/",
+      "_source": "apify_instagram_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 2
     },
     {
       "date": "2026-10-14",
@@ -2659,7 +2647,7 @@
       "time": "11:15 AM \u2013 1:00 PM",
       "venue": "Galvan Community Hall TAMUV North Building 3007 N Ben Wilson",
       "address": "",
-      "description": "Networking followed by a luncheon and keynote address from U.S. Representative Michael Cloud; members and nonmembers welcome.",
+      "description": "Networking followed by a plated luncheon with guest speaker U.S. Representative Michael Cloud; tickets vary for members and nonmembers.",
       "icons": [
         "community",
         "food"
@@ -2672,42 +2660,26 @@
     },
     {
       "date": "2026-10-14",
-      "name": "Elizabeth Payne: Paintings, 1972-2026 & Roy Fridge: Curious Arts and Other Whittlings",
-      "time": "12:00 PM - 5:00 PM",
-      "venue": "Five Points Museum of Contemporary Art",
-      "address": "1201 N Moody St, Victoria, TX 77901",
-      "description": "Two solo shows: paintings by Elizabeth Payne alongside Roy Fridge\u2019s wood carvings and whittled sculptures on display.",
-      "icons": [
-        "arts",
-        "free"
-      ],
-      "free": true,
-      "url": "",
-      "_source": "gemini_search",
-      "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-14",
       "name": "Hauntingly Spooky Movie Night",
       "time": "5:30 PM \u2013 7:00 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "Enjoy a spooky family movie with themed crafts and snacks during an evening of Halloween fun at the library.",
+      "description": "Enjoy a spooky family film with ghost-themed crafts and snacks during this library evening program.",
       "icons": [
         "family",
-        "community",
-        "arts"
+        "arts",
+        "free"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3975",
       "_source": "city_calendar",
       "_also_from": [
         "allevents",
+        "apify_facebook",
         "gemini_search",
         "library"
       ],
-      "sources": 4,
+      "sources": 5,
       "appeal": 3
     },
     {
@@ -2716,7 +2688,7 @@
       "time": "6:00 PM\u20139:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "Learn and practice country dance moves in a relaxed, social class covering basics and partner patterns to upbeat music.",
+      "description": "Join a guided group country dance lesson suitable for beginners and returning dancers.",
       "icons": [
         "arts",
         "music"
@@ -2726,7 +2698,7 @@
       "_source": "apify_facebook_posts",
       "recurring": true,
       "sources": 1,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-14",
@@ -2734,7 +2706,7 @@
       "time": "6:30 PM",
       "venue": "Riverside Stadium Parking Lot",
       "address": "Memorial Dr.",
-      "description": "Midweek group run/walk for all levels with friendly pacing and route options. Walkers and runners welcome.",
+      "description": "Midweek group run/walk for all paces and abilities; free and open to the community.",
       "icons": [
         "outdoors",
         "community",
@@ -2754,10 +2726,10 @@
       "time": "7:00 AM",
       "venue": "",
       "address": "506 E San Antonio St.",
-      "description": "Breakfast fundraiser supporting Crossroads Guardians during Breast Cancer Awareness Month. Enjoy a community meal while giving back.",
+      "description": "Fundraising breakfast to support cancer patients; proceeds benefit Crossroads Guardians. Ticketed entry supports a local cause.",
       "icons": [
-        "food",
-        "community"
+        "community",
+        "food"
       ],
       "free": false,
       "url": "https://www.facebook.com/events/1597883508674934/",
@@ -2774,11 +2746,11 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Weekly rock & blues open mic\u2014musicians of all skill levels invited to play or listen. Friendly jam atmosphere.",
+      "description": "Weekly open-mic jam for rock and blues players of all levels, hosted by local musicians. Sign up to play or sit back and listen.",
       "icons": [
         "music",
         "community",
-        "free"
+        "drinks"
       ],
       "free": true,
       "url": "https://aerocrafters.pub",
@@ -2794,7 +2766,7 @@
       "time": "7:00 PM \u2013 9:00 PM",
       "venue": "Evan's Fire Brick Oven Pizza",
       "address": "711 S. Bridge St.",
-      "description": "Team trivia with food and drink specials, casual atmosphere, and prizes for winners. Bring friends and compete.",
+      "description": "Casual trivia night with food and drink service. Teams compete for bragging rights and small prizes.",
       "icons": [
         "community",
         "food",
@@ -2813,7 +2785,7 @@
       "time": "7:00 PM \u2013 close",
       "venue": "La Cantina Tacos & Tequila",
       "address": "212 S Main St.",
-      "description": "Weekly downtown karaoke with margarita and drink specials. Sing along and enjoy late-night bites.",
+      "description": "Weekly karaoke with drink specials and a lively, all-ages-friendly atmosphere. Grab friends and sing your favorites.",
       "icons": [
         "music",
         "drinks",
@@ -2829,15 +2801,33 @@
     },
     {
       "date": "2026-10-14",
+      "name": "Wednesday Market",
+      "time": "9 AM\u20131 PM",
+      "venue": "Victoria Farmers Market",
+      "address": "",
+      "description": "Browse fresh produce, baked goods and local vendors at this weekly farmers market. Great for quick shopping and weekend prep.",
+      "icons": [
+        "food",
+        "shopping",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid02UscUYhMsxQEV4GdKQVfqfXq5wTiCdAsQof2VFoTkNpp8rrpdGTtSG6hvFaTTvvW5l",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-14",
       "name": "Stroller Barre",
       "time": "9:00 AM \u2013 10:00 AM",
       "venue": "Ethel Lee Tracy Park Pavilion",
       "address": "1507 Placido Benavides Dr",
-      "description": "A stroller-friendly barre class combining ballet-inspired movements and light cardio for caregivers and babies.",
+      "description": "A stroller-friendly barre class designed for caregivers with little ones\u2014bring a stroller and expect light cardio and strength moves.",
       "icons": [
-        "family",
         "outdoors",
-        "community"
+        "family"
       ],
       "free": false,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3988",
@@ -2851,22 +2841,19 @@
       "time": "9:00 AM \u2013 1:00 PM",
       "venue": "Victoria Farmers Market",
       "address": "2805 N. Navarro St.",
-      "description": "Local vendors offering fresh produce, baked goods, honey, pastured meats, and more from area farmers and makers.",
+      "description": "Find seasonal produce, pastured meats, honey, baked goods and more from local vendors. Perfect for weekly shopping and sampling.",
       "icons": [
         "food",
         "shopping",
-        "outdoors"
+        "free"
       ],
       "free": true,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid02UscUYhMsxQEV4GdKQVfqfXq5wTiCdAsQof2VFoTkNpp8rrpdGTtSG6hvFaTTvvW5l",
+      "url": "https://www.facebook.com/VictoriaFarmersMarket",
       "_source": "local_events",
       "curated": true,
       "favorite": true,
       "recurring": true,
-      "_also_from": [
-        "apify_facebook_posts"
-      ],
-      "sources": 2,
+      "sources": 1,
       "appeal": 3
     },
     {
@@ -2875,7 +2862,7 @@
       "time": "9:30 PM \u2013 2:00 AM",
       "venue": "Shooters Bar",
       "address": "4705 N Navarro St.",
-      "description": "Late-night karaoke with DJ Shane, a large dance floor, and drink specials. Bring friends and sing into the night.",
+      "description": "Late-night karaoke hosted by DJ Shane with a big dance floor and drink specials. Sing late or enjoy the music and crowd.",
       "icons": [
         "music",
         "drinks",
@@ -2895,18 +2882,17 @@
       "time": "",
       "venue": "Vida Caf\u00e9 & Market",
       "address": "",
-      "description": "A seasonal pumpkin-themed gathering with activities, treats and community vibes. Family-friendly; check event page for tickets and details.",
+      "description": "A seasonal pumpkin event presented with 1824 Club; expect fall activities and ticketed attractions. See event page for details and tickets.",
       "icons": [
-        "family",
-        "food",
-        "community"
+        "community",
+        "food"
       ],
       "free": false,
       "url": "",
       "_source": "local_events",
       "curated": true,
       "sources": 1,
-      "appeal": 3
+      "appeal": 4
     },
     {
       "date": "2026-10-15",
@@ -2914,7 +2900,7 @@
       "time": "",
       "venue": "Moonshine Drinkery",
       "address": "103 W. Santa Rosa St.",
-      "description": "A social meetup for bourbon fans to sample pours, swap tasting notes and meet fellow enthusiasts. Expect casual conversation and drink service.",
+      "description": "An evening social for bourbon fans to sample pours, swap tasting notes and meet fellow enthusiasts. 21+ atmosphere with casual conversation.",
       "icons": [
         "drinks",
         "community"
@@ -2936,11 +2922,11 @@
       "time": "",
       "venue": "",
       "address": "4103 N Navarro St",
-      "description": "A community art-based treasure hunt benefiting Golden Crescent Habitat for Humanity \u2014 explore sites, find artworks and support affordable housing.",
+      "description": "A community treasure hunt raising funds for Golden Crescent Habitat for Humanity. Expect a family-friendly scavenger-style walk or tour with donated-good prizes.",
       "icons": [
-        "arts",
         "community",
-        "outdoors"
+        "shopping",
+        "arts"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/art-doors-collaborative-treasure-hunt-for-golden-crescent-habitat-for-humanity/200030772681457",
@@ -2950,34 +2936,35 @@
     },
     {
       "date": "2026-10-15",
-      "name": "i want to talk about you--stella alesi",
+      "name": "Weekly Karaoke",
       "time": "",
-      "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "A visual exhibition that explores the visceral nature of human experience through immersive works by Stella Alesi.",
-      "icons": [
-        "arts",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.discovervictoriatexas.com/p/events/current-museum--art-exhibits",
-      "_source": "gemini_search",
-      "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-15",
-      "name": "Open Mic",
-      "time": "",
-      "venue": "Weber Brewing",
-      "address": "",
-      "description": "An open mic night welcoming musicians and poets; sign up to perform or enjoy local talent while grabbing a drink.",
+      "venue": "Dodge City Saloon",
+      "address": "205 N Star Dr H, Victoria, TX 77904",
+      "description": "Sing your favorite songs in a lively weekly karaoke night with a roomy dance floor and casual crowd. All are welcome to watch or perform.",
       "icons": [
         "music",
         "drinks",
         "free"
       ],
       "free": true,
+      "url": "http://dcsaloon.com/",
+      "_source": "gemini_search",
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-15",
+      "name": "Open mic",
+      "time": "",
+      "venue": "Weber Brewing",
+      "address": "",
+      "description": "Open-mic performances all night paired with steak-night specials\u2014enjoy live acts and hearty dinner options. Sign-up to perform or just listen.",
+      "icons": [
+        "music",
+        "food",
+        "drinks"
+      ],
+      "free": false,
       "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid02BUwvxrdRXw39CzZBSh6oQQjjrifkZpCJiY13ayZoiMz9HtU3YcfJ1FG32rzugU6jl&id=61555658972596",
       "_source": "apify_facebook_posts",
       "recurring": true,
@@ -2990,7 +2977,7 @@
       "time": "10:00 AM",
       "venue": "",
       "address": "",
-      "description": "A practical parent seminar with therapist Christy Rodriguez offering simple tools to understand and respond to challenging child behaviors.",
+      "description": "A practical, parent-focused seminar with an LPC offering tools to understand child behavior and use realistic strategies at home.",
       "icons": [
         "community"
       ],
@@ -3002,23 +2989,20 @@
     },
     {
       "date": "2026-10-15",
-      "name": "Handprint on a Plate",
+      "name": "Handprint on a Plate Craft",
       "time": "10:00 AM \u2013 11:15 AM",
       "venue": "Crossroads Art House",
       "address": "2914 N. Laurent St.",
-      "description": "Make a keepsake ceramic plate using your child\u2019s handprint; designed for ages 0\u20134, all ages welcome. Registration required; materials included.",
+      "description": "Make a ceramic handprint keepsake; materials provided. Designed for little ones (0\u20134) though all ages are welcome; registration required.",
       "icons": [
-        "family",
-        "arts"
+        "arts",
+        "family"
       ],
       "free": false,
-      "url": "https://www.facebook.com/events/28422768757379003/",
+      "url": "",
       "_source": "local_events",
       "curated": true,
-      "_also_from": [
-        "apify_facebook"
-      ],
-      "sources": 2,
+      "sources": 1,
       "appeal": 3
     },
     {
@@ -3027,7 +3011,7 @@
       "time": "10:30 AM \u2013 11:00 AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "A high-energy toddler story time with songs, rhymes and activities to support developing motor and language skills.",
+      "description": "High-energy songs, rhymes and movement for toddlers to build motor and language skills in a short, engaging session.",
       "icons": [
         "family",
         "free",
@@ -3044,20 +3028,38 @@
     },
     {
       "date": "2026-10-15",
-      "name": "Elizabeth Payne: Paintings, 1972-2026 & Roy Fridge: Curious Arts and Other Whittlings",
-      "time": "12:00 PM - 5:00 PM",
-      "venue": "Five Points Museum of Contemporary Art",
-      "address": "1201 N Moody St, Victoria, TX 77901",
-      "description": "Two solo exhibitions showcasing Elizabeth Payne\u2019s paintings and Roy Fridge\u2019s wood carvings and whittlings. Gallery viewing of contemporary work in two mediums.",
+      "name": "Open Studio",
+      "time": "4-7 p.m.",
+      "venue": "Crossroads Art House",
+      "address": "2914 N. Laurent St.",
+      "description": "Drop into the studio to work on personal art projects in a shared creative space. Bring materials or use what's available on-site.",
       "icons": [
         "arts",
-        "free"
+        "community"
       ],
-      "free": true,
-      "url": "",
-      "_source": "gemini_search",
+      "free": false,
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0nra1oPyjKNQEtksC6j2MSmSBpbpUU7uSRjrZ8CsUnC82X8hJZm9Lo4RdWJi9reQul",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
       "sources": 1,
       "appeal": 3
+    },
+    {
+      "date": "2026-10-15",
+      "name": "Clay with Anahi (Members-Only Hand Building Clay)",
+      "time": "5:00\u20137:00 PM",
+      "venue": "Crossroads Art House",
+      "address": "2914 N. Laurent St.",
+      "description": "Members ages 16+ can hand-build clay projects during this studio session. Bring any personal tools or apron you prefer.",
+      "icons": [
+        "arts"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid02xztDVwqV1djxGV9JHcdXh3w2zwseHsFLQS4CVj4X4axc2UdDo2UW6j35qS4xr4h5l",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 2
     },
     {
       "date": "2026-10-15",
@@ -3065,7 +3067,7 @@
       "time": "5:30 PM",
       "venue": "Victoria Fine Arts Center",
       "address": "1002 Sam Houston Dr.",
-      "description": "A Halloween-themed symphony concert with family-friendly pre-show activities. Tickets available online.",
+      "description": "An orchestral Halloween program with family-friendly pre-show activities for all ages. Tickets required for entry.",
       "icons": [
         "music",
         "family",
@@ -3088,7 +3090,7 @@
       "time": "5:30 PM \u2013 6:30 PM",
       "venue": "Riverside Park",
       "address": "405 Memorial Drive",
-      "description": "A relaxed audiobook walking group along the river \u2014 listen, stroll, and enjoy the outdoors together. All ages welcome; bring comfortable shoes.",
+      "description": "A relaxed audiobook walking group along the Guadalupe River. Bring comfortable shoes and water for the mile\u2011plus stroll.",
       "icons": [
         "outdoors",
         "community",
@@ -3108,7 +3110,7 @@
       "time": "5:30 PM \u2013 6:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "Hands-on sugar skull embroidery workshop celebrating color and textile traditions, co-hosted with the Quilt Guild. Materials may be provided.",
+      "description": "Hands-on sugar skull embroidery workshop celebrating textile art and tradition. Materials may be provided\u2014check with the library.",
       "icons": [
         "arts",
         "community",
@@ -3120,9 +3122,10 @@
       "_also_from": [
         "allevents",
         "apify_facebook",
+        "gemini_search",
         "library"
       ],
-      "sources": 4,
+      "sources": 5,
       "appeal": 3
     },
     {
@@ -3131,7 +3134,7 @@
       "time": "6:00 PM \u2013 9:00 PM",
       "venue": "Evan's Fire Brick Oven Pizza",
       "address": "711 S. Bridge St.",
-      "description": "Live music while you dine on wood-fired pizza. Casual evening with local tunes and dinner service.",
+      "description": "Live music while you dine\u2014enjoy pizza and local tunes in a casual atmosphere. Dinner service available during the performance.",
       "icons": [
         "music",
         "food"
@@ -3149,7 +3152,7 @@
       "time": "6:00 PM\u20139:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "Open ballroom session featuring partner dancing and practice time for a range of skill levels. Expect social dancing and instruction.",
+      "description": "Group ballroom lesson for partners and solo dancers, with practice time to follow. Suitable for beginners and returning students.",
       "icons": [
         "arts",
         "community"
@@ -3167,10 +3170,9 @@
       "time": "7:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Weekly bingo night with doors opening early; bring friends for a night of community games and prizes. Call ahead for reservations.",
+      "description": "Weekly bingo night with doors opening an hour before games. Call to reserve a spot or for group seating details.",
       "icons": [
-        "community",
-        "family"
+        "community"
       ],
       "free": false,
       "url": "https://www.instagram.com/jwelchfarms/",
@@ -3190,7 +3192,7 @@
       "time": "8:00 PM \u2013 11:00 PM",
       "venue": "5D Tavern",
       "address": "213 S Main St.",
-      "description": "Weekly downtown karaoke night with no cover and craft cocktails available. Singers and spectators welcome.",
+      "description": "No-cover karaoke night with craft cocktails in an upscale downtown lounge. Sign up to perform throughout the evening.",
       "icons": [
         "music",
         "drinks",
@@ -3210,7 +3212,7 @@
       "time": "8:00 PM \u2013 2:00 AM",
       "venue": "Dodge City Saloon",
       "address": "205 N Star Dr, Suite H",
-      "description": "Sing along at a lively weekly karaoke night hosted by DJ Rocketman. $3 Fireball, margarita and Chamoy shots until midnight.",
+      "description": "Sing your favorite songs with DJ Rocketman and enjoy $3 Fireball, margarita and Chamoy shots until midnight.",
       "icons": [
         "music",
         "drinks",
@@ -3230,10 +3232,9 @@
       "time": "",
       "venue": "Outlaw Pass Family Fun Center",
       "address": "78 Tate Rd.",
-      "description": "A multi-night haunted attraction running weekends in October with walk-through scares and themed sets. Check the attraction site for times and tickets.",
+      "description": "A walk\u2011through haunted attraction running Friday\u2013Sunday nights in October. Check the website for hours and ticket info.",
       "icons": [
         "outdoors",
-        "family",
         "community"
       ],
       "free": false,
@@ -3251,13 +3252,13 @@
       "time": "",
       "venue": "Downtown Yorktown",
       "address": "",
-      "description": "A small-town weekend celebration with parades, vendors, family activities and classic western fun. Expect live music, food and community events.",
+      "description": "A weekend of western-themed fun with live music, vendors, food and family activities in downtown Yorktown.",
       "icons": [
         "community",
-        "family",
-        "food"
+        "food",
+        "music"
       ],
-      "free": false,
+      "free": true,
       "url": "",
       "_source": "local_events",
       "curated": true,
@@ -3268,34 +3269,18 @@
     },
     {
       "date": "2026-10-16",
-      "name": "i want to talk about you--stella alesi",
-      "time": "",
-      "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "A contemporary exhibition exploring visceral aspects of the human experience through visual art. Appropriate for fans of modern art and museum exhibits.",
-      "icons": [
-        "arts"
-      ],
-      "free": false,
-      "url": "https://www.discovervictoriatexas.com/p/events/current-museum--art-exhibits",
-      "_source": "gemini_search",
-      "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-16",
       "name": "FRIDAY HAPPY HOUR",
       "time": "",
       "venue": "Evan's Fire Brick Oven Pizza",
       "address": "711 S. Bridge St.",
-      "description": "Evening happy hour with drink and food specials to wind into the weekend. Casual atmosphere, great for groups or date night.",
+      "description": "Unwind after work with drink specials and casual pizza in a relaxed, social setting.",
       "icons": [
         "drinks",
         "food",
         "free"
       ],
       "free": true,
-      "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid02mwvrPFf6Zysef4ToiAVCsxAK4QhrgfZ2EPv3QHa4DmT7bqeNcKEhPqF1HwvpY3Vfl&id=61565940617671",
+      "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid0iQHfU62jipt9NxMRnquAoZjHBvZtexC8YwuKzSKc3wrjpBggeoFbqFDYUsrUCVwpl&id=61565940617671",
       "_source": "apify_facebook_posts",
       "recurring": true,
       "sources": 1,
@@ -3307,7 +3292,7 @@
       "time": "06:30 PM",
       "venue": "Crossroads Art House",
       "address": "2914 N Laurent St",
-      "description": "An evening art session for makers of all levels. Drop in to create, socialize, and try guided projects or open-studio time.",
+      "description": "A relaxed group art session for friends to make simple projects together; materials or small fee may apply.",
       "icons": [
         "arts",
         "community"
@@ -3316,7 +3301,7 @@
       "url": "https://allevents.in/victoria/create-with-fruends/200030777082217",
       "_source": "allevents",
       "sources": 1,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-16",
@@ -3324,21 +3309,20 @@
       "time": "06:30 PM",
       "venue": "Community Center",
       "address": "Victoria Fire Department Victoria",
-      "description": "A high-energy dueling pianos performance presented by Theatre Victoria. Expect sing-alongs, audience requests and theatrical fun.",
+      "description": "A high\u2011energy Dueling Pianos fundraiser celebrating 50 years of Theatre Victoria. Expect interactive music and theatrical fun.",
       "icons": [
         "music",
-        "arts",
-        "community"
+        "community",
+        "arts"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/howl2go-by-howl-at-the-moon-dueling-pianos/200030796889452",
       "_source": "allevents",
       "_also_from": [
-        "apify_facebook",
-        "gemini_search"
+        "apify_facebook"
       ],
-      "sources": 3,
-      "appeal": 3
+      "sources": 2,
+      "appeal": 4
     },
     {
       "date": "2026-10-16",
@@ -3346,7 +3330,7 @@
       "time": "10:00 AM \u2013 11:00 AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "A weekly Friday morning creative program for kids and families; this week make beaded skeleton crafts. Supplies provided while they last.",
+      "description": "Kids can make beaded skeletons and enjoy a different creative activity every Friday morning. All ages welcome.",
       "icons": [
         "family",
         "arts",
@@ -3356,25 +3340,26 @@
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3977",
       "_source": "city_calendar",
       "_also_from": [
-        "apify_facebook",
         "library"
       ],
-      "sources": 3,
+      "sources": 2,
       "appeal": 3
     },
     {
       "date": "2026-10-16",
-      "name": "Elizabeth Payne: Paintings, 1972-2026 & Roy Fridge: Curious Arts and Other Whittlings",
-      "time": "12:00 PM - 5:00 PM",
-      "venue": "Five Points Museum of Contemporary Art",
-      "address": "1201 N Moody St, Victoria, TX 77901",
-      "description": "Two solo shows share the gallery: a career-spanning body of paintings and a collection of wood carvings and whittlings on display.",
+      "name": "Open Studio",
+      "time": "4-7 p.m.",
+      "venue": "Crossroads Art House",
+      "address": "2914 N. Laurent St.",
+      "description": "Drop into the studio to work on your own art in a relaxed, shared creative space.",
       "icons": [
-        "arts"
+        "arts",
+        "community"
       ],
       "free": false,
-      "url": "",
-      "_source": "gemini_search",
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0nra1oPyjKNQEtksC6j2MSmSBpbpUU7uSRjrZ8CsUnC82X8hJZm9Lo4RdWJi9reQul",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
       "sources": 1,
       "appeal": 3
     },
@@ -3384,10 +3369,10 @@
       "time": "6:00 PM \u2013 10:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Seasonal corn maze plus on-site activities like rock mining, a potato cannon and paintball options; kids 2 and under attend free.",
+      "description": "Navigate a fall corn maze and enjoy extras like rock mining, a potato cannon and paintball for an extra fee. Leashed dogs welcome; kids 2 and under free.",
       "icons": [
-        "family",
-        "outdoors"
+        "outdoors",
+        "family"
       ],
       "free": false,
       "url": "https://www.instagram.com/jwelchfarms/",
@@ -3404,7 +3389,7 @@
       "time": "6:00 PM \u2013 9:00 PM",
       "venue": "Evan's Fire Brick Oven Pizza",
       "address": "711 S. Bridge St.",
-      "description": "Enjoy live acoustic music while you dine on wood\u2011fired pizza and casual fare.",
+      "description": "Live acoustic set while you dine on wood-fired pizza. Casual family-friendly atmosphere; check the restaurant for any cover charge.",
       "icons": [
         "music",
         "food"
@@ -3418,28 +3403,11 @@
     },
     {
       "date": "2026-10-16",
-      "name": "Painting and TV Comedy",
-      "time": "6:30 to 8:30 PM",
-      "venue": "Crossroads Art House",
-      "address": "2914 N. Laurent St.",
-      "description": "A relaxed paint\u2011and\u2011watch evening \u2014 pick a pot or canvas to work on while the group watches TV together.",
-      "icons": [
-        "arts",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid02iNRvVRJQWKTVDZEZwGvhV5WGtgQw4YEvNuyY515ayNvGiaizGXnVRVeRqb9SCKtEl",
-      "_source": "apify_facebook_posts",
-      "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-16",
       "name": "Live Music at Aero Crafters",
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Weekly Friday night live music with rotating bands and solo acts; check the venue's social page for this week's lineup.",
+      "description": "Weekly Friday-night lineup of bands and solo artists. Check the venue's Facebook for this week's performers and any cover details.",
       "icons": [
         "music",
         "drinks"
@@ -3459,7 +3427,7 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Live music on the farm most Friday nights; bring blankets or chairs and enjoy a relaxed outdoor set.",
+      "description": "Friday-night live music on the farm \u2014 bring friends and consider making reservations. Expect a relaxed, outdoor concert vibe.",
       "icons": [
         "music",
         "outdoors"
@@ -3482,7 +3450,7 @@
       "time": "8:00 PM\u201310:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "Open practice and social dance session for students and dancers to rehearse, socialize and get extra floor time.",
+      "description": "Open practice party for dancers to work on steps, social dance and choreography in a studio setting. All skill levels welcome.",
       "icons": [
         "arts",
         "community"
@@ -3500,7 +3468,7 @@
       "time": "9:00 AM",
       "venue": "",
       "address": "1905 Leary Lane",
-      "description": "Meet recruiters, learn about open positions and possibly interview on site at this in-person hiring event.",
+      "description": "Drop in between 9 a.m. and 1 p.m. to meet employers, submit resumes and learn about open positions. Bring copies of your resume.",
       "icons": [
         "community",
         "free"
@@ -3508,24 +3476,6 @@
       "free": true,
       "url": "https://www.facebook.com/events/1666338568187708/",
       "_source": "apify_facebook",
-      "sources": 1,
-      "appeal": 2
-    },
-    {
-      "date": "2026-10-16",
-      "name": "Youth Self Defense Class",
-      "time": "9:00 AM-12:00 PM",
-      "venue": "Riverside Park Special Events Area",
-      "address": "",
-      "description": "Hands-on class teaching personal safety, situational awareness and practical self-defense skills for youth. Expect active drills and safety tips.",
-      "icons": [
-        "family",
-        "community",
-        "outdoors"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/VictoriaParksandRecreation/posts/pfbid02Eu47wG5VkpQ3ygVrQoB5FCGWogUTnmzVQXP2ASa55FRwQ98ByQGPsNefmoZVnCDHl",
-      "_source": "apify_facebook_posts",
       "sources": 1,
       "appeal": 3
     },
@@ -3535,7 +3485,7 @@
       "time": "",
       "venue": "Outlaw Pass Family Fun Center",
       "address": "78 Tate Rd.",
-      "description": "A seasonal haunted attraction running weekend nights in October with themed sets and actors. Buy tickets online for hours and admission.",
+      "description": "Seasonal haunted attraction running weekends in October with scares, props and themed walkthroughs. See the event site for tickets and hours.",
       "icons": [
         "family",
         "outdoors",
@@ -3556,11 +3506,11 @@
       "time": "",
       "venue": "Downtown Yorktown",
       "address": "",
-      "description": "A small-town celebration with live music, food vendors, family activities and community booths downtown. Street festival atmosphere.",
+      "description": "Second day of a downtown celebration with vendors, live music, food and family activities. Expect a festive small-town atmosphere.",
       "icons": [
         "community",
         "family",
-        "food"
+        "shopping"
       ],
       "free": true,
       "url": "",
@@ -3577,7 +3527,7 @@
       "time": "",
       "venue": "Lowe's",
       "address": "",
-      "description": "A free, instructor-led kids workshop where children build a simple project to take home; registration is required online.",
+      "description": "Hands-on, kid-friendly workshop making seasonal crafts. Supplies provided; register online to save a spot.",
       "icons": [
         "family",
         "free"
@@ -3587,31 +3537,15 @@
       "_source": "local_events",
       "curated": true,
       "sources": 1,
-      "appeal": 2
-    },
-    {
-      "date": "2026-10-17",
-      "name": "i want to talk about you--stella alesi",
-      "time": "",
-      "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "A contemporary exhibition exploring the visceral nature of human experience through visual media and immersive works.",
-      "icons": [
-        "arts"
-      ],
-      "free": false,
-      "url": "https://www.discovervictoriatexas.com/p/events/current-museum--art-exhibits",
-      "_source": "gemini_search",
-      "sources": 1,
       "appeal": 3
     },
     {
       "date": "2026-10-17",
-      "name": "Crossroads Sports Center Season Finale All-Star Volleyball Tournament",
+      "name": "All-Star Volleyball Tournament",
       "time": "",
       "venue": "Crossroads Sports Center",
       "address": "304 Kerh Blvd, Victoria, TX 77904",
-      "description": "A one-day all-star volleyball tournament for 3rd/4th and 5th/6th grade divisions featuring multiple short matches and team play.",
+      "description": "Youth volleyball tournament featuring divisions for 3rd/4th and 5th/6th grade teams. Expect competitive matches all day.",
       "icons": [
         "community",
         "family"
@@ -3624,33 +3558,15 @@
     },
     {
       "date": "2026-10-17",
-      "name": "Caturday",
-      "time": "",
-      "venue": "Petsmart",
-      "address": "",
-      "description": "Meet adoptable cats and learn about local rescue and adoption options during an in-store pet meet-and-greet event.",
-      "icons": [
-        "family",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "https://www.facebook.com/victoriatxtnr/posts/pfbid02Ca54nmE4Hx9iEB7WSLh7t1jHbStaydL3nmPrwZAuxSdSymAKPJQAEjJArg3eBWP3l",
-      "_source": "apify_facebook_posts",
-      "recurring": true,
-      "sources": 1,
-      "appeal": 2
-    },
-    {
-      "date": "2026-10-17",
       "name": "2026 South Texas Spirits & Cigar Festival",
       "time": "04:00 PM",
       "venue": "",
       "address": "2905 E North St",
-      "description": "An adult-oriented tasting event showcasing spirits and cigars with vendors, samples and live entertainment (ticketed).",
+      "description": "Tastings and cigar samplings with vendor booths and a social atmosphere for adults. Ticketed event with VIP options.",
       "icons": [
         "drinks",
-        "community"
+        "community",
+        "food"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/2026-south-texas-spirits-and-cigar-festival/200030008215004",
@@ -3660,11 +3576,28 @@
     },
     {
       "date": "2026-10-17",
+      "name": "Pictures in the Patch",
+      "time": "05:00 PM",
+      "venue": "",
+      "address": "407 N Bridge St",
+      "description": "Photo opportunities among pumpkins and fall d\u00e9cor\u2014great for family portraits and seasonal snapshots.",
+      "icons": [
+        "family",
+        "outdoors"
+      ],
+      "free": false,
+      "url": "https://allevents.in/victoria/pictures-in-the-patch/200030773061903",
+      "_source": "allevents",
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-17",
       "name": "MOWSTX Mahjong for Meals",
       "time": "10:00 AM",
       "venue": "",
       "address": "306 E Commercial St",
-      "description": "Fundraising Mahjong brunch with mimosa and margarita session options to support Meals on Wheels South Texas. Play, eat, and help a local nonprofit.",
+      "description": "Fundraiser with Mahjong sessions plus brunch and cocktail options; proceeds benefit Meals on Wheels South Texas.",
       "icons": [
         "community",
         "food",
@@ -3685,7 +3618,7 @@
       "time": "10:00 AM \u2013 3:00 PM",
       "venue": "PetSmart",
       "address": "",
-      "description": "Adoption event featuring kittens plus kid-friendly trick-or-treating every Saturday in October. Drop in to meet pets and enjoy seasonal fun.",
+      "description": "Adoption event with kittens on site plus family-friendly trick-or-treat activities each Saturday in October.",
       "icons": [
         "family",
         "community",
@@ -3704,7 +3637,7 @@
       "time": "11:00 AM \u2013 10:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Corn maze with extra activities like rock mining, a potato cannon and paintball options; kids 2 and under are free. Leashed dogs welcome.",
+      "description": "Seasonal corn maze with extra attractions like a potato cannon and rock mining; kids 2 and under free, leashed dogs welcome.",
       "icons": [
         "family",
         "outdoors"
@@ -3720,32 +3653,13 @@
     },
     {
       "date": "2026-10-17",
-      "name": "Elizabeth Payne: Paintings, 1972-2026 & Roy Fridge: Curious Arts and Other Whittlings",
-      "time": "12:00 PM - 5:00 PM",
-      "venue": "Five Points Museum of Contemporary Art",
-      "address": "1201 N Moody St, Victoria, TX 77901",
-      "description": "Two solo exhibitions showcasing Elizabeth Payne\u2019s paintings and Roy Fridge\u2019s wood carvings. Gallery open for walk-through viewing.",
-      "icons": [
-        "arts",
-        "community",
-        "free"
-      ],
-      "free": true,
-      "url": "",
-      "_source": "gemini_search",
-      "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-17",
       "name": "Chess Club",
       "time": "12:00 PM \u2013 2:30 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main St.",
-      "description": "Casual, all-level chess play in the library\u2019s Bronte Room. Bring a board or join a game; all ages are welcome.",
+      "description": "Casual chess meet-up in the library's meeting room for players of all levels. Boards provided; drop in and play.",
       "icons": [
         "community",
-        "family",
         "free"
       ],
       "free": true,
@@ -3762,7 +3676,7 @@
       "time": "1:00 PM \u2013 5:00 PM",
       "venue": "",
       "address": "2107 Lone Tree Rd.",
-      "description": "Family-friendly Halloween event presented by Heathenz Entertainment with seasonal activities and spooky fun. Expect games, costumes and entertainment.",
+      "description": "An afternoon of Halloween-themed activities and entertainment hosted by a local production group. Expect family-friendly spooky fun and community vibes.",
       "icons": [
         "family",
         "community"
@@ -3780,11 +3694,11 @@
       "time": "1:00 PM \u2013 8:00 PM",
       "venue": "DeLeon Plaza",
       "address": "101 N. Main St.",
-      "description": "Afternoon-to-evening downtown music festival featuring local and regional acts. Bring a lawn chair and enjoy live performances.",
+      "description": "Live music downtown from afternoon into evening with multiple acts and a community atmosphere on the plaza.",
       "icons": [
         "music",
-        "community",
-        "outdoors"
+        "outdoors",
+        "community"
       ],
       "free": false,
       "url": "https://www.victoriatx.gov",
@@ -3796,15 +3710,33 @@
     },
     {
       "date": "2026-10-17",
+      "name": "Open Studio",
+      "time": "2-7 p.m.",
+      "venue": "Crossroads Art House",
+      "address": "2914 N. Laurent St.",
+      "description": "Drop in to make your own artwork in an open studio setting; supplies and guidance may be available.",
+      "icons": [
+        "arts",
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0nra1oPyjKNQEtksC6j2MSmSBpbpUU7uSRjrZ8CsUnC82X8hJZm9Lo4RdWJi9reQul",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-17",
       "name": "Riverside Oaks Trunk or Treat",
       "time": "4:00 PM \u2013 7:00 PM",
       "venue": "Riverside Oaks",
       "address": "",
-      "description": "Trunk-or-treat Halloween evening with decorated cars handing out candy and safe, family-friendly activities. Costume-friendly event.",
+      "description": "Kid-friendly trick-or-treating from decorated vehicle trunks with candy and seasonal fun for families.",
       "icons": [
         "family",
-        "community",
-        "free"
+        "free",
+        "community"
       ],
       "free": true,
       "url": "",
@@ -3815,31 +3747,11 @@
     },
     {
       "date": "2026-10-17",
-      "name": "Pictures in the Patch",
-      "time": "5:00 PM",
-      "venue": "",
-      "address": "407 N Bridge Street",
-      "description": "Bring the whole family for quick fall portraits in the pumpkin patch\u2014staff will take photos so you can relax and enjoy the season.",
-      "icons": [
-        "family",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/862468866861991/",
-      "_source": "apify_facebook",
-      "_also_from": [
-        "allevents"
-      ],
-      "sources": 2,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-17",
       "name": "Palace Bingo \u2014 Saturday Evening",
       "time": "5:30 PM \u2013 11:00 PM",
       "venue": "Palace Bingo",
       "address": "5306 Houston Hwy",
-      "description": "Evening bingo session with multiple games and cash prizes in Victoria\u2019s original hall.",
+      "description": "Evening bingo session with multiple games and cash prizes at the city\u2019s longtime bingo hall.",
       "icons": [
         "community"
       ],
@@ -3849,21 +3761,21 @@
       "curated": true,
       "recurring": true,
       "sources": 1,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-17",
-      "name": "Theatrical Masquerade Mask",
+      "name": "Design your own theatrical masquerade mask",
       "time": "6 to 8 PM",
       "venue": "Crossroads Art House",
       "address": "2914 N. Laurent St.",
-      "description": "Create and decorate a theatrical masquerade mask using paint and embellishments; supplies provided.",
+      "description": "Hands-on workshop to paint and embellish a theatrical masquerade mask; materials included or provided for purchase.",
       "icons": [
         "arts",
         "community"
       ],
       "free": false,
-      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid02chvfaZRE8ZngH42UF4tuFyTRYS5YYptSGTBrZY6YZvYHegj292ihCqNDV9pk4qwhl",
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0ZAHUfPnsHMQvYDdd7SC3mDhVujfPwbe6ifRLAamYYcRenaivPZgSysNvghBXEjoHl",
       "_source": "apify_facebook_posts",
       "sources": 1,
       "appeal": 3
@@ -3874,7 +3786,7 @@
       "time": "6:00 PM",
       "venue": "Crossroads Art House",
       "address": "2914 N Laurent St.",
-      "description": "An evening workshop to design and personalize a dramatic or spooky masquerade mask\u2014no experience required.",
+      "description": "An evening workshop focused on designing and decorating theatrical masks using paint and embellishments.",
       "icons": [
         "arts",
         "community"
@@ -3891,18 +3803,18 @@
       "time": "6:00 PM \u2013 8:00 PM",
       "venue": "Parking lot between Denny's and La Quinta",
       "address": "",
-      "description": "Family-friendly trunk-or-treat in the parking lot with decorated cars and candy for kids.",
+      "description": "Family-friendly trunk-or-treat event with decorated cars handing out candy in a safe, community setting.",
       "icons": [
         "family",
-        "community",
-        "free"
+        "free",
+        "community"
       ],
       "free": true,
       "url": "",
       "_source": "local_events",
       "curated": true,
       "sources": 1,
-      "appeal": 4
+      "appeal": 3
     },
     {
       "date": "2026-10-17",
@@ -3910,11 +3822,11 @@
       "time": "6:00 PM \u2013 9:00 PM",
       "venue": "Leo J. Welder Center",
       "address": "214 N. Main St.",
-      "description": "A free, theatrical murder-mystery event for ages 11\u201318; registration required at civicrec.com.",
+      "description": "An interactive whodunit for ages 11\u201318. Teams solve clues and interrogate suspects; free but registration required.",
       "icons": [
-        "arts",
         "family",
-        "free"
+        "arts",
+        "community"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3989",
@@ -3934,7 +3846,7 @@
       "time": "6:00 PM \u2013 9:00 PM",
       "venue": "Evan's Fire Brick Oven Pizza",
       "address": "711 S. Bridge St.",
-      "description": "Live music while you dine\u2014local singer-songwriter performing in the restaurant dining area.",
+      "description": "Local singer-songwriter performs while the kitchen serves wood-fired pizza and casual dinner service.",
       "icons": [
         "music",
         "food"
@@ -3952,7 +3864,7 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Weekly Saturday night live bands; expect a lively set and a bar atmosphere. Check the venue for the lineup.",
+      "description": "Weekly Saturday night live bands with a rotating lineup; expect bar service and a lively crowd.",
       "icons": [
         "music",
         "drinks"
@@ -3972,11 +3884,10 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Enjoy live bands on the farm with relaxed outdoor seating; bring friends and reserve a spot.",
+      "description": "Live music on the farm with an open-air atmosphere; reservations recommended for dinner or seating.",
       "icons": [
         "music",
-        "outdoors",
-        "community"
+        "outdoors"
       ],
       "free": false,
       "url": "https://www.instagram.com/jwelchfarms/",
@@ -3996,21 +3907,39 @@
       "time": "7:30 PM \u2013 9:30 PM",
       "venue": "Victoria Fine Arts Center",
       "address": "1002 Sam Houston Dr",
-      "description": "A concert tracing folk and regional songs from Appalachia and the Deep South to vibrant Mexican rhythms.",
+      "description": "A concert tracing musical traditions from Appalachia and the American south to Mexico, featuring choral and folk repertoire.",
       "icons": [
-        "music",
         "arts",
+        "music",
         "community"
       ],
       "free": false,
       "url": "https://business.victoriachamber.org/events/details/voices-of-the-americas-4428",
       "_source": "chamber",
       "_also_from": [
-        "allevents",
-        "gemini_search"
+        "allevents"
       ],
-      "sources": 3,
+      "sources": 2,
       "appeal": 4
+    },
+    {
+      "date": "2026-10-17",
+      "name": "Saturday Market",
+      "time": "9 AM\u20131 PM",
+      "venue": "Victoria Farmers Market",
+      "address": "",
+      "description": "Weekly farmers market with local produce, vendors, and seasonal goods; open to all with free admission.",
+      "icons": [
+        "food",
+        "shopping",
+        "free"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid02UscUYhMsxQEV4GdKQVfqfXq5wTiCdAsQof2VFoTkNpp8rrpdGTtSG6hvFaTTvvW5l",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 3
     },
     {
       "date": "2026-10-17",
@@ -4018,22 +3947,19 @@
       "time": "9:00 AM \u2013 1:00 PM",
       "venue": "Victoria Farmers Market",
       "address": "2805 N. Navarro St.",
-      "description": "Fresh local produce, pastured meats, honey and baked goods from area vendors every Wednesday and Saturday.",
+      "description": "Fresh local produce, pastured meats, honey and baked goods from area vendors; held weekly on market days.",
       "icons": [
         "food",
         "shopping",
-        "community"
+        "free"
       ],
       "free": true,
-      "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid02UscUYhMsxQEV4GdKQVfqfXq5wTiCdAsQof2VFoTkNpp8rrpdGTtSG6hvFaTTvvW5l",
+      "url": "https://www.facebook.com/VictoriaFarmersMarket",
       "_source": "local_events",
       "curated": true,
       "favorite": true,
       "recurring": true,
-      "_also_from": [
-        "apify_facebook_posts"
-      ],
-      "sources": 2,
+      "sources": 1,
       "appeal": 3
     },
     {
@@ -4042,7 +3968,7 @@
       "time": "",
       "venue": "Outlaw Pass Family Fun Center",
       "address": "78 Tate Rd.",
-      "description": "A weekend haunted attraction with actors, props and outdoor scare areas running Friday\u2013Sunday nights in October.",
+      "description": "Seasonal haunted attraction running weekend nights in October; ticketed scare experience with varying intensity.",
       "icons": [
         "outdoors",
         "community"
@@ -4062,13 +3988,13 @@
       "time": "",
       "venue": "Downtown Yorktown",
       "address": "",
-      "description": "Final-day festivities feature family activities, live music, food vendors and community celebrations downtown.",
+      "description": "Final day of the town's Western Days festival with family activities, food vendors and live entertainment.",
       "icons": [
         "community",
         "family",
         "food"
       ],
-      "free": false,
+      "free": true,
       "url": "",
       "_source": "local_events",
       "curated": true,
@@ -4079,18 +4005,19 @@
     },
     {
       "date": "2026-10-18",
-      "name": "i want to talk about you--stella alesi",
-      "time": "",
-      "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "A gallery exhibition of mixed-media work that explores the visceral nature of human experience.",
+      "name": "Pedals, Pipes and Pumpkins",
+      "time": "03:00 PM",
+      "venue": "",
+      "address": "407 N Bridge St",
+      "description": "A fall community event featuring bike rides, pumpkin-themed activities and seasonal fun for all ages.",
       "icons": [
-        "arts",
-        "community"
+        "community",
+        "outdoors",
+        "family"
       ],
       "free": false,
-      "url": "https://www.discovervictoriatexas.com/p/events/current-museum--art-exhibits",
-      "_source": "gemini_search",
+      "url": "https://allevents.in/victoria/pedals-pipes-and-pumpkins/200030773062704",
+      "_source": "allevents",
       "sources": 1,
       "appeal": 3
     },
@@ -4100,10 +4027,10 @@
       "time": "04:00 PM",
       "venue": "",
       "address": "1302 E Crestwood Dr",
-      "description": "Drop off nonperishable food donations to support local pantries; volunteers and donations welcome.",
+      "description": "Community food distribution and support for neighbors in need; check with organizers for details and eligibility.",
       "icons": [
-        "community",
         "food",
+        "community",
         "free"
       ],
       "free": true,
@@ -4118,11 +4045,11 @@
       "time": "05:30 PM",
       "venue": "Club Westerner",
       "address": "1005 W Constitution St",
-      "description": "An evening of mariachi music, Mexican cuisine and festive drinks to benefit the Victoria Bach Festival.",
+      "description": "An evening of mariachi music, Mexican food and margaritas to celebrate culture and support a local arts fundraiser.",
       "icons": [
         "music",
-        "food",
-        "drinks"
+        "drinks",
+        "community"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/mariachis-and-margaritas/200030587201731",
@@ -4136,11 +4063,30 @@
     },
     {
       "date": "2026-10-18",
+      "name": "Sunday Brunch",
+      "time": "10:00 AM - 3:00 PM",
+      "venue": "The PumpHouse Riverside Restaurant & Bar",
+      "address": "",
+      "description": "Riverside brunch service offering breakfast and lunch dishes in a relaxed outdoor setting.",
+      "icons": [
+        "food",
+        "outdoors",
+        "drinks"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/VictoriaPumpHouse/posts/pfbid0VPD6kqnxyYL7isuJmfEj1bAbk9Mba436YC6Kz7XbrbjNhgvukkmHCLErtsSBcScQl",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-18",
       "name": "Sunday Brunch at J Welch Farms",
       "time": "10:00 AM \u2013 3:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Country-style Sunday brunch with farm-fresh dishes and a relaxed outdoor setting. Reservations recommended.",
+      "description": "Farm-style Sunday brunch with seasonal dishes; reservations recommended.",
       "icons": [
         "food",
         "outdoors"
@@ -4163,7 +4109,7 @@
       "time": "10:00 AM \u2013 3:00 PM",
       "venue": "J Welch Farms",
       "address": "",
-      "description": "Seasonal corn maze with extra activities like rock mining, a potato cannon and paintball for an added cost. Leashed dogs welcome.",
+      "description": "Corn maze with extra attractions; $20 per person, kids 2 and under free. Leashed dogs welcome; some activities cost extra.",
       "icons": [
         "family",
         "outdoors"
@@ -4175,43 +4121,6 @@
       "favorite": true,
       "recurring": true,
       "sources": 1,
-      "appeal": 4
-    },
-    {
-      "date": "2026-10-18",
-      "name": "Elizabeth Payne: Paintings, 1972-2026 & Roy Fridge: Curious Arts and Other Whittlings",
-      "time": "12:00 PM - 5:00 PM",
-      "venue": "Five Points Museum of Contemporary Art",
-      "address": "1201 N Moody St, Victoria, TX 77901",
-      "description": "Two solo shows feature recent paintings by Elizabeth Payne and wood carvings by Roy Fridge. Drop in to view the gallery exhibits.",
-      "icons": [
-        "arts",
-        "free"
-      ],
-      "free": true,
-      "url": "",
-      "_source": "gemini_search",
-      "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-18",
-      "name": "Pedals, Pipes and Pumpkins",
-      "time": "3:00 PM",
-      "venue": "",
-      "address": "407 N Bridge Street",
-      "description": "A Halloween-themed organ concert featuring music, pumpkins and family-friendly spooky fun presented by the local AGO chapter.",
-      "icons": [
-        "music",
-        "community"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/events/1431404435585959/",
-      "_source": "apify_facebook",
-      "_also_from": [
-        "allevents"
-      ],
-      "sources": 2,
       "appeal": 3
     },
     {
@@ -4220,7 +4129,7 @@
       "time": "4\u20135pm",
       "venue": "Theatre Victoria",
       "address": "",
-      "description": "Weekly acting classes for young performers ages 5\u201311 focusing on basic skills, games and confidence building.",
+      "description": "Weekly acting classes for ages 5\u201311 focused on performance skills, creativity and confidence-building.",
       "icons": [
         "arts",
         "family",
@@ -4239,7 +4148,7 @@
       "time": "6:00 PM",
       "venue": "",
       "address": "2002 E Mockingbird Ln",
-      "description": "An evening banquet with a plated meal, inspirational stories and updates on local and global mission projects.",
+      "description": "An evening program with a plated meal, personal stories, and updates on mission work that aim to inspire faith and community support.",
       "icons": [
         "community",
         "food"
@@ -4252,16 +4161,18 @@
     },
     {
       "date": "2026-10-19",
-      "name": "i want to talk about you--stella alesi",
+      "name": "Weekly Karaoke",
       "time": "",
-      "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "A solo exhibition by Stella Alesi exploring visceral aspects of the human experience through visual work. View the artist\u2019s recent pieces.",
+      "venue": "The Hideaway Bar",
+      "address": "1807 Stolz St, Victoria, TX 77901",
+      "description": "Sing along to open-mic karaoke and play free pool with friends every Monday night. Casual, walk-in friendly \u2014 bring your song list.",
       "icons": [
-        "arts"
+        "music",
+        "drinks",
+        "free"
       ],
-      "free": false,
-      "url": "https://www.discovervictoriatexas.com/p/events/current-museum--art-exhibits",
+      "free": true,
+      "url": "https://www.facebook.com/TheHideawayVictoriaTX",
       "_source": "gemini_search",
       "sources": 1,
       "appeal": 3
@@ -4272,16 +4183,18 @@
       "time": "07:00 PM",
       "venue": "Moonshine Drinkery",
       "address": "103 W Santa Rosa St",
-      "description": "Classic horror screening of Friday the 13th in a bar setting. Expect a film-focused crowd with drinks available.",
+      "description": "A kickoff screening for an October horror series featuring the 1980 classic. Expect a social movie night with themed vibes and drinks available.",
       "icons": [
-        "drinks",
         "arts",
-        "community"
+        "drinks"
       ],
       "free": false,
       "url": "https://allevents.in/victoria/victoria-film-society-presents-friday-the-13th-1980/200030723030351",
       "_source": "allevents",
-      "sources": 1,
+      "_also_from": [
+        "gemini_search"
+      ],
+      "sources": 2,
       "appeal": 3
     },
     {
@@ -4290,11 +4203,11 @@
       "time": "5:00 PM \u2013 7:00 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "Teens can turn boxes into spooky mini haunted houses in a hands-on decorating contest. Supplies and simple DIY tips provided.",
+      "description": "Teens transform boxes into spooky mini haunted-house displays in a friendly decorating contest. Supplies and guidance provided.",
       "icons": [
         "family",
         "arts",
-        "community"
+        "free"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3959",
@@ -4312,7 +4225,7 @@
       "time": "5:30 PM \u2013 10:30 PM",
       "venue": "Palace Bingo",
       "address": "5306 Houston Hwy",
-      "description": "Evening bingo session with cash prizes; cards sold at the door. Casual, social atmosphere for regulars and newcomers.",
+      "description": "Evening bingo session with cash prizes; cards sold at the door. Traditional hall atmosphere and multiple games each night.",
       "icons": [
         "community"
       ],
@@ -4322,24 +4235,7 @@
       "curated": true,
       "recurring": true,
       "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-19",
-      "name": "Port Lavaca Fall/Halloween Ceramic Paint Night",
-      "time": "6 to 8 PM",
-      "venue": "",
-      "address": "132 E. Main St",
-      "description": "Paint fall- and Halloween-themed ceramics with step-by-step guidance; bring a friend for a creative night out.",
-      "icons": [
-        "arts",
-        "family"
-      ],
-      "free": false,
-      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0KveUvqm1mpQe9CeoPoj3b9esU9GjcJxpf72vKtubBYCJRNiHrBVTZCepFn3NJU4hl",
-      "_source": "apify_facebook_posts",
-      "sources": 1,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-19",
@@ -4347,7 +4243,7 @@
       "time": "6:00 PM \u2013 9:00 PM",
       "venue": "Texas Roadhouse",
       "address": "4908 N. Navarro St.",
-      "description": "Family-friendly evening with kid-focused activities and casual dining specials. Suitable for children and parents.",
+      "description": "A family-friendly evening with kids' activities and dining specials; plan to purchase food while kids enjoy the programming.",
       "icons": [
         "family",
         "food"
@@ -4357,7 +4253,7 @@
       "_source": "local_events",
       "curated": true,
       "sources": 1,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-19",
@@ -4365,7 +4261,7 @@
       "time": "6:00 PM\u20139:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "Swing dance session offering instruction and social dancing for beginners and experienced dancers alike.",
+      "description": "Beginner-friendly group swing lesson for dancers of varying experience. Wear comfortable shoes and come ready to move.",
       "icons": [
         "arts",
         "community"
@@ -4375,7 +4271,7 @@
       "_source": "apify_facebook_posts",
       "recurring": true,
       "sources": 1,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-19",
@@ -4383,7 +4279,7 @@
       "time": "6:30 PM",
       "venue": "Riverside Stadium Parking Lot",
       "address": "Memorial Dr.",
-      "description": "Weekly group run/walk for all paces hosted by the local road runners. Just show up and join the community workout.",
+      "description": "Weekly open run/walk for all paces hosted by the local road-runners group. Just show up and join others for a social workout.",
       "icons": [
         "outdoors",
         "community",
@@ -4403,10 +4299,11 @@
       "time": "7:00 PM",
       "venue": "Moonshine Drinkery",
       "address": "103 W. Santa Rosa St.",
-      "description": "Monthly film night screening a classic horror feature; bar service available. Expect a casual movie-and-drinks crowd.",
+      "description": "Horror classic screening presented by the Victoria Film Society. Enjoy the film with full bar service available.",
       "icons": [
         "arts",
-        "drinks"
+        "drinks",
+        "community"
       ],
       "free": false,
       "url": "https://www.facebook.com/moonshinedrinkery/posts/pfbid0j8SfEKMk5BJ1ixk2GbmEMffyFNeECHCAFWP77frPraNkRTQz8VmsYjJ2wfRScUS7l",
@@ -4414,10 +4311,9 @@
       "curated": true,
       "recurring": true,
       "_also_from": [
-        "apify_facebook_posts",
-        "apify_instagram_posts"
+        "apify_facebook_posts"
       ],
-      "sources": 3,
+      "sources": 2,
       "appeal": 3
     },
     {
@@ -4426,7 +4322,7 @@
       "time": "7:00 PM",
       "venue": "DeTar Hospital North",
       "address": "101 Medical Drive",
-      "description": "Informational seminar for expectant parents covering breastfeeding basics, techniques and local support resources.",
+      "description": "A seminar for expectant parents covering breastfeeding basics, benefits and local support resources.",
       "icons": [
         "community",
         "free"
@@ -4438,19 +4334,21 @@
       "appeal": 3
     },
     {
-      "date": "2026-10-20",
-      "name": "i want to talk about you--stella alesi",
-      "time": "",
-      "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "A new exhibition exploring visceral human experience through painting and mixed media. Expect thought-provoking, intimate works across the gallery.",
+      "date": "2026-10-19",
+      "name": "Monday Movie Nights with Victoria Film Society",
+      "time": "7:00 PM",
+      "venue": "Moonshine Drinkery",
+      "address": "",
+      "description": "Weekly screenings of horror classics every Monday in October, hosted by the Victoria Film Society. Bar service available.",
       "icons": [
         "arts",
+        "drinks",
         "community"
       ],
       "free": false,
-      "url": "https://www.discovervictoriatexas.com/p/events/current-museum--art-exhibits",
-      "_source": "gemini_search",
+      "url": "https://www.instagram.com/p/DeIZju3ieSu/",
+      "_source": "apify_instagram_posts",
+      "recurring": true,
       "sources": 1,
       "appeal": 3
     },
@@ -4460,13 +4358,13 @@
       "time": "",
       "venue": "Weber Brewing",
       "address": "",
-      "description": "Weeknight special featuring $2 birria tacos and a casual, social brewery atmosphere. Great for grabbing a quick bite with friends.",
+      "description": "$2 birria tacos all night with $6 margaritas. Casual taco-and-drinks night at the brewery.",
       "icons": [
         "food",
         "drinks"
       ],
       "free": false,
-      "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid02kmtgLE6c2zCX8D4mLt3s51upYYQ4mu9VA6HCyVXsvQbfm9hE5JrYvPmJscK7zV8xl&id=61555658972596",
+      "url": "https://www.facebook.com/permalink.php?story_fbid=pfbid0Ug9Spe1hugYdosNUwLvzrVVuE35Zp6FXavQ4PjNj2nkBkw8s6oia4w2MwyfkyjcFl&id=61555658972596",
       "_source": "apify_facebook_posts",
       "recurring": true,
       "sources": 1,
@@ -4474,17 +4372,36 @@
     },
     {
       "date": "2026-10-20",
-      "name": "Pair Painting (grown-up + little artist)",
+      "name": "Trivia Night",
+      "time": "",
+      "venue": "Weber Brewing",
+      "address": "",
+      "description": "Pub-style trivia night with a teachers-theme and food and drink specials. Bring a team or join one when you arrive.",
+      "icons": [
+        "community",
+        "drinks",
+        "food"
+      ],
+      "free": false,
+      "url": "https://www.instagram.com/p/DeJvvaethIb/",
+      "_source": "apify_instagram_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-20",
+      "name": "Pair Painting (one canvas for grown-up and one for little artist)",
       "time": "10 to 11:30 AM",
       "venue": "Crossroads Art House",
       "address": "2914 N. Laurent St.",
-      "description": "A parent-and-child painting session where each pair paints two canvases to take home. Materials provided for a relaxed creative morning.",
+      "description": "Parent-and-child painting session: each pair gets two canvases to paint and take home. Designed for ages 0\u20134, all ages welcome.",
       "icons": [
         "arts",
         "family"
       ],
       "free": false,
-      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid0iND1QKik4MZuTJvuqcU8t3deAZZVKEu75yrj1BbcWUTZ7toASnNpmaKace1Hp7Nl",
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid025ZovC5FYbVBkdX8idsU93YS9rUb1NtJVwC8JqXXWodyCth8ksoHrUc3o7fNMBbfVl",
       "_source": "apify_facebook_posts",
       "sources": 1,
       "appeal": 3
@@ -4495,7 +4412,7 @@
       "time": "10:00 AM \u2013 11:00 AM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "A story and play session for babies 18 months and under to encourage early literacy through songs, books and gentle activities.",
+      "description": "Storytime and play for babies 18 months and under to spark early literacy and social playtime.",
       "icons": [
         "family",
         "community",
@@ -4516,7 +4433,7 @@
       "time": "5:00 PM \u2013 8:00 PM",
       "venue": "Dodge City Saloon",
       "address": "205 N Star Dr, Suite H",
-      "description": "Free pool on eight tables with evening drink specials. Come early for open play and a lively bar scene.",
+      "description": "Free pool on eight tables with drink specials during the early evening; drop in for casual play.",
       "icons": [
         "free",
         "drinks"
@@ -4535,7 +4452,7 @@
       "time": "5:30 PM \u2013 10:30 PM",
       "venue": "Palace Bingo",
       "address": "5306 Houston Hwy",
-      "description": "Evening bingo session with multiple games and cash prizes; cards available for purchase at the door.",
+      "description": "Tuesday evening bingo with multiple games and cash prizes; cards sold at the door.",
       "icons": [
         "community"
       ],
@@ -4545,7 +4462,7 @@
       "curated": true,
       "recurring": true,
       "sources": 1,
-      "appeal": 2
+      "appeal": 3
     },
     {
       "date": "2026-10-20",
@@ -4553,11 +4470,10 @@
       "time": "6:00 PM\u20139:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "Social Latin dance night welcoming dancers of all levels for an evening of partnered dancing and Latin rhythms.",
+      "description": "Group Latin dance lesson for all levels; expect step-by-step instruction and partner practice.",
       "icons": [
-        "music",
-        "community",
-        "arts"
+        "arts",
+        "community"
       ],
       "free": false,
       "url": "https://www.facebook.com/starlightvictoria/posts/pfbid0E84X8DfcY9uw519DVcswjpSnmY5s7GTWjBK92pe2cr5Br5H9716dguDLncoH4G7il",
@@ -4568,25 +4484,42 @@
     },
     {
       "date": "2026-10-20",
+      "name": "Clay with Anahi (Members-Only Hand Building Clay)",
+      "time": "6:00\u20138:00 PM",
+      "venue": "Crossroads Art House",
+      "address": "2914 N. Laurent St.",
+      "description": "Members 16+ can hand-build clay projects during an instructor-led studio session.",
+      "icons": [
+        "arts",
+        "community"
+      ],
+      "free": false,
+      "url": "https://www.facebook.com/crossroadsarthouse/posts/pfbid02xztDVwqV1djxGV9JHcdXh3w2zwseHsFLQS4CVj4X4axc2UdDo2UW6j35qS4xr4h5l",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 2
+    },
+    {
+      "date": "2026-10-20",
       "name": "Escape the Library! Halloween Escape Rooms",
       "time": "6:30 PM \u2013 8:00 PM",
       "venue": "Victoria Public Library",
       "address": "302 N. Main Street",
-      "description": "Solve timed, spooky puzzles in immersive Halloween escape rooms designed for teams and a few good scares.",
+      "description": "Halloween-themed escape rooms with immersive puzzles; families and adults welcome, registration recommended.",
       "icons": [
-        "community",
         "family",
-        "free"
+        "community",
+        "arts"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3978",
       "_source": "city_calendar",
       "_also_from": [
-        "apify_facebook",
         "gemini_search",
         "library"
       ],
-      "sources": 4,
+      "sources": 3,
       "appeal": 3
     },
     {
@@ -4595,7 +4528,7 @@
       "time": "7:00 PM",
       "venue": "Weber Brewing",
       "address": "",
-      "description": "Casual trivia night with craft beers and team play \u2014 come compete, drink, and enjoy a lively evening.",
+      "description": "Weekly trivia night hosted by Geeks Who Drink \u2014 teams compete for prizes in a lively bar setting.",
       "icons": [
         "drinks",
         "community",
@@ -4614,7 +4547,7 @@
       "time": "8:00 AM",
       "venue": "Gulf Bend Center",
       "address": "6502 Nursery Drive",
-      "description": "Learn to recognize and respond to signs of mental illness with practical skills taught in this certification course.",
+      "description": "Full-day course teaching how to recognize and respond to adult mental health crises; certificate provided.",
       "icons": [
         "community",
         "free"
@@ -4631,7 +4564,7 @@
       "time": "9:00 AM",
       "venue": "",
       "address": "1905 Leary Lane",
-      "description": "Drop in to learn about career opportunities, application steps, and possible on\u2011site interviews with Border Patrol.",
+      "description": "Recruiters on site to share job openings, answer questions, and accept applications for Border Patrol roles.",
       "icons": [
         "community",
         "free"
@@ -4644,36 +4577,21 @@
     },
     {
       "date": "2026-10-21",
-      "name": "i want to talk about you--stella alesi",
+      "name": "Wildcard Wednesdays",
       "time": "",
-      "venue": "The Nave Museum",
-      "address": "306 W Commercial St, Victoria, TX 77901",
-      "description": "A contemporary exhibition that examines the visceral nature of human experience through Stella Alesi\u2019s visuals.",
+      "venue": "Weber Brewing",
+      "address": "",
+      "description": "Weekly food special \u2014 this week\u2019s Wildcard Wednesday features Buffalo Chicken Mac with bacon.",
       "icons": [
-        "arts"
+        "food",
+        "drinks"
       ],
       "free": false,
-      "url": "https://www.discovervictoriatexas.com/p/events/current-museum--art-exhibits",
-      "_source": "gemini_search",
+      "url": "https://www.instagram.com/p/DeNfVN3Nmhe/",
+      "_source": "apify_instagram_posts",
+      "recurring": true,
       "sources": 1,
-      "appeal": 3
-    },
-    {
-      "date": "2026-10-21",
-      "name": "Elizabeth Payne: Paintings, 1972-2026 & Roy Fridge: Curious Arts and Other Whittlings",
-      "time": "12:00 PM - 5:00 PM",
-      "venue": "Five Points Museum of Contemporary Art",
-      "address": "1201 N Moody St, Victoria, TX 77901",
-      "description": "Two solo shows featuring Elizabeth Payne\u2019s paintings alongside Roy Fridge\u2019s wood carvings and folk-art pieces.",
-      "icons": [
-        "arts",
-        "free"
-      ],
-      "free": true,
-      "url": "",
-      "_source": "gemini_search",
-      "sources": 1,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-21",
@@ -4681,11 +4599,11 @@
       "time": "5:00 PM \u2013 9:00 PM",
       "venue": "DeLeon Plaza",
       "address": "101 N. Main St.",
-      "description": "Downtown family-friendly Halloween celebration with trick-or-treating, music, vendors, and activities for all ages.",
+      "description": "Family-friendly Halloween event with costumes, trick-or-treating and downtown activities. Expect live entertainment and seasonal fun for all ages.",
       "icons": [
         "family",
         "community",
-        "free"
+        "outdoors"
       ],
       "free": true,
       "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3985",
@@ -4693,9 +4611,10 @@
       "curated": true,
       "big": true,
       "_also_from": [
-        "city_calendar"
+        "city_calendar",
+        "gemini_search"
       ],
-      "sources": 2,
+      "sources": 3,
       "appeal": 4
     },
     {
@@ -4704,7 +4623,7 @@
       "time": "6:00 PM \u2013 7:00 PM",
       "venue": "Moonshine Drinkery",
       "address": "103 W Santa Rosa St",
-      "description": "Laid-back book club where people bring what they\u2019re reading and chat over drinks in a friendly bar setting.",
+      "description": "Casual book club with no assigned reading; bring what you\u2019re reading and share thoughts over drinks. Relaxed, social atmosphere at the drinkery.",
       "icons": [
         "drinks",
         "community",
@@ -4717,7 +4636,7 @@
         "library"
       ],
       "sources": 2,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-21",
@@ -4725,18 +4644,17 @@
       "time": "6:00 PM\u20139:00 PM",
       "venue": "Starlight Dance Studio",
       "address": "",
-      "description": "Learn partner steps or join a friendly social country dance night for beginners and experienced dancers alike.",
+      "description": "Beginner-friendly country dance group lesson with guided instruction. Come solo or with a partner to learn steps and have fun.",
       "icons": [
         "arts",
-        "music",
-        "community"
+        "music"
       ],
       "free": false,
       "url": "https://www.facebook.com/starlightvictoria/posts/pfbid0E84X8DfcY9uw519DVcswjpSnmY5s7GTWjBK92pe2cr5Br5H9716dguDLncoH4G7il",
       "_source": "apify_facebook_posts",
       "recurring": true,
       "sources": 1,
-      "appeal": 3
+      "appeal": 2
     },
     {
       "date": "2026-10-21",
@@ -4744,7 +4662,7 @@
       "time": "6:30 PM",
       "venue": "Riverside Stadium Parking Lot",
       "address": "Memorial Dr.",
-      "description": "Casual midweek group run or walk for all paces; bring water and wear reflective gear if you'll be out after dark.",
+      "description": "Midweek group run/walk for all paces led by VARRA. Free, welcoming community workout along local routes.",
       "icons": [
         "outdoors",
         "community",
@@ -4764,11 +4682,11 @@
       "time": "7:00 PM \u2013 10:00 PM",
       "venue": "Aero Crafters",
       "address": "309 E. Crestwood Dr.",
-      "description": "Open-mic rock and blues jam welcoming all skill levels\u2014come play or watch local musicians showcase originals and covers.",
+      "description": "Weekly rock and blues open mic jam hosted by local musicians. All skill levels welcome to play or listen.",
       "icons": [
         "music",
         "community",
-        "drinks"
+        "free"
       ],
       "free": true,
       "url": "https://aerocrafters.pub",
@@ -4784,10 +4702,10 @@
       "time": "7:00 PM \u2013 9:00 PM",
       "venue": "Froggy's Grub & Pub",
       "address": "5902 N. Navarro St.",
-      "description": "Halloween-themed pub trivia\u2014form a team and test your spooky knowledge with prizes and seasonal questions.",
+      "description": "Halloween-themed trivia night with team play and spooky questions. Free to join\u2014bring a team of 2\u20136 for bar fun and prizes.",
       "icons": [
-        "community",
         "drinks",
+        "community",
         "free"
       ],
       "free": true,
@@ -4803,10 +4721,10 @@
       "time": "7:00 PM \u2013 close",
       "venue": "La Cantina Tacos & Tequila",
       "address": "212 S Main St.",
-      "description": "Weekly downtown karaoke night with margarita and drink specials; sign up to sing or enjoy the lively crowd.",
+      "description": "Weekly karaoke night with drink and margarita specials. Sing along or enjoy performances in a casual cantina setting.",
       "icons": [
-        "music",
         "drinks",
+        "music",
         "food"
       ],
       "free": true,
@@ -4819,11 +4737,11 @@
     },
     {
       "date": "2026-10-21",
-      "name": "Victoria Farmers' Market",
-      "time": "9:00 AM \u2013 1:00 PM",
+      "name": "Wednesday Market",
+      "time": "9 AM\u20131 PM",
       "venue": "Victoria Farmers Market",
-      "address": "2805 N. Navarro St.",
-      "description": "Shop fresh produce, baked goods, honey and pasture-raised meats from local vendors at this weekly market.",
+      "address": "",
+      "description": "Weekly farmers market featuring fresh produce, local vendors and artisan goods. Browse and buy from neighborhood growers and makers.",
       "icons": [
         "food",
         "shopping",
@@ -4831,14 +4749,30 @@
       ],
       "free": true,
       "url": "https://www.facebook.com/VictoriaFarmersMarket/posts/pfbid02UscUYhMsxQEV4GdKQVfqfXq5wTiCdAsQof2VFoTkNpp8rrpdGTtSG6hvFaTTvvW5l",
+      "_source": "apify_facebook_posts",
+      "recurring": true,
+      "sources": 1,
+      "appeal": 3
+    },
+    {
+      "date": "2026-10-21",
+      "name": "Victoria Farmers' Market",
+      "time": "9:00 AM \u2013 1:00 PM",
+      "venue": "Victoria Farmers Market",
+      "address": "2805 N. Navarro St.",
+      "description": "Shop seasonal produce, pastured meats, honey, baked goods and other goods from local vendors. Family-friendly weekend market atmosphere.",
+      "icons": [
+        "food",
+        "shopping",
+        "community"
+      ],
+      "free": true,
+      "url": "https://www.facebook.com/VictoriaFarmersMarket",
       "_source": "local_events",
       "curated": true,
       "favorite": true,
       "recurring": true,
-      "_also_from": [
-        "apify_facebook_posts"
-      ],
-      "sources": 2,
+      "sources": 1,
       "appeal": 3
     },
     {
@@ -4847,7 +4781,7 @@
       "time": "9:30 PM \u2013 2:00 AM",
       "venue": "Shooters Bar",
       "address": "4705 N Navarro St.",
-      "description": "Late-night karaoke with a DJ, a big dance floor and drink specials\u2014bring friends for a night of music and fun.",
+      "description": "Late-night karaoke hosted by DJ Shane with a big dance floor and drink specials. Sing or watch a lively crowd of local regulars.",
       "icons": [
         "music",
         "drinks",
