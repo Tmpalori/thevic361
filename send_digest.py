@@ -103,7 +103,7 @@ def build_email_body(events, by_date):
         f"Open the admin review page to pick the events you want to publish:",
         f"   {admin_url}",
         "",
-        "The newsletter goes out Monday morning.",
+        "The newsletter goes out Monday morning (the week) and Thursday morning (the weekend).",
         "",
         "=" * 50,
     ]
@@ -119,7 +119,7 @@ def build_email_body(events, by_date):
         "<div style='background: #F7F6F2; padding: 15px; border-radius: 8px; margin-bottom: 20px;'>",
         "<p style='margin: 0;'><strong>This is an informational summary of what was collected this evening.</strong></p>",
         f"<p style='margin: 8px 0 0 0; color: #666; font-size: 13px;'>Pick the events you want to publish on the admin review page: <a href='{admin_url}'>{admin_url}</a></p>",
-        "<p style='margin: 8px 0 0 0; color: #888; font-size: 12px;'>The newsletter goes out Monday morning.</p>",
+        "<p style='margin: 8px 0 0 0; color: #888; font-size: 12px;'>The newsletter goes out Monday morning (the week) and Thursday morning (the weekend).</p>",
         "</div>",
     ]
 
@@ -174,13 +174,13 @@ def build_email_body(events, by_date):
             """)
 
     text_lines.append(f"\n{'=' * 50}")
-    text_lines.append(f"Pick events at {admin_url}, the newsletter goes out Monday morning.")
+    text_lines.append(f"Pick events at {admin_url}, the newsletter goes out Monday morning (and the weekend issue Thursday).")
 
     html_parts.append(f"""
     <div style='background: #F7F6F2; padding: 15px; border-radius: 8px; margin-top: 25px; text-align: center;'>
         <p style='margin: 0;'><strong>Pick events on the admin review page.</strong></p>
         <p style='margin: 8px 0 0 0; color: #666; font-size: 13px;'><a href='{admin_url}'>{admin_url}</a></p>
-        <p style='margin: 8px 0 0 0; color: #888; font-size: 12px;'>The newsletter goes out Monday morning.</p>
+        <p style='margin: 8px 0 0 0; color: #888; font-size: 12px;'>The newsletter goes out Monday morning (the week) and Thursday morning (the weekend).</p>
     </div>
     </body></html>
     """)

@@ -522,7 +522,22 @@ class FileStore {
     if (!token) return null;
     const data = await this._read();
     const sub = data.subscribers.find(x => x.token === token || (x.old_tokens || []).includes(token));
-    return sub ? { email: sub.email, status: sub.status } : null;
+    return sub ? { email: sub.email, status: sub.status, weekend_optout: Boolean(sub.weekend_optout) } : null;
+  }
+
+  // The Thursday weekend issue is on for everyone unless they turn it off
+  // (the Monday issue keeps coming). Current token only: older tokens are
+  // kept for unsubscribing, not for changing settings.
+  async setWeekendOptout(token, optout) {
+    if (!token) return null;
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const sub = data.subscribers.find(x => x.token === token);
+      if (!sub) return null;
+      sub.weekend_optout = Boolean(optout);
+      await this._write(data);
+      return { email: sub.email, status: sub.status, weekend_optout: sub.weekend_optout };
+    });
   }
 
   async listSubscribers({ status } = {}) {
@@ -1011,7 +1026,7 @@ class PgStore {
         const added = [['event_submissions', 'ai_review'], ['traffic', 'ad'],
           ['newsletter_sends', 'failed_emails'], ['newsletter_sends', 'picks'], ['subscribers', 'old_tokens'],
           ['subscribers', 'ref_code'], ['subscribers', 'referred_by'], ['subscribers', 'ref_tier'],
-          ['subscribers', 'reminded_at'], ['subscribers', 'pending_since']];
+          ['subscribers', 'reminded_at'], ['subscribers', 'pending_since'], ['subscribers', 'weekend_optout']];
         const cols = await this.pool.query(
           `SELECT table_name, column_name FROM information_schema.columns
             WHERE table_schema = current_schema() AND column_name = ANY($1::text[])`,
@@ -1131,6 +1146,8 @@ class PgStore {
         // When a pending signup asked (a first signup or a comeback), so the
         // reminder goes a day after the ask, not a day after the first signup.
         await addColumn('subscribers', 'pending_since', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS pending_since TIMESTAMPTZ');
+        // Turned off the Thursday weekend issue (still gets Monday's).
+        await addColumn('subscribers', 'weekend_optout', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS weekend_optout BOOLEAN NOT NULL DEFAULT FALSE');
         await this.pool.query(`
           CREATE TABLE IF NOT EXISTS newsletter_sends (
             week_key TEXT PRIMARY KEY,
@@ -1483,15 +1500,23 @@ class PgStore {
   async getSubscriberByToken(token) {
     if (!token) return null;
     await this.ready();
-    const r = await this.pool.query('SELECT email, status FROM subscribers WHERE token = $1 OR $1 = ANY(old_tokens)', [token]);
+    const r = await this.pool.query('SELECT email, status, weekend_optout FROM subscribers WHERE token = $1 OR $1 = ANY(old_tokens)', [token]);
+    return r.rows[0] || null;
+  }
+
+  async setWeekendOptout(token, optout) {
+    if (!token) return null;
+    await this.ready();
+    const r = await this.pool.query(
+      'UPDATE subscribers SET weekend_optout = $2 WHERE token = $1 RETURNING email, status, weekend_optout', [token, Boolean(optout)]);
     return r.rows[0] || null;
   }
 
   async listSubscribers({ status } = {}) {
     await this.ready();
     const r = status
-      ? await this.pool.query('SELECT id, email, status, token FROM subscribers WHERE status = $1 ORDER BY created_at', [status])
-      : await this.pool.query('SELECT id, email, status, token FROM subscribers ORDER BY created_at');
+      ? await this.pool.query('SELECT id, email, status, token, weekend_optout FROM subscribers WHERE status = $1 ORDER BY created_at', [status])
+      : await this.pool.query('SELECT id, email, status, token, weekend_optout FROM subscribers ORDER BY created_at');
     return r.rows;
   }
 

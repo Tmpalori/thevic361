@@ -252,7 +252,7 @@ export async function createApp(opts = {}) {
     console.error('[db] production database had no', tables.join(', '), 'table: created empty');
     slack.alert('db-fresh', 'Production database looks new and empty',
       `The server had to create the ${tables.join(' and ')} table${tables.length > 1 ? 's' : ''}, so this database has no subscribers or sponsor orders. ` +
-      'If DATABASE_URL now points at a recreated Postgres, restore the latest Railway backup (AGENTS.md, Backups) before the Monday newsletter.');
+      'If DATABASE_URL now points at a recreated Postgres, restore the latest Railway backup (AGENTS.md, Backups) before the next newsletter (Monday or Thursday).');
   };
   const storeBundle = opts.storeBundle ?? await createStore({
     databaseUrl: opts.databaseUrl,
@@ -2050,6 +2050,8 @@ export async function createApp(opts = {}) {
     handlers: {
       newsletter: () => newsletterApi.scheduledSend(),
       newsletterReady: () => newsletter.enabled && newsletter.autosend,
+      newsletterWeekend: () => newsletterApi.scheduledSend('weekend'),
+      newsletterWeekendReady: () => newsletter.enabled && newsletter.autosend && newsletter.weekend,
       // Weekly sponsor reports (server/sponsors.js), once that exists.
       sponsorReports: typeof sponsors.sendSponsorReports === 'function'
         ? now => sponsors.sendSponsorReports(now)
@@ -2166,7 +2168,7 @@ export async function createApp(opts = {}) {
         fix: slackRefusedText() || 'Set SLACK_WEBHOOK_URL in Railway (and as a GitHub secret) to get pings for breakage, sponsors and submissions. Optional: SLACK_SALES_WEBHOOK_URL, SLACK_ACTIVITY_WEBHOOK_URL and SLACK_ALERTS_WEBHOOK_URL send each kind to its own channel.' },
       { key: 'newsletter', label: 'Email newsletter (Resend)', ok: newsletter.enabled && Boolean(newsletter.address), level: 'recommended',
         fix: newsletter.enabled ? 'Set NEWSLETTER_ADDRESS (a mailing address is required by law in every email).' : 'Set RESEND_API_KEY and NEWSLETTER_ADDRESS in Railway.' },
-      { key: 'newsletter_auto', label: 'Newsletter sends itself Mondays at 7:43 AM', ok: newsletter.enabled && newsletter.autosend, level: 'recommended',
+      { key: 'newsletter_auto', label: 'Newsletter sends itself (Mondays 7:43 AM, Thursdays 7:00 AM)', ok: newsletter.enabled && newsletter.autosend, level: 'recommended',
         fix: !newsletter.enabled ? 'Set RESEND_API_KEY in Railway first.'
           : 'NEWSLETTER_AUTOSEND=0 is set in Railway; remove it to send automatically. (Optional backup: NEWSLETTER_CRON_SECRET in Railway and GitHub lets GitHub retry later in the day.)' },
       { key: 'reply_to', label: 'Customer email replies reach you', ok: Boolean(newsletter.replyTo), level: 'recommended',

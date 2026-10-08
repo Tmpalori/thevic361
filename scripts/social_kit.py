@@ -260,11 +260,11 @@ def captions(groups, start, end, kind, handles=None):
     see_all = "👉 Full list: " if not total else "👉 Details: " if total == 1 else f"👉 See all {total}: "
     body = _body(groups, kind)
     fb = "\n".join([head, ""] + body + [f"{see_all}{SITE}{path}",
-                                          f"Don't miss a thing: get every event free in your inbox each Monday 👉 {SITE}/subscribe", "", HASHTAGS])
+                                          f"Don't miss a thing: get every event free in your inbox every Monday and Thursday 👉 {SITE}/subscribe", "", HASHTAGS])
 
     def ig_caption(body, tags):
         return "\n".join([head, ""] + body + [f"{see_all}link in bio (thevic361.com)",
-                                                "Don't miss a thing: get every event free in your inbox each Monday (subscribe at the link in bio)", ""]
+                                                "Don't miss a thing: get every event free in your inbox every Monday and Thursday (subscribe at the link in bio)", ""]
                          + ([" ".join(tags), ""] if tags else []) + [HASHTAGS]).strip() + "\n"
 
     # Instagram stops at 2,200 characters, and a busy week of long names can
@@ -407,7 +407,7 @@ def render_plain_slides(groups, start, end, kind, out_dir):
 
     # CTA
     img, d = new()
-    _header(d, "Never miss a thing", "Get the full list every week")
+    _header(d, "Never miss a thing", "Get the full list every Monday & Thursday")
     for i, line in enumerate(["Every event, every day, in one place:", "thevic361.com", "",
                               "Have an event? Submit it free.", "Own a venue? Become a Vic’s Pick."]):
         d.text((72, 400 + i * 80), line, font=_font(i in (1,), 52 if i == 1 else 44), fill=ACCENT if i == 1 else INK)

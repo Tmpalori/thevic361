@@ -5,7 +5,7 @@
  *
  *   - Weekly sponsor ($300, one-time): books one Monday–Sunday week. Their
  *     block replaces the sponsor slot on every page, in /events.json, and in
- *     that Monday's newsletter. One sponsor per week; a week someone is
+ *     that week's newsletters (Monday's and Thursday's). One sponsor per week; a week someone is
  *     paying for right now is held for the life of the Checkout session.
  *   - Venue partner (retired Oct 2026, no longer sold): a $150/month Stripe
  *     subscription that made every event at the venue a Vic’s Pick. It
@@ -55,7 +55,7 @@ import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
 import { normalizeEmail } from './newsletter.js';
 import { venueFor } from './guides.js';
-import { renderSponsorConfirmed, renderSponsorReport, renderPickReport, renderSponsorTooLate, newsletterCovers, pickWhere } from './notify.js';
+import { renderSponsorConfirmed, renderSponsorReport, renderPickReport, renderSponsorTooLate, newsletterCovers, weekendCovers, pickWhere } from './notify.js';
 import { botName, visitorHash, pageType, PAGE_TYPES, rowCount, SHARED_LINK } from './analytics.js';
 
 export { newsletterCovers, pickWhere };
@@ -455,7 +455,7 @@ function pathOf(u) {
   try { return new URL(String(u || ''), 'https://x.invalid').pathname.replace(/\/+$/, ''); } catch { return ''; }
 }
 
-export function pickStats(order, rows, { start, end, pages = [], urls = [], recipients = 0, starred = false } = {}) {
+export function pickStats(order, rows, { start, end, pages = [], urls = [], recipients = 0, starred = false, issues = 1 } = {}) {
   const inRange = (rows || []).filter(r => r.day >= start && r.day <= end);
   const onPage = r => pages.includes(r.path);
   const clicks = type => inRange.filter(r => r.kind === 'click' && (typeof type === 'function' ? type(r.click_type) : r.click_type === type));
@@ -472,7 +472,8 @@ export function pickStats(order, rows, { start, end, pages = [], urls = [], reci
     link_clicks: rowCount(link), link_people: peopleIn(link),
     calendar_adds: rowCount(calendar), shares: rowCount(shares),
     share_visits: rowCount(fromShares), share_people: peopleIn(fromShares),
-    newsletter_starred: Boolean(starred), newsletter_recipients: starred ? Number(recipients) || 0 : 0
+    newsletter_starred: Boolean(starred), newsletter_recipients: starred ? Number(recipients) || 0 : 0,
+    newsletter_issues: starred ? Math.max(1, Number(issues) || 1) : 0
   };
 }
 
@@ -716,7 +717,7 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
       url: safeUrl(normalizeUrl(clean(v.url, 300))) || '#',
       address: clean(v.address, 120)
     });
-    return `<p class="co-preview-where">Shown on every page of thevic361.com for your week, and at the top of that Monday’s newsletter.</p>${block}`;
+    return `<p class="co-preview-where">Shown on every page of thevic361.com for your week, and at the top of that week’s newsletters (Monday’s and Thursday’s).</p>${block}`;
   }
   // Vic’s Pick: the event as it will look, pinned above the rest of its day.
   const date = /^\d{4}-\d{2}-\d{2}$/.test(val('date')) ? val('date') : '';
@@ -904,7 +905,7 @@ export function renderThanksPage(order, { siteUrl, now = new Date() }) {
     if (order.kind === 'weekly') {
       const week = formatDay(order.week_start, { weekday: 'long', month: 'long', day: 'numeric' });
       msg = `You're booked for the week of ${escHtml(week)}.`;
-      next = [`Your sponsor block goes live on its own on ${escHtml(week)}, on every page of the site and at the top of that Monday’s newsletter.`,
+      next = [`Your sponsor block goes live on its own on ${escHtml(week)}, on every page of the site and at the top of that week’s Monday and Thursday newsletters.`,
         `${emailed ? 'We’ve emailed you' : 'We’ll email you'} a confirmation with a copy of your block. Stripe sends your receipt separately.`,
         'Want to change the wording or link before it goes live? Reply to that email.'];
     } else if (order.kind === 'partner') {
@@ -1238,9 +1239,11 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     } catch { return null; } // the report still goes, without the newsletter line
   }
 
+  // Newsletter copies a weekly sponsor's block went out in: Monday's issue
+  // and Thursday's weekend issue both carry the week's sponsor.
   async function recipientsFor(week) {
-    const nl = await newsletterSend(week);
-    return nl ? Number(nl.recipients) || 0 : 0;
+    const sends = await Promise.all([newsletterSend(week), newsletterSend(addDays(week, 3))]);
+    return sends.reduce((n, nl) => n + (nl ? Number(nl.recipients) || 0 : 0), 0);
   }
 
   // Where a paid pick ran: the live and archived events it matches (by the
@@ -1273,14 +1276,20 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
   // at purchase (newsletterCovers).
   async function pickStatsFor(order, list, rows = null) {
     const place = await pickPlacement(order, list);
-    const nl = await newsletterSend(currentWeek(place.lastDate)[0]);
-    const recipients = nl ? Number(nl.recipients) || 0 : 0;
-    const starred = Boolean(nl && recipients) && (Array.isArray(nl.picks)
-      ? nl.picks.includes(order.id)
-      : newsletterCovers(order.event.date, order.paid_at || order.created_at));
+    const week = currentWeek(place.lastDate);
+    // Monday's issue and Thursday's weekend issue: the copies of each that
+    // starred it.
+    const [mon, thu] = await Promise.all([newsletterSend(week[0]), newsletterSend(week[3])]);
+    const bought = order.paid_at || order.created_at;
+    const starredIn = (nl, covers) => Boolean(nl && Number(nl.recipients)) &&
+      (Array.isArray(nl.picks) ? nl.picks.includes(order.id) : covers(order.event.date, bought));
+    const inMon = starredIn(mon, newsletterCovers);
+    const inThu = starredIn(thu, weekendCovers);
+    const starred = inMon || inThu;
+    const recipients = (inMon ? Number(mon.recipients) : 0) + (inThu ? Number(thu.recipients) : 0);
     const start = localDateStr(new Date(order.paid_at || order.created_at || Date.now()));
     if (!rows) rows = typeof store.listTraffic === 'function' ? await store.listTraffic(start) : [];
-    return { place, stats: pickStats(order, rows, { start, end: place.lastDate, pages: place.pages, urls: place.urls, recipients, starred }) };
+    return { place, stats: pickStats(order, rows, { start, end: place.lastDate, pages: place.pages, urls: place.urls, recipients, starred, issues: (inMon ? 1 : 0) + (inThu ? 1 : 0) }) };
   }
 
   // Live stats for the admin Sponsors tab's Report button: the same numbers

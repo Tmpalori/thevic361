@@ -169,7 +169,7 @@ def digest_html(groups, start, end, kind):
 </div>
 <div class="disp" style="position:absolute;left:64px;top:140px;font-size:60px">A peek at {"today" if kind == "today" else "the list"} <span style="font-size:40px;color:{PURPLE}">({total} in all)</span></div>
 <div class="card" style="position:absolute;left:64px;right:78px;top:228px;max-height:1010px">{days}</div>
-<div class="foot"><span style="color:{PURPLE}">Don’t miss out: get the list free every Monday</span><span style="font-size:30px">→</span></div>
+<div class="foot"><span style="color:{PURPLE}">Don’t miss out: get the list free Mondays &amp; Thursdays</span><span style="font-size:30px">→</span></div>
 </section>"""
 
 
@@ -181,7 +181,7 @@ def cta_html(total=0):
 <div style="position:absolute;left:72px;right:72px;top:80px;color:#fff">
   {_brand(color="#fff")}
   <div class="disp" style="font-size:112px;margin-top:60px">Don’t miss<br>a thing.</div>
-  <div style="font-size:46px;font-weight:800;margin-top:26px;opacity:.95">Every event in Victoria, <span style="color:{SUN}">free</span> in your inbox each Monday.</div>
+  <div style="font-size:46px;font-weight:800;margin-top:26px;opacity:.95">Every event in Victoria, <span style="color:{SUN}">free</span> in your inbox every Monday &amp; Thursday.</div>
   <div class="pill" style="margin-top:44px;font-size:62px;padding:10px 40px;background:{SUN};color:{INK};box-shadow:10px 10px 0 {INK}">Subscribe free →</div>
   <div class="disp" style="font-size:46px;margin-top:22px;color:{SUN}">thevic361.com/subscribe</div>
   <div style="font-size:40px;font-weight:800;margin-top:52px">{esc(see_all)} at <span style="color:{SUN}">thevic361.com</span></div>

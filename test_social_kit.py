@@ -138,7 +138,7 @@ def test_caption_points_to_the_signup_page():
     from datetime import date as _d
     caps = sk.captions({_d(2026, 10, 9): [{"name": "Live Music", "date": "2026-10-09", "time": "7 PM"}]},
                        _d(2026, 10, 9), _d(2026, 10, 9), "today")
-    assert "Don't miss a thing: get every event free in your inbox each Monday 👉 https://www.thevic361.com/subscribe" in caps["facebook"]
+    assert "Don't miss a thing: get every event free in your inbox every Monday and Thursday 👉 https://www.thevic361.com/subscribe" in caps["facebook"]
     assert "subscribe at the link in bio" in caps["instagram"]
 
 

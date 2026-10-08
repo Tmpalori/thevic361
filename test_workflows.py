@@ -181,11 +181,13 @@ def run_gate(tmp_path, wf, schedule, now, ran=False, event="schedule"):
     out.write_text("")
     env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", GITHUB_OUTPUT=str(out),
                GATE_NOW=now, EVENT=event, SCHEDULE=schedule, SITE="https://example.test",
-               CDT_CRON=g["env"]["CDT_CRON"], CST_CRON=g["env"]["CST_CRON"])
+               **{k: v for k, v in g["env"].items() if k.endswith("CRON")})
     r = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", g["run"]], env=env,
                        capture_output=True, text=True, timeout=30)
     assert r.returncode == 0, r.stderr
-    return out.read_text().strip()
+    lines = out.read_text().strip().splitlines()
+    run_gate.outputs = dict(x.split("=", 1) for x in lines)
+    return next(x for x in lines if x.startswith("run="))
 
 
 SUMMER, WINTER = "2026-07-06T18:00:00Z", "2026-12-07T18:00:00Z"
@@ -208,6 +210,20 @@ def test_fallback_crons_fire_at_the_slot_in_both_cdt_and_cst(tmp_path, wf, cdt, 
     # runs are never gated.
     assert run_gate(tmp_path, wf, cst, WINTER, ran=True) == "run=false"
     assert run_gate(tmp_path, wf, "", WINTER, ran=True, event="workflow_dispatch") == "run=true"
+
+
+def test_newsletter_thursday_cron_sends_the_weekend_issue(tmp_path):
+    crons = [c["cron"] for c in load("newsletter.yml")[True]["schedule"]]
+    assert "0 12 * * 4" in crons and "0 13 * * 4" in crons
+    thu_summer, thu_winter = "2026-07-09T18:00:00Z", "2026-12-10T18:00:00Z"
+    assert run_gate(tmp_path, "newsletter.yml", "0 12 * * 4", thu_summer) == "run=true"
+    assert run_gate.outputs["edition"] == "weekend"
+    assert run_gate(tmp_path, "newsletter.yml", "0 12 * * 4", thu_winter) == "run=false"
+    assert run_gate(tmp_path, "newsletter.yml", "0 13 * * 4", thu_winter, ran=True) == "run=false"
+    assert run_gate(tmp_path, "newsletter.yml", "43 12 * * 1", SUMMER) == "run=true"
+    assert run_gate.outputs["edition"] == "weekly"
+    send = step(load("newsletter.yml")["jobs"]["send"], "Send this week's newsletter")
+    assert "X-Newsletter-Edition: $EDITION" in send["run"]
 
 
 @pytest.mark.parametrize("name,job,post,script", [("meta-ads.yml", "ads", "Meta ads", "meta_ads.py"),
