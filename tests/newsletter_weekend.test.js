@@ -220,3 +220,53 @@ describe('review fixes', () => {
     expect(dueSlot(job, new Date('2026-10-08T11:00:00Z'))).toBe('2026-10-08'); // 6:00 AM CDT
   });
 });
+
+describe('second review fixes', () => {
+  it('Monday\'s send going out doesn\'t make Thursday\'s look done', async () => {
+    // Monday's batch hangs until released; Thursday's goes out meanwhile.
+    let release;
+    const gate = new Promise(r => { release = r; });
+    const batches = [];
+    const resend = {
+      send: async () => ({ id: 'e1' }),
+      batch: async (msgs, key) => {
+        batches.push(key);
+        if (key.startsWith('vic361-2026-10-05-')) await gate;
+        return { data: msgs.map((_, i) => ({ id: `b${i}` })) };
+      }
+    };
+    await startApp({ resend });
+    await store.importSubscribers(['a@example.com'], 'import');
+    const monday = nlApi.sendWeekly({ edition: 'weekly' });
+    await new Promise(r => setTimeout(r, 30));
+    expect(await nlApi.sendWeekly({ edition: 'weekly' })).toMatchObject({ error: 'in-progress' });
+    const thursday = await nlApi.sendWeekly({ edition: 'weekend' });
+    expect(thursday).toMatchObject({ ok: true, week_key: '2026-10-08' });
+    release();
+    expect(await monday).toMatchObject({ ok: true, week_key: '2026-10-05' });
+  });
+
+  it('opens of a weekend issue sent early in the week still count', async () => {
+    await startApp({ now: () => new Date('2026-10-06T15:00:00Z') }); // Tuesday
+    await store.importSubscribers(['a@example.com'], 'import');
+    const [a] = await store.listSubscribers({ status: 'active' });
+    await fetch(`${baseUrl}/email/o/2026-10-08/${a.id}.gif`);
+    await new Promise(r => setTimeout(r, 50));
+    expect(await store.countEmailOpens(['2026-10-08'])).toEqual({ '2026-10-08': 1 });
+  });
+
+  it('a pending subscriber\'s settings link changes nothing', async () => {
+    await startApp();
+    const p = await store.addSubscriber({ email: 'p@example.com', source: 'site' });
+    const r = await fetch(`${baseUrl}/email-prefs?token=${p.token}&weekend=0`, { method: 'POST' });
+    expect(r.status).toBe(404);
+    expect((await store.listSubscribers({})).find(x => x.email === 'p@example.com').weekend_optout).toBeFalsy();
+  });
+
+  it('with NEWSLETTER_WEEKEND=0, Monday\'s issue has no weekend settings link', async () => {
+    await startApp({ newsletterWeekend: '0' });
+    await store.importSubscribers(['a@example.com'], 'import');
+    await nlApi.sendWeekly();
+    expect(sent.batches[0].msgs[0].html).not.toContain('/email-prefs');
+  });
+});
