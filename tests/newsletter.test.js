@@ -1404,7 +1404,11 @@ describe('referral signups: holes from the code review', () => {
     const [s] = await store.listSubscribers({ status: 'active' });
     const code = (await store.ensureRefCodes([s.id]))[s.id];
     expect((await (await post('/api/subscribe', { email: 'fake1@nowhere.test', ref: code })).json()).message).toBe(ALMOST);
-    expect((await (await post('/api/subscribe', { email: 'fake1@nowhere.test' })).json()).message).toBe(ALMOST);
+    // Same answer as any signup (not "Almost there", which would tell anyone
+    // it's a referred address waiting to confirm); still only its inbox can
+    // put it on the list.
+    expect((await (await post('/api/subscribe', { email: 'fake1@nowhere.test' })).json()).message).toBe("You're on the list! Check your inbox.");
+    expect(sent.single.filter(m => m.to[0] === 'fake1@nowhere.test').map(m => m.subject)).toEqual(['Confirm your Vic 361 subscription', 'Confirm your Vic 361 subscription']);
     const sub = (await store._read()).subscribers.find(x => x.email === 'fake1@nowhere.test');
     expect(sub).toMatchObject({ status: 'pending', referred_by: code });
     expect(await store.countReferrals([code], { counted: false })).toEqual({});
@@ -1476,5 +1480,61 @@ describe('confirm reminders', () => {
   it('the first-time confirm email is unchanged', () => {
     const m = renderConfirmEmail({ siteUrl: 'https://www.thevic361.com', confirmUrl: 'https://x/c', address: 'a' });
     expect(m.subject).toBe('Confirm your Vic 361 subscription');
+  });
+});
+
+describe('referral rewards: second review', () => {
+  const localDate = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  const NOW_R = new Date('2026-10-20T13:00:00Z');
+
+  async function storeWith() {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-rr2-'));
+    return new FileStore(path.join(tmpDir, 's.json'));
+  }
+  async function join(st, email, ref, at) {
+    const f = await st.addSubscriber({ email, source: 'site', referredBy: ref });
+    await st.confirmSubscriber(f.token);
+    await st._withWrite(async () => {
+      const data = await st._read();
+      data.subscribers.find(x => x.email === email).confirmed_at = at;
+      await st._write(data);
+    });
+  }
+
+  it('one inbox counts for one referrer only, and a second address of a rewarded inbox is held', async () => {
+    const st = await storeWith();
+    await st.importSubscribers(['owner+r1@gmail.com', 'owner+r2@gmail.com'], 'import');
+    const subs = await st.listSubscribers({ status: 'active' });
+    const codes = await st.ensureRefCodes(subs.map(x => x.id));
+    const c1 = codes[subs.find(x => x.email === 'owner+r1@gmail.com').id];
+    const c2 = codes[subs.find(x => x.email === 'owner+r2@gmail.com').id];
+    const friends = ['ann', 'bob', 'cat', 'dee', 'eve'];
+    for (const [i, f] of friends.entries()) await join(st, `${f}+r1@gmail.com`, c1, new Date(Date.UTC(2026, 9, 2, 12 + i)).toISOString());
+    for (const [i, f] of friends.entries()) await join(st, `${f}+r2@gmail.com`, c2, new Date(Date.UTC(2026, 9, 5, i)).toISOString());
+    // The same five inboxes again under the second alias: they count only for the first.
+    expect(await st.countReferrals([c1, c2])).toEqual({ [c1]: 5 });
+
+    // Five different friends under the second alias: counted, but the reward is held for a look.
+    for (const [i, f] of ['fay', 'gus', 'hal', 'ivy', 'jon'].entries()) await join(st, `${f}@yahoo.com`, c2, new Date(Date.UTC(2026, 9, 6, i * 3)).toISOString());
+    const orders = [];
+    const tremendous = { enabled: true, sendReward: async (o) => { orders.push(o); return { orderId: 'O' + orders.length, status: 'EXECUTED' }; } };
+    const rewards = createReferralRewards({ store: st, slack: { notify: async () => {}, alert: async () => {} }, tremendous, localDate, nowFn: () => NOW_R });
+    const first = await rewards.run(await st.countReferrals([c1]));
+    expect(first).toMatchObject([{ ref_code: c1, status: 'sent' }]);
+    const second = await rewards.run(await st.countReferrals([c2]));
+    expect(second).toMatchObject([{ ref_code: c2, status: 'held', flags: 'another address of this inbox already earned referral rewards' }]);
+    expect(orders).toHaveLength(1);
+  });
+
+  it('held rewards stay on the admin list however many newer ones there are; Slack puts them first', async () => {
+    const st = await storeWith();
+    const held = await st.addReferralReward({ key: 'tier:old:5', kind: 'tier', ref_code: 'old', email: 'h@example.com', tier: 5, amount: 10, status: 'held', flags: 'x' });
+    for (let i = 0; i < 25; i++) {
+      await st.addReferralReward({ key: `tier:c${i}:5`, kind: 'tier', ref_code: `c${i}`, email: `s${i}@example.com`, tier: 5, amount: 10, status: 'sent' });
+    }
+    const rewards = createReferralRewards({ store: st, slack: null, tremendous: null, localDate, nowFn: () => NOW_R });
+    const list = await rewards.list(20);
+    expect(list.some(r => r.id === held.id)).toBe(true);
+    expect(list).toHaveLength(21);
   });
 });

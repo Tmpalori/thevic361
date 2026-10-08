@@ -778,7 +778,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     // the form can't tell anyone who's subscribed or who owns a code.
     const almost = { ok: true, message: 'Almost there! Check your inbox and tap Confirm to start getting it.' };
     const confirmFirst = unverified || Boolean(ref);
-    let done = confirmFirst && config.enabled
+    const done = confirmFirst && config.enabled
       ? almost
       : { ok: true, message: config.enabled ? "You're on the list! Check your inbox." : "You're on the list! See you Monday." };
     try {
@@ -787,8 +787,8 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       if (sub.status === 'active') return res.json(done);
       // A referred address still waiting to confirm stays that way when it's
       // sent again without the code: only its inbox can put it on the list.
+      // The answer doesn't change (that would tell anyone it's waiting).
       const needsConfirm = confirmFirst || Boolean(sub.referred_by);
-      if (needsConfirm && config.enabled) done = almost;
       // Single opt-in: a new address is on the list right away and gets the
       // welcome email (with its unsubscribe link) now. One of the first two
       // ad-driven signups never finished the confirmation step, and the Turnstile

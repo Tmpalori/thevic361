@@ -233,15 +233,21 @@ export function emailKey(email) {
 }
 
 // { code: { counted, all } } (Sets of emailKeys) from the active subscribers
-// each code brought in (listReferredFriends rows). A friend counts once
-// they've been on the list REF_HOLD_HOURS; one inbox counts once; and the
-// referrer's own inbox under another +tag never counts.
+// each code brought in (listReferredFriends rows, every code). A friend
+// counts once they've been on the list REF_HOLD_HOURS; one inbox counts
+// once across ALL codes (the earliest to sign it up gets it, so someone
+// with several +tag addresses can't count the same friends under each);
+// and the referrer's own inbox under another +tag never counts.
 export function tallyReferrals(friends, now = Date.now()) {
   const cutoff = now - REF_HOLD_HOURS * 3600e3;
   const out = {};
-  for (const f of friends) {
+  const claimed = new Set();
+  const when = f => (f.confirmed_at ? new Date(f.confirmed_at).getTime() : Infinity);
+  for (const f of [...friends].sort((a, b) => when(a) - when(b))) {
     const key = emailKey(f.email);
     if (f.referrer_email && emailKey(f.referrer_email) === key) continue;
+    if (claimed.has(key)) continue;
+    claimed.add(key);
     const t = out[f.referred_by] || (out[f.referred_by] = { counted: new Set(), all: new Set() });
     t.all.add(key);
     if (f.confirmed_at && new Date(f.confirmed_at).getTime() <= cutoff) t.counted.add(key);
@@ -566,7 +572,12 @@ class FileStore {
   // bounced stops counting, and the hold means a burst of throwaway
   // addresses that unsubscribe right away never pays off.
   async countReferrals(codes, { counted = true } = {}) {
-    return referralCounts(tallyReferrals(await this.listReferredFriends(codes)), counted);
+    // Every code's friends, so an inbox another code already counts isn't
+    // counted again here (tallyReferrals); then just the codes asked for.
+    const all = referralCounts(tallyReferrals(await this.listReferredFriends(null)), counted);
+    if (!codes) return all;
+    const want = new Set(codes);
+    return Object.fromEntries(Object.entries(all).filter(([c]) => want.has(c)));
   }
 
   // The active subscribers each code brought in: { referred_by,
@@ -1472,7 +1483,12 @@ class PgStore {
   // See FileStore.countReferrals. Counted in JS (tallyReferrals) so one
   // inbox under several addresses counts once.
   async countReferrals(codes, { counted = true } = {}) {
-    return referralCounts(tallyReferrals(await this.listReferredFriends(codes)), counted);
+    // Every code's friends, so an inbox another code already counts isn't
+    // counted again here (tallyReferrals); then just the codes asked for.
+    const all = referralCounts(tallyReferrals(await this.listReferredFriends(null)), counted);
+    if (!codes) return all;
+    const want = new Set(codes);
+    return Object.fromEntries(Object.entries(all).filter(([c]) => want.has(c)));
   }
 
   async listReferredFriends(codes) {

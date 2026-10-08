@@ -128,14 +128,21 @@ export function drawingMonth(today) {
 export function drawingEntries(friends, month, { now, localDate }) {
   const cutoff = now - REF_HOLD_HOURS * 3600e3;
   const out = {};
-  for (const f of friends) {
-    if (!f.referrer_active || !f.confirmed_at) continue;
-    const at = new Date(f.confirmed_at).getTime();
-    if (!(at <= cutoff) || localDate(new Date(at)).slice(0, 7) !== month) continue;
+  // One inbox is one entry in all: the earliest referral of it gets it,
+  // even if a later one came through another code (see tallyReferrals).
+  const claimed = new Set();
+  const when = f => (f.confirmed_at ? new Date(f.confirmed_at).getTime() : Infinity);
+  for (const f of [...friends].sort((a, b) => when(a) - when(b))) {
+    if (!f.confirmed_at) continue;
     const key = emailKey(f.email);
     if (f.referrer_email && emailKey(f.referrer_email) === key) continue;
+    if (claimed.has(key)) continue;
+    claimed.add(key);
+    if (!f.referrer_active) continue;
+    const at = new Date(f.confirmed_at).getTime();
+    if (!(at <= cutoff) || localDate(new Date(at)).slice(0, 7) !== month) continue;
     const e = out[f.referred_by] || (out[f.referred_by] = { email: f.referrer_email, keys: new Set(), friends: [] });
-    if (!e.keys.has(key)) { e.keys.add(key); e.friends.push(f); }
+    e.keys.add(key); e.friends.push(f);
   }
   return out;
 }
@@ -191,6 +198,21 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
     }
   }
 
+  // Every reward so far (null when it can't be read), to spot one inbox
+  // collecting under several addresses (owner+1@, owner+2@ ...).
+  async function rewardsSoFar() {
+    try { return await store.listReferralRewards({ limit: 5000 }); } catch (err) {
+      console.warn('[referrals] reading earlier rewards failed:', err.message);
+      return null;
+    }
+  }
+  function sameInboxFlag(email, code, earlier) {
+    if (!earlier) return 'couldn\'t check earlier rewards';
+    const key = emailKey(email);
+    return earlier.some(r => r.ref_code !== code && r.status !== 'skipped' && emailKey(r.email) === key)
+      ? 'another address of this inbox already earned referral rewards' : null;
+  }
+
   // Gift cards for each tier newly reached. counts: { code: counted friends }.
   // A code's ref_tier goes up only once its reward rows exist, so a failure
   // in between leaves the tier due for next time (the row key stops a
@@ -210,9 +232,12 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
     if (!due.length) return [];
     const withCards = due.filter(d => d.tiers.length);
     const friends = withCards.length ? await friendsOf(withCards.map(d => d.code)) : [];
+    const earlier = withCards.length ? await rewardsSoFar() : [];
     const rows = [];
     for (const d of due) {
       const flags = friends ? referralFlags(friends.filter(f => f.referred_by === d.code)) : ['couldn\'t check this reader\'s friends'];
+      const twin = sameInboxFlag(d.email, d.code, earlier ? [...earlier, ...rows] : null);
+      if (twin) flags.push(twin);
       for (const t of d.tiers) {
         const row = await store.addReferralReward({ key: `tier:${d.code}:${t.n}`, kind: 'tier', ref_code: d.code, email: d.email,
           tier: t.n, amount: t.amount, status: flags.length ? 'held' : 'pending', flags: flags.join('; ') || null });
@@ -239,6 +264,8 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
       pick -= entries[c].keys.size;
     }
     const flags = referralFlags(entries[code].friends);
+    const twin = sameInboxFlag(entries[code].email, code, await rewardsSoFar());
+    if (twin) flags.push(twin);
     return store.addReferralReward({ key: `draw:${month}`, kind: 'drawing', ref_code: code, email: entries[code].email, month,
       amount: DRAWING_AMOUNT, entries: entries[code].keys.size, total_entries: total,
       status: flags.length ? 'held' : 'pending', flags: flags.join('; ') || null });
@@ -287,7 +314,13 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
         if (done.length && slack) {
           const held = done.filter(r => r.status === 'held');
           const friends = held.length ? await friendsOf([...new Set(held.map(r => r.ref_code))]) : [];
-          slack.notify({ title: '🎁 Referral rewards', fields: done.map(r => [r.email, line(r, friends)]) });
+          // Slack shows 10 fields: the ones that need the owner first, and
+          // a pointer to the admin for the rest.
+          const order = { held: 0, failed: 1, manual: 2 };
+          const sorted = [...done].sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
+          const fields = sorted.slice(0, sorted.length > 10 ? 9 : 10).map(r => [r.email, line(r, friends)]);
+          if (sorted.length > 10) fields.push(['…', `and ${sorted.length - 9} more in Admin → Newsletter → Referral rewards`]);
+          slack.notify({ title: '🎁 Referral rewards', fields });
           const failed = done.filter(r => r.status === 'failed');
           if (failed.length) slack.alert('referral-reward-failed', 'A referral gift card didn\'t send', failed[0].reason);
         }
@@ -322,7 +355,16 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
       return { ok: true, status: 200, reward: await store.updateReferralReward(id, { status: 'skipped' }) };
     },
 
-    list: (limit = 20) => supported ? store.listReferralRewards({ limit }) : Promise.resolve([]),
+    // The admin list: everything that needs the owner (held, failed, by
+    // hand, stuck), however old, plus the latest others.
+    async list(limit = 20) {
+      if (!supported) return [];
+      const open = await store.listReferralRewards({ statuses: ['held', 'failed', 'manual', 'pending'], limit: 500 });
+      const recent = await store.listReferralRewards({ limit });
+      const seen = new Set();
+      return [...open, ...recent].filter(r => !seen.has(r.id) && seen.add(r.id))
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    },
     describe
   };
 }
