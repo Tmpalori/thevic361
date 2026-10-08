@@ -324,6 +324,7 @@ export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, ad
   const short = d => formatDay(d, { month: 'short', day: 'numeric' });
   const range = week.length ? (week.length === 1 ? short(week[0]) : `${short(week[0])}–${short(week[week.length - 1])}`) : '';
   const title = weekend ? 'This weekend in Victoria' : 'This week in Victoria';
+  const listPath = weekend ? '/this-weekend' : '/';
   const subject = `${title}: ${total} ${total === 1 ? 'thing' : 'things'} to do (${range})`;
   // Paid Vic's Picks lead, then editor's picks (pickRank), then the rest.
   const highlights = byDay.flatMap(x => x.list).filter(e => e.featured).sort((a, b) => pickRank(a) - pickRank(b))
@@ -338,7 +339,7 @@ export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, ad
 <span style="display:inline-block;margin-left:6px;font-size:13px;font-weight:bold;background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:0 9px;">${escHtml(formatDay(d, { month: 'long', day: 'numeric' }))}</span></td></tr>
 <tr><td style="padding:6px 12px 10px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${list.slice(0, PER_DAY).map(e => eventRow(e, siteUrl)).join('')}</table>
-${list.length > PER_DAY ? `<p style="margin:8px 0 0;font-size:13px;font-weight:bold;"><a href="${siteUrl}/" style="color:${C.accent};">+${list.length - PER_DAY} more on ${escHtml(formatDay(d, { weekday: 'long' }))} →</a></p>` : ''}
+${list.length > PER_DAY ? `<p style="margin:8px 0 0;font-size:13px;font-weight:bold;"><a href="${siteUrl}${listPath}" style="color:${C.accent};">+${list.length - PER_DAY} more on ${escHtml(formatDay(d, { weekday: 'long' }))} →</a></p>` : ''}
 </td></tr></table>`).join('');
 
   const sponsorBlock = sponsorHtml(sponsor, siteUrl);
@@ -348,7 +349,7 @@ ${list.length > PER_DAY ? `<p style="margin:8px 0 0;font-size:13px;font-weight:b
 <p style="margin:16px 0 4px;font-size:16px;">${total ? `Here's what's happening in Victoria, TX ${weekend ? 'this weekend' : 'this week'}: <strong>${total} ${total === 1 ? 'event' : 'events'}</strong>.` : `Nothing is listed yet for ${weekend ? 'this weekend' : 'the rest of this week'}.`}</p>
 <div>${weekend ? pill('/', 'All week') : pill('/this-weekend', 'This weekend')}${pill('/free-things-to-do', 'Free')}${pill('/kids-and-family', 'Kids')}${pill('/live-music', 'Live music')}</div>
 ${sponsorBlock}${days}
-<p style="margin:28px 0 0;text-align:center;">${btn(`${siteUrl}/`, 'See the full list')}</p>
+<p style="margin:28px 0 0;text-align:center;">${btn(`${siteUrl}${listPath}`, weekend ? 'See the whole weekend' : 'See the full list')}</p>
 ${referral ? referralHtml({ siteUrl, ...referral }) : ''}`;
 
   // Sponsors are sold "the top of the newsletter": first in both parts (and
@@ -361,7 +362,7 @@ ${referral ? referralHtml({ siteUrl, ...referral }) : ''}`;
     `${subject}`, '', ...sponsorLine,
     ...byDay.flatMap(({ d, list }) => [formatDay(d, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase(),
       ...list.slice(0, PER_DAY).map(e => `- ${e.time ? e.time + ' ' : ''}${e.name}${e.venue ? ' @ ' + e.venue : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), '']),
-    `Full list: ${siteUrl}/`, '', ...(referral ? referralText({ siteUrl, ...referral }) : []),
+    `Full list: ${siteUrl}${listPath}`, '', ...(referral ? referralText({ siteUrl, ...referral }) : []),
     ...(prefsUrl ? [`${weekend ? 'Just want Mondays? Skip the weekend email' : 'Email settings'}: ${prefsUrl}`] : []),
     `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
   ].join('\n');
@@ -647,9 +648,6 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     }
   }
 
-  // The Thursday issue: same send, its own key, Friday–Sunday, and not to
-  // readers who turned it off.
-  const sendWeekend = (opts = {}) => sendWeekly({ ...opts, edition: 'weekend' });
   const prefsLink = s => `${siteUrl}/email-prefs?token=${encodeURIComponent(s.token)}`;
 
   async function sendWeeklyNow({ force = false, edition = 'weekly' } = {}) {
@@ -1015,7 +1013,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   });
 
   // Email settings: keep or skip the Thursday weekend issue. GET shows the
-  // choice (link scanners follow GETs), POST makes it. Current token only.
+  // choice (link scanners follow GETs), POST makes it.
   const prefsPage = (sub, token, note = '') => {
     const off = Boolean(sub.weekend_optout);
     const action = `/email-prefs?token=${encodeURIComponent(token)}&weekend=${off ? '1' : '0'}`;
@@ -1048,7 +1046,8 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   app.get('/api/admin/newsletter', requireAdmin, async (req, res) => {
     if (!supported) return res.json({ ok: false, error: 'not-supported' });
     const counts = await store.countSubscribers();
-    let sends = await store.listNewsletterSends(8);
+    // Two issues a week: 16 is the last eight weeks.
+    let sends = await store.listNewsletterSends(16);
     // Unique opens per issue. A failed read leaves them off, not the tab.
     if (typeof store.countEmailOpens === 'function' && sends.length) {
       try {
@@ -1080,10 +1079,10 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     const wkFailed = wkRecord ? (Array.isArray(wkRecord.failed_emails) ? wkRecord.failed_emails.length : Number(wkRecord.failed) || 0) : 0;
     const wkIssue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: '#', address: config.address, edition: 'weekend' });
     let optedOut = 0;
-    try { optedOut = (await store.listSubscribers({ status: 'active' })).filter(x => x.weekend_optout).length; } catch { /* leave 0 */ }
+    try { optedOut = typeof store.countWeekendOptouts === 'function' ? await store.countWeekendOptouts() : 0; } catch { /* leave 0 */ }
     res.json({
       ok: true, configured: config.enabled, from: config.from, address_set: Boolean(config.address),
-      autosend: config.enabled && config.autosend, counts, sends, next: { subject: issue.subject, events: issue.total },
+      autosend: config.enabled && config.autosend, counts, next: { subject: issue.subject, events: issue.total },
       referrers, referral_tiers: REFERRAL_TIERS, referral_rewards: referralRewards,
       gift_cards: tremendous && tremendous.enabled ? 'tremendous' : 'manual',
       this_week_sent: Boolean(record) && !failed,
@@ -1231,5 +1230,5 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     return { sent };
   }
 
-  return { sendWeekly, sendWeekend, scheduledSend, sendConfirmReminders };
+  return { sendWeekly, scheduledSend, sendConfirmReminders };
 }

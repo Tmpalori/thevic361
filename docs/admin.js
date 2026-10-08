@@ -2033,13 +2033,13 @@
       ? [['Week', s.week_start + ' to ' + s.week_end], ['Block seen', n(s.views) + ' times (' + n(s.view_people) + ' people)'],
         ['Clicked on the site', n(s.site_people) + ' people (' + n(s.site_clicks) + ' clicks)'],
         ['Clicked in emails', n(s.email_people) + ' people (' + n(s.email_clicks) + ' clicks)'],
-        ['Newsletter sent to', n(s.newsletter_recipients) + ' subscribers'], ['Site visitors that week', n(s.site_visitors)]]
+        ['Newsletter copies with the block (Mon + Thu)', n(s.newsletter_recipients)], ['Site visitors that week', n(s.site_visitors)]]
       : [['Counting', s.start + ' to ' + s.end], ['Shown in lists as a Vic’s Pick', n(s.shown) + ' times (' + n(s.shown_people) + ' people)'],
         ['Event page views', n(s.page_views) + ' (' + n(s.page_people) + ' people)'],
         ['Clicked their link', n(s.link_people) + ' people (' + n(s.link_clicks) + ' clicks)'],
         ['Added to calendar', n(s.calendar_adds)], ['Shares', n(s.shares)],
         ['Visits from shares', n(s.share_visits) + ' (' + n(s.share_people) + ' people)'],
-        ['Newsletter', s.newsletter_starred ? 'Starred, sent to ' + n(s.newsletter_recipients) + ' subscribers' : 'Not starred'],
+        ['Newsletter', s.newsletter_starred ? 'Starred, ' + n(s.newsletter_recipients) + ' copies' + (s.newsletter_issues > 1 ? ' (Mon + Thu)' : '') : 'Not starred'],
         ...(r.on_site === false ? [['On the site', 'Never matched a listed event']] : [])];
     (s.where || []).forEach(w => rows.push(['Seen on ' + w.type, n(w.views)]));
     rows.push(['Report email', r.report_sent ? 'Sent ' + String(r.report_sent).slice(0, 10) : 'Not sent yet']);
@@ -2203,12 +2203,14 @@
     const list = bits.length > 1 ? bits.slice(0, -1).join(', ') + ' and ' + bits[bits.length - 1] : bits[0];
     // The newsletter's reach that week, not a claim this event was in it
     // (an issue shows a few events a day, from the day it's sent).
+    const wk = (d.newsletter && d.newsletter.weekend) || {};
     const nl = d.newsletter && d.newsletter.recipients
-      ? ' Our Monday newsletter that week went to ' + d.newsletter.recipients + ' Victoria locals' + (d.newsletter.opens ? ' (' + d.newsletter.opens + ' opened it)' : '') + '.'
+      ? ' Our Monday newsletter that week went to ' + d.newsletter.recipients + ' Victoria locals' + (d.newsletter.opens ? ' (' + d.newsletter.opens + ' opened it)' : '') +
+        (wk.recipients ? ', and Thursday\'s weekend issue to ' + wk.recipients + (wk.opens ? ' (' + wk.opens + ' opened it)' : '') : '') + '.'
       : '';
     return 'Hi ' + (ev.venue || 'there') + '!\n\n' +
       'We featured ' + ev.name + ' on The Vic 361, Victoria\'s free events guide, and it got ' + list + '.' + nl + '\n\n' +
-      'Want your next event front and center? A Vic\'s Pick pins it to the top of its day on the site (booked before Monday, it\'s in the newsletter too): ' +
+      'Want your next event front and center? A Vic\'s Pick pins it to the top of its day on the site (booked in time, it\'s starred in the newsletter too): ' +
       location.origin + '/advertise\n\nThanks!\nThe Vic 361';
   }
 
@@ -2220,7 +2222,8 @@
     if (next) next.disabled = Boolean(d.this_week);
     const msg = document.getElementById('event-stats-msg');
     if (msg) msg.textContent = d.newsletter && d.newsletter.recipients
-      ? 'Newsletter that week: sent to ' + d.newsletter.recipients + ', opened by ' + d.newsletter.opens + '.' : '';
+      ? 'Newsletter that week: Monday sent to ' + d.newsletter.recipients + ', opened by ' + d.newsletter.opens +
+        (d.newsletter.weekend && d.newsletter.weekend.recipients ? '; Thursday sent to ' + d.newsletter.weekend.recipients + ', opened by ' + d.newsletter.weekend.opens : '') + '.' : '';
     if (!table) return;
     const n = v => Number(v) || 0;
     table.innerHTML = (d.events || []).length

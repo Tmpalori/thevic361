@@ -213,7 +213,9 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
     // A bank payment that cleared after that Monday's issue went out
     // (sponsors.js sets newsletter_missed) can't be promised the issue.
     const newsletterLine = order.newsletter_missed
-      ? 'Your payment cleared after that Monday’s newsletter went out, so your block wasn’t in it. We’ll be in touch to make that up to you.'
+      ? (order.newsletter_missed_both
+        ? 'Your payment cleared after that week’s newsletters went out, so your block wasn’t in them. We’ll be in touch to make that up to you.'
+        : 'Your payment cleared after that Monday’s newsletter went out, so your block wasn’t in it; it will be at the top of Thursday’s weekend issue. We’ll be in touch to make up for Monday’s.')
       : 'It’s also the sponsor spot at the top of that week’s newsletters: Monday’s, and Thursday’s weekend issue.';
     const bodyHtml =
       p(`Thanks, ${escHtml(business)}! Your payment went through and <strong>the week of ${escHtml(week)}</strong> is yours.`) +

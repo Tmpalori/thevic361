@@ -6,6 +6,7 @@
  * (Intl does the DST switch):
  *
  *   event-check        Mon 6:43 AM   dispatch event-check.yml (before the send)
+ *   event-check-weekend Thu 6:00 AM  the same, before the weekend issue
  *   newsletter         Mon 7:43 AM   sendWeekly() in-process; retried on failure
  *   newsletter-weekend Thu 7:00 AM   the weekend issue (Friday–Sunday), same way
  *   meta-ads           daily 8:37 AM dispatch meta-ads.yml (scheduled=true)
@@ -63,6 +64,8 @@ const dowOf = ymd => new Date(ymd + 'T12:00:00Z').getUTCDay();
 
 export const JOBS = [
   { name: 'event-check', dow: 1, at: '06:43', until: '12:00', workflow: 'event-check.yml' },
+  // And before Thursday's weekend issue.
+  { name: 'event-check-weekend', dow: 4, at: '06:00', until: '12:00', workflow: 'event-check.yml' },
   { name: 'newsletter', dow: 1, at: '07:43', until: '23:59', retryMins: [5, 15, 30] },
   // The weekend issue (Friday–Sunday), Thursday mornings.
   { name: 'newsletter-weekend', dow: 4, at: '07:00', until: '23:59', retryMins: [5, 15, 30] },

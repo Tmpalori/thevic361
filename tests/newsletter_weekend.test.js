@@ -101,13 +101,13 @@ describe('weekend issue sending', () => {
   it('goes to everyone who didn\'t skip it, once, under Thursday\'s key; Monday\'s is separate', async () => {
     await startApp();
     await subscribers();
-    const out = await nlApi.sendWeekend();
+    const out = await nlApi.sendWeekly({ edition: 'weekend' });
     expect(out).toMatchObject({ ok: true, week_key: '2026-10-08', recipients: 2 });
     expect(sent.batches[0].msgs.map(m => m.to[0]).sort()).toEqual(['a@example.com', 'c@example.com']);
     expect(sent.batches[0].msgs[0].subject).toMatch(/^This weekend in Victoria/);
     expect(sent.batches[0].msgs[0].html).toContain('/email/o/2026-10-08/');
     expect(sent.batches[0].key).toMatch(/^vic361-2026-10-08-/);
-    expect(await nlApi.sendWeekend()).toMatchObject({ ok: false, error: 'already-sent' });
+    expect(await nlApi.sendWeekly({ edition: 'weekend' })).toMatchObject({ ok: false, error: 'already-sent' });
     // This week's Monday issue is its own send (to everyone).
     const mon = await nlApi.sendWeekly();
     expect(mon).toMatchObject({ ok: true, week_key: '2026-10-05', recipients: 3 });
@@ -116,7 +116,7 @@ describe('weekend issue sending', () => {
   it('NEWSLETTER_WEEKEND=0 stops it, and the scheduler doesn\'t retry that', async () => {
     await startApp({ newsletterWeekend: '0' });
     await subscribers();
-    expect(await nlApi.sendWeekend()).toMatchObject({ ok: false, error: 'weekend-off' });
+    expect(await nlApi.sendWeekly({ edition: 'weekend' })).toMatchObject({ ok: false, error: 'weekend-off' });
     expect(await nlApi.scheduledSend('weekend')).toMatchObject({ ok: true, final: true, sent_ok: false });
     expect(sent.batches).toHaveLength(0);
   });
@@ -192,5 +192,31 @@ describe('promises and the schedule', () => {
     expect(dueSlot(job, new Date('2026-10-08T11:59:00Z'))).toBeNull();
     expect(dueSlot(job, new Date('2026-10-08T12:00:00Z'))).toBe('2026-10-08');
     expect(dueSlot(job, new Date('2026-10-05T12:00:00Z'))).toBeNull();
+  });
+});
+
+describe('review fixes', () => {
+  it('a settings link from an older issue (old token) still works, and a comeback gets Thursdays again', async () => {
+    await startApp();
+    await store.importSubscribers(['a@example.com'], 'import');
+    let [a] = await store.listSubscribers({ status: 'active' });
+    const oldToken = a.token;
+    await store.setWeekendOptout(oldToken, true);
+    expect(await store.countWeekendOptouts()).toBe(1);
+    await store.unsubscribe(oldToken);
+    const back = await store.addSubscriber({ email: 'a@example.com', source: 'site' });
+    await store.confirmSubscriber(back.token);
+    [a] = await store.listSubscribers({ status: 'active' });
+    expect(a.weekend_optout).toBe(false);
+    // The old link from an earlier issue: same person, still works.
+    const r = await fetch(`${baseUrl}/email-prefs?token=${oldToken}&weekend=0`, { method: 'POST' });
+    expect(r.status).toBe(200);
+    expect((await store.listSubscribers({ status: 'active' }))[0].weekend_optout).toBe(true);
+  });
+
+  it('the event check runs Thursday before the weekend issue', () => {
+    const job = JOBS.find(j => j.name === 'event-check-weekend');
+    expect(job).toMatchObject({ dow: 4, workflow: 'event-check.yml' });
+    expect(dueSlot(job, new Date('2026-10-08T11:00:00Z'))).toBe('2026-10-08'); // 6:00 AM CDT
   });
 });

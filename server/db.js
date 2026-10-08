@@ -439,8 +439,9 @@ class FileStore {
         // so those issues' links still work (see PgStore.addSubscriber).
         // pending_since: when this signup asked, for the confirm reminder; a
         // comeback is a new ask and gets its own reminder.
+        // weekend_optout: a fresh signup is promised both issues again.
         Object.assign(sub, { status: 'pending', token: newToken(), unsubscribed_at: null, source,
-          old_tokens: [...(sub.old_tokens || []), sub.token], pending_since: now, reminded_at: null });
+          old_tokens: [...(sub.old_tokens || []), sub.token], pending_since: now, reminded_at: null, weekend_optout: false });
         fresh = true;
       }
       await this._write(data);
@@ -526,13 +527,13 @@ class FileStore {
   }
 
   // The Thursday weekend issue is on for everyone unless they turn it off
-  // (the Monday issue keeps coming). Current token only: older tokens are
-  // kept for unsubscribing, not for changing settings.
+  // (the Monday issue keeps coming). Any of their tokens, like unsubscribe:
+  // the link sits in every issue they got.
   async setWeekendOptout(token, optout) {
     if (!token) return null;
     return this._withWrite(async () => {
       const data = await this._read();
-      const sub = data.subscribers.find(x => x.token === token);
+      const sub = data.subscribers.find(x => x.token === token || (x.old_tokens || []).includes(token));
       if (!sub) return null;
       sub.weekend_optout = Boolean(optout);
       await this._write(data);
@@ -543,6 +544,12 @@ class FileStore {
   async listSubscribers({ status } = {}) {
     const data = await this._read();
     return data.subscribers.filter(x => !status || x.status === status);
+  }
+
+  // Active subscribers who skip the Thursday weekend issue.
+  async countWeekendOptouts() {
+    const data = await this._read();
+    return data.subscribers.filter(x => x.status === 'active' && x.weekend_optout).length;
   }
 
   async countSubscribers() {
@@ -1430,7 +1437,7 @@ class PgStore {
       // unsubscribing (Gmail's Unsubscribe on an older issue still works).
       const row = (await this.pool.query(
         `UPDATE subscribers SET status = 'pending', old_tokens = array_append(old_tokens, token), token = $2,
-           unsubscribed_at = NULL, source = $3, pending_since = NOW(), reminded_at = NULL WHERE email = $1 RETURNING *`,
+           unsubscribed_at = NULL, source = $3, pending_since = NOW(), reminded_at = NULL, weekend_optout = FALSE WHERE email = $1 RETURNING *`,
         [email, newToken(), source])).rows[0];
       return { ...row, new_signup: true };
     }
@@ -1508,7 +1515,7 @@ class PgStore {
     if (!token) return null;
     await this.ready();
     const r = await this.pool.query(
-      'UPDATE subscribers SET weekend_optout = $2 WHERE token = $1 RETURNING email, status, weekend_optout', [token, Boolean(optout)]);
+      'UPDATE subscribers SET weekend_optout = $2 WHERE token = $1 OR $1 = ANY(old_tokens) RETURNING email, status, weekend_optout', [token, Boolean(optout)]);
     return r.rows[0] || null;
   }
 
@@ -1518,6 +1525,12 @@ class PgStore {
       ? await this.pool.query('SELECT id, email, status, token, weekend_optout FROM subscribers WHERE status = $1 ORDER BY created_at', [status])
       : await this.pool.query('SELECT id, email, status, token, weekend_optout FROM subscribers ORDER BY created_at');
     return r.rows;
+  }
+
+  async countWeekendOptouts() {
+    await this.ready();
+    const r = await this.pool.query("SELECT COUNT(*)::int AS n FROM subscribers WHERE status = 'active' AND weekend_optout");
+    return Number(r.rows[0].n) || 0;
   }
 
   async countSubscribers() {

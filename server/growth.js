@@ -247,7 +247,7 @@ export function registerGrowth(app, { store, requireAdmin, nowFn = () => new Dat
         res.set('Cache-Control', 'no-store');
         return res.json({ ok: true, today, goals: goals(subs, dailyGrowth(subs, [], { today, days: 15 }), monthRevenue(orders, today), today) });
       }
-      const sends = typeof store.listNewsletterSends === 'function' ? await store.listNewsletterSends(8).catch(() => []) : [];
+      const sends = typeof store.listNewsletterSends === 'function' ? await store.listNewsletterSends(16).catch(() => []) : [];
       // Enough history for the 14-day pace and every listed issue's week.
       const oldestSend = sends.map(s => dayOf(s.sent_at)).filter(Boolean).sort()[0];
       const since = [addDays(today, -(Math.max(days, 15) - 1)), oldestSend].filter(Boolean).sort()[0];

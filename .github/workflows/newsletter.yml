@@ -21,8 +21,8 @@ on:
   schedule:
     - cron: '43 12 * * 1'   # Mon 7:43 AM CDT; usually runs hours late (fallback)
     - cron: '43 13 * * 1'   # Mon 7:43 AM CST
-    - cron: '0 12 * * 4'    # Thu 7:00 AM CDT: the weekend issue
-    - cron: '0 13 * * 4'    # Thu 7:00 AM CST
+    - cron: '13 12 * * 4'   # Thu 7:13 AM CDT: the weekend issue (the site sends at 7:00)
+    - cron: '13 13 * * 4'   # Thu 7:13 AM CST
   workflow_dispatch:
     inputs:
       edition:
@@ -53,8 +53,8 @@ jobs:
           INPUT_EDITION: ${{ inputs.edition }}
           CDT_CRON: '43 12 * * 1'
           CST_CRON: '43 13 * * 1'
-          WEEKEND_CDT_CRON: '0 12 * * 4'
-          WEEKEND_CST_CRON: '0 13 * * 4'
+          WEEKEND_CDT_CRON: '13 12 * * 4'
+          WEEKEND_CST_CRON: '13 13 * * 4'
         run: |
           run=true
           edition="${INPUT_EDITION:-weekly}"

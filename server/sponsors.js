@@ -1359,7 +1359,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       const summary = [['Buyer', order.business], ['Event', `${name} (${place.lastDate})`],
         ['Shown in lists', stats.shown], ['Event page views', stats.page_views], ['Clicked their link', stats.link_people],
         ['Added to calendar', stats.calendar_adds], ['Shares', stats.shares], ['Visits from shares', stats.share_visits],
-        ['Newsletter', stats.newsletter_starred ? `Starred, sent to ${stats.newsletter_recipients}` : 'Not in it']];
+        ['Newsletter', stats.newsletter_starred ? `Starred, ${stats.newsletter_recipients} copies${stats.newsletter_issues > 1 ? ' (Mon + Thu)' : ''}` : 'Not in it']];
       if (!mailer || !mailer.enabled) {
         if (!order.report_slack_sent && slack) {
           slack.alert(`pick-report:${order.id}`, `Send ${order.business} their Vic's Pick report (email is off)`,
@@ -1588,12 +1588,15 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         }
         // A bank debit that cleared after its week's Monday issue went out:
         // the sponsor spot in that newsletter is gone, so the owner owes a
-        // make-good and the confirmation doesn't promise it.
+        // make-good and the confirmation doesn't promise it. Thursday's
+        // weekend issue still carries it unless that has gone out too.
         if (order.kind === 'weekly' && await newsletterSend(order.week_start)) {
           order.newsletter_missed = nowIso();
+          const both = Boolean(await newsletterSend(addDays(order.week_start, 3)));
+          order.newsletter_missed_both = both;
           if (slack) {
             slack.alert(`sponsor-newsletter-missed:${order.id}`, `${order.business} paid after their week's newsletter went out`,
-              `${order.business} (${order.email}) paid by bank for the week of ${order.week_start}; it cleared after that Monday's newsletter was sent, so their block wasn't in it. It's live on the site now; offer them a make-good (e.g. a later issue) or a partial refund.`,
+              `${order.business} (${order.email}) paid by bank for the week of ${order.week_start}; it cleared after that Monday's newsletter${both ? ' and Thursday\'s weekend issue were' : ' was'} sent, so their block wasn't in ${both ? 'either' : 'it'}${both ? '' : ' (it will be in Thursday\'s weekend issue)'}. It's live on the site now; offer them a make-good (e.g. a later issue) or a partial refund.`,
               `${siteUrl}/admin.html`);
           }
         }

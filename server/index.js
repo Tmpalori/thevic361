@@ -1349,15 +1349,24 @@ export async function createApp(opts = {}) {
         store.listTraffic(addDays(start, -LEAD_IN_DAYS)), getPublicPayload(), listArchived().catch(() => [])
       ]);
       const events = [...((payload && payload.events) || []), ...(archived || [])];
+      // That week's two issues: Monday's (keyed by `start`) and Thursday's.
       let recipients = 0, opens = 0;
+      const weekend = { recipients: 0, opens: 0 };
       try {
-        const sent = typeof store.getNewsletterSend === 'function' ? await store.getNewsletterSend(start) : null;
-        recipients = sent ? Number(sent.recipients) || 0 : 0;
-        if (typeof store.countEmailOpens === 'function') opens = (await store.countEmailOpens([start]))[start] || 0;
+        const thu = addDays(start, 3);
+        const [mon, wk] = typeof store.getNewsletterSend === 'function'
+          ? await Promise.all([store.getNewsletterSend(start), store.getNewsletterSend(thu)]) : [null, null];
+        recipients = mon ? Number(mon.recipients) || 0 : 0;
+        weekend.recipients = wk ? Number(wk.recipients) || 0 : 0;
+        if (typeof store.countEmailOpens === 'function') {
+          const o = await store.countEmailOpens([start, thu]);
+          opens = o[start] || 0;
+          weekend.opens = o[thu] || 0;
+        }
       } catch { /* the table still shows without the newsletter line */ }
       res.set('Cache-Control', 'no-store');
       res.json({ ok: true, week_start: start, week_end: end, this_week: start === thisMonday,
-        newsletter: { recipients, opens }, events: eventWeekStats(rows, events, { start, end }) });
+        newsletter: { recipients, opens, weekend }, events: eventWeekStats(rows, events, { start, end }) });
     } catch (err) {
       console.error('[traffic] event stats failed:', err.message);
       res.status(500).json({ ok: false, error: 'event-stats-failed', message: err.message });

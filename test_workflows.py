@@ -214,12 +214,12 @@ def test_fallback_crons_fire_at_the_slot_in_both_cdt_and_cst(tmp_path, wf, cdt, 
 
 def test_newsletter_thursday_cron_sends_the_weekend_issue(tmp_path):
     crons = [c["cron"] for c in load("newsletter.yml")[True]["schedule"]]
-    assert "0 12 * * 4" in crons and "0 13 * * 4" in crons
+    assert "13 12 * * 4" in crons and "13 13 * * 4" in crons
     thu_summer, thu_winter = "2026-07-09T18:00:00Z", "2026-12-10T18:00:00Z"
-    assert run_gate(tmp_path, "newsletter.yml", "0 12 * * 4", thu_summer) == "run=true"
+    assert run_gate(tmp_path, "newsletter.yml", "13 12 * * 4", thu_summer) == "run=true"
     assert run_gate.outputs["edition"] == "weekend"
-    assert run_gate(tmp_path, "newsletter.yml", "0 12 * * 4", thu_winter) == "run=false"
-    assert run_gate(tmp_path, "newsletter.yml", "0 13 * * 4", thu_winter, ran=True) == "run=false"
+    assert run_gate(tmp_path, "newsletter.yml", "13 12 * * 4", thu_winter) == "run=false"
+    assert run_gate(tmp_path, "newsletter.yml", "13 13 * * 4", thu_winter, ran=True) == "run=false"
     assert run_gate(tmp_path, "newsletter.yml", "43 12 * * 1", SUMMER) == "run=true"
     assert run_gate.outputs["edition"] == "weekly"
     send = step(load("newsletter.yml")["jobs"]["send"], "Send this week's newsletter")
