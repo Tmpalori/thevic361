@@ -1979,12 +1979,14 @@
     if (ev.calendar_adds) bits.push(plural(ev.calendar_adds, 'calendar add', 'calendar adds'));
     if (ev.shares) bits.push('it was shared ' + plural(ev.shares, 'time', 'times') + (ev.share_visits ? ', bringing in ' + plural(ev.share_visits, 'more visit', 'more visits') : ''));
     const list = bits.length > 1 ? bits.slice(0, -1).join(', ') + ' and ' + bits[bits.length - 1] : bits[0];
+    // The newsletter's reach that week, not a claim this event was in it
+    // (an issue shows a few events a day, from the day it's sent).
     const nl = d.newsletter && d.newsletter.recipients
-      ? ' It was also in our Monday newsletter, which went to ' + d.newsletter.recipients + ' Victoria locals' + (d.newsletter.opens ? ' (' + d.newsletter.opens + ' opened it)' : '') + '.'
+      ? ' Our Monday newsletter that week went to ' + d.newsletter.recipients + ' Victoria locals' + (d.newsletter.opens ? ' (' + d.newsletter.opens + ' opened it)' : '') + '.'
       : '';
     return 'Hi ' + (ev.venue || 'there') + '!\n\n' +
       'We featured ' + ev.name + ' on The Vic 361, Victoria\'s free events guide, and it got ' + list + '.' + nl + '\n\n' +
-      'Want your next event front and center? A Vic\'s Pick pins it to the top of its day on the site, and booked before Monday it\'s starred in our newsletter too: ' +
+      'Want your next event front and center? A Vic\'s Pick pins it to the top of its day on the site (booked before Monday, it\'s in the newsletter too): ' +
       location.origin + '/advertise\n\nThanks!\nThe Vic 361';
   }
 

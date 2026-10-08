@@ -32,7 +32,7 @@ import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys, keyedEvents
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { createMailer, renderSubmissionReceived, renderSubmissionLive } from './notify.js';
 import { registerSubmissionReview, isPaidPick } from './submissionReview.js';
-import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage, sameEvent, eventWeekStats } from './sponsors.js';
+import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage, sameEvent, eventWeekStats, LEAD_IN_DAYS } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
 import { registerContact } from './contact.js';
 import { renderEventCard, eventCardVersion } from './ogImage.js';
@@ -1341,7 +1341,7 @@ export async function createApp(opts = {}) {
       const start = /^\d{4}-\d{2}-\d{2}$/.test(asked) ? currentWeek(asked)[0] : addDays(thisMonday, -7);
       const end = addDays(start, 6);
       const [rows, payload, archived] = await Promise.all([
-        store.listTraffic(start), getPublicPayload(), listArchived().catch(() => [])
+        store.listTraffic(addDays(start, -LEAD_IN_DAYS)), getPublicPayload(), listArchived().catch(() => [])
       ]);
       const events = [...((payload && payload.events) || []), ...(archived || [])];
       let recipients = 0, opens = 0;
@@ -1753,9 +1753,12 @@ export async function createApp(opts = {}) {
   // then back, or the collector's name flips between runs), and a browser
   // keeps an uncached 301 forever, so a revert would loop. Stay 301 so
   // search engines move the page's standing, but make browsers ask again.
+  // Keeps the query string (?s=sh from a share, utm tags from an ad), so
+  // a link to an event that moved still counts where it came from.
   function movedRedirect(res, to) {
     res.set('Cache-Control', 'no-cache');
-    return res.redirect(301, to);
+    const q = (res.req && res.req.originalUrl || '').match(/\?.*$/);
+    return res.redirect(301, to + (q && !to.includes('?') ? q[0] : ''));
   }
 
   // Add-to-calendar file. Registered before /events/:slug, which would

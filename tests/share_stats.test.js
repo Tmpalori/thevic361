@@ -45,25 +45,31 @@ describe('shared links', () => {
 });
 
 describe('event stats', () => {
-  it('every event that week, with views, link taps, shares and visits from shares', () => {
+  it('every event that week, from a week before its date, with only its own taps and shares', () => {
+    const T = '/events/2026-10-09-trivia', M = '/events/2026-10-10-market';
     const events = [
-      { date: '2026-10-09', name: 'Trivia', venue: 'Pub', page: '/events/2026-10-09-trivia', url: 'https://pub.example/trivia' },
-      { date: '2026-10-10', name: 'Market', venue: 'Square', page: '/events/2026-10-10-market' },
+      { date: '2026-10-09', name: 'Trivia', venue: 'Pub', page: T, url: 'https://pub.example/trivia' },
+      { date: '2026-10-10', name: 'Market', venue: 'Square', page: M, url: 'https://market.example' },
       { date: '2026-10-20', name: 'Later', page: '/events/2026-10-20-later' }
     ];
     const rows = [
-      view('2026-10-08', '/events/2026-10-09-trivia', 'a'), view('2026-10-09', '/events/2026-10-09-trivia', 'b', SHARED_LINK),
-      click('2026-10-08', '/this-weekend', 'a', 'event_click', 'https://pub.example/trivia'), // from a list
-      click('2026-10-08', '/events/2026-10-09-trivia', 'a', 'share_native', 'https://www.thevic361.com/events/2026-10-09-trivia'),
-      view('2026-10-10', '/events/2026-10-10-market', 'c'),
-      view('2026-10-01', '/events/2026-10-09-trivia', 'z') // before the week
+      view('2026-10-03', T, 'early'),                                       // the week before: counts (lead-in)
+      view('2026-10-01', T, 'z'),                                           // more than 7 days before: doesn't
+      view('2026-10-08', T, 'a'), view('2026-10-09', T, 'b', SHARED_LINK),
+      view('2026-10-10', T, 'late'),                                        // after its date: doesn't
+      click('2026-10-08', '/this-weekend', 'a', 'event_click', 'https://pub.example/trivia'), // from a list: counts
+      click('2026-10-08', T, 'a', 'share_native', `https://www.thevic361.com${T}`),
+      click('2026-10-08', T, 'a', 'share_facebook', 'https://www.facebook.com/sharer/sharer.php?u=x'),
+      // On Trivia's page, its "Also on" list: Market's link and share icon belong to Market.
+      click('2026-10-08', T, 'a', 'event_click', 'https://market.example'),
+      click('2026-10-08', T, 'a', 'share_from_list', `https://www.thevic361.com${M}`),
+      view('2026-10-10', M, 'c')
     ];
-    expect(eventWeekStats(rows, events, { start: '2026-10-05', end: '2026-10-11' })).toEqual([
-      { page: '/events/2026-10-09-trivia', name: 'Trivia', venue: 'Pub', date: '2026-10-09', page_views: 2, page_people: 2,
-        link_clicks: 1, link_people: 1, calendar_adds: 0, shares: 1, share_visits: 1 },
-      { page: '/events/2026-10-10-market', name: 'Market', venue: 'Square', date: '2026-10-10', page_views: 1, page_people: 1,
-        link_clicks: 0, link_people: 0, calendar_adds: 0, shares: 0, share_visits: 0 }
-    ]);
+    const [trivia, market] = eventWeekStats(rows, events, { start: '2026-10-05', end: '2026-10-11' });
+    expect(trivia).toEqual({ page: T, name: 'Trivia', venue: 'Pub', date: '2026-10-09', counted_from: '2026-10-02',
+      page_views: 3, page_people: 3, link_clicks: 1, link_people: 1, calendar_adds: 0, shares: 2, share_visits: 1 });
+    expect(market).toEqual({ page: M, name: 'Market', venue: 'Square', date: '2026-10-10', counted_from: '2026-10-03',
+      page_views: 1, page_people: 1, link_clicks: 0, link_people: 0, calendar_adds: 0, shares: 1, share_visits: 0 });
   });
 
   it('the admin endpoint defaults to last week and needs a login', async () => {
