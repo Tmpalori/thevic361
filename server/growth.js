@@ -184,7 +184,8 @@ export function monthRevenue(orders, today) {
   const month = today.slice(0, 7);
   let cents = 0, count = 0, recurring = 0;
   for (const o of orders || []) {
-    if (!o || !KEPT.has(o.status) || !o.paid_at) continue;
+    // A test order (marked in Admin → Sponsors, or paid in Stripe test mode) isn't revenue.
+    if (!o || o.test || !KEPT.has(o.status) || !o.paid_at) continue;
     const paid = dayOf(o.paid_at);
     if (paid && paid.slice(0, 7) === month) { cents += Number(o.amount) || 0; count++; }
     else if (o.kind === 'partner' && o.status === 'active' && paid < month) { recurring += Number(o.amount) || 0; count++; }

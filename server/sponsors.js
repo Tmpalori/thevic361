@@ -1526,7 +1526,9 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           amount: Number.isFinite(obj.amount_total) ? obj.amount_total : order.amount,
           subscription_id: typeof obj.subscription === 'string' ? obj.subscription : null,
           customer_id: typeof obj.customer === 'string' ? obj.customer : null,
-          payment_intent: typeof obj.payment_intent === 'string' ? obj.payment_intent : null
+          payment_intent: typeof obj.payment_intent === 'string' ? obj.payment_intent : null,
+          // Paid with Stripe's test keys: not real money (revenue leaves it out).
+          ...(event.livemode === false ? { test: true } : {})
         });
         // Settled after the date it paid for: nothing left to run, so no
         // submission and no "you're booked". The owner refunds in Stripe
@@ -2020,6 +2022,9 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       } catch (err) { next(err); }
     });
 
+    // Mark test / not test: an order that wasn't real money (the owner's own
+    // try-out), left out of the revenue goal; the placement itself is
+    // untouched (Hide takes it off the site).
     // Hide pulls a placement (refund, bad copy); restore puts it back, unless
     // its day or week was sold meanwhile. Remove-logo deletes the uploaded
     // logo and keeps the rest of the placement. Edit changes a weekly
@@ -2032,7 +2037,15 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         const list = supported ? await store.listSponsorOrders() : [];
         const order = list.find(o => o.id === req.params.id);
         if (!order) return res.status(404).json({ ok: false, error: 'not-found' });
-        if (action === 'hide' || action === 'restore' || action === 'remove-logo') {
+        if (action === 'mark-test' || action === 'unmark-test') {
+          const out = await withBookingLock(async () => {
+            const cur = (await freshOrders()).find(o => o.id === order.id);
+            if (!cur) return { status: 404, body: { ok: false, error: 'not-found' } };
+            await save({ ...cur, test: action === 'mark-test' });
+            return null;
+          });
+          if (out) return res.status(out.status).json(out.body);
+        } else if (action === 'hide' || action === 'restore' || action === 'remove-logo') {
           // Under the booking lock and on a fresh read, like webhooks: a
           // refund or confirmation saved between the read above and this
           // save would otherwise be overwritten with the older copy.

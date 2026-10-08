@@ -133,6 +133,19 @@ describe('confirmation emails are retried until they send', () => {
   });
 });
 
+describe('Stripe test mode', () => {
+  it('an order paid with test keys is marked a test; a live one isn\'t', async () => {
+    const store = await newStore();
+    const sp = setup(store);
+    await store.saveSponsorOrder(order({ id: 'o1', session_id: 'cs_1' }));
+    await sp.processEvent({ ...paidEvent(order({ id: 'o1', session_id: 'cs_1' })), livemode: false });
+    expect((await store.listSponsorOrders()).find(o => o.id === 'o1').test).toBe(true);
+    await store.saveSponsorOrder(order({ id: 'o2', session_id: 'cs_2', week_start: '2026-10-26' }));
+    await sp.processEvent({ ...paidEvent(order({ id: 'o2', session_id: 'cs_2', week_start: '2026-10-26' })), livemode: true });
+    expect((await store.listSponsorOrders()).find(o => o.id === 'o2').test).toBeUndefined();
+  });
+});
+
 describe('bank debits close to the date', () => {
   it('cards only until 10 days out, since ACH can take a week to clear', () => {
     expect(instantOnly(pick({ event: { date: '2026-10-15' } }), NOW)).toBe(true);   // 8 days
