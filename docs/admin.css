@@ -1323,3 +1323,19 @@ code {
 .cal-key { white-space: nowrap; margin-left: 6px; }
 .cal-key .cal-dot { margin: 0 2px 0 8px; }
 
+
+/* ─── Growth tab and the goal strip on Home ─── */
+.goal-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem; margin: 0 0 1rem; }
+.goal { padding: 0.75rem 1rem; background: var(--admin-surface-2); border: 1px solid var(--admin-border); border-radius: var(--radius); }
+.goal__label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--admin-muted); }
+.goal__value { font-size: 1.15rem; font-weight: 700; color: var(--admin-text); margin: 0.15rem 0 0.4rem; font-variant-numeric: tabular-nums; }
+.goal__bar { height: 8px; background: var(--admin-border); border-radius: 4px; overflow: hidden; }
+.goal__fill { display: block; height: 100%; min-width: 2px; background: var(--admin-primary); border-radius: 4px; }
+.goal__note { font-size: 0.8rem; color: var(--admin-muted); margin-top: 0.4rem; }
+.table-scroll { overflow-x: auto; }
+.growth-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.growth-table th { text-align: left; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--admin-muted); padding: 0.3rem 0.5rem 0.3rem 0; border-bottom: 1px solid var(--admin-border); white-space: nowrap; }
+.growth-table td { padding: 0.3rem 0.5rem 0.3rem 0; border-bottom: 1px solid var(--admin-border); vertical-align: top; }
+.growth-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.growth-table .muted { color: var(--admin-muted); }
+.growth-table td:first-child { white-space: nowrap; }

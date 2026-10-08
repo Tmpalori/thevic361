@@ -29,6 +29,7 @@ import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys, keyedEvents } from './eventcheck.js';
+import { registerGrowth } from './growth.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { createTremendous, tremendousConfig } from './referralRewards.js';
 import { createMailer, renderSubmissionReceived, renderSubmissionLive } from './notify.js';
@@ -1601,6 +1602,16 @@ export async function createApp(opts = {}) {
     (process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || '');
   const submissionReviewSecret = opts.submissionReviewSecret ??
     (process.env.SUBMISSION_REVIEW_SECRET || process.env.EVENT_CHECK_SECRET || process.env.NEWSLETTER_CRON_SECRET || '');
+
+  // Growth (server/growth.js): Admin → Growth, and Meta's daily ad spend
+  // from scripts/meta_ads.py. ADS_SPEND_SECRET, else the submission review
+  // secret (meta-ads.yml sends the same fallback); it can only add numbers.
+  const adsSpendSecret = opts.adsSpendSecret ?? (process.env.ADS_SPEND_SECRET || submissionReviewSecret);
+  registerGrowth(app, {
+    store, requireAdmin, nowFn: () => (opts.now || (() => new Date()))(), secret: adsSpendSecret,
+    getEvents: async () => [...(((await getPublicPayload()) || {}).events || []), ...(await listArchived().catch(() => []))],
+    getOrders: async () => (typeof store.listSponsorOrders === 'function' ? store.listSponsorOrders() : [])
+  });
 
   // ─── Newsletter (Resend; see server/newsletter.js) ───
   // Event check (server/eventcheck.js): hide what the weekly check is sure

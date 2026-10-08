@@ -110,6 +110,11 @@ jobs:
           META_ADS_TOKEN: ${{ secrets.META_ADS_TOKEN || secrets.META_PAGE_TOKEN }}
           META_ADS_TOKEN_SOURCE: ${{ secrets.META_ADS_TOKEN && 'ads' || 'page' }}
           META_AD_ACCOUNT_ID: ${{ vars.META_AD_ACCOUNT_ID }}
+          # The daily report sends each day's spend to the site (Admin →
+          # Growth): Railway's ADS_SPEND_SECRET, else the submission review
+          # secret it falls back to.
+          ADS_SPEND_SECRET: ${{ secrets.ADS_SPEND_SECRET || secrets.SUBMISSION_REVIEW_SECRET || secrets.EVENT_CHECK_SECRET || secrets.NEWSLETTER_CRON_SECRET }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
           SLACK_ALERTS_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}

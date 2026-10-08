@@ -269,3 +269,38 @@ def test_an_ad_under_a_finished_ad_set_or_campaign_is_not_on():
 def test_a_refused_slack_webhook_fails_the_daily_report(monkeypatch):
     monkeypatch.setattr(ma.slack_notify, "main", lambda args: 2)
     assert ma.main(["report"], session=FakeMeta()) == 2
+
+
+def test_report_sends_daily_spend_to_the_site_and_adds_the_real_cost(monkeypatch):
+    monkeypatch.setenv("ADS_SPEND_SECRET", "s3cret")
+    posted = []
+
+    class WithSite(FakeMeta):
+        def request(self, method, url, **k):
+            if url.startswith(ma.SITE):
+                posted.append((url, k))
+                return Resp({"ok": True, "yesterday": {"joined": 31, "cost_per_sub": 0.92},
+                             "last_7_days": {"joined": 120, "cost_per_sub": 1.05}})
+            if url.endswith("/insights") and (k.get("params") or {}).get("time_increment") == 1:
+                return Resp({"data": [{"date_start": "2026-10-07", "spend": "28.37", "impressions": "1500",
+                                       "inline_link_clicks": "57", "actions": [{"action_type": "lead", "value": "9"}]}]})
+            return super().request(method, url, **k)
+    assert ma.main(["report"], session=WithSite()) == 0
+    [(url, k)] = posted
+    assert url == f"{ma.SITE}/api/ads/spend" and k["headers"]["X-Cron-Secret"] == "s3cret"
+    assert k["json"] == {"days": [{"day": "2026-10-07", "spend": 28.37, "impressions": 1500, "clicks": 57, "leads": 9}]}
+    assert TOKEN not in str(k)
+    assert "✅ Real, from the site: yesterday: 31 new subscribers ($0.92 each) · last 7 days: 120 new subscribers ($1.05 each)" in sent[0][0]
+
+
+def test_report_still_goes_out_when_the_site_is_down(monkeypatch, capsys):
+    monkeypatch.setenv("ADS_SPEND_SECRET", "s3cret")
+
+    class SiteDown(FakeMeta):
+        def request(self, method, url, **k):
+            if url.startswith(ma.SITE):
+                raise ma.requests.ConnectionError("down")
+            return super().request(method, url, **k)
+    assert ma.main(["report"], session=SiteDown()) == 0
+    assert len(sent) == 1 and "Real" not in sent[0][0]
+    assert "Couldn't send ad spend" in capsys.readouterr().out
