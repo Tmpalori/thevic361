@@ -333,15 +333,23 @@ ${sponsorBlock}${days}
   };
 }
 
-export function renderConfirmEmail({ siteUrl, confirmUrl, address }) {
-  const bodyHtml = `<p style="margin:18px 0;font-size:16px;">Tap the button to confirm and start getting Victoria's events every week.</p>
+// reminder: the one follow-up a day later to someone who hasn't tapped it
+// (sendConfirmReminders), with a subject that says what it's for.
+export function renderConfirmEmail({ siteUrl, confirmUrl, address, reminder = false }) {
+  const lead = reminder
+    ? 'You asked for The Vic 361 yesterday but haven\'t confirmed yet. One tap and Victoria\'s best events land in your inbox every Monday.'
+    : 'Tap the button to confirm and start getting Victoria\'s events every week.';
+  const bodyHtml = `<p style="margin:18px 0;font-size:16px;">${escHtml(lead)}</p>
 <p style="text-align:center;">${btn(confirmUrl, 'Confirm my subscription')}</p>
-<p style="color:${C.muted};font-size:13px;">Didn't sign up? Ignore this email and you won't hear from us.</p>`;
+<p style="color:${C.muted};font-size:13px;">Didn't sign up? Ignore this email and you won't hear from us${reminder ? ' again' : ''}.</p>`;
   return {
-    subject: 'Confirm your Vic 361 subscription',
-    html: emailShell({ title: 'One tap to confirm', preheader: 'Confirm to get Victoria events every week', bodyHtml, siteUrl,
+    subject: reminder ? 'Still want Victoria\'s events? Tap to confirm' : 'Confirm your Vic 361 subscription',
+    html: emailShell({ title: reminder ? 'Just one tap left' : 'One tap to confirm',
+      preheader: reminder ? 'Your Vic 361 signup is waiting on one tap' : 'Confirm to get Victoria events every week', bodyHtml, siteUrl,
       footerHtml: `${escHtml(SITE_NAME)} · ${escHtml(address || 'Victoria, TX')}` }),
-    text: `Confirm your subscription to The Vic 361: ${confirmUrl}\n\nDidn't sign up? Ignore this email.`
+    text: reminder
+      ? `${lead}\n\nConfirm: ${confirmUrl}\n\nDidn't sign up? Ignore this email and you won't hear from us again.`
+      : `Confirm your subscription to The Vic 361: ${confirmUrl}\n\nDidn't sign up? Ignore this email.`
   };
 }
 
@@ -894,5 +902,33 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     }
   });
 
-  return { sendWeekly, scheduledSend };
+  // One reminder, a day after signing up, to anyone who got the "tap to
+  // confirm" email and hasn't (the Facebook in-app browser sometimes skips
+  // the bot check, and those signups have to confirm). Only signups from
+  // the last week, so old pending rows aren't dug up. Hourly, from the
+  // scheduler's health job; claims each row first so it's sent once.
+  async function sendConfirmReminders(now = nowFn()) {
+    if (!supported || !config.enabled || !config.address || typeof store.listConfirmReminders !== 'function') return { sent: 0 };
+    const t = now.getTime();
+    const due = await store.listConfirmReminders({
+      from: new Date(t - 7 * 24 * 3600e3).toISOString(), to: new Date(t - 24 * 3600e3).toISOString(), limit: 50
+    });
+    let sent = 0;
+    for (const sub of due) {
+      if (!(await store.markReminded(sub.id))) continue;
+      try {
+        const confirmUrl = `${siteUrl}/subscribe/confirm?token=${encodeURIComponent(sub.token)}`;
+        const mail = renderConfirmEmail({ siteUrl, confirmUrl, address: config.address, reminder: true });
+        await resend.send({ from: config.from, to: [sub.email], subject: mail.subject, html: mail.html, text: mail.text }, `vic361-remind-${sub.id}`);
+        sent++;
+      } catch (err) {
+        console.warn('[newsletter] confirm reminder failed:', err.message);
+        try { await store.markReminded(sub.id, false); } catch { /* tried again next hour or never */ }
+      }
+    }
+    if (sent) console.log(`[newsletter] sent ${sent} confirm reminder(s)`);
+    return { sent };
+  }
+
+  return { sendWeekly, scheduledSend, sendConfirmReminders };
 }
