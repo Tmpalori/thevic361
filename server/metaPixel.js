@@ -32,7 +32,7 @@ export function metaPixelJs(id) {
   // in the sponsor checkout): the pixel sends the whole URL to Meta. Token
   // pages don't load this script anyway (layout pixel: false); this is the
   // backstop.
-  if (/[?&](token|from|cancelled|order)=/.test(location.search) || location.pathname.indexOf('/subscribe/confirm') === 0 ||
+  if (/[?&](token|from|cancelled|order|ref)=/.test(location.search) || location.pathname.indexOf('/subscribe/confirm') === 0 ||
       location.pathname.indexOf('/unsubscribe') === 0) skip = true;
   if (skip) return;
   !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?

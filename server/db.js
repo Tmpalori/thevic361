@@ -204,6 +204,76 @@ const FILE_TRAFFIC_CAP = 50000;
 function newToken() {
   return crypto.randomBytes(24).toString('base64url');
 }
+
+// Referral codes (thevic361.com/r/<code>): short enough to read out loud, no
+// look-alike characters. Not a secret like the token: it only credits
+// signups, it can't confirm or unsubscribe anyone.
+const REF_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+// A referred subscriber counts once they've been on the list this long.
+export const REF_HOLD_HOURS = 24;
+export function newRefCode() {
+  const bytes = crypto.randomBytes(7);
+  let out = '';
+  for (const b of bytes) out += REF_ALPHABET[b % REF_ALPHABET.length];
+  return out;
+}
+
+// One inbox, one key: john+1@gmail.com, j.ohn@gmail.com and
+// john@googlemail.com all land in the same Gmail inbox, so for counting
+// referrals they're one person. Most providers ignore a +tag; only Gmail
+// ignores dots.
+export function emailKey(email) {
+  const s = String(email || '').toLowerCase();
+  const at = s.lastIndexOf('@');
+  if (at < 1) return s;
+  const domain = s.slice(at + 1) === 'googlemail.com' ? 'gmail.com' : s.slice(at + 1);
+  let local = s.slice(0, at).split('+')[0];
+  if (domain === 'gmail.com') local = local.replace(/\./g, '');
+  return `${local}@${domain}`;
+}
+
+// { code: { counted, all } } (Sets of emailKeys) from the active subscribers
+// each code brought in (listReferredFriends rows, every code). A friend
+// counts once they've been on the list REF_HOLD_HOURS; one inbox counts
+// once across ALL codes (the earliest to sign it up gets it, so someone
+// with several +tag addresses can't count the same friends under each);
+// and the referrer's own inbox under another +tag never counts.
+export function tallyReferrals(friends, now = Date.now()) {
+  const cutoff = now - REF_HOLD_HOURS * 3600e3;
+  const out = {};
+  const claimed = new Set();
+  const when = f => (f.confirmed_at ? new Date(f.confirmed_at).getTime() : Infinity);
+  for (const f of [...friends].sort((a, b) => when(a) - when(b))) {
+    const key = emailKey(f.email);
+    if (f.referrer_email && emailKey(f.referrer_email) === key) continue;
+    if (claimed.has(key)) continue;
+    claimed.add(key);
+    const t = out[f.referred_by] || (out[f.referred_by] = { counted: new Set(), all: new Set() });
+    t.all.add(key);
+    if (f.confirmed_at && new Date(f.confirmed_at).getTime() <= cutoff) t.counted.add(key);
+  }
+  return out;
+}
+
+function referralCounts(tally, counted) {
+  const out = {};
+  for (const [code, t] of Object.entries(tally)) {
+    const n = (counted ? t.counted : t.all).size;
+    if (n) out[code] = n;
+  }
+  return out;
+}
+
+// Admin view: counted referrals plus the ones still in the hold.
+function referrerRows(tally, referrers, limit) {
+  return referrers.filter(x => tally[x.ref_code] && tally[x.ref_code].all.size)
+    .map(x => {
+      const t = tally[x.ref_code];
+      return { email: x.email, ref_code: x.ref_code, referrals: t.counted.size,
+        pending: [...t.all].filter(k => !t.counted.has(k)).length, ref_tier: Number(x.ref_tier) || 0 };
+    })
+    .sort((a, b) => b.referrals - a.referrals || b.pending - a.pending || a.email.localeCompare(b.email)).slice(0, limit);
+}
 // Postgres keeps a bit over a year of traffic; older rows are pruned.
 const TRAFFIC_RETENTION_DAYS = 400;
 // Archived event pages are kept as long, then pruned: every public page
@@ -225,7 +295,7 @@ class FileStore {
       const raw = await fs.readFile(this.file, 'utf8');
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') {
-        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], email_opens: [], sponsor_orders: [] };
+        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], email_opens: [], referral_rewards: [], sponsor_orders: [] };
       }
       if (!Array.isArray(parsed.submissions)) parsed.submissions = [];
       if (!parsed.event_archive || typeof parsed.event_archive !== 'object') parsed.event_archive = {};
@@ -233,12 +303,13 @@ class FileStore {
       if (!Array.isArray(parsed.subscribers)) parsed.subscribers = [];
       if (!Array.isArray(parsed.newsletter_sends)) parsed.newsletter_sends = [];
       if (!Array.isArray(parsed.email_opens)) parsed.email_opens = [];
+      if (!Array.isArray(parsed.referral_rewards)) parsed.referral_rewards = [];
       if (!Array.isArray(parsed.sponsor_orders)) parsed.sponsor_orders = [];
       if (!Array.isArray(parsed.event_edits)) parsed.event_edits = [];
       return parsed;
     } catch (err) {
       if (err.code === 'ENOENT') {
-        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], email_opens: [], sponsor_orders: [] };
+        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], email_opens: [], referral_rewards: [], sponsor_orders: [] };
       }
       throw err;
     }
@@ -347,7 +418,7 @@ class FileStore {
   }
 
   // ─── Newsletter (server/newsletter.js) ───
-  async addSubscriber({ email, source }) {
+  async addSubscriber({ email, source, referredBy = null }) {
     return this._withWrite(async () => {
       const data = await this._read();
       let sub = data.subscribers.find(x => x.email === email);
@@ -355,7 +426,10 @@ class FileStore {
       if (sub && sub.status === 'active') return sub;
       let fresh = false;
       if (!sub) {
-        sub = { id: newId(), email, status: 'pending', token: newToken(), source, created_at: now, pending_since: now };
+        // referred_by is only ever set here, on a first signup: a comeback
+        // or a re-submit isn't a new reader anyone brought in.
+        sub = { id: newId(), email, status: 'pending', token: newToken(), source, created_at: now, pending_since: now,
+          ...(referredBy ? { referred_by: referredBy } : {}) };
         data.subscribers.push(sub);
         fresh = true;
       } else if (sub.status === 'unsubscribed') {
@@ -461,6 +535,134 @@ class FileStore {
     const c = { active: 0, pending: 0, unsubscribed: 0 };
     for (const x of data.subscribers) c[x.status] = (c[x.status] || 0) + 1;
     return c;
+  }
+
+  // ─── Referrals (server/newsletter.js) ───
+  // Give each listed subscriber a referral code if they don't have one yet;
+  // returns { id: code } for all of them.
+  async ensureRefCodes(ids) {
+    const want = new Set(ids || []);
+    if (!want.size) return {};
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const taken = new Set(data.subscribers.map(x => x.ref_code).filter(Boolean));
+      const out = {};
+      let changed = false;
+      for (const sub of data.subscribers) {
+        if (!want.has(sub.id)) continue;
+        if (!sub.ref_code) {
+          let c; do { c = newRefCode(); } while (taken.has(c));
+          sub.ref_code = c; taken.add(c); changed = true;
+        }
+        out[sub.id] = sub.ref_code;
+      }
+      if (changed) await this._write(data);
+      return out;
+    });
+  }
+
+  // The active subscriber a code belongs to (a referral only counts for
+  // someone still on the list).
+  async getReferrer(code) {
+    if (!code) return null;
+    const data = await this._read();
+    const sub = data.subscribers.find(x => x.ref_code === code && x.status === 'active');
+    return sub ? { id: sub.id, email: sub.email, ref_code: sub.ref_code } : null;
+  }
+
+  // { code: n } of the subscribers each code brought in that count: still
+  // active, and on the list for REF_HOLD_HOURS. Someone who unsubscribed or
+  // bounced stops counting, and the hold means a burst of throwaway
+  // addresses that unsubscribe right away never pays off.
+  async countReferrals(codes, { counted = true } = {}) {
+    // Every code's friends, so an inbox another code already counts isn't
+    // counted again here (tallyReferrals); then just the codes asked for.
+    const all = referralCounts(tallyReferrals(await this.listReferredFriends(null)), counted);
+    if (!codes) return all;
+    const want = new Set(codes);
+    return Object.fromEntries(Object.entries(all).filter(([c]) => want.has(c)));
+  }
+
+  // The active subscribers each code brought in: { referred_by,
+  // referrer_email, email, confirmed_at }. null codes means every code.
+  async listReferredFriends(codes) {
+    const want = codes ? new Set(codes) : null;
+    const data = await this._read();
+    const owner = new Map(data.subscribers.filter(x => x.ref_code).map(x => [x.ref_code, x]));
+    return data.subscribers
+      .filter(x => x.status === 'active' && x.referred_by && (!want || want.has(x.referred_by)))
+      .map(x => {
+        const o = owner.get(x.referred_by);
+        return { referred_by: x.referred_by, referrer_email: o ? o.email : null, referrer_active: Boolean(o && o.status === 'active'),
+          email: x.email, confirmed_at: x.confirmed_at || null };
+      });
+  }
+
+  async topReferrers(limit = 10) {
+    const tally = tallyReferrals(await this.listReferredFriends(null));
+    const data = await this._read();
+    return referrerRows(tally, data.subscribers.filter(x => x.ref_code), limit);
+  }
+
+  // The highest reward tier the owner was told about for this referrer, so
+  // the Monday "rewards to send" note names each tier once.
+  async listRefTiers(codes) {
+    const want = new Set(codes || []);
+    const data = await this._read();
+    const out = {};
+    for (const x of data.subscribers) if (x.ref_code && want.has(x.ref_code)) out[x.ref_code] = { email: x.email, ref_tier: x.ref_tier || 0 };
+    return out;
+  }
+
+  async setRefTier(code, n) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const sub = data.subscribers.find(x => x.ref_code === code);
+      if (!sub) return false;
+      sub.ref_tier = Math.max(sub.ref_tier || 0, n);
+      await this._write(data);
+      return true;
+    });
+  }
+
+  // Referral rewards (server/referralRewards.js): one row per reward, keyed
+  // so a tier or a month's drawing is only ever created once. Returns the
+  // new row, or null when that key already exists.
+  async addReferralReward(row) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      if (data.referral_rewards.some(x => x.key === row.key)) return null;
+      const out = { id: newId(), order_id: null, reason: null, entries: null, total_entries: null, flags: null, ...row,
+        created_at: nowIso(), updated_at: nowIso() };
+      data.referral_rewards.push(out);
+      await this._write(data);
+      return { ...out };
+    });
+  }
+
+  async updateReferralReward(id, patch) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const row = data.referral_rewards.find(x => x.id === id);
+      if (!row) return null;
+      for (const k of ['status', 'order_id', 'reason']) if (k in patch) row[k] = patch[k];
+      row.updated_at = nowIso();
+      await this._write(data);
+      return { ...row };
+    });
+  }
+
+  async getReferralReward(id) {
+    const data = await this._read();
+    const row = data.referral_rewards.find(x => x.id === id);
+    return row ? { ...row } : null;
+  }
+
+  // Newest first; statuses limits it (e.g. ['pending', 'failed']).
+  async listReferralRewards({ statuses = null, limit = 30 } = {}) {
+    const data = await this._read();
+    return data.referral_rewards.filter(x => !statuses || statuses.includes(x.status))
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, limit).map(x => ({ ...x }));
   }
 
   // Imported addresses already opted in elsewhere (an old list), so they start
@@ -745,6 +947,14 @@ export function breakerPool(pool, { windowMs = 30000, now = () => Date.now() } =
 }
 
 // Tables holding data nothing else can rebuild; see ready().
+// A referral_rewards row as the FileStore keeps it (ISO times, plain numbers).
+function rewardRow(x) {
+  return { ...x, amount: Number(x.amount), tier: x.tier == null ? null : Number(x.tier),
+    entries: x.entries == null ? null : Number(x.entries), total_entries: x.total_entries == null ? null : Number(x.total_entries),
+    created_at: x.created_at instanceof Date ? x.created_at.toISOString() : x.created_at,
+    updated_at: x.updated_at instanceof Date ? x.updated_at.toISOString() : x.updated_at };
+}
+
 const FRESH_TABLES = ['subscribers', 'sponsor_orders'];
 
 class PgStore {
@@ -767,6 +977,7 @@ class PgStore {
         // which of the added columns exist and only ALTER for missing ones.
         const added = [['event_submissions', 'ai_review'], ['traffic', 'ad'],
           ['newsletter_sends', 'failed_emails'], ['newsletter_sends', 'picks'], ['subscribers', 'old_tokens'],
+          ['subscribers', 'ref_code'], ['subscribers', 'referred_by'], ['subscribers', 'ref_tier'],
           ['subscribers', 'reminded_at'], ['subscribers', 'pending_since']];
         const cols = await this.pool.query(
           `SELECT table_name, column_name FROM information_schema.columns
@@ -875,6 +1086,13 @@ class PgStore {
         // Tokens a returning subscriber had before (addSubscriber): they
         // still unsubscribe, so links in older issues keep working.
         await addColumn('subscribers', 'old_tokens', `ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS old_tokens TEXT[] NOT NULL DEFAULT '{}'`);
+        // Referrals: each subscriber's own code, and the code of whoever
+        // brought them in (see FileStore.ensureRefCodes). The column and its
+        // unique constraint come in one statement, so neither can exist
+        // without the other (and no index is built on every boot).
+        await addColumn('subscribers', 'ref_code', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS ref_code TEXT UNIQUE');
+        await addColumn('subscribers', 'referred_by', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS referred_by TEXT');
+        await addColumn('subscribers', 'ref_tier', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS ref_tier INT NOT NULL DEFAULT 0');
         // When a pending signup got its one "tap to confirm" reminder.
         await addColumn('subscribers', 'reminded_at', 'ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS reminded_at TIMESTAMPTZ');
         // When a pending signup asked (a first signup or a comeback), so the
@@ -893,6 +1111,28 @@ class PgStore {
         await addColumn('newsletter_sends', 'failed_emails', `ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS failed_emails JSONB NOT NULL DEFAULT '[]'::jsonb`);
         // Paid Vic's Pick order ids the issue starred, for their reports.
         await addColumn('newsletter_sends', 'picks', 'ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS picks JSONB');
+        // Referral rewards (see FileStore.addReferralReward). key is unique:
+        // a tier per referrer, or a month's drawing, is created once.
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS referral_rewards (
+            id TEXT PRIMARY KEY,
+            key TEXT NOT NULL UNIQUE,
+            kind TEXT NOT NULL,
+            ref_code TEXT,
+            email TEXT NOT NULL,
+            tier INT,
+            month TEXT,
+            amount INT NOT NULL,
+            status TEXT NOT NULL,
+            order_id TEXT,
+            entries INT,
+            total_entries INT,
+            flags TEXT,
+            reason TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `);
         // Newsletter opens (see FileStore.recordEmailOpen): one row per
         // issue and subscriber.
         await this.pool.query(`
@@ -1115,7 +1355,7 @@ class PgStore {
   }
 
   // ─── Newsletter ───
-  async addSubscriber({ email, source }) {
+  async addSubscriber({ email, source, referredBy = null }) {
     await this.ready();
     const existing = (await this.pool.query('SELECT * FROM subscribers WHERE email = $1', [email])).rows[0];
     if (existing && existing.status === 'active') return existing;
@@ -1134,9 +1374,9 @@ class PgStore {
     }
     // xmax = 0 means this statement inserted the row (not the conflict path).
     const row = (await this.pool.query(
-      `INSERT INTO subscribers (id, email, status, token, source, pending_since) VALUES ($1, $2, 'pending', $3, $4, NOW())
+      `INSERT INTO subscribers (id, email, status, token, source, referred_by, pending_since) VALUES ($1, $2, 'pending', $3, $4, $5, NOW())
        ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING *, (xmax = 0) AS inserted`,
-      [newId(), email, newToken(), source])).rows[0];
+      [newId(), email, newToken(), source, referredBy])).rows[0];
     const { inserted, ...sub } = row;
     return { ...sub, new_signup: Boolean(inserted) };
   }
@@ -1145,11 +1385,14 @@ class PgStore {
     if (!token) return null;
     await this.ready();
     // newly_confirmed: was pending until this call (the welcome email goes out once).
+    // confirmed_at is when they (re)joined, as in FileStore: a comeback starts
+    // a new referral hold and counts in the month they came back.
     const r = await this.pool.query(
       `WITH prev AS (
          SELECT id, status FROM subscribers WHERE token = $1 AND status <> 'unsubscribed' FOR UPDATE
        )
-       UPDATE subscribers s SET status = 'active', confirmed_at = COALESCE(s.confirmed_at, NOW())
+       UPDATE subscribers s SET status = 'active',
+         confirmed_at = CASE WHEN prev.status <> 'active' THEN NOW() ELSE s.confirmed_at END
        FROM prev WHERE s.id = prev.id
        RETURNING s.*, (prev.status <> 'active') AS newly_confirmed`, [token]);
     return r.rows[0] || null;
@@ -1215,6 +1458,80 @@ class PgStore {
     return c;
   }
 
+  // See FileStore.ensureRefCodes. A code that collides with another
+  // subscriber's (unique index) is retried with a fresh one.
+  async ensureRefCodes(ids) {
+    if (!ids || !ids.length) return {};
+    await this.ready();
+    const r = await this.pool.query('SELECT id, ref_code FROM subscribers WHERE id = ANY($1::text[])', [ids]);
+    const out = {};
+    for (const row of r.rows) {
+      if (row.ref_code) { out[row.id] = row.ref_code; continue; }
+      for (let tries = 0; tries < 5 && !out[row.id]; tries++) {
+        try {
+          const u = await this.pool.query(
+            `UPDATE subscribers SET ref_code = COALESCE(ref_code, $2) WHERE id = $1 RETURNING ref_code`, [row.id, newRefCode()]);
+          if (u.rows[0]) out[row.id] = u.rows[0].ref_code;
+        } catch (err) {
+          if (err.code !== '23505') throw err; // unique_violation: try another code
+        }
+      }
+    }
+    return out;
+  }
+
+  async getReferrer(code) {
+    if (!code) return null;
+    await this.ready();
+    const r = await this.pool.query(
+      `SELECT id, email, ref_code FROM subscribers WHERE ref_code = $1 AND status = 'active'`, [code]);
+    return r.rows[0] || null;
+  }
+
+  // See FileStore.countReferrals.
+  // See FileStore.countReferrals. Counted in JS (tallyReferrals) so one
+  // inbox under several addresses counts once.
+  async countReferrals(codes, { counted = true } = {}) {
+    // Every code's friends, so an inbox another code already counts isn't
+    // counted again here (tallyReferrals); then just the codes asked for.
+    const all = referralCounts(tallyReferrals(await this.listReferredFriends(null)), counted);
+    if (!codes) return all;
+    const want = new Set(codes);
+    return Object.fromEntries(Object.entries(all).filter(([c]) => want.has(c)));
+  }
+
+  async listReferredFriends(codes) {
+    await this.ready();
+    const sql = `SELECT f.referred_by, s.email AS referrer_email, COALESCE(s.status = 'active', false) AS referrer_active, f.email, f.confirmed_at
+                   FROM subscribers f LEFT JOIN subscribers s ON s.ref_code = f.referred_by
+                  WHERE f.status = 'active' AND f.referred_by IS NOT NULL`;
+    const r = codes
+      ? await this.pool.query(`${sql} AND f.referred_by = ANY($1::text[])`, [codes])
+      : await this.pool.query(sql);
+    return r.rows;
+  }
+
+  async topReferrers(limit = 10) {
+    const tally = tallyReferrals(await this.listReferredFriends(null));
+    const codes = Object.keys(tally);
+    if (!codes.length) return [];
+    const r = await this.pool.query('SELECT email, ref_code, ref_tier FROM subscribers WHERE ref_code = ANY($1::text[])', [codes]);
+    return referrerRows(tally, r.rows, limit);
+  }
+
+  async listRefTiers(codes) {
+    if (!codes || !codes.length) return {};
+    await this.ready();
+    const r = await this.pool.query('SELECT email, ref_code, ref_tier FROM subscribers WHERE ref_code = ANY($1::text[])', [codes]);
+    return Object.fromEntries(r.rows.map(x => [x.ref_code, { email: x.email, ref_tier: Number(x.ref_tier) || 0 }]));
+  }
+
+  async setRefTier(code, n) {
+    await this.ready();
+    const r = await this.pool.query('UPDATE subscribers SET ref_tier = GREATEST(ref_tier, $2) WHERE ref_code = $1', [code, n]);
+    return r.rowCount > 0;
+  }
+
   async importSubscribers(emails, source) {
     await this.ready();
     const out = { added: 0, already: 0, skipped_unsubscribed: 0 };
@@ -1229,7 +1546,7 @@ class PgStore {
         out.skipped_unsubscribed++;
       } else {
         await this.pool.query(
-          `UPDATE subscribers SET status = 'active', confirmed_at = COALESCE(confirmed_at, NOW()) WHERE email = $1`, [email]);
+          `UPDATE subscribers SET status = 'active', confirmed_at = CASE WHEN status <> 'active' THEN NOW() ELSE confirmed_at END WHERE email = $1`, [email]);
         out.already++;
       }
     }
@@ -1318,6 +1635,40 @@ class PgStore {
     const r = await this.pool.query(
       'SELECT week_key, COUNT(*)::int AS n FROM email_opens WHERE week_key = ANY($1::text[]) GROUP BY week_key', [weekKeys]);
     return Object.fromEntries(r.rows.map(x => [x.week_key, Number(x.n)]));
+  }
+
+  async addReferralReward(row) {
+    await this.ready();
+    const r = await this.pool.query(
+      `INSERT INTO referral_rewards (id, key, kind, ref_code, email, tier, month, amount, status, entries, total_entries, flags)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       ON CONFLICT (key) DO NOTHING RETURNING *`,
+      [newId(), row.key, row.kind, row.ref_code || null, row.email, row.tier ?? null, row.month || null, row.amount, row.status,
+        row.entries ?? null, row.total_entries ?? null, row.flags || null]);
+    return r.rows[0] ? rewardRow(r.rows[0]) : null;
+  }
+
+  async updateReferralReward(id, patch) {
+    await this.ready();
+    const sets = [], vals = [id];
+    for (const k of ['status', 'order_id', 'reason']) if (k in patch) { vals.push(patch[k]); sets.push(`${k} = $${vals.length}`); }
+    const r = await this.pool.query(
+      `UPDATE referral_rewards SET ${[...sets, 'updated_at = NOW()'].join(', ')} WHERE id = $1 RETURNING *`, vals);
+    return r.rows[0] ? rewardRow(r.rows[0]) : null;
+  }
+
+  async getReferralReward(id) {
+    await this.ready();
+    const r = await this.pool.query('SELECT * FROM referral_rewards WHERE id = $1', [id]);
+    return r.rows[0] ? rewardRow(r.rows[0]) : null;
+  }
+
+  async listReferralRewards({ statuses = null, limit = 30 } = {}) {
+    await this.ready();
+    const r = statuses
+      ? await this.pool.query('SELECT * FROM referral_rewards WHERE status = ANY($1::text[]) ORDER BY created_at DESC LIMIT $2', [statuses, limit])
+      : await this.pool.query('SELECT * FROM referral_rewards ORDER BY created_at DESC LIMIT $1', [limit]);
+    return r.rows.map(rewardRow);
   }
 
   async getArchivedEvent(page) {

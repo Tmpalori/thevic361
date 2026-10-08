@@ -23,6 +23,14 @@
  *     utm_source=newsletter) and sent with Resend's batch API,
  *     each copy with its own unsubscribe link. One send per week: a second
  *     attempt for the same week is refused unless forced.
+ *   - Referrals: every subscriber gets a link, /r/<code> (→ /subscribe?ref=,
+ *     kept for the visit by docs/track.js and sent with the form). A new
+ *     signup through it records referred_by and must be confirmed by email; it
+ *     counts for the sharer once the friend has been on the list a day and
+ *     while they stay subscribed, one per inbox (see emailKey in db.js).
+ *     The welcome email and each Monday copy show the reader's link and
+ *     progress (REFERRAL_TIERS); Monday's send Slacks the owner who just
+ *     earned a reward, once per tier (rewards go out by hand).
  *   - Open tracking: each weekly copy has a 1x1 image,
  *     /email/o/<week>/<subscriber id>.gif, counted once per subscriber per
  *     issue (email_opens) and shown as opens and open rate per send in the
@@ -35,6 +43,10 @@
  */
 
 import crypto from 'node:crypto';
+import { emailKey } from './db.js';
+import { REFERRAL_TIERS, DRAWING_AMOUNT, referralFlags, createReferralRewards } from './referralRewards.js';
+
+export { REFERRAL_TIERS, referralFlags };
 import {
   SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank,
   sponsorLinkUrl
@@ -247,7 +259,7 @@ export function utmTag(content, siteUrl, campaign, amp = '&amp;') {
   const re = new RegExp(`${base}(/[^\\s"'<>]*)?`, 'g');
   const tags = `utm_source=newsletter${amp}utm_medium=email${amp}utm_campaign=${encodeURIComponent(campaign)}`;
   return content.replace(re, (url, rest = '') => {
-    if (/^\/(unsubscribe|subscribe\/confirm|go\/|email\/|sponsor-logo\/)/.test(rest)) return url;
+    if (/^\/(unsubscribe|subscribe\/confirm|go\/|email\/|sponsor-logo\/|r\/)/.test(rest)) return url;
     const hash = url.indexOf('#');
     const [head, frag] = hash === -1 ? [url, ''] : [url.slice(0, hash), url.slice(hash)];
     return `${head}${head.includes('?') ? amp : '?'}${tags}${frag}`;
@@ -277,7 +289,7 @@ ${safeUrl(sponsor.url) && sponsor.cta ? `<a href="${escHtml(sponsorHref(sponsor,
 }
 
 // The weekly issue: the rest of this week (today through Sunday).
-export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, address, openPixelUrl = '' }) {
+export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, address, openPixelUrl = '', referral = null }) {
   const today = localDateStr(now);
   const week = currentWeek(today).filter(d => d >= today);
   const byDay = week.map(d => ({ d, list: sortEvents(events.filter(e => e.date === d)) })).filter(x => x.list.length);
@@ -308,7 +320,8 @@ ${list.length > PER_DAY ? `<p style="margin:8px 0 0;font-size:13px;font-weight:b
 <p style="margin:16px 0 4px;font-size:16px;">${total ? `Here's what's happening in Victoria, TX this week: <strong>${total} ${total === 1 ? 'event' : 'events'}</strong>.` : 'Nothing is listed yet for the rest of this week.'}</p>
 <div>${pill('/this-weekend', 'This weekend')}${pill('/free-things-to-do', 'Free')}${pill('/kids-and-family', 'Kids')}${pill('/live-music', 'Live music')}</div>
 ${sponsorBlock}${days}
-<p style="margin:28px 0 0;text-align:center;">${btn(`${siteUrl}/`, 'See the full list')}</p>`;
+<p style="margin:28px 0 0;text-align:center;">${btn(`${siteUrl}/`, 'See the full list')}</p>
+${referral ? referralHtml({ siteUrl, ...referral }) : ''}`;
 
   // Sponsors are sold "the top of the Monday newsletter": first in both parts.
   const sponsorLine = sponsor && sponsor.name
@@ -319,7 +332,8 @@ ${sponsorBlock}${days}
     `${subject}`, '', ...sponsorLine,
     ...byDay.flatMap(({ d, list }) => [formatDay(d, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase(),
       ...list.slice(0, PER_DAY).map(e => `- ${e.time ? e.time + ' ' : ''}${e.name}${e.venue ? ' @ ' + e.venue : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), '']),
-    `Full list: ${siteUrl}/`, '', `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
+    `Full list: ${siteUrl}/`, '', ...(referral ? referralText({ siteUrl, ...referral }) : []),
+    `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
   ].join('\n');
 
   // The paid Vic's Picks this issue actually stars (shown, not cut by
@@ -335,17 +349,8 @@ ${sponsorBlock}${days}
 
 // reminder: the one follow-up a day later to someone who hasn't tapped it
 // (sendConfirmReminders), with a subject that says what it's for.
-// One inbox, one key: Gmail ignores dots and +tags, most providers ignore
-// +tags, so these are the same mailbox for rate limits.
-export function inboxKey(email) {
-  const s = String(email || '').toLowerCase();
-  const at = s.lastIndexOf('@');
-  if (at < 1) return s;
-  const domain = s.slice(at + 1) === 'googlemail.com' ? 'gmail.com' : s.slice(at + 1);
-  let local = s.slice(0, at).split('+')[0];
-  if (domain === 'gmail.com') local = local.replace(/\./g, '');
-  return `${local}@${domain}`;
-}
+// One inbox, one key for rate limits (same as emailKey in db.js).
+export const inboxKey = emailKey;
 
 export function renderConfirmEmail({ siteUrl, confirmUrl, address, reminder = false }) {
   const lead = reminder
@@ -365,6 +370,69 @@ export function renderConfirmEmail({ siteUrl, confirmUrl, address, reminder = fa
   };
 }
 
+// ─── Referral program ───
+// Every subscriber has a link, thevic361.com/r/<code>. A friend who signs up
+// through it counts for them while that friend stays subscribed. The tiers
+// and the gift cards are in server/referralRewards.js (REFERRAL_TIERS);
+// emails, Slack and the rules page read them. The first tier is at 1 on
+// purpose: each tier up, about a tenth as many readers get there (Morning
+// Brew's ladder), so the cheap early rewards do most of the work.
+const REF_CODE_RE = /^[a-z2-9]{7}$/;
+export function normalizeRefCode(raw) {
+  const c = String(raw || '').trim().toLowerCase();
+  return REF_CODE_RE.test(c) ? c : null;
+}
+export function refLink(siteUrl, code) { return `${siteUrl}/r/${code}`; }
+function nextTier(count) { return REFERRAL_TIERS.find(t => t.n > count) || null; }
+export function referralProgress(count) {
+  const next = nextTier(count);
+  const done = count === 1 ? "You've brought in 1 friend so far." : count ? `You've brought in ${count} friends so far.` : '';
+  const todo = next ? `${next.n - count} more and you get ${next.reward}.` : "You've unlocked every reward. Thank you!";
+  return [done, todo].filter(Boolean).join(' ');
+}
+
+// The "share" box in the weekly issue and the welcome email: this reader's
+// own link and how close they are to the next reward.
+function referralHtml({ siteUrl, code, count = 0 }) {
+  if (!code) return '';
+  const url = refLink(siteUrl, code);
+  const tiers = REFERRAL_TIERS.map(t => `${t.n} ${t.n === 1 ? 'friend' : 'friends'}: ${escHtml(t.reward)}`).join('<br>');
+  return `
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0 0;border-collapse:separate;"><tr><td style="background:${C.sunLight};border:2px solid ${C.ink};border-radius:14px;padding:16px 18px;">
+<p style="margin:0 0 6px;font-family:${DISPLAY};font-size:19px;font-weight:bold;">Share The Vic 361, get local perks</p>
+<p style="margin:0 0 10px;font-size:14px;">Know someone who's always asking what there is to do in Victoria? Send them your link:</p>
+<p style="margin:0 0 10px;text-align:center;"><a href="${url}" style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:17px;color:${C.ink};background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:6px 16px;text-decoration:none;">${escHtml(url.replace(/^https?:\/\/(www\.)?/, ''))}</a></p>
+<p style="margin:0 0 8px;font-size:14px;font-weight:bold;">${escHtml(referralProgress(count))}</p>
+<p style="margin:0;font-size:12px;color:${C.muted};">${tiers}<br>Every friend who joins in a month is another entry in that month's drawing. A friend counts a day after they sign up with your link and confirm their email, for as long as they stay subscribed. Gift cards arrive by email. <a href="${siteUrl}/referral-rules" style="color:${C.muted};">Rules</a></p>
+</td></tr></table>`;
+}
+export function renderReferralRules({ siteUrl }) {
+  const cards = REFERRAL_TIERS.filter(t => t.amount);
+  const li = (title, text) => `<li><strong>${title}</strong> ${text}</li>`;
+  return layout({
+    siteUrl, path: '/referral-rules', nav: null, pixel: false, title: `Referral rewards: official rules | ${SITE_NAME}`,
+    description: 'How The Vic 361 newsletter referral rewards and monthly gift card drawing work.',
+    body: `<h1 class="page-title">Referral rewards: official rules</h1>
+<p class="page-lead">Share The Vic 361 with friends and earn gift cards. No purchase is necessary: subscribing and sharing are free.</p>
+<ul>
+${li('Who can take part.', 'Anyone subscribed to The Vic 361 newsletter who is 18 or older and lives in the United States. The Vic 361\'s owner and their household can\'t win. Void where prohibited.')}
+${li('Your link.', 'Every subscriber gets a personal share link in each newsletter. A friend counts for you when they sign up through your link, confirm their email address, and stay subscribed for at least 24 hours. Each email inbox counts once, and your own addresses don\'t count.')}
+${li('Monthly drawing.', `Each friend who joins through your link during a calendar month is one entry in that month's drawing. In the first week of the next month, one entry is picked at random from all entries, and its owner gets a $${DRAWING_AMOUNT} digital gift card. Your odds depend on how many entries there are that month. Entries don't carry over to the next month.`)}
+${cards.map(t => li(`${t.n} friends.`, `A $${t.amount} digital gift card, once per subscriber.`)).join('\n')}
+${li('How rewards arrive.', 'Gift cards are sent by email from our rewards partner, Tremendous, usually on the Monday after you earn them. You choose the store from their list. Tremendous gets your email address to send it.')}
+${li('Fair play.', 'Referrals have to be real people who want the newsletter. We can hold back or cancel rewards for sign-ups that look made up (fake, throwaway or duplicate addresses), and our decisions about who counts are final.')}
+${li('Changes.', 'We may change or end the program at any time. Rewards you have already earned will still be sent.')}
+</ul>
+<p>Questions? <a href="/contact">Get in touch</a>.</p>`
+  });
+}
+
+function referralText({ siteUrl, code, count = 0 }) {
+  if (!code) return [];
+  return ['SHARE THE VIC 361', `Send friends your link: ${refLink(siteUrl, code)}`, referralProgress(count),
+    `Rules: ${siteUrl}/referral-rules`, ''];
+}
+
 // Sent once, right after someone signs up (or a comeback confirms): what
 // to expect, a few events they can use now (no waiting until Monday), the
 // sponsor, and a nudge to share.
@@ -372,7 +440,7 @@ const WELCOME_PICKS = 5;
 
 // A transparent 1x1 GIF, the newsletter's open-tracking image.
 const PIXEL_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
-export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeUrl, address }) {
+export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeUrl, address, referral = null }) {
   const today = localDateStr(now);
   const soon = sortEvents((events || []).filter(e => e.date >= today && e.date <= addDays(today, 6)));
   const picks = [...soon.filter(e => e.featured).sort((a, b) => pickRank(a) - pickRank(b)), ...soon.filter(e => !e.featured)].slice(0, WELCOME_PICKS);
@@ -386,12 +454,13 @@ ${soon.length > picks.length ? `<p style="margin:10px 0 0;font-size:13px;font-we
 <p style="margin:18px 0 4px;font-size:16px;"><strong>You're in!</strong> Every Monday morning you'll get the week's events in Victoria, TX: concerts, markets, festivals, family stuff and more, all in one email.</p>
 ${coming}${sponsorHtml(sponsor, siteUrl, 'welcome')}
 <p style="margin:26px 0 0;text-align:center;">${btn(`${siteUrl}/`, "See this week's events")}</p>
-<p style="margin:22px 0 0;font-size:14px;color:${C.muted};">Know someone who's always asking what there is to do in Victoria? Forward them this email or send them to <a href="${siteUrl}/" style="color:${C.accent};font-weight:bold;">thevic361.com</a>.</p>`;
+${referral ? referralHtml({ siteUrl, ...referral }) : `<p style="margin:22px 0 0;font-size:14px;color:${C.muted};">Know someone who's always asking what there is to do in Victoria? Forward them this email or send them to <a href="${siteUrl}/" style="color:${C.accent};font-weight:bold;">thevic361.com</a>.</p>`}`;
   const text = [
     "You're in! Every Monday morning you'll get the week's events in Victoria, TX.", '',
     ...(picks.length ? ['COMING UP THIS WEEK', ...picks.map(e =>
       `- ${dayLabel(e.date)}${e.time ? ' ' + e.time : ''}: ${e.name}${e.venue ? ' @ ' + e.venue : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
-    `This week's events: ${siteUrl}/`, '', `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
+    `This week's events: ${siteUrl}/`, '', ...(referral ? referralText({ siteUrl, ...referral }) : []),
+    `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
   ].join('\n');
   return {
     subject: 'Welcome to The Vic 361',
@@ -422,7 +491,7 @@ export function signupFormHtml({ source = 'footer', button = 'Subscribe' } = {})
 <script>
 (function(){var f=document.getElementById('signup-form');if(!f)return;var m=document.getElementById('signup-msg');
 f.addEventListener('submit',function(e){e.preventDefault();var b=f.querySelector('button');b.disabled=true;m.textContent='';
-(window.vicTurnstile?window.vicTurnstile.token(f):Promise.resolve('')).then(function(t){return fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value,turnstile_token:t,source:window.vic361Source?window.vic361Source(f.getAttribute('data-source')):f.getAttribute('data-source')})});})
+(window.vicTurnstile?window.vicTurnstile.token(f):Promise.resolve('')).then(function(t){return fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value,turnstile_token:t,source:window.vic361Source?window.vic361Source(f.getAttribute('data-source')):f.getAttribute('data-source'),ref:window.vic361Ref?window.vic361Ref():''})});})
 .then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});})
 .then(function(x){m.textContent=x.ok?'✅ '+(x.j.message||"You're on the list! Check your inbox."):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';f.classList.add('is-done');var was=false;try{was=localStorage.getItem('vic361-subscribed')==='1';localStorage.setItem('vic361-subscribed','1')}catch(e){}if(!was&&window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
 .catch(function(){m.textContent='Something went wrong. Try again.';}).then(function(){b.disabled=false;if(window.vicTurnstile)window.vicTurnstile.reset(f);});});})();
@@ -435,7 +504,7 @@ const SHOW_COUNT_FROM = 100; // "Join 40 locals" undersells; say nothing until i
 
 // The signup page: what you get, the form, then proof (real events from
 // the next seven days) for people who scroll before deciding.
-export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0 }) {
+export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0, invited = false }) {
   const today = localDateStr(now);
   const end = addDays(today, 6);
   const next7 = sortEvents(events.filter(e => e.date >= today && e.date <= end));
@@ -455,6 +524,7 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0 
     <p class="sub-again"><a class="btn btn--primary" href="#signup-email">Get the full list every Monday</a> <a class="btn btn--outline" href="/">See this week's events</a></p>` : '';
   const body = `
     <section class="sub-hero">
+      ${invited ? '<p class="sub-invited">🎁 A friend invited you to The Vic 361</p>' : ''}
       <p class="sub-kicker">Free · Every Monday · Victoria, TX</p>
       <h1 class="page-title">Victoria's best events, in your inbox every Monday.</h1>
       <p class="page-lead">One email a week with what's going on around town: live music, festivals, markets, family days, and new spots opening.</p>
@@ -478,7 +548,8 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0 
 
 // ─── Routes ──────────────────────────────────────────────────────────────
 
-export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, getSendPayload = getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true, withNav = async html => html, onCron = null }) {
+export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, getSendPayload = getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true, withNav = async html => html, onCron = null, tremendous = null }) {
+  const rewards = createReferralRewards({ store, slack, tremendous, nowFn, localDate: localDateStr });
   const subscribeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10 });
   const confirmLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 3 });
   // Signups without a bot-check token can ask for a confirmation email
@@ -491,6 +562,36 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   const supported = typeof store.addSubscriber === 'function';
 
   const openPixel = (week, id) => `${siteUrl}/email/o/${week}/${encodeURIComponent(id)}.gif`;
+
+  // One subscriber's referral link and count, for the welcome email. A
+  // store without referrals (or a failed read) just leaves the box out.
+  async function referralFor(sub) {
+    if (!sub || !sub.id || typeof store.ensureRefCodes !== 'function') return null;
+    try {
+      const code = (await store.ensureRefCodes([sub.id]))[sub.id];
+      if (!code) return null;
+      const count = (await store.countReferrals([code]))[code] || 0;
+      return { code, count };
+    } catch (err) {
+      console.warn('[newsletter] referral link failed:', err.message);
+      return null;
+    }
+  }
+
+  // Monday's send: each recipient's code and count. The rewards that came
+  // due go out after the newsletter (rewards.run below), so a slow gift
+  // card service can't hold up the issue.
+  async function referralsForSend(subs) {
+    if (typeof store.ensureRefCodes !== 'function') return { codes: {}, counts: {} };
+    try {
+      const codes = await store.ensureRefCodes(subs.map(s => s.id).filter(Boolean));
+      const counts = await store.countReferrals(Object.values(codes));
+      return { codes, counts };
+    } catch (err) {
+      console.warn('[newsletter] referral links failed:', err.message);
+      return { codes: {}, counts: {} };
+    }
+  }
 
   const page = (title, message) => layout({
     siteUrl, path: '/subscribe', nav: null, noindex: true, pixel: false, title: `${title} | ${SITE_NAME}`, description: title,
@@ -571,6 +672,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       week_key: key, subject: probe.subject, recipients: base + sent, picks,
       failed: failedEmails.length + waiting.length, failed_emails: [...failedEmails, ...waiting]
     });
+    const refs = await referralsForSend(subs);
     for (let i = 0; i < subs.length; i += BATCH_SIZE) {
       await progress();
       const chunk = subs.slice(i, i + BATCH_SIZE);
@@ -579,7 +681,9 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
         // Open tracking: a 1x1 image per copy, keyed by week and subscriber
         // id (not the token, which unsubscribes). See /email/o below.
         const openPixelUrl = s.id ? openPixel(key, s.id) : '';
-        const issue = renderWeekly(payload.events, { siteUrl, now, sponsor: payload.sponsor, unsubscribeUrl, address: config.address, openPixelUrl });
+        const code = s.id && refs.codes[s.id];
+        const referral = code ? { code, count: refs.counts[code] || 0 } : null;
+        const issue = renderWeekly(payload.events, { siteUrl, now, sponsor: payload.sponsor, unsubscribeUrl, address: config.address, openPixelUrl, referral });
         return {
           from: config.from, to: [s.email], subject: issue.subject, html: issue.html, text: issue.text,
           ...(config.replyTo ? { reply_to: config.replyTo } : {}),
@@ -632,6 +736,8 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       if (failures.length) slack.alert(`newsletter-failed-${key}`, 'Newsletter send partly failed', `${sent} sent, ${record.failed} failed.\n${failures[0]}`, `${siteUrl}/admin.html`);
       else slack.notify({ title: '📧 Newsletter sent', fields: [['Recipients', sent], ['Subject', probe.subject], ['Events', probe.total]] });
     }
+    // Referral rewards, once the issue is out (never throws).
+    await rewards.run(refs.counts);
     return { ok: failures.length === 0, ...record, refused: refusedEmails.map(r => r.email), errors: failures.slice(0, 3) };
   }
 
@@ -664,23 +770,45 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     // same answer, so the form can't be used to find out who's on the list.
     // Whether it was a first signup is the browser's to know (docs/track.js
     // Lead), not the server's to say.
-    // Unverified signups all get the confirm message, whatever the address's
-    // state, so it can't be used to tell who's subscribed.
-    const done = unverified && config.enabled
-      ? { ok: true, message: 'Almost there! Check your inbox and tap Confirm to start getting it.' }
+    // A referral link (/r/<code>) the browser carried to this form. It only
+    // credits an active subscriber, and never the referrer's own inbox (a
+    // +tag or Gmail dots make another address for it).
+    let referredBy = null;
+    const ref = normalizeRefCode(body.ref);
+    if (ref && typeof store.getReferrer === 'function') {
+      try {
+        const referrer = await store.getReferrer(ref);
+        if (referrer && emailKey(referrer.email) !== emailKey(email)) referredBy = referrer.ref_code;
+      } catch (err) {
+        console.warn('[newsletter] referral lookup failed:', err.message);
+      }
+    }
+    // Unverified signups and any signup carrying a referral code all get the
+    // confirm message, whatever the address's state or whose code it is, so
+    // the form can't tell anyone who's subscribed or who owns a code.
+    const almost = { ok: true, message: 'Almost there! Check your inbox and tap Confirm to start getting it.' };
+    const confirmFirst = unverified || Boolean(ref);
+    const done = confirmFirst && config.enabled
+      ? almost
       : { ok: true, message: config.enabled ? "You're on the list! Check your inbox." : "You're on the list! See you Monday." };
     try {
       const source = signupSource(body.source);
-      const sub = await store.addSubscriber({ email, source });
+      const sub = await store.addSubscriber({ email, source, referredBy });
       if (sub.status === 'active') return res.json(done);
+      // A referred address still waiting to confirm stays that way when it's
+      // sent again without the code: only its inbox can put it on the list.
+      // The answer doesn't change (that would tell anyone it's waiting).
+      const needsConfirm = confirmFirst || Boolean(sub.referred_by);
       // Single opt-in: a new address is on the list right away and gets the
       // welcome email (with its unsubscribe link) now. One of the first two
       // ad-driven signups never finished the confirmation step, and the Turnstile
       // check, honeypot and rate limit already keep out junk. The exception
       // is a comeback (old_tokens): someone who unsubscribed must confirm
-      // from their own inbox, so nobody else can sign them back up.
+      // from their own inbox, so nobody else can sign them back up. So does a
+      // friend from a referral link: a made-up address can't tap Confirm, so
+      // it never counts toward a reward.
       const comeback = (sub.old_tokens || []).length > 0;
-      if ((!comeback && !unverified) || !config.enabled) {
+      if ((!comeback && !needsConfirm) || !config.enabled) {
         const confirmed = await store.confirmSubscriber(sub.token);
         // Not awaited: the welcome email shouldn't hold up the form.
         if (confirmed && confirmed.newly_confirmed) welcome(confirmed);
@@ -716,12 +844,14 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   });
 
   async function welcome(sub) {
-    if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', sub.email], ...(sub.source ? [['From', sub.source]] : [])] });
+    if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', sub.email], ...(sub.source ? [['From', sub.source]] : []),
+      ...(sub.referred_by ? [['Referred by', sub.referred_by]] : [])] });
     if (!config.enabled || !config.address) return; // never send without the required mailing address
     try {
       const payload = await getPublicPayload();
       const unsubscribeUrl = `${siteUrl}/unsubscribe?token=${encodeURIComponent(sub.token)}`;
-      const mail = renderWelcomeEmail(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl, address: config.address });
+      const referral = await referralFor(sub);
+      const mail = renderWelcomeEmail(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl, address: config.address, referral });
       await resend.send({
         from: config.from, to: [sub.email], subject: mail.subject, html: mail.html, text: mail.text,
         ...(config.replyTo ? { reply_to: config.replyTo } : {}),
@@ -760,6 +890,20 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     res.end(PIXEL_GIF);
   });
 
+  // Referral links. The code rides along to the signup form in the URL
+  // (docs/track.js keeps it for the visit); nothing is looked up here, so
+  // the link can't be used to check whose code is whose.
+  app.get('/r/:code', (req, res) => {
+    const code = normalizeRefCode(req.params.code);
+    res.set('Cache-Control', 'no-store');
+    res.redirect(302, code ? `/subscribe?ref=${code}` : '/subscribe');
+  });
+
+  // The referral program's official rules (the monthly drawing needs them).
+  app.get('/referral-rules', (req, res) => {
+    res.type('html').send(renderReferralRules({ siteUrl }));
+  });
+
   app.get('/subscribe', async (req, res, next) => {
     try {
       const payload = await getPublicPayload();
@@ -767,7 +911,8 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       if (supported) { try { count = (await store.countSubscribers()).active || 0; } catch { /* page still works */ } }
       res.set('Cache-Control', 'public, max-age=300');
       // withNav (server/index.js) adds the seasonal tabs other pages get.
-      res.type('html').send(await withNav(renderSubscribePage(payload.events, { siteUrl, now: nowFn(), subscriberCount: count }), '/subscribe'));
+      const invited = Boolean(normalizeRefCode(req.query.ref));
+      res.type('html').send(await withNav(renderSubscribePage(payload.events, { siteUrl, now: nowFn(), subscriberCount: count, invited }), '/subscribe'));
     } catch (err) {
       next(err);
     }
@@ -844,11 +989,23 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     const issue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: '#', address: config.address });
     // A week whose send partly failed isn't "sent": the button stays on to
     // retry just the people who missed it (sendWeekly resumes).
+    // Top referrers and their rewards (emails shown in full: this is the
+    // owner's admin, and a held reward needs a person to look at it).
+    let referrers = [], referralRewards = [];
+    if (typeof store.topReferrers === 'function') {
+      try { referrers = await store.topReferrers(10); } catch (err) { console.warn('[newsletter] reading referrers failed:', err.message); }
+    }
+    try {
+      referralRewards = (await rewards.list(20)).map(r => ({ id: r.id, email: r.email, what: rewards.describe(r), status: r.status,
+        flags: r.flags, reason: r.reason, created_at: r.created_at }));
+    } catch (err) { console.warn('[newsletter] reading referral rewards failed:', err.message); }
     const record = await store.getNewsletterSend(weekKey(nowFn()));
     const failed = record ? (Array.isArray(record.failed_emails) ? record.failed_emails.length : Number(record.failed) || 0) : 0;
     res.json({
       ok: true, configured: config.enabled, from: config.from, address_set: Boolean(config.address),
       autosend: config.enabled && config.autosend, counts, sends, next: { subject: issue.subject, events: issue.total },
+      referrers, referral_tiers: REFERRAL_TIERS, referral_rewards: referralRewards,
+      gift_cards: tremendous && tremendous.enabled ? 'tremendous' : 'manual',
       this_week_sent: Boolean(record) && !failed,
       this_week_failed: failed,
       this_week_recipients: record ? Number(record.recipients) || 0 : 0
@@ -872,6 +1029,19 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       res.json({ ok: true, to });
     } catch (err) {
       res.status(502).json({ ok: false, error: 'send-failed', message: err.message });
+    }
+  });
+
+  // A held, failed or by-hand referral reward: send it now, or skip it.
+  app.post('/api/admin/newsletter/rewards/:id/:action', requireAdmin, async (req, res) => {
+    const { id, action } = req.params;
+    if (!['approve', 'skip'].includes(action)) return res.status(404).json({ ok: false, message: 'Unknown action.' });
+    try {
+      const out = action === 'approve' ? await rewards.approve(id) : await rewards.skip(id);
+      res.status(out.status).json({ ok: out.ok, message: out.message, reward: out.reward });
+    } catch (err) {
+      console.error('[referrals] admin reward action failed:', err.message);
+      res.status(503).json({ ok: false, message: `Couldn't update the reward: ${err.message}` });
     }
   });
 

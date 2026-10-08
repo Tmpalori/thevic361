@@ -1004,6 +1004,38 @@
           '<tr><td class="traffic-empty" colspan="3"><small>Opens read high: Apple Mail loads every email\u2019s images for its users, and some work mail scanners do too.</small></td></tr>'
         : '<tr><td class="traffic-empty">No newsletters sent yet.</td></tr>';
     }
+    // Referral program: who's sharing. "Counted" is a friend still subscribed
+    // a day after signing up; "pending" is still in that hold.
+    const refs = document.getElementById('email-nl-referrers');
+    if (refs) {
+      const tiers = (d.referral_tiers || []).map(t => t.n + ': ' + t.reward).join(' · ');
+      refs.innerHTML = (d.referrers || []).length
+        ? '<tr><th class="traffic-label"></th><th class="traffic-num">Counted</th><th class="traffic-num">Pending</th></tr>' +
+          d.referrers.map(r => '<tr><td class="traffic-label">' + escapeHtml(r.email) + '</td><td class="traffic-num">' +
+            Number(r.referrals) + '</td><td class="traffic-num">' + Number(r.pending) + '</td></tr>').join('') +
+          '<tr><td class="traffic-empty" colspan="3"><small>Rewards: ' + escapeHtml(tiers) + '</small></td></tr>'
+        : '<tr><td class="traffic-empty">No referrals yet. Every subscriber gets a share link in the welcome and Monday emails.</td></tr>';
+    }
+    // Gift cards the Monday send created (server/referralRewards.js). Held
+    // ones (friends that look made up), failed ones and, without Tremendous,
+    // by-hand ones get Send / Skip.
+    const rw = document.getElementById('email-nl-rewards');
+    if (rw) {
+      const label = { sent: 'Sent', pending: 'Sending', held: '\u{1F440} Held', failed: 'Failed', manual: 'Send by hand', skipped: 'Skipped' };
+      const how = d.gift_cards === 'tremendous' ? 'Gift cards go out automatically through Tremendous.'
+        : 'Tremendous isn\u2019t set up (TREMENDOUS_API_KEY, TREMENDOUS_CAMPAIGN_ID), so send these by hand.';
+      rw.innerHTML = (d.referral_rewards || []).map(r => {
+        const note = r.status === 'held' ? r.flags : (r.status === 'failed' || r.status === 'manual') ? r.reason : '';
+        const act = ['held', 'failed', 'manual'].includes(r.status)
+          ? '<button type="button" class="btn btn--outline" data-reward="' + escapeHtml(r.id) + '" data-act="approve">' +
+            (d.gift_cards === 'tremendous' ? 'Send' : 'Mark sent') + '</button> ' +
+            '<button type="button" class="btn btn--outline" data-reward="' + escapeHtml(r.id) + '" data-act="skip">Skip</button>'
+          : '';
+        return '<tr><td class="traffic-label">' + escapeHtml(r.email) + '<br><small>' + escapeHtml(r.what) +
+          (note ? ' \u00b7 ' + escapeHtml(note) : '') + '</small></td><td class="traffic-num">' + escapeHtml(label[r.status] || r.status) +
+          '</td><td class="traffic-num">' + act + '</td></tr>';
+      }).join('') + '<tr><td class="traffic-empty" colspan="3"><small>' + escapeHtml(how) + '</small></td></tr>';
+    }
   }
 
   async function loadEmailNewsletter() {
@@ -2432,6 +2464,15 @@
       if (!window.confirm(retry ? 'Retry this week\'s newsletter for the ' + retry + ' subscribers who didn\'t get it?'
         : 'Send this week\'s newsletter to ' + n + ' subscribers?')) return;
       emailNlPost('/api/admin/newsletter/send', {}, j => 'Sent to ' + j.recipients + ' subscribers.');
+    });
+    const nlRewards = document.getElementById('email-nl-rewards');
+    if (nlRewards) nlRewards.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-reward]');
+      if (!b) return;
+      const approve = b.dataset.act === 'approve';
+      if (approve && !window.confirm('Send this gift card now?')) return;
+      emailNlPost('/api/admin/newsletter/rewards/' + encodeURIComponent(b.dataset.reward) + '/' + b.dataset.act, {},
+        () => approve ? 'Gift card sent.' : 'Skipped.');
     });
     if (nlImport) nlImport.addEventListener('click', () => emailNlPost('/api/admin/newsletter/import',
       { emails: (document.getElementById('email-nl-import-text') || {}).value },

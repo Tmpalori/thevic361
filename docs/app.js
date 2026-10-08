@@ -284,7 +284,8 @@
         return fetch('/api/subscribe', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: form.email.value, company: form.company.value, turnstile_token: t,
-            source: window.vic361Source ? window.vic361Source('list-card') : 'list-card' })
+            source: window.vic361Source ? window.vic361Source('list-card') : 'list-card',
+            ref: window.vic361Ref ? window.vic361Ref() : '' })
         });
       }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });

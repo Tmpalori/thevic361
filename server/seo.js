@@ -1023,7 +1023,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
 
 // Plain-language privacy notice. Meta's Business Tools terms require one
 // once the Pixel runs; it also covers analytics, the newsletter and forms.
-export const PRIVACY_UPDATED = 'October 7, 2026';
+export const PRIVACY_UPDATED = 'October 8, 2026';
 export function renderPrivacyPage({ siteUrl }) {
   const body = `
     <h1 class="page-title">Privacy</h1>
@@ -1037,6 +1037,7 @@ export function renderPrivacyPage({ siteUrl }) {
     <h2 class="section-heading">What we measure</h2>
     <ul>
       <li><strong>Our own visit counts:</strong> which pages are viewed and which links are clicked, so we know what's useful. We don't use cookies for this and don't store IP addresses; a visitor is a one-way code that changes every day.</li>
+      <li><strong>Referrals:</strong> every subscriber gets a share link. When someone signs up through it, we note who shared it so we can count referrals and send rewards; we don't tell the person who shared it who signed up. Gift card rewards are sent by our rewards partner, <a href="https://www.tremendous.com/privacy" rel="noopener">Tremendous</a>, which gets the winner's email address to deliver them (see the <a href="/referral-rules">rules</a>).</li>
       <li><strong>Newsletter opens:</strong> each weekly newsletter has a tiny invisible image, so we can tell whether you opened that issue (we count each person once per issue). Turning off images in your email app stops it.</li>
       <li><strong>Google Analytics</strong> measures visits to the site and uses cookies. See <a href="https://policies.google.com/technologies/partner-sites" rel="noopener">how Google uses this data</a>.</li>
       <li><strong>Meta Pixel:</strong> when we advertise on Facebook and Instagram, the Meta Pixel tells Meta that someone visited from an ad or signed up for the newsletter, so we can see whether our ads work and show them to people likely to be interested. Meta may combine this with what it knows about your Meta account. It's never loaded on the newsletter confirm or unsubscribe pages. You can control this in your <a href="https://www.facebook.com/adpreferences/ad_settings" rel="noopener">Meta ad settings</a>.</li>

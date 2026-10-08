@@ -30,6 +30,7 @@ import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys, keyedEvents } from './eventcheck.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
+import { createTremendous, tremendousConfig } from './referralRewards.js';
 import { createMailer, renderSubmissionReceived, renderSubmissionLive } from './notify.js';
 import { registerSubmissionReview, isPaidPick } from './submissionReview.js';
 import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage, sameEvent, eventWeekStats, LEAD_IN_DAYS } from './sponsors.js';
@@ -293,6 +294,9 @@ export async function createApp(opts = {}) {
   // Resend: the newsletter and the "we got it" emails (server/notify.js).
   const newsletter = newsletterConfig(process.env, opts);
   const nlResend = opts.resend || createResend(newsletter.apiKey);
+  // Referral gift cards (server/referralRewards.js); unset means the owner
+  // sends them by hand from the admin list.
+  const tremendous = opts.tremendous || createTremendous(tremendousConfig(process.env, opts));
   const mailer = createMailer({ resend: nlResend, config: newsletter });
 
   const sponsors = createSponsors({
@@ -1611,7 +1615,7 @@ export async function createApp(opts = {}) {
   const newsletterApi = registerNewsletter(app, {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
     // The newsletter is a day-by-day list: only events that made their day.
-    getPublicPayload: shownPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman,
+    getPublicPayload: shownPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman, tremendous,
     // The send itself must carry the paid placements (see sponsors.apply).
     getSendPayload: () => shownPayload({ strict: true }),
     // Monday's run also sends last week's sponsor reports (and any Vic's
