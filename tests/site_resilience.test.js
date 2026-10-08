@@ -189,7 +189,9 @@ describe('event URLs that move or go away', () => {
     await post('/api/admin/publish-events', { events: [jazz] });
     await settle();
     await post('/api/admin/event-edits', { original_key: key(jazz), payload: { ...jazz, name: 'Jazz Night' } });
-    await settle();
+    // The edit republishes in the background; under CI load that can take
+    // longer than settle(), so wait for the redirect itself.
+    await vi.waitFor(async () => expect((await get('/events/2026-10-10-jazz-nite')).status).toBe(301), { timeout: 5000, interval: 100 });
     for (const suffix of ['', '.ics', '.png']) {
       const r = await get(`/events/2026-10-10-jazz-nite${suffix}`);
       expect(r.status, suffix).toBe(301);

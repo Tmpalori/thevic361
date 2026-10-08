@@ -1953,9 +1953,14 @@
       ' visitors · ' + v.views + ' views</span></div>';
     // The period picked, plus the last 7 days when that's a different box.
     const range = t.totals.range || t.totals.month;
+    // Shares sent (every share_* click) and the visits shared links brought.
+    const shares = (t.clicks || []).filter(c => /^share_/.test(c.key)).reduce((a, c) => a + c.count, 0);
+    const fromShares = ((t.sources || []).find(s => s.key === 'Shared link') || {}).count || 0;
     if (totals) totals.innerHTML = stat('Today', t.totals.today) +
       (t.days === 7 ? '' : stat('Last 7 days', t.totals.week)) +
-      stat('Last ' + t.days + ' days', range);
+      stat('Last ' + t.days + ' days', range) +
+      '<div class="sources-summary__item"><span class="sources-summary__label">Shares, last ' + t.days + ' days</span>' +
+      '<span class="sources-summary__value">' + shares + ' sent · ' + fromShares + ' views from shared links</span></div>';
 
     const chart = document.getElementById('traffic-chart');
     if (chart) {
