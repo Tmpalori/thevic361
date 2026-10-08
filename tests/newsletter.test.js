@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createApp } from '../server/index.js';
 import { FileStore, } from '../server/db.js';
 import { withPages } from '../server/seo.js';
-import { renderWeekly, renderWelcomeEmail, normalizeEmail, signupSource, renderSubscribePage, darkSafe, createResend } from '../server/newsletter.js';
+import { renderWeekly, renderWelcomeEmail, normalizeEmail, signupSource, renderSubscribePage, darkSafe, createResend, referralFlags } from '../server/newsletter.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -536,6 +536,11 @@ describe('referral program', () => {
   }
   const codeOf = async (email) => (await store._read()).subscribers.find(x => x.email === email).ref_code;
   const subOf = async (email) => (await store._read()).subscribers.find(x => x.email === email);
+  // A referred friend taps Confirm in their email before they're on the list.
+  const confirmFriend = async (email) => {
+    const r = await fetch(`${baseUrl}/subscribe/confirm?token=${(await subOf(email)).token}`, { method: 'POST' });
+    expect(r.status).toBe(200);
+  };
 
   it('/r/<code> sends people to the signup page with the code; a bad code just goes to signup', async () => {
     await startApp();
@@ -574,8 +579,15 @@ describe('referral program', () => {
     await store.unsubscribe(subs.find(x => x.email === 'gone@example.com').token);
     await store.unsubscribe(subs.find(x => x.email === 'old@example.com').token);
 
-    await post('/api/subscribe', { email: 'friend@example.com', ref: code.toUpperCase() });
+    const r = await post('/api/subscribe', { email: 'friend@example.com', ref: code.toUpperCase() });
+    expect((await r.json()).message).toBe('Almost there! Check your inbox and tap Confirm to start getting it.');
     expect((await subOf('friend@example.com')).referred_by).toBe(code);
+    // Not on the list (so not counted) until they confirm: a made-up address never can.
+    expect((await subOf('friend@example.com')).status).toBe('pending');
+    expect(sent.single.at(-1).subject).toBe('Confirm your Vic 361 subscription');
+    expect(await store.countReferrals([code], { counted: false })).toEqual({});
+    await confirmFriend('friend@example.com');
+    expect(await store.countReferrals([code], { counted: false })).toEqual({ [code]: 1 });
     await post('/api/subscribe', { email: 'other@example.com', ref: goneCode });
     expect((await subOf('other@example.com')).referred_by).toBeUndefined();
     await post('/api/subscribe', { email: 'sharer@example.com', ref: code });
@@ -599,12 +611,16 @@ describe('referral program', () => {
     await store.importSubscribers(['sharer@example.com', 'plain@example.com'], 'import');
     const [sharer] = (await store.listSubscribers({ status: 'active' })).filter(x => x.email === 'sharer@example.com');
     const code = (await store.ensureRefCodes([sharer.id]))[sharer.id];
-    for (const e of ['f1@example.com', 'f2@example.com', 'f3@example.com']) {
+    for (const [e, hours] of [['maria.g@gmail.com', 30], ['tomr@yahoo.com', 40], ['jess.k@outlook.com', 50]]) {
       await post('/api/subscribe', { email: e, ref: code });
-      await age(e);
+      await confirmFriend(e);
+      await age(e, hours);
     }
-    await post('/api/subscribe', { email: 'f4@example.com', ref: code }); // still in the hold
-    await vi.waitFor(() => expect(sent.single).toHaveLength(4), { timeout: 2000 });
+    await post('/api/subscribe', { email: 'dee@icloud.com', ref: code }); // still in the hold
+    await confirmFriend('dee@icloud.com');
+    await post('/api/subscribe', { email: 'made.up@gmail.com', ref: code }); // never confirmed: not counted at all
+    // A confirmation and a welcome for each confirmed friend, one confirmation for f5.
+    await vi.waitFor(() => expect(sent.single).toHaveLength(9), { timeout: 2000 });
     pings.length = 0;
 
     const h = await auth();
@@ -630,6 +646,64 @@ describe('referral program', () => {
     const st = await (await fetch(baseUrl + '/api/admin/newsletter', { headers: h })).json();
     expect(st.referrers[0]).toMatchObject({ email: 'sharer@example.com', referrals: 3, pending: 1 });
     expect(st.referral_tiers.map(t => t.n)).toEqual([1, 3, 10]);
+  });
+
+  it('one inbox counts once: +tags and Gmail dots are the same friend, and never the referrer', async () => {
+    await startApp();
+    await store.importSubscribers(['sam@gmail.com'], 'import');
+    const [sam] = await store.listSubscribers({ status: 'active' });
+    const code = (await store.ensureRefCodes([sam.id]))[sam.id];
+    // The referrer's own inbox under another address isn't credited at all.
+    await post('/api/subscribe', { email: 's.a.m+vic@gmail.com', ref: code });
+    expect((await subOf('s.a.m+vic@gmail.com')).referred_by).toBeUndefined();
+    for (const e of ['pat@yahoo.com', 'pat+2@yahoo.com', 'jo.ann@gmail.com', 'joann@googlemail.com']) {
+      await post('/api/subscribe', { email: e, ref: code });
+      await confirmFriend(e);
+      await age(e);
+    }
+    expect(await store.countReferrals([code])).toEqual({ [code]: 2 });
+    expect((await store.topReferrers())[0]).toMatchObject({ email: 'sam@gmail.com', referrals: 2, pending: 0 });
+    // Pat leaves: pat+2 is the same inbox, so it still counts once.
+    await store.unsubscribe((await subOf('pat@yahoo.com')).token);
+    expect(await store.countReferrals([code])).toEqual({ [code]: 2 });
+  });
+
+  it('flags friends that look made up in the owner\'s rewards note, without holding anything back', async () => {
+    const at = (min) => new Date(Date.UTC(2026, 9, 1, 12, min)).toISOString();
+    expect(referralFlags([
+      { email: 'maria.g@gmail.com', confirmed_at: at(0) },
+      { email: 'tomr@yahoo.com', confirmed_at: at(45) },
+      { email: 'jess.k@outlook.com', confirmed_at: at(120) }
+    ])).toEqual([]);
+    expect(referralFlags([
+      { email: 'sam1@gmail.com', confirmed_at: at(0) },
+      { email: 'sam.2@yahoo.com', confirmed_at: at(3) },
+      { email: 'sam3@mailinator.com', confirmed_at: at(8) }
+    ])).toEqual(['1 at a throwaway-inbox site', '3 joined within 10 minutes', '3 addresses like "sam"']);
+    expect(referralFlags([
+      { email: 'a@burner.biz', confirmed_at: at(0) },
+      { email: 'b@burner.biz', confirmed_at: at(30) },
+      { email: 'c@burner.biz', confirmed_at: at(90) }
+    ])).toEqual(['3 at burner.biz']);
+
+    const pings = [];
+    await startApp({ slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async () => {} } });
+    await store.importSubscribers(['sharer@example.com'], 'import');
+    const [sharer] = await store.listSubscribers({ status: 'active' });
+    const code = (await store.ensureRefCodes([sharer.id]))[sharer.id];
+    for (const e of ['sam1@gmail.com', 'sam2@gmail.com', 'sam3@gmail.com']) {
+      await post('/api/subscribe', { email: e, ref: code });
+      await confirmFriend(e);
+      await age(e);
+    }
+    pings.length = 0;
+    expect((await post('/api/admin/newsletter/send', {}, await auth())).status).toBe(200);
+    const [note] = pings.filter(p => p.title === '🎁 Referral rewards to send');
+    // Both tiers still listed; the warning and the friends come once, on the last line.
+    expect(note.fields[0]).toEqual(['sharer@example.com', '3 referrals: an entry in our monthly $50 local gift card drawing']);
+    expect(note.fields[1][1]).toBe('3 referrals: a Vic 361 sticker pack\n' +
+      '👀 Check before sending: 3 joined within 10 minutes; 3 addresses like "sam".\n' +
+      'Friends: sam1@gmail.com, sam2@gmail.com, sam3@gmail.com');
   });
 
   it('the forms send the code the browser kept, and the pixel skips referral URLs', async () => {

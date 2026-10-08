@@ -25,8 +25,9 @@
  *     attempt for the same week is refused unless forced.
  *   - Referrals: every subscriber gets a link, /r/<code> (→ /subscribe?ref=,
  *     kept for the visit by docs/track.js and sent with the form). A new
- *     signup through it records referred_by; it counts for the sharer once
- *     the friend has been on the list a day and while they stay subscribed.
+ *     signup through it records referred_by and must be confirmed by email; it
+ *     counts for the sharer once the friend has been on the list a day and
+ *     while they stay subscribed, one per inbox (see emailKey in db.js).
  *     The welcome email and each Monday copy show the reader's link and
  *     progress (REFERRAL_TIERS); Monday's send Slacks the owner who just
  *     earned a reward, once per tier (rewards go out by hand).
@@ -42,6 +43,7 @@
  */
 
 import crypto from 'node:crypto';
+import { emailKey } from './db.js';
 import {
   SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank,
   sponsorLinkUrl
@@ -354,6 +356,39 @@ export function renderConfirmEmail({ siteUrl, confirmUrl, address }) {
   };
 }
 
+// Signs a referrer's friends may be made up, for the owner's "rewards to
+// send" note (nothing is held back automatically: a real group chat can
+// look like this too). friends: listReferredFriends rows for one referrer.
+const BIG_PROVIDERS = new Set(['gmail.com', 'yahoo.com', 'ymail.com', 'hotmail.com', 'outlook.com', 'live.com', 'msn.com',
+  'icloud.com', 'me.com', 'mac.com', 'aol.com', 'att.net', 'sbcglobal.net', 'comcast.net', 'proton.me', 'protonmail.com']);
+const THROWAWAY_DOMAINS = new Set(['mailinator.com', 'guerrillamail.com', 'sharklasers.com', 'yopmail.com', '10minutemail.com',
+  'temp-mail.org', 'tempmail.com', 'trashmail.com', 'getnada.com', 'maildrop.cc', 'dispostable.com', 'mailnesia.com',
+  'throwawaymail.com', 'fakeinbox.com', 'emailondeck.com', 'mohmal.com', 'tempmail.plus', 'mail.tm']);
+export function referralFlags(friends) {
+  const flags = [];
+  const domainOf = (e) => String(e).toLowerCase().split('@').pop();
+  const throwaway = friends.filter(f => THROWAWAY_DOMAINS.has(domainOf(f.email))).length;
+  if (throwaway) flags.push(`${throwaway} at a throwaway-inbox site`);
+  const times = friends.map(f => new Date(f.confirmed_at || NaN).getTime()).filter(Number.isFinite).sort((a, b) => a - b);
+  let burst = 0;
+  for (let i = 0, j = 0; i < times.length; i++) {
+    while (times[i] - times[j] > 10 * 60e3) j++;
+    burst = Math.max(burst, i - j + 1);
+  }
+  if (burst >= 3) flags.push(`${burst} joined within 10 minutes`);
+  const tally = (key) => {
+    const n = new Map();
+    for (const f of friends) { const k = key(f.email); if (k) n.set(k, (n.get(k) || 0) + 1); }
+    return [...n].sort((a, b) => b[1] - a[1])[0] || [null, 0];
+  };
+  const [domain, sameDomain] = tally(e => { const d = domainOf(e); return BIG_PROVIDERS.has(d) || THROWAWAY_DOMAINS.has(d) ? null : d; });
+  if (sameDomain >= 3) flags.push(`${sameDomain} at ${domain}`);
+  // sam1@, sam2@, sam.3@: the same name with a number on it.
+  const [stem, lookalike] = tally(e => emailKey(e).split('@')[0].replace(/[^a-z]/g, '') || null);
+  if (lookalike >= 3) flags.push(`${lookalike} addresses like "${stem}"`);
+  return flags;
+}
+
 // ─── Referral program ───
 // Every subscriber has a link, thevic361.com/r/<code>. A friend who signs up
 // through it counts for them while that friend stays subscribed. Rewards are
@@ -393,7 +428,7 @@ function referralHtml({ siteUrl, code, count = 0 }) {
 <p style="margin:0 0 10px;font-size:14px;">Know someone who's always asking what there is to do in Victoria? Send them your link:</p>
 <p style="margin:0 0 10px;text-align:center;"><a href="${url}" style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:17px;color:${C.ink};background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:6px 16px;text-decoration:none;">${escHtml(url.replace(/^https?:\/\/(www\.)?/, ''))}</a></p>
 <p style="margin:0 0 8px;font-size:14px;font-weight:bold;">${escHtml(referralProgress(count))}</p>
-<p style="margin:0;font-size:12px;color:${C.muted};">${tiers}<br>A friend counts a day after they sign up with your link, for as long as they stay subscribed.</p>
+<p style="margin:0;font-size:12px;color:${C.muted};">${tiers}<br>A friend counts a day after they sign up with your link and confirm their email, for as long as they stay subscribed.</p>
 </td></tr></table>`;
 }
 function referralText({ siteUrl, code, count = 0 }) {
@@ -563,10 +598,28 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       const k = known[code];
       if (!k || !reached || k.ref_tier >= reached.n) continue;
       // Every tier crossed since the last note (someone can jump from 0 to 3).
-      for (const t of REFERRAL_TIERS.filter(t => t.n > k.ref_tier && t.n <= n)) due.push([k.email, `${n} referrals: ${t.reward}`]);
+      for (const t of REFERRAL_TIERS.filter(t => t.n > k.ref_tier && t.n <= n)) due.push({ code, email: k.email, text: `${n} referrals: ${t.reward}` });
       await store.setRefTier(code, reached.n);
     }
-    if (due.length && slack) slack.notify({ title: '🎁 Referral rewards to send', fields: due });
+    if (!due.length || !slack) return;
+    // Rewards go out by hand, so the owner is the last check: a referrer
+    // whose friends look made up gets a 👀 and the friends' addresses.
+    let friends = [];
+    try {
+      if (typeof store.listReferredFriends === 'function') friends = await store.listReferredFriends([...new Set(due.map(d => d.code))]);
+    } catch (err) {
+      console.warn('[newsletter] referral check failed:', err.message);
+    }
+    const fields = due.map((d, i) => {
+      const mine = friends.filter(f => f.referred_by === d.code);
+      // Once per referrer, on their last line (someone can jump two tiers).
+      const last = !due.slice(i + 1).some(x => x.code === d.code);
+      const flags = last ? referralFlags(mine) : [];
+      if (!flags.length) return [d.email, d.text];
+      const list = mine.slice(0, 12).map(f => f.email).join(', ') + (mine.length > 12 ? ` and ${mine.length - 12} more` : '');
+      return [d.email, `${d.text}\n👀 Check before sending: ${flags.join('; ')}.\nFriends: ${list}`];
+    });
+    slack.notify({ title: '🎁 Referral rewards to send', fields });
   }
 
   const page = (title, message) => layout({
@@ -744,25 +797,27 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     // same answer, so the form can't be used to find out who's on the list.
     // Whether it was a first signup is the browser's to know (docs/track.js
     // Lead), not the server's to say.
-    // Unverified signups all get the confirm message, whatever the address's
-    // state, so it can't be used to tell who's subscribed.
-    const done = unverified && config.enabled
+    // A referral link (/r/<code>) the browser carried to this form. It only
+    // credits an active subscriber, and never the referrer's own inbox (a
+    // +tag or Gmail dots make another address for it).
+    let referredBy = null;
+    const ref = normalizeRefCode(body.ref);
+    if (ref && typeof store.getReferrer === 'function') {
+      try {
+        const referrer = await store.getReferrer(ref);
+        if (referrer && emailKey(referrer.email) !== emailKey(email)) referredBy = referrer.ref_code;
+      } catch (err) {
+        console.warn('[newsletter] referral lookup failed:', err.message);
+      }
+    }
+    // Unverified and referred signups all get the confirm message, whatever
+    // the address's state, so it can't be used to tell who's subscribed.
+    const confirmFirst = unverified || Boolean(referredBy);
+    const done = confirmFirst && config.enabled
       ? { ok: true, message: 'Almost there! Check your inbox and tap Confirm to start getting it.' }
       : { ok: true, message: config.enabled ? "You're on the list! Check your inbox." : "You're on the list! See you Monday." };
     try {
       const source = signupSource(body.source);
-      // A referral link (/r/<code>) the browser carried to this form. It only
-      // credits an active subscriber, and never the address signing up.
-      let referredBy = null;
-      const ref = normalizeRefCode(body.ref);
-      if (ref && typeof store.getReferrer === 'function') {
-        try {
-          const referrer = await store.getReferrer(ref);
-          if (referrer && referrer.email !== email) referredBy = referrer.ref_code;
-        } catch (err) {
-          console.warn('[newsletter] referral lookup failed:', err.message);
-        }
-      }
       const sub = await store.addSubscriber({ email, source, referredBy });
       if (sub.status === 'active') return res.json(done);
       // Single opt-in: a new address is on the list right away and gets the
@@ -770,9 +825,11 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       // ad-driven signups never finished the confirmation step, and the Turnstile
       // check, honeypot and rate limit already keep out junk. The exception
       // is a comeback (old_tokens): someone who unsubscribed must confirm
-      // from their own inbox, so nobody else can sign them back up.
+      // from their own inbox, so nobody else can sign them back up. So does a
+      // friend from a referral link: a made-up address can't tap Confirm, so
+      // it never counts toward a reward.
       const comeback = (sub.old_tokens || []).length > 0;
-      if ((!comeback && !unverified) || !config.enabled) {
+      if ((!comeback && !confirmFirst) || !config.enabled) {
         const confirmed = await store.confirmSubscriber(sub.token);
         // Not awaited: the welcome email shouldn't hold up the form.
         if (confirmed && confirmed.newly_confirmed) welcome(confirmed);

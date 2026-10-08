@@ -217,6 +217,57 @@ export function newRefCode() {
   for (const b of bytes) out += REF_ALPHABET[b % REF_ALPHABET.length];
   return out;
 }
+
+// One inbox, one key: john+1@gmail.com, j.ohn@gmail.com and
+// john@googlemail.com all land in the same Gmail inbox, so for counting
+// referrals they're one person. Most providers ignore a +tag; only Gmail
+// ignores dots.
+export function emailKey(email) {
+  const s = String(email || '').toLowerCase();
+  const at = s.lastIndexOf('@');
+  if (at < 1) return s;
+  const domain = s.slice(at + 1) === 'googlemail.com' ? 'gmail.com' : s.slice(at + 1);
+  let local = s.slice(0, at).split('+')[0];
+  if (domain === 'gmail.com') local = local.replace(/\./g, '');
+  return `${local}@${domain}`;
+}
+
+// { code: { counted, all } } (Sets of emailKeys) from the active subscribers
+// each code brought in (listReferredFriends rows). A friend counts once
+// they've been on the list REF_HOLD_HOURS; one inbox counts once; and the
+// referrer's own inbox under another +tag never counts.
+export function tallyReferrals(friends, now = Date.now()) {
+  const cutoff = now - REF_HOLD_HOURS * 3600e3;
+  const out = {};
+  for (const f of friends) {
+    const key = emailKey(f.email);
+    if (f.referrer_email && emailKey(f.referrer_email) === key) continue;
+    const t = out[f.referred_by] || (out[f.referred_by] = { counted: new Set(), all: new Set() });
+    t.all.add(key);
+    if (f.confirmed_at && new Date(f.confirmed_at).getTime() <= cutoff) t.counted.add(key);
+  }
+  return out;
+}
+
+function referralCounts(tally, counted) {
+  const out = {};
+  for (const [code, t] of Object.entries(tally)) {
+    const n = (counted ? t.counted : t.all).size;
+    if (n) out[code] = n;
+  }
+  return out;
+}
+
+// Admin view: counted referrals plus the ones still in the hold.
+function referrerRows(tally, referrers, limit) {
+  return referrers.filter(x => tally[x.ref_code] && tally[x.ref_code].all.size)
+    .map(x => {
+      const t = tally[x.ref_code];
+      return { email: x.email, ref_code: x.ref_code, referrals: t.counted.size,
+        pending: [...t.all].filter(k => !t.counted.has(k)).length, ref_tier: Number(x.ref_tier) || 0 };
+    })
+    .sort((a, b) => b.referrals - a.referrals || b.pending - a.pending || a.email.localeCompare(b.email)).slice(0, limit);
+}
 // Postgres keeps a bit over a year of traffic; older rows are pruned.
 const TRAFFIC_RETENTION_DAYS = 400;
 // Archived event pages are kept as long, then pruned: every public page
@@ -488,27 +539,24 @@ class FileStore {
   // bounced stops counting, and the hold means a burst of throwaway
   // addresses that unsubscribe right away never pays off.
   async countReferrals(codes, { counted = true } = {}) {
-    const want = codes ? new Set(codes) : null;
-    const cutoff = Date.now() - REF_HOLD_HOURS * 3600e3;
-    const data = await this._read();
-    const out = {};
-    for (const x of data.subscribers) {
-      if (x.status !== 'active' || !x.referred_by || (want && !want.has(x.referred_by))) continue;
-      if (counted && !(Date.parse(x.confirmed_at || '') <= cutoff)) continue;
-      out[x.referred_by] = (out[x.referred_by] || 0) + 1;
-    }
-    return out;
+    return referralCounts(tallyReferrals(await this.listReferredFriends(codes)), counted);
   }
 
-  // Admin view: counted referrals plus the ones still in the hold.
-  async topReferrers(limit = 10) {
-    const counted = await this.countReferrals();
-    const all = await this.countReferrals(null, { counted: false });
+  // The active subscribers each code brought in: { referred_by,
+  // referrer_email, email, confirmed_at }. null codes means every code.
+  async listReferredFriends(codes) {
+    const want = codes ? new Set(codes) : null;
     const data = await this._read();
-    return data.subscribers.filter(x => x.ref_code && all[x.ref_code])
-      .map(x => ({ email: x.email, ref_code: x.ref_code, referrals: counted[x.ref_code] || 0,
-        pending: all[x.ref_code] - (counted[x.ref_code] || 0), ref_tier: x.ref_tier || 0 }))
-      .sort((a, b) => b.referrals - a.referrals || b.pending - a.pending || a.email.localeCompare(b.email)).slice(0, limit);
+    const owner = new Map(data.subscribers.filter(x => x.ref_code).map(x => [x.ref_code, x.email]));
+    return data.subscribers
+      .filter(x => x.status === 'active' && x.referred_by && (!want || want.has(x.referred_by)))
+      .map(x => ({ referred_by: x.referred_by, referrer_email: owner.get(x.referred_by) || null, email: x.email, confirmed_at: x.confirmed_at || null }));
+  }
+
+  async topReferrers(limit = 10) {
+    const tally = tallyReferrals(await this.listReferredFriends(null));
+    const data = await this._read();
+    return referrerRows(tally, data.subscribers.filter(x => x.ref_code), limit);
   }
 
   // The highest reward tier the owner was told about for this referrer, so
@@ -1298,29 +1346,29 @@ class PgStore {
   }
 
   // See FileStore.countReferrals.
+  // See FileStore.countReferrals. Counted in JS (tallyReferrals) so one
+  // inbox under several addresses counts once.
   async countReferrals(codes, { counted = true } = {}) {
+    return referralCounts(tallyReferrals(await this.listReferredFriends(codes)), counted);
+  }
+
+  async listReferredFriends(codes) {
     await this.ready();
-    const hold = counted ? `AND confirmed_at <= NOW() - make_interval(hours => ${Number(REF_HOLD_HOURS)})` : '';
+    const sql = `SELECT f.referred_by, s.email AS referrer_email, f.email, f.confirmed_at
+                   FROM subscribers f LEFT JOIN subscribers s ON s.ref_code = f.referred_by
+                  WHERE f.status = 'active' AND f.referred_by IS NOT NULL`;
     const r = codes
-      ? await this.pool.query(
-        `SELECT referred_by, COUNT(*)::int AS n FROM subscribers WHERE status = 'active' AND referred_by = ANY($1::text[]) ${hold}
-          GROUP BY referred_by`, [codes])
-      : await this.pool.query(
-        `SELECT referred_by, COUNT(*)::int AS n FROM subscribers WHERE status = 'active' AND referred_by IS NOT NULL ${hold}
-          GROUP BY referred_by`);
-    return Object.fromEntries(r.rows.map(x => [x.referred_by, Number(x.n)]));
+      ? await this.pool.query(`${sql} AND f.referred_by = ANY($1::text[])`, [codes])
+      : await this.pool.query(sql);
+    return r.rows;
   }
 
   async topReferrers(limit = 10) {
-    await this.ready();
-    const r = await this.pool.query(
-      `SELECT s.email, s.ref_code, s.ref_tier,
-              COUNT(f.id) FILTER (WHERE f.confirmed_at <= NOW() - make_interval(hours => ${Number(REF_HOLD_HOURS)}))::int AS referrals,
-              COUNT(f.id)::int AS total
-         FROM subscribers s JOIN subscribers f ON f.referred_by = s.ref_code AND f.status = 'active'
-        GROUP BY s.email, s.ref_code, s.ref_tier ORDER BY referrals DESC, total DESC, s.email LIMIT $1`, [limit]);
-    return r.rows.map(x => ({ email: x.email, ref_code: x.ref_code, referrals: Number(x.referrals),
-      pending: Number(x.total) - Number(x.referrals), ref_tier: Number(x.ref_tier) || 0 }));
+    const tally = tallyReferrals(await this.listReferredFriends(null));
+    const codes = Object.keys(tally);
+    if (!codes.length) return [];
+    const r = await this.pool.query('SELECT email, ref_code, ref_tier FROM subscribers WHERE ref_code = ANY($1::text[])', [codes]);
+    return referrerRows(tally, r.rows, limit);
   }
 
   async listRefTiers(codes) {
