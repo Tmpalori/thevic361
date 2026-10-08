@@ -44,6 +44,9 @@
 
 import crypto from 'node:crypto';
 import { emailKey } from './db.js';
+import { REFERRAL_TIERS, DRAWING_AMOUNT, referralFlags, createReferralRewards } from './referralRewards.js';
+
+export { REFERRAL_TIERS, referralFlags };
 import {
   SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank,
   sponsorLinkUrl
@@ -356,52 +359,13 @@ export function renderConfirmEmail({ siteUrl, confirmUrl, address }) {
   };
 }
 
-// Signs a referrer's friends may be made up, for the owner's "rewards to
-// send" note (nothing is held back automatically: a real group chat can
-// look like this too). friends: listReferredFriends rows for one referrer.
-const BIG_PROVIDERS = new Set(['gmail.com', 'yahoo.com', 'ymail.com', 'hotmail.com', 'outlook.com', 'live.com', 'msn.com',
-  'icloud.com', 'me.com', 'mac.com', 'aol.com', 'att.net', 'sbcglobal.net', 'comcast.net', 'proton.me', 'protonmail.com']);
-const THROWAWAY_DOMAINS = new Set(['mailinator.com', 'guerrillamail.com', 'sharklasers.com', 'yopmail.com', '10minutemail.com',
-  'temp-mail.org', 'tempmail.com', 'trashmail.com', 'getnada.com', 'maildrop.cc', 'dispostable.com', 'mailnesia.com',
-  'throwawaymail.com', 'fakeinbox.com', 'emailondeck.com', 'mohmal.com', 'tempmail.plus', 'mail.tm']);
-export function referralFlags(friends) {
-  const flags = [];
-  const domainOf = (e) => String(e).toLowerCase().split('@').pop();
-  const throwaway = friends.filter(f => THROWAWAY_DOMAINS.has(domainOf(f.email))).length;
-  if (throwaway) flags.push(`${throwaway} at a throwaway-inbox site`);
-  const times = friends.map(f => new Date(f.confirmed_at || NaN).getTime()).filter(Number.isFinite).sort((a, b) => a - b);
-  let burst = 0;
-  for (let i = 0, j = 0; i < times.length; i++) {
-    while (times[i] - times[j] > 10 * 60e3) j++;
-    burst = Math.max(burst, i - j + 1);
-  }
-  if (burst >= 3) flags.push(`${burst} joined within 10 minutes`);
-  const tally = (key) => {
-    const n = new Map();
-    for (const f of friends) { const k = key(f.email); if (k) n.set(k, (n.get(k) || 0) + 1); }
-    return [...n].sort((a, b) => b[1] - a[1])[0] || [null, 0];
-  };
-  const [domain, sameDomain] = tally(e => { const d = domainOf(e); return BIG_PROVIDERS.has(d) || THROWAWAY_DOMAINS.has(d) ? null : d; });
-  if (sameDomain >= 3) flags.push(`${sameDomain} at ${domain}`);
-  // sam1@, sam2@, sam.3@: the same name with a number on it.
-  const [stem, lookalike] = tally(e => emailKey(e).split('@')[0].replace(/[^a-z]/g, '') || null);
-  if (lookalike >= 3) flags.push(`${lookalike} addresses like "${stem}"`);
-  return flags;
-}
-
 // ─── Referral program ───
 // Every subscriber has a link, thevic361.com/r/<code>. A friend who signs up
-// through it counts for them while that friend stays subscribed. Rewards are
-// handed out by hand: reaching a tier pings the owner in Slack (see the
-// signup route). Edit the tiers here; emails and Slack read them.
-// The first tier is at 1 on purpose: each tier up, about a tenth as many
-// readers get there (Morning Brew's ladder), so the cheap early rewards do
-// most of the work.
-export const REFERRAL_TIERS = [
-  { n: 1, reward: 'an entry in our monthly $50 local gift card drawing' },
-  { n: 3, reward: 'a Vic 361 sticker pack' },
-  { n: 10, reward: 'a $25 gift card to a Victoria favorite' }
-];
+// through it counts for them while that friend stays subscribed. The tiers
+// and the gift cards are in server/referralRewards.js (REFERRAL_TIERS);
+// emails, Slack and the rules page read them. The first tier is at 1 on
+// purpose: each tier up, about a tenth as many readers get there (Morning
+// Brew's ladder), so the cheap early rewards do most of the work.
 const REF_CODE_RE = /^[a-z2-9]{7}$/;
 export function normalizeRefCode(raw) {
   const c = String(raw || '').trim().toLowerCase();
@@ -428,12 +392,34 @@ function referralHtml({ siteUrl, code, count = 0 }) {
 <p style="margin:0 0 10px;font-size:14px;">Know someone who's always asking what there is to do in Victoria? Send them your link:</p>
 <p style="margin:0 0 10px;text-align:center;"><a href="${url}" style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:17px;color:${C.ink};background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:6px 16px;text-decoration:none;">${escHtml(url.replace(/^https?:\/\/(www\.)?/, ''))}</a></p>
 <p style="margin:0 0 8px;font-size:14px;font-weight:bold;">${escHtml(referralProgress(count))}</p>
-<p style="margin:0;font-size:12px;color:${C.muted};">${tiers}<br>A friend counts a day after they sign up with your link and confirm their email, for as long as they stay subscribed.</p>
+<p style="margin:0;font-size:12px;color:${C.muted};">${tiers}<br>Every friend who joins in a month is another entry in that month's drawing. A friend counts a day after they sign up with your link and confirm their email, for as long as they stay subscribed. Gift cards arrive by email. <a href="${siteUrl}/referral-rules" style="color:${C.muted};">Rules</a></p>
 </td></tr></table>`;
 }
+export function renderReferralRules({ siteUrl }) {
+  const cards = REFERRAL_TIERS.filter(t => t.amount);
+  const li = (title, text) => `<li><strong>${title}</strong> ${text}</li>`;
+  return layout({
+    siteUrl, path: '/referral-rules', nav: null, pixel: false, title: `Referral rewards: official rules | ${SITE_NAME}`,
+    description: 'How The Vic 361 newsletter referral rewards and monthly gift card drawing work.',
+    body: `<h1 class="page-title">Referral rewards: official rules</h1>
+<p class="page-lead">Share The Vic 361 with friends and earn gift cards. No purchase is necessary: subscribing and sharing are free.</p>
+<ul>
+${li('Who can take part.', 'Anyone subscribed to The Vic 361 newsletter who is 18 or older and lives in the United States. The Vic 361\'s owner and their household can\'t win. Void where prohibited.')}
+${li('Your link.', 'Every subscriber gets a personal share link in each newsletter. A friend counts for you when they sign up through your link, confirm their email address, and stay subscribed for at least 24 hours. Each email inbox counts once, and your own addresses don\'t count.')}
+${li('Monthly drawing.', `Each friend who joins through your link during a calendar month is one entry in that month's drawing. In the first week of the next month, one entry is picked at random from all entries, and its owner gets a $${DRAWING_AMOUNT} digital gift card. Your odds depend on how many entries there are that month. Entries don't carry over to the next month.`)}
+${cards.map(t => li(`${t.n} friends.`, `A $${t.amount} digital gift card, once per subscriber.`)).join('\n')}
+${li('How rewards arrive.', 'Gift cards are sent by email from our rewards partner, Tremendous, usually on the Monday after you earn them. You choose the store from their list. Tremendous gets your email address to send it.')}
+${li('Fair play.', 'Referrals have to be real people who want the newsletter. We can hold back or cancel rewards for sign-ups that look made up (fake, throwaway or duplicate addresses), and our decisions about who counts are final.')}
+${li('Changes.', 'We may change or end the program at any time. Rewards you have already earned will still be sent.')}
+</ul>
+<p>Questions? <a href="/contact">Get in touch</a>.</p>`
+  });
+}
+
 function referralText({ siteUrl, code, count = 0 }) {
   if (!code) return [];
-  return ['SHARE THE VIC 361', `Send friends your link: ${refLink(siteUrl, code)}`, referralProgress(count), ''];
+  return ['SHARE THE VIC 361', `Send friends your link: ${refLink(siteUrl, code)}`, referralProgress(count),
+    `Rules: ${siteUrl}/referral-rules`, ''];
 }
 
 // Sent once, right after someone signs up (or a comeback confirms): what
@@ -551,7 +537,8 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0,
 
 // ─── Routes ──────────────────────────────────────────────────────────────
 
-export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, getSendPayload = getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true, withNav = async html => html, onCron = null }) {
+export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, getSendPayload = getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true, withNav = async html => html, onCron = null, tremendous = null }) {
+  const rewards = createReferralRewards({ store, slack, tremendous, nowFn, localDate: localDateStr });
   const subscribeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10 });
   const confirmLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 3 });
   const supported = typeof store.addSubscriber === 'function';
@@ -573,53 +560,19 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     }
   }
 
-  // Monday's send: each recipient's code and count. Also tells the owner,
-  // once per tier, who just earned a reward (rewards go out by hand).
+  // Monday's send: each recipient's code and count. Also sends the rewards
+  // that came due (server/referralRewards.js).
   async function referralsForSend(subs) {
     if (typeof store.ensureRefCodes !== 'function') return { codes: {}, counts: {} };
     try {
       const codes = await store.ensureRefCodes(subs.map(s => s.id).filter(Boolean));
       const counts = await store.countReferrals(Object.values(codes));
-      await rewardsDue(counts);
+      await rewards.run(counts);
       return { codes, counts };
     } catch (err) {
       console.warn('[newsletter] referral links failed:', err.message);
       return { codes: {}, counts: {} };
     }
-  }
-
-  async function rewardsDue(counts) {
-    const earned = Object.entries(counts).filter(([, n]) => n >= REFERRAL_TIERS[0].n);
-    if (!earned.length || typeof store.listRefTiers !== 'function') return;
-    const known = await store.listRefTiers(earned.map(([c]) => c));
-    const due = [];
-    for (const [code, n] of earned) {
-      const reached = REFERRAL_TIERS.filter(t => t.n <= n).pop();
-      const k = known[code];
-      if (!k || !reached || k.ref_tier >= reached.n) continue;
-      // Every tier crossed since the last note (someone can jump from 0 to 3).
-      for (const t of REFERRAL_TIERS.filter(t => t.n > k.ref_tier && t.n <= n)) due.push({ code, email: k.email, text: `${n} referrals: ${t.reward}` });
-      await store.setRefTier(code, reached.n);
-    }
-    if (!due.length || !slack) return;
-    // Rewards go out by hand, so the owner is the last check: a referrer
-    // whose friends look made up gets a 👀 and the friends' addresses.
-    let friends = [];
-    try {
-      if (typeof store.listReferredFriends === 'function') friends = await store.listReferredFriends([...new Set(due.map(d => d.code))]);
-    } catch (err) {
-      console.warn('[newsletter] referral check failed:', err.message);
-    }
-    const fields = due.map((d, i) => {
-      const mine = friends.filter(f => f.referred_by === d.code);
-      // Once per referrer, on their last line (someone can jump two tiers).
-      const last = !due.slice(i + 1).some(x => x.code === d.code);
-      const flags = last ? referralFlags(mine) : [];
-      if (!flags.length) return [d.email, d.text];
-      const list = mine.slice(0, 12).map(f => f.email).join(', ') + (mine.length > 12 ? ` and ${mine.length - 12} more` : '');
-      return [d.email, `${d.text}\n👀 Check before sending: ${flags.join('; ')}.\nFriends: ${list}`];
-    });
-    slack.notify({ title: '🎁 Referral rewards to send', fields });
   }
 
   const page = (title, message) => layout({
@@ -899,6 +852,11 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     res.redirect(302, code ? `/subscribe?ref=${code}` : '/subscribe');
   });
 
+  // The referral program's official rules (the monthly drawing needs them).
+  app.get('/referral-rules', (req, res) => {
+    res.type('html').send(renderReferralRules({ siteUrl }));
+  });
+
   app.get('/subscribe', async (req, res, next) => {
     try {
       const payload = await getPublicPayload();
@@ -984,18 +942,23 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     const issue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: '#', address: config.address });
     // A week whose send partly failed isn't "sent": the button stays on to
     // retry just the people who missed it (sendWeekly resumes).
-    // Top referrers (emails shown in full: this is the owner's admin, and
-    // rewards are sent to them by hand).
-    let referrers = [];
+    // Top referrers and their rewards (emails shown in full: this is the
+    // owner's admin, and a held reward needs a person to look at it).
+    let referrers = [], referralRewards = [];
     if (typeof store.topReferrers === 'function') {
       try { referrers = await store.topReferrers(10); } catch (err) { console.warn('[newsletter] reading referrers failed:', err.message); }
     }
+    try {
+      referralRewards = (await rewards.list(20)).map(r => ({ id: r.id, email: r.email, what: rewards.describe(r), status: r.status,
+        flags: r.flags, reason: r.reason, created_at: r.created_at }));
+    } catch (err) { console.warn('[newsletter] reading referral rewards failed:', err.message); }
     const record = await store.getNewsletterSend(weekKey(nowFn()));
     const failed = record ? (Array.isArray(record.failed_emails) ? record.failed_emails.length : Number(record.failed) || 0) : 0;
     res.json({
       ok: true, configured: config.enabled, from: config.from, address_set: Boolean(config.address),
       autosend: config.enabled && config.autosend, counts, sends, next: { subject: issue.subject, events: issue.total },
-      referrers, referral_tiers: REFERRAL_TIERS,
+      referrers, referral_tiers: REFERRAL_TIERS, referral_rewards: referralRewards,
+      gift_cards: tremendous && tremendous.enabled ? 'tremendous' : 'manual',
       this_week_sent: Boolean(record) && !failed,
       this_week_failed: failed,
       this_week_recipients: record ? Number(record.recipients) || 0 : 0
@@ -1020,6 +983,14 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     } catch (err) {
       res.status(502).json({ ok: false, error: 'send-failed', message: err.message });
     }
+  });
+
+  // A held, failed or by-hand referral reward: send it now, or skip it.
+  app.post('/api/admin/newsletter/rewards/:id/:action', requireAdmin, async (req, res) => {
+    const { id, action } = req.params;
+    if (!['approve', 'skip'].includes(action)) return res.status(404).json({ ok: false, message: 'Unknown action.' });
+    const out = action === 'approve' ? await rewards.approve(id) : await rewards.skip(id);
+    res.status(out.status).json({ ok: out.ok, message: out.message, reward: out.reward });
   });
 
   app.post('/api/admin/newsletter/send', requireAdmin, async (req, res) => {

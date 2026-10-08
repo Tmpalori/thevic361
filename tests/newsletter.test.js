@@ -8,6 +8,7 @@ import { createApp } from '../server/index.js';
 import { FileStore, } from '../server/db.js';
 import { withPages } from '../server/seo.js';
 import { renderWeekly, renderWelcomeEmail, normalizeEmail, signupSource, renderSubscribePage, darkSafe, createResend, referralFlags } from '../server/newsletter.js';
+import { createReferralRewards, createTremendous, tremendousConfig, drawingMonth } from '../server/referralRewards.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -563,9 +564,12 @@ describe('referral program', () => {
     expect(w.html).toContain(`https://www.thevic361.com/r/${code}`);
     expect(w.html).not.toContain(`/r/${code}?utm_`);
     expect(w.html).toContain('Share The Vic 361');
-    expect(w.html).toContain('1 more and you get an entry in our monthly $50 local gift card drawing.');
+    expect(w.html).toContain('1 more and you get an entry in our monthly $25 gift card drawing.');
     expect(w.html).toContain('1 friend: an entry');
-    expect(w.html).toContain('3 friends: a Vic 361 sticker pack');
+    expect(w.html).toContain('5 friends: a $10 gift card');
+    expect(w.html).toContain('10 friends: a $25 gift card');
+    expect(w.html).toContain('https://www.thevic361.com/referral-rules');
+    expect(w.html).not.toMatch(/sticker/i);
     expect(w.text).toContain(`Send friends your link: https://www.thevic361.com/r/${code}`);
   });
 
@@ -605,13 +609,15 @@ describe('referral program', () => {
     expect(await store.countReferrals([code])).toEqual({});
   });
 
-  it('every Monday copy has its reader\'s link and count; the owner hears once per reward tier', async () => {
-    const pings = [];
-    await startApp({ slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async () => {} } });
+  it('every Monday copy has its reader\'s link and count; a reward that comes due is sent as a gift card, once', async () => {
+    const pings = [], orders = [];
+    const tremendous = { enabled: true, sendReward: async (o) => { orders.push(o); return { orderId: 'ORD' + orders.length, status: 'EXECUTED' }; } };
+    await startApp({ tremendous, slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async () => {} } });
     await store.importSubscribers(['sharer@example.com', 'plain@example.com'], 'import');
     const [sharer] = (await store.listSubscribers({ status: 'active' })).filter(x => x.email === 'sharer@example.com');
     const code = (await store.ensureRefCodes([sharer.id]))[sharer.id];
-    for (const [e, hours] of [['maria.g@gmail.com', 30], ['tomr@yahoo.com', 40], ['jess.k@outlook.com', 50]]) {
+    const friends = [['maria.g@gmail.com', 30], ['tomr@yahoo.com', 40], ['jess.k@outlook.com', 50], ['li.wei@icloud.com', 60], ['bob@aol.com', 70]];
+    for (const [e, hours] of friends) {
       await post('/api/subscribe', { email: e, ref: code });
       await confirmFriend(e);
       await age(e, hours);
@@ -619,8 +625,8 @@ describe('referral program', () => {
     await post('/api/subscribe', { email: 'dee@icloud.com', ref: code }); // still in the hold
     await confirmFriend('dee@icloud.com');
     await post('/api/subscribe', { email: 'made.up@gmail.com', ref: code }); // never confirmed: not counted at all
-    // A confirmation and a welcome for each confirmed friend, one confirmation for f5.
-    await vi.waitFor(() => expect(sent.single).toHaveLength(9), { timeout: 2000 });
+    // A confirmation and a welcome for each confirmed friend, one confirmation for the last.
+    await vi.waitFor(() => expect(sent.single).toHaveLength(13), { timeout: 2000 });
     pings.length = 0;
 
     const h = await auth();
@@ -628,24 +634,32 @@ describe('referral program', () => {
     const msgs = sent.batches.flatMap(b => b.msgs);
     const mine = msgs.find(m => m.to[0] === 'sharer@example.com');
     expect(mine.html).toContain(`/r/${code}`);
-    expect(mine.text).toContain("You've brought in 3 friends so far. 7 more and you get a $25 gift card to a Victoria favorite.");
-    expect(mine.html).toContain('You&#39;ve brought in 3 friends so far.');
+    expect(mine.text).toContain("You've brought in 5 friends so far. 5 more and you get a $25 gift card.");
+    expect(mine.html).toContain('You&#39;ve brought in 5 friends so far.');
     const other = msgs.find(m => m.to[0] === 'plain@example.com');
     expect(other.html).toMatch(/\/r\/[a-z2-9]{7}/);
     expect(other.html).not.toContain(`/r/${code}`);
 
-    const rewards = pings.filter(p => p.title === '🎁 Referral rewards to send');
-    expect(rewards).toHaveLength(1);
-    expect(rewards[0].fields).toEqual([
-      ['sharer@example.com', '3 referrals: an entry in our monthly $50 local gift card drawing'],
-      ['sharer@example.com', '3 referrals: a Vic 361 sticker pack']
-    ]);
-    expect((await subOf('sharer@example.com')).ref_tier).toBe(3);
+    // The $10 card went out by itself; the drawing entry is no gift card.
+    expect(orders).toEqual([{ externalId: `vic361-tier-${code}-5`, amount: 10, email: 'sharer@example.com', name: 'sharer',
+      message: "Thanks for sharing The Vic 361! You've brought in 5 friends, so here's a $10 gift card on us." }]);
+    const notes = pings.filter(p => p.title === '🎁 Referral rewards');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].fields).toEqual([['sharer@example.com', '$10 gift card for reaching 5 friends. Sent ✅']]);
+    expect((await subOf('sharer@example.com')).ref_tier).toBe(5);
 
-    // The admin shows counted and pending referrals.
+    // The admin shows counted and pending referrals, and the reward.
     const st = await (await fetch(baseUrl + '/api/admin/newsletter', { headers: h })).json();
-    expect(st.referrers[0]).toMatchObject({ email: 'sharer@example.com', referrals: 3, pending: 1 });
-    expect(st.referral_tiers.map(t => t.n)).toEqual([1, 3, 10]);
+    expect(st.referrers[0]).toMatchObject({ email: 'sharer@example.com', referrals: 5, pending: 1 });
+    expect(st.referral_tiers.map(t => t.n)).toEqual([1, 5, 10]);
+    expect(st.gift_cards).toBe('tremendous');
+    expect(st.referral_rewards).toMatchObject([{ email: 'sharer@example.com', what: '$10 gift card for reaching 5 friends', status: 'sent' }]);
+
+    // A retry of the week (or next Monday) doesn't send it again.
+    pings.length = 0;
+    expect((await post('/api/admin/newsletter/send', { force: true }, h)).status).toBe(200);
+    expect(orders).toHaveLength(1);
+    expect(pings.filter(p => p.title === '🎁 Referral rewards')).toHaveLength(0);
   });
 
   it('one inbox counts once: +tags and Gmail dots are the same friend, and never the referrer', async () => {
@@ -668,7 +682,7 @@ describe('referral program', () => {
     expect(await store.countReferrals([code])).toEqual({ [code]: 2 });
   });
 
-  it('flags friends that look made up in the owner\'s rewards note, without holding anything back', async () => {
+  it('holds a reward whose friends look made up until the owner approves it', async () => {
     const at = (min) => new Date(Date.UTC(2026, 9, 1, 12, min)).toISOString();
     expect(referralFlags([
       { email: 'maria.g@gmail.com', confirmed_at: at(0) },
@@ -686,24 +700,98 @@ describe('referral program', () => {
       { email: 'c@burner.biz', confirmed_at: at(90) }
     ])).toEqual(['3 at burner.biz']);
 
-    const pings = [];
-    await startApp({ slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async () => {} } });
+    const pings = [], orders = [];
+    const tremendous = { enabled: true, sendReward: async (o) => { orders.push(o); return { orderId: 'ORD1', status: 'EXECUTED' }; } };
+    await startApp({ tremendous, slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async () => {} } });
     await store.importSubscribers(['sharer@example.com'], 'import');
     const [sharer] = await store.listSubscribers({ status: 'active' });
     const code = (await store.ensureRefCodes([sharer.id]))[sharer.id];
-    for (const e of ['sam1@gmail.com', 'sam2@gmail.com', 'sam3@gmail.com']) {
+    for (const e of ['sam1@gmail.com', 'sam2@gmail.com', 'sam3@gmail.com', 'sam4@gmail.com', 'sam5@gmail.com']) {
       await post('/api/subscribe', { email: e, ref: code });
       await confirmFriend(e);
       await age(e);
     }
     pings.length = 0;
-    expect((await post('/api/admin/newsletter/send', {}, await auth())).status).toBe(200);
-    const [note] = pings.filter(p => p.title === '🎁 Referral rewards to send');
-    // Both tiers still listed; the warning and the friends come once, on the last line.
-    expect(note.fields[0]).toEqual(['sharer@example.com', '3 referrals: an entry in our monthly $50 local gift card drawing']);
-    expect(note.fields[1][1]).toBe('3 referrals: a Vic 361 sticker pack\n' +
-      '👀 Check before sending: 3 joined within 10 minutes; 3 addresses like "sam".\n' +
-      'Friends: sam1@gmail.com, sam2@gmail.com, sam3@gmail.com');
+    const h = await auth();
+    expect((await post('/api/admin/newsletter/send', {}, h)).status).toBe(200);
+    // Held: nothing sent until the owner says so.
+    expect(orders).toHaveLength(0);
+    const [note] = pings.filter(p => p.title === '🎁 Referral rewards');
+    expect(note.fields).toEqual([['sharer@example.com', '$10 gift card for reaching 5 friends.\n' +
+      '👀 Held for your OK (Admin → Newsletter → Referral rewards): 5 joined within 10 minutes; 5 addresses like "sam".\n' +
+      'Friends: sam1@gmail.com, sam2@gmail.com, sam3@gmail.com, sam4@gmail.com, sam5@gmail.com']]);
+    const st = await (await fetch(baseUrl + '/api/admin/newsletter', { headers: h })).json();
+    const [held] = st.referral_rewards;
+    expect(held).toMatchObject({ status: 'held', flags: '5 joined within 10 minutes; 5 addresses like "sam"' });
+
+    // Approve sends it; a second approve can't send it twice.
+    const ok = await post(`/api/admin/newsletter/rewards/${held.id}/approve`, {}, h);
+    expect(await ok.json()).toMatchObject({ ok: true, message: 'Sent.', reward: { status: 'sent', order_id: 'ORD1' } });
+    expect(orders).toHaveLength(1);
+    expect((await post(`/api/admin/newsletter/rewards/${held.id}/approve`, {}, h)).status).toBe(409);
+    expect((await post(`/api/admin/newsletter/rewards/${held.id}/skip`, {}, h)).status).toBe(409);
+    expect((await post(`/api/admin/newsletter/rewards/${held.id}/approve`, {})).status).toBe(401);
+  });
+
+  it('a gift card that fails is retried every Monday; without Tremendous it\'s listed to send by hand', async () => {
+    const pings = [], alerts = [];
+    let fail = true;
+    const tremendous = { enabled: true, sendReward: async () => {
+      if (fail) { const e = new Error('Not enough money in the Tremendous balance. Add funds, then approve it again or wait for Monday.'); e.status = 402; throw e; }
+      return { orderId: 'ORD9', status: 'EXECUTED' };
+    } };
+    await startApp({ tremendous, slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async (...a) => { alerts.push(a); } } });
+    await store.importSubscribers(['sharer@example.com'], 'import');
+    const [sharer] = await store.listSubscribers({ status: 'active' });
+    const code = (await store.ensureRefCodes([sharer.id]))[sharer.id];
+    for (const [e, hours] of [['maria.g@gmail.com', 30], ['tomr@yahoo.com', 40], ['jess.k@outlook.com', 50], ['li.wei@icloud.com', 60], ['bob@aol.com', 70]]) {
+      await post('/api/subscribe', { email: e, ref: code });
+      await confirmFriend(e);
+      await age(e, hours);
+    }
+    const h = await auth();
+    pings.length = 0;
+    await post('/api/admin/newsletter/send', {}, h);
+    expect(pings.find(p => p.title === '🎁 Referral rewards').fields[0][1])
+      .toBe('$10 gift card for reaching 5 friends. Failed: Not enough money in the Tremendous balance. Add funds, then approve it again or wait for Monday. It\'s retried every Monday.');
+    expect(alerts.map(a => a[0])).toContain('referral-reward-failed');
+    fail = false;
+    pings.length = 0;
+    await post('/api/admin/newsletter/send', { force: true }, h);
+    expect(pings.find(p => p.title === '🎁 Referral rewards').fields).toEqual([['sharer@example.com', '$10 gift card for reaching 5 friends. Sent ✅']]);
+
+    // No Tremendous: the reward is still recorded, for the owner to send.
+    if (server) await new Promise(r => server.close(r));
+    const keep = store;
+    await startApp({ slack: { enabled: true, notify: async (m) => { pings.push(m); return true; }, alert: async () => {} } });
+    expect(keep).not.toBe(store);
+    await store.importSubscribers(['sharer@example.com'], 'import');
+    const [s2] = await store.listSubscribers({ status: 'active' });
+    const c2 = (await store.ensureRefCodes([s2.id]))[s2.id];
+    for (const [e, hours] of [['maria.g@gmail.com', 30], ['tomr@yahoo.com', 40], ['jess.k@outlook.com', 50], ['li.wei@icloud.com', 60], ['bob@aol.com', 70]]) {
+      await post('/api/subscribe', { email: e, ref: c2 });
+      await confirmFriend(e);
+      await age(e, hours);
+    }
+    pings.length = 0;
+    await post('/api/admin/newsletter/send', {}, await auth());
+    expect(pings.find(p => p.title === '🎁 Referral rewards').fields[0][1])
+      .toBe("$10 gift card for reaching 5 friends. Send it by hand (Tremendous isn't set up).");
+    const st = await (await fetch(baseUrl + '/api/admin/newsletter', { headers: await auth() })).json();
+    expect(st.gift_cards).toBe('manual');
+    const marked = await post(`/api/admin/newsletter/rewards/${st.referral_rewards[0].id}/approve`, {}, await auth());
+    expect(await marked.json()).toMatchObject({ ok: true, reward: { status: 'sent', reason: 'Sent by hand' } });
+  });
+
+  it('the rules page explains the drawing and the gift cards', async () => {
+    await startApp();
+    const html = await (await fetch(baseUrl + '/referral-rules')).text();
+    expect(html).toContain('Referral rewards: official rules');
+    expect(html).toContain('No purchase is necessary');
+    expect(html).toContain('$25 digital gift card');
+    expect(html).toContain('<strong>5 friends.</strong> A $10 digital gift card');
+    expect(html).toContain('Tremendous');
+    expect(await (await fetch(baseUrl + '/privacy')).text()).toContain('href="/referral-rules"');
   });
 
   it('the forms send the code the browser kept, and the pixel skips referral URLs', async () => {
@@ -1102,5 +1190,79 @@ describe('a returning subscriber', () => {
     expect(calls.at(-1).text).toMatch(/\$1 = ANY\(old_tokens\)/);
     await st.confirmSubscriber('old');
     expect(calls.at(-1).text).not.toMatch(/old_tokens/);
+  });
+});
+
+describe('referral rewards engine', () => {
+  const localDate = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+
+  it('draws last month\'s winner once, from the 2nd, one entry per friend who joined that month', async () => {
+    expect(drawingMonth('2026-10-01')).toBe(null);
+    expect(drawingMonth('2026-10-02')).toBe('2026-09');
+    expect(drawingMonth('2027-01-05')).toBe('2026-12');
+
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-draw-'));
+    const st = new FileStore(path.join(tmpDir, 's.json'));
+    await st.importSubscribers(['ann@example.com', 'ben@example.com', 'gone@example.com'], 'import');
+    const subs = await st.listSubscribers({ status: 'active' });
+    const codes = await st.ensureRefCodes(subs.map(x => x.id));
+    const code = (e) => codes[subs.find(x => x.email === e).id];
+    const join = async (email, ref, at) => {
+      const s = await st.addSubscriber({ email, source: 'site', referredBy: ref });
+      await st.confirmSubscriber(s.token);
+      await st._withWrite(async () => {
+        const data = await st._read();
+        data.subscribers.find(x => x.email === email).confirmed_at = at;
+        await st._write(data);
+      });
+    };
+    await join('a1@gmail.com', code('ann@example.com'), '2026-09-03T15:00:00Z');
+    await join('a.1+x@gmail.com', code('ann@example.com'), '2026-09-04T15:00:00Z'); // same inbox: one entry
+    await join('a2@yahoo.com', code('ann@example.com'), '2026-09-20T15:00:00Z');
+    await join('b1@outlook.com', code('ben@example.com'), '2026-10-01T04:30:00Z'); // Sept 30 in Victoria
+    await join('b2@outlook.com', code('ben@example.com'), '2026-08-30T15:00:00Z'); // August: not this drawing
+    await join('g1@aol.com', code('gone@example.com'), '2026-09-10T15:00:00Z');
+    await st.unsubscribe(subs.find(x => x.email === 'gone@example.com').token); // a referrer who left can't win
+
+    const orders = [], pings = [];
+    const tremendous = { enabled: true, sendReward: async (o) => { orders.push(o); return { orderId: 'D1', status: 'EXECUTED' }; } };
+    const slack = { notify: async (m) => { pings.push(m); }, alert: async () => {} };
+    const picks = [];
+    const rewards = createReferralRewards({ store: st, slack, tremendous, localDate, nowFn: () => new Date('2026-10-05T13:00:00Z'),
+      randomInt: (n) => { picks.push(n); return 2; } }); // entries: ann 0-1, ben 2
+    const done = await rewards.run({});
+    expect(picks).toEqual([3]);
+    expect(done).toMatchObject([{ kind: 'drawing', month: '2026-09', email: 'ben@example.com', entries: 1, total_entries: 3, amount: 25, status: 'sent' }]);
+    expect(orders).toEqual([{ externalId: 'vic361-draw-2026-09', amount: 25, email: 'ben@example.com', name: 'ben',
+      message: "You won The Vic 361's September 2026 referral drawing! Thanks for sharing the newsletter with your friends." }]);
+    expect(pings[0].fields).toEqual([['ben@example.com', '$25 gift card: won the September 2026 drawing (1 of 3 entries). Sent ✅']]);
+    // Once a month, however many Mondays.
+    expect(await rewards.run({})).toEqual([]);
+    expect(orders).toHaveLength(1);
+  });
+
+  it('sends one order to Tremendous: campaign, amount, email, and the key that stops a double payment', async () => {
+    const calls = [];
+    const ok = async (url, init) => { calls.push({ url, init }); return { ok: true, status: 200, json: async () => ({ order: { id: 'O1', status: 'EXECUTED' } }) }; };
+    const live = createTremendous(tremendousConfig({ TREMENDOUS_API_KEY: 'PROD_abc', TREMENDOUS_CAMPAIGN_ID: 'CAMP1' }), ok);
+    expect(live.enabled).toBe(true);
+    expect(await live.sendReward({ externalId: 'vic361-tier-abc2345-5', amount: 10, email: 'r@example.com', name: 'r', message: 'Thanks!' }))
+      .toEqual({ orderId: 'O1', status: 'EXECUTED' });
+    expect(calls[0].url).toBe('https://api.tremendous.com/api/v2/orders');
+    expect(calls[0].init.headers.Authorization).toBe('Bearer PROD_abc');
+    expect(JSON.parse(calls[0].init.body)).toEqual({
+      external_id: 'vic361-tier-abc2345-5', payment: { funding_source_id: 'BALANCE' },
+      reward: { campaign_id: 'CAMP1', value: { denomination: 10, currency_code: 'USD' }, recipient: { name: 'r', email: 'r@example.com' },
+        delivery: { method: 'EMAIL', meta: { sender_name: 'The Vic 361', message: 'Thanks!' } } }
+    });
+    const test = createTremendous(tremendousConfig({ TREMENDOUS_API_KEY: 'TEST_abc', TREMENDOUS_CAMPAIGN_ID: 'C' }), ok);
+    await test.sendReward({ externalId: 'x', amount: 1, email: 'r@example.com', name: 'r', message: 'm' });
+    expect(calls[1].url).toBe('https://testflight.tremendous.com/api/v2/orders');
+    expect(tremendousConfig({ TREMENDOUS_API_KEY: 'k' }).enabled).toBe(false); // needs the campaign too
+
+    const broke = createTremendous(tremendousConfig({ TREMENDOUS_API_KEY: 'k', TREMENDOUS_CAMPAIGN_ID: 'C' }),
+      async () => ({ ok: false, status: 402, json: async () => ({ errors: { message: 'Insufficient funds' } }) }));
+    await expect(broke.sendReward({ externalId: 'x', amount: 1, email: 'r@example.com', name: 'r', message: 'm' }))
+      .rejects.toThrow('Not enough money in the Tremendous balance');
   });
 });

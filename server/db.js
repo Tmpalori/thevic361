@@ -289,7 +289,7 @@ class FileStore {
       const raw = await fs.readFile(this.file, 'utf8');
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') {
-        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], email_opens: [], sponsor_orders: [] };
+        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], email_opens: [], referral_rewards: [], sponsor_orders: [] };
       }
       if (!Array.isArray(parsed.submissions)) parsed.submissions = [];
       if (!parsed.event_archive || typeof parsed.event_archive !== 'object') parsed.event_archive = {};
@@ -297,12 +297,13 @@ class FileStore {
       if (!Array.isArray(parsed.subscribers)) parsed.subscribers = [];
       if (!Array.isArray(parsed.newsletter_sends)) parsed.newsletter_sends = [];
       if (!Array.isArray(parsed.email_opens)) parsed.email_opens = [];
+      if (!Array.isArray(parsed.referral_rewards)) parsed.referral_rewards = [];
       if (!Array.isArray(parsed.sponsor_orders)) parsed.sponsor_orders = [];
       if (!Array.isArray(parsed.event_edits)) parsed.event_edits = [];
       return parsed;
     } catch (err) {
       if (err.code === 'ENOENT') {
-        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], email_opens: [], sponsor_orders: [] };
+        return { submissions: [], published: null, event_edits: [], event_archive: {}, traffic: [], subscribers: [], newsletter_sends: [], email_opens: [], referral_rewards: [], sponsor_orders: [] };
       }
       throw err;
     }
@@ -547,10 +548,14 @@ class FileStore {
   async listReferredFriends(codes) {
     const want = codes ? new Set(codes) : null;
     const data = await this._read();
-    const owner = new Map(data.subscribers.filter(x => x.ref_code).map(x => [x.ref_code, x.email]));
+    const owner = new Map(data.subscribers.filter(x => x.ref_code).map(x => [x.ref_code, x]));
     return data.subscribers
       .filter(x => x.status === 'active' && x.referred_by && (!want || want.has(x.referred_by)))
-      .map(x => ({ referred_by: x.referred_by, referrer_email: owner.get(x.referred_by) || null, email: x.email, confirmed_at: x.confirmed_at || null }));
+      .map(x => {
+        const o = owner.get(x.referred_by);
+        return { referred_by: x.referred_by, referrer_email: o ? o.email : null, referrer_active: Boolean(o && o.status === 'active'),
+          email: x.email, confirmed_at: x.confirmed_at || null };
+      });
   }
 
   async topReferrers(limit = 10) {
@@ -578,6 +583,46 @@ class FileStore {
       await this._write(data);
       return true;
     });
+  }
+
+  // Referral rewards (server/referralRewards.js): one row per reward, keyed
+  // so a tier or a month's drawing is only ever created once. Returns the
+  // new row, or null when that key already exists.
+  async addReferralReward(row) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      if (data.referral_rewards.some(x => x.key === row.key)) return null;
+      const out = { id: newId(), order_id: null, reason: null, entries: null, total_entries: null, flags: null, ...row,
+        created_at: nowIso(), updated_at: nowIso() };
+      data.referral_rewards.push(out);
+      await this._write(data);
+      return { ...out };
+    });
+  }
+
+  async updateReferralReward(id, patch) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const row = data.referral_rewards.find(x => x.id === id);
+      if (!row) return null;
+      for (const k of ['status', 'order_id', 'reason']) if (k in patch) row[k] = patch[k];
+      row.updated_at = nowIso();
+      await this._write(data);
+      return { ...row };
+    });
+  }
+
+  async getReferralReward(id) {
+    const data = await this._read();
+    const row = data.referral_rewards.find(x => x.id === id);
+    return row ? { ...row } : null;
+  }
+
+  // Newest first; statuses limits it (e.g. ['pending', 'failed']).
+  async listReferralRewards({ statuses = null, limit = 30 } = {}) {
+    const data = await this._read();
+    return data.referral_rewards.filter(x => !statuses || statuses.includes(x.status))
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, limit).map(x => ({ ...x }));
   }
 
   // Imported addresses already opted in elsewhere (an old list), so they start
@@ -862,6 +907,14 @@ export function breakerPool(pool, { windowMs = 30000, now = () => Date.now() } =
 }
 
 // Tables holding data nothing else can rebuild; see ready().
+// A referral_rewards row as the FileStore keeps it (ISO times, plain numbers).
+function rewardRow(x) {
+  return { ...x, amount: Number(x.amount), tier: x.tier == null ? null : Number(x.tier),
+    entries: x.entries == null ? null : Number(x.entries), total_entries: x.total_entries == null ? null : Number(x.total_entries),
+    created_at: x.created_at instanceof Date ? x.created_at.toISOString() : x.created_at,
+    updated_at: x.updated_at instanceof Date ? x.updated_at.toISOString() : x.updated_at };
+}
+
 const FRESH_TABLES = ['subscribers', 'sponsor_orders'];
 
 class PgStore {
@@ -1014,6 +1067,28 @@ class PgStore {
         await addColumn('newsletter_sends', 'failed_emails', `ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS failed_emails JSONB NOT NULL DEFAULT '[]'::jsonb`);
         // Paid Vic's Pick order ids the issue starred, for their reports.
         await addColumn('newsletter_sends', 'picks', 'ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS picks JSONB');
+        // Referral rewards (see FileStore.addReferralReward). key is unique:
+        // a tier per referrer, or a month's drawing, is created once.
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS referral_rewards (
+            id TEXT PRIMARY KEY,
+            key TEXT NOT NULL UNIQUE,
+            kind TEXT NOT NULL,
+            ref_code TEXT,
+            email TEXT NOT NULL,
+            tier INT,
+            month TEXT,
+            amount INT NOT NULL,
+            status TEXT NOT NULL,
+            order_id TEXT,
+            entries INT,
+            total_entries INT,
+            flags TEXT,
+            reason TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `);
         // Newsletter opens (see FileStore.recordEmailOpen): one row per
         // issue and subscriber.
         await this.pool.query(`
@@ -1354,7 +1429,7 @@ class PgStore {
 
   async listReferredFriends(codes) {
     await this.ready();
-    const sql = `SELECT f.referred_by, s.email AS referrer_email, f.email, f.confirmed_at
+    const sql = `SELECT f.referred_by, s.email AS referrer_email, COALESCE(s.status = 'active', false) AS referrer_active, f.email, f.confirmed_at
                    FROM subscribers f LEFT JOIN subscribers s ON s.ref_code = f.referred_by
                   WHERE f.status = 'active' AND f.referred_by IS NOT NULL`;
     const r = codes
@@ -1487,6 +1562,40 @@ class PgStore {
     const r = await this.pool.query(
       'SELECT week_key, COUNT(*)::int AS n FROM email_opens WHERE week_key = ANY($1::text[]) GROUP BY week_key', [weekKeys]);
     return Object.fromEntries(r.rows.map(x => [x.week_key, Number(x.n)]));
+  }
+
+  async addReferralReward(row) {
+    await this.ready();
+    const r = await this.pool.query(
+      `INSERT INTO referral_rewards (id, key, kind, ref_code, email, tier, month, amount, status, entries, total_entries, flags)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       ON CONFLICT (key) DO NOTHING RETURNING *`,
+      [newId(), row.key, row.kind, row.ref_code || null, row.email, row.tier ?? null, row.month || null, row.amount, row.status,
+        row.entries ?? null, row.total_entries ?? null, row.flags || null]);
+    return r.rows[0] ? rewardRow(r.rows[0]) : null;
+  }
+
+  async updateReferralReward(id, patch) {
+    await this.ready();
+    const sets = [], vals = [id];
+    for (const k of ['status', 'order_id', 'reason']) if (k in patch) { vals.push(patch[k]); sets.push(`${k} = $${vals.length}`); }
+    const r = await this.pool.query(
+      `UPDATE referral_rewards SET ${[...sets, 'updated_at = NOW()'].join(', ')} WHERE id = $1 RETURNING *`, vals);
+    return r.rows[0] ? rewardRow(r.rows[0]) : null;
+  }
+
+  async getReferralReward(id) {
+    await this.ready();
+    const r = await this.pool.query('SELECT * FROM referral_rewards WHERE id = $1', [id]);
+    return r.rows[0] ? rewardRow(r.rows[0]) : null;
+  }
+
+  async listReferralRewards({ statuses = null, limit = 30 } = {}) {
+    await this.ready();
+    const r = statuses
+      ? await this.pool.query('SELECT * FROM referral_rewards WHERE status = ANY($1::text[]) ORDER BY created_at DESC LIMIT $2', [statuses, limit])
+      : await this.pool.query('SELECT * FROM referral_rewards ORDER BY created_at DESC LIMIT $1', [limit]);
+    return r.rows.map(rewardRow);
   }
 
   async getArchivedEvent(page) {
