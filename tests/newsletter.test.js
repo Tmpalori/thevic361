@@ -479,6 +479,51 @@ describe('signup page', () => {
   });
 });
 
+describe('signups where the bot check never loaded', () => {
+  const pass = async () => ({ ok: true, json: async () => ({ success: true }) });
+  const fail = async () => ({ ok: true, json: async () => ({ success: false, 'error-codes': ['invalid-input-response'] }) });
+
+  it('no token: not refused, but confirmed by email before they are on the list', async () => {
+    await startApp({ turnstileSecret: 'fake-secret', fetch: pass });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const r = await post('/api/subscribe', { email: 'iab@example.com' });
+      expect(r.status).toBe(200);
+      expect((await r.json()).message).toBe('Almost there! Check your inbox and tap Confirm to start getting it.');
+      expect((await store.countSubscribers()).pending).toBe(1);
+      expect(sent.single.map(m => m.subject)).toEqual(['Confirm your Vic 361 subscription']);
+      // Same answer for an address already on the list (no way to probe who's subscribed).
+      await store.importSubscribers(['on@example.com'], 'import');
+      expect((await (await post('/api/subscribe', { email: 'on@example.com' })).json()).message)
+        .toBe('Almost there! Check your inbox and tap Confirm to start getting it.');
+    } finally { warn.mockRestore(); }
+  });
+
+  it('a token that fails is still refused; a good one signs up straight away', async () => {
+    await startApp({ turnstileSecret: 'fake-secret', fetch: fail });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect((await post('/api/subscribe', { email: 'bot@example.com', turnstile_token: 'x' })).status).toBe(400);
+      expect((await store.countSubscribers()).pending || 0).toBe(0);
+    } finally { warn.mockRestore(); }
+    if (server) await new Promise(r => server.close(r));
+    await startApp({ turnstileSecret: 'fake-secret', fetch: pass });
+    const r = await post('/api/subscribe', { email: 'real@example.com', turnstile_token: 'ok' });
+    expect((await r.json()).message).toBe("You're on the list! Check your inbox.");
+    expect((await store.countSubscribers()).active).toBe(1);
+  });
+
+  it('after a signup the form shows only the confirmation (no empty-form second tap)', async () => {
+    await startApp();
+    const html = await (await fetch(baseUrl + '/subscribe')).text();
+    expect(html).toContain("f.classList.add('is-done')");
+    const app = await fs.readFile(path.join(process.cwd(), 'docs/app.js'), 'utf8');
+    expect(app).toContain("form.classList.add('is-done')");
+    const css = await fs.readFile(path.join(process.cwd(), 'docs/style.css'), 'utf8');
+    expect(css).toContain('.signup-form.is-done input, .signup-form.is-done button { display: none; }');
+  });
+});
+
 describe('open tracking', () => {
   it('each copy carries its own tracking image; opens count once per subscriber and show in admin', async () => {
     await startApp();
