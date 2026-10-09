@@ -298,3 +298,19 @@ describe('PR preview sample events', () => {
     expect((await get('/')).text).not.toContain('Monday Market');
   });
 });
+
+describe('asset versions', () => {
+  it('pages link the site CSS and JS with a version, so a deploy never pairs new pages with cached old styles', async () => {
+    await startApp();
+    for (const p of ['/', '/about']) {
+      const html = (await get(p)).text;
+      expect(html).toMatch(/href="\/?\.?\/?style\.css\?v=[0-9a-f]{10}"/);
+      expect(html).toMatch(/href="\/?\.?\/?base\.css\?v=[0-9a-f]{10}"/);
+      expect(html).not.toMatch(/style\.css"/);
+    }
+    expect((await get('/')).text).toMatch(/src="\.\/app\.js\?v=[0-9a-f]{10}"/);
+    // The versioned file is the same file.
+    const v = (await get('/')).text.match(/style\.css\?v=([0-9a-f]+)/)[1];
+    expect((await get(`/style.css?v=${v}`)).status).toBe(200);
+  });
+});

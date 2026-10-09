@@ -16,7 +16,7 @@
 import express from 'express';
 import compression from 'compression';
 import path from 'node:path';
-import { promises as fsp } from 'node:fs';
+import { promises as fsp, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter, resolveEditKey, withPublishedLock } from './db.js';
@@ -1662,8 +1662,24 @@ export async function createApp(opts = {}) {
   const nowFn = opts.now || (() => new Date());
   let indexTemplate = null;
 
+  // The site's own CSS and JS are cached for 10 minutes; a page from a new
+  // deploy with the previous deploy's stylesheet looks broken. Pages link
+  // them with ?v=<hash of their contents>, so each deploy loads fresh files.
+  let assetVersion = null;
+  function versionAssets(html) {
+    if (assetVersion === null) {
+      try {
+        const h = crypto.createHash('sha1');
+        for (const f of ['base.css', 'style.css', 'app.js']) h.update(readFileSync(path.join(DOCS_DIR, f)));
+        assetVersion = h.digest('hex').slice(0, 10);
+      } catch (_) { assetVersion = ''; }
+    }
+    if (!assetVersion) return html;
+    return html.replace(/(href|src)="(\/|\.\/)(base\.css|style\.css|app\.js)"/g, `$1="$2$3?v=${assetVersion}"`);
+  }
+
   function sendHtml(res, html, status = 200, cacheControl = null) {
-    html = fillSeasonalNav(html, res.locals.seasons || [], res.req.path);
+    html = versionAssets(fillSeasonalNav(html, res.locals.seasons || [], res.req.path));
     // Short public cache: a new publish shows up within minutes, and a
     // burst of crawler traffic doesn't hit Postgres on every request.
     // A page built from a fallback list (database down) isn't cached:
