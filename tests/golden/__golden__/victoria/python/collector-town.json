@@ -1,0 +1,81 @@
+{
+  "ALLEVENTS_PAGES": [
+    "https://allevents.in/victoria-tx/all",
+    "https://allevents.in/victoria-tx/this-weekend",
+    "https://allevents.in/victoria-tx/music",
+    "https://allevents.in/victoria-tx/festivals",
+    "https://allevents.in/victoria-tx/kids",
+    "https://allevents.in/victoria-tx/food-drinks",
+    "https://allevents.in/victoria-tx/performances",
+    "https://allevents.in/victoria-tx/arts",
+    "https://allevents.in/victoria-tx/sports"
+  ],
+  "EVENTBRITE_SEARCH": {
+    "location": "Victoria, TX",
+    "searchQuery": "events in Victoria, TX"
+  },
+  "FB_SEARCH_QUERIES": {
+    "alt": [
+      "Victoria, Texas"
+    ],
+    "primary": [
+      "Victoria Texas"
+    ]
+  },
+  "GEMINI_CATEGORIES": [
+    "concerts, live music, open mics and karaoke",
+    "family and kids events (story times, zoo, museum, school and library programs)",
+    "festivals, markets, fairs and community events",
+    "arts, theatre, museums, galleries and film screenings",
+    "food and drink events, trivia nights, bar and brewery events",
+    "sports, runs, rodeos, outdoor and recreation events",
+    "Texas A&M University-Victoria and Victoria College events open to the general public (concerts, plays, lectures, exhibits, games); not student-only, recruiting, orientation or club events",
+    "charity fundraisers, galas, benefit concerts and civic events open to the public (not worship services or church meetings)"
+  ],
+  "GOOGLE_SHEET_ID": "1S42hYlrPM516LDTcy3W_8afCkCqc-ZrUfN2J-SmP23I",
+  "_ADDRESSY": "^\\d+\\s+\\w|,\\s*(?:victoria|tx|texas)\\b|\\b7\\d{4}\\b",
+  "_CITY_TOKENS": [
+    "texas",
+    "tx",
+    "victoria",
+    "vtx"
+  ],
+  "_PAGE_STOP": [
+    "2026",
+    "2027",
+    "and",
+    "annual",
+    "event",
+    "events",
+    "for",
+    "live",
+    "night",
+    "texas",
+    "the",
+    "victoria",
+    "with"
+  ],
+  "_PLACEHOLDER_PLACE_RE": "^\\s*(?:(?:city of )?victoria(?:,?\\s*(?:tx|texas))?(?:,?\\s*(?:usa|united states))?|victoria county|tx|texas|online|virtual|various(?: locations)?|multiple locations|location tbd|tba|tbd|to be announced|restaurant of the week|see description|see details|private residence|secret location)\\s*\\.?\\s*$",
+  "_VENUE_STOP": [
+    "and",
+    "at",
+    "bar",
+    "cafe",
+    "center",
+    "centre",
+    "church",
+    "club",
+    "grill",
+    "hall",
+    "house",
+    "of",
+    "park",
+    "pub",
+    "st",
+    "street",
+    "texas",
+    "the",
+    "tx",
+    "victoria"
+  ]
+}

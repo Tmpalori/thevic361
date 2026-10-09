@@ -1,0 +1,37 @@
+{
+  "addressy": {
+    "101 N. Main St, Victoria, TX 77901": true,
+    "101 North Main Street": true,
+    "2 Bay City Rd, Texas": true,
+    "Aero Crafters": false,
+    "City of Victoria, TX": true,
+    "TBA": false,
+    "Victoria": false,
+    "Victoria County": false,
+    "Victoria, Texas, USA": true
+  },
+  "fb_location": [
+    true,
+    false,
+    false,
+    false,
+    false
+  ],
+  "fill_gaps": [
+    "Event at Hall in Victoria, TX.",
+    "Event at this venue in Victoria, TX."
+  ],
+  "placeholder": {
+    "Aero Crafters": false,
+    "City of Victoria, TX": true,
+    "TBA": true,
+    "Victoria": true,
+    "Victoria County": true,
+    "Victoria, Texas, USA": true
+  },
+  "street_key": {
+    "101 N. Main St, Victoria, TX 77901": "101 main",
+    "101 North Main Street": "101 main",
+    "2 Bay City Rd, Texas": "2 bay"
+  }
+}

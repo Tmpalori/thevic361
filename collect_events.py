@@ -3971,6 +3971,11 @@ def _to_central(dt):
         return dt
 
 
+# What the Eventbrite and Facebook search actors are asked for.
+EVENTBRITE_SEARCH = {"searchQuery": "events in Victoria, TX", "location": "Victoria, TX"}
+FB_SEARCH_QUERIES = {"primary": ["Victoria Texas"], "alt": ["Victoria, Texas"]}
+
+
 def fetch_apify_eventbrite_events(days_ahead=14):
     """Eventbrite events in Victoria, TX via Apify.
 
@@ -3991,8 +3996,8 @@ def fetch_apify_eventbrite_events(days_ahead=14):
         return events
 
     payload = {
-        "searchQuery": "events in Victoria, TX",
-        "location": "Victoria, TX",
+        "searchQuery": EVENTBRITE_SEARCH["searchQuery"],
+        "location": EVENTBRITE_SEARCH["location"],
         "onlineOnly": False,
         "includeDetails": True,
         "maxResults": _resolve_int_env("EVENTBRITE_MAX", 60),
@@ -4167,7 +4172,7 @@ def fetch_apify_facebook_events(days_ahead=14):
     # little overlap), so run both and dedupe by event id.
     searches = [
         (APIFY_FB_ACTOR, {
-            "searchQueries": ["Victoria Texas"],
+            "searchQueries": FB_SEARCH_QUERIES["primary"],
             # The Oct 2026 probe got 39 Victoria events out of 40 (~$0.39); the
             # old cap of 25 left most of the next two weeks on the table because
             # search results skew toward events months out.
@@ -4176,7 +4181,7 @@ def fetch_apify_facebook_events(days_ahead=14):
     ]
     if os.environ.get("FB_EVENTS_ALT_ENABLED", "1").strip() not in ("0", "false", "no"):
         searches.append((APIFY_FB_ALT_ACTOR, {
-            "searchQueries": ["Victoria, Texas"],
+            "searchQueries": FB_SEARCH_QUERIES["alt"],
             "maxEvents": _resolve_int_env("FB_EVENTS_MAX", 50),
             "scrapeOrganizerContacts": False,
             "maxConcurrency": 10,
@@ -4514,6 +4519,33 @@ def _flyers_for(posts, limit=FLYER_IMAGES_PER_ACCOUNT, fetch=None):
     return sorted((i, data) for (i, _), data in zip(picks, datas) if data)
 
 
+def _post_events_prompt(venue_name, posts_blob, today_str, end_str):
+    """The AI prompt for pulling events out of a venue's recent posts (pure, so
+    the golden snapshots can pin it)."""
+    return f"""You are extracting future events from recent Facebook posts by {venue_name} in Victoria, TX.
+
+Posts:
+{posts_blob}
+
+Return ONLY a JSON array of upcoming events mentioned in these posts. Each object:
+{{"date":"YYYY-MM-DD","weekday":"Friday","recurring":true_or_false,"name":"Event Name","time":"7:00 PM or empty string","venue":"Where it happens if NOT at {venue_name} itself, else empty string","description":"One short sentence or empty string","free":true_or_false,"source_post_index":N,"starts":"YYYY-MM-DD or empty string","ends":"YYYY-MM-DD or empty string"}}
+
+Rules:
+- "weekday" is the day of the week the post gives for the event (e.g. "Thursday"). Copy it from the post; don't work it out from a date.
+- Recurring events the post says happen EVERY week ("every Wednesday", "live music every Friday & Saturday", "Trivia Tuesdays", "brunch on Sundays"): emit ONE object per weekday with "recurring": true and that "weekday". Leave "date" empty; dates are filled in later. A 20-day-old post saying "Live music every Friday" still counts.
+- "starts" and "ends" are only for recurring events with a stated first or last date ("Starting Oct 16, karaoke every Friday" → "starts":"2026-10-16"; "every Saturday in October" → "starts" the 1st, "ends" the 31st). Leave them empty when the post gives no limit, and on one-time events.
+- Everything else is a one-time event: "recurring": false, with its ACTUAL "date" between {today_str} and {end_str}, regardless of when the post was made.
+- A dated schedule for one particular week ("This week @ the farm: Sept 24 bingo, Sept 25 music") lists one-time events for those dates only. Never carry those dates forward to later weeks; if the dates are before {today_str}, skip them (but keep any "every week" line in the same post as recurring).
+- For relative dates ("this Friday", "tomorrow", "next Saturday"), resolve them against the post's own posted-on date — then check the resolved date is in the window.
+- "name" is the event's own name as the post gives it ("Plant and Sip", "Trivia Night", "Fall Market"). When a guest business or performer is the draw, add them: "Plant and Sip with Scenic Root". Never build a name from a cut-off or partial phrase, and never end a name with "a", "the", "and", "for" or "...".
+- "description" says only what the post says. Don't add performers, live music, food or other details the post doesn't mention.
+- A post ending in "[post continues]" was cut short; use only what you can read and don't guess the rest.
+- Skip posts that are pure promo, photo dumps, customer thank-yous, or undated announcements.
+- Skip events that already happened (post-date BEFORE today's date with no recurring signal).
+- Only include events held in Victoria, TX or elsewhere in Victoria County. Skip events in other towns (Cuero, Port Lavaca, Goliad, Edna, Yoakum, Corpus Christi, Houston, etc.).
+- Return [] if no events found. No prose, no markdown fences."""
+
+
 def _extract_events_from_posts_via_ai(venue_name, posts):
     """Send a venue's recent posts (text and flyer images) to OpenAI and
     parse out events.
@@ -4553,28 +4585,7 @@ def _extract_events_from_posts_via_ai(venue_name, posts):
         return []
     posts_blob = "\n".join(lines)
 
-    prompt = f"""You are extracting future events from recent Facebook posts by {venue_name} in Victoria, TX.
-
-Posts:
-{posts_blob}
-
-Return ONLY a JSON array of upcoming events mentioned in these posts. Each object:
-{{"date":"YYYY-MM-DD","weekday":"Friday","recurring":true_or_false,"name":"Event Name","time":"7:00 PM or empty string","venue":"Where it happens if NOT at {venue_name} itself, else empty string","description":"One short sentence or empty string","free":true_or_false,"source_post_index":N,"starts":"YYYY-MM-DD or empty string","ends":"YYYY-MM-DD or empty string"}}
-
-Rules:
-- "weekday" is the day of the week the post gives for the event (e.g. "Thursday"). Copy it from the post; don't work it out from a date.
-- Recurring events the post says happen EVERY week ("every Wednesday", "live music every Friday & Saturday", "Trivia Tuesdays", "brunch on Sundays"): emit ONE object per weekday with "recurring": true and that "weekday". Leave "date" empty; dates are filled in later. A 20-day-old post saying "Live music every Friday" still counts.
-- "starts" and "ends" are only for recurring events with a stated first or last date ("Starting Oct 16, karaoke every Friday" → "starts":"2026-10-16"; "every Saturday in October" → "starts" the 1st, "ends" the 31st). Leave them empty when the post gives no limit, and on one-time events.
-- Everything else is a one-time event: "recurring": false, with its ACTUAL "date" between {today_str} and {end_str}, regardless of when the post was made.
-- A dated schedule for one particular week ("This week @ the farm: Sept 24 bingo, Sept 25 music") lists one-time events for those dates only. Never carry those dates forward to later weeks; if the dates are before {today_str}, skip them (but keep any "every week" line in the same post as recurring).
-- For relative dates ("this Friday", "tomorrow", "next Saturday"), resolve them against the post's own posted-on date — then check the resolved date is in the window.
-- "name" is the event's own name as the post gives it ("Plant and Sip", "Trivia Night", "Fall Market"). When a guest business or performer is the draw, add them: "Plant and Sip with Scenic Root". Never build a name from a cut-off or partial phrase, and never end a name with "a", "the", "and", "for" or "...".
-- "description" says only what the post says. Don't add performers, live music, food or other details the post doesn't mention.
-- A post ending in "[post continues]" was cut short; use only what you can read and don't guess the rest.
-- Skip posts that are pure promo, photo dumps, customer thank-yous, or undated announcements.
-- Skip events that already happened (post-date BEFORE today's date with no recurring signal).
-- Only include events held in Victoria, TX or elsewhere in Victoria County. Skip events in other towns (Cuero, Port Lavaca, Goliad, Edna, Yoakum, Corpus Christi, Houston, etc.).
-- Return [] if no events found. No prose, no markdown fences."""
+    prompt = _post_events_prompt(venue_name, posts_blob, today_str, end_str)
 
     text_prompt = prompt
     if flyers:

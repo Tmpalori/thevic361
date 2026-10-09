@@ -137,3 +137,37 @@ def test_ai_prompts():
         "submission review =====\n" + rs.PROMPT,
         "event check =====\n" + sw.PROMPT,
     ]) + "\n")
+
+
+# ─── Collector: what it asks sources for, and its place checks ───────────
+
+def test_collector_town_values():
+    check("collector-town.json", {
+        "ALLEVENTS_PAGES": ce.ALLEVENTS_PAGES, "GOOGLE_SHEET_ID": ce.GOOGLE_SHEET_ID, "GEMINI_CATEGORIES": ce.GEMINI_CATEGORIES,
+        "EVENTBRITE_SEARCH": ce.EVENTBRITE_SEARCH, "FB_SEARCH_QUERIES": ce.FB_SEARCH_QUERIES,
+        "_CITY_TOKENS": sorted(ce._CITY_TOKENS), "_VENUE_STOP": sorted(ce._VENUE_STOP), "_PAGE_STOP": sorted(ce._PAGE_STOP),
+        "_ADDRESSY": ce._ADDRESSY.pattern, "_PLACEHOLDER_PLACE_RE": ce._PLACEHOLDER_PLACE_RE.pattern,
+    })
+
+
+def test_collector_place_checks():
+    fb = [({}, "Aero Crafters", "1502 E Airline Rd, Victoria, TX 77901", "Victoria"),
+          ({}, "Pub", "1770 Fort St", "Victoria"),
+          ({"state": "BC"}, "Pub", "Victoria, TX", "Victoria"),
+          ({}, "Hall", "Cuero, TX 77954", "Cuero"),
+          ({"countryCode": "CA"}, "Hall", "Victoria Texas", "")]
+    placeholders = ["Victoria", "City of Victoria, TX", "Victoria County", "TBA", "Aero Crafters", "Victoria, Texas, USA"]
+    streets = ["101 N. Main St, Victoria, TX 77901", "101 North Main Street", "2 Bay City Rd, Texas"]
+    gap = [{"date": "2026-10-09", "name": "Show", "venue": "Hall"}, {"date": "2026-10-09", "name": "Show", "venue": "", "address": ""}]
+    check("collector-place-checks.json", {
+        "fb_location": [ce._fb_location_is_victoria_tx(*c) for c in fb],
+        "placeholder": {p: bool(ce._PLACEHOLDER_PLACE_RE.match(p)) for p in placeholders},
+        "addressy": {p: bool(ce._ADDRESSY.search(p)) for p in placeholders + streets},
+        "street_key": {s: ce._street_key(s) for s in streets},
+        "fill_gaps": [e.get("description") for e in ce.fill_gaps([dict(e) for e in gap], templates=True)],
+    })
+
+
+def test_collector_post_prompt():
+    check("post-prompt.txt", ce._post_events_prompt(
+        "Aero Crafters", "[1] (posted Fri 2026-10-09 8:15 PM) Trivia tonight at 7!", "2026-10-09", "2026-10-23") + "\n")
