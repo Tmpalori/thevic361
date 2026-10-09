@@ -267,7 +267,10 @@ describe('Vic’s Pick report', () => {
     expect(reports()[0].text).toContain('Shown in our event lists as a Vic’s Pick: 1 time');
     expect(reports()[0].text).toContain('Views of its event page: 1');
     expect(reports()[0].text).toContain('sent to: 250 subscribers');
-    const saved = (await store.listSponsorOrders()).find(o => o.id === AD);
+    // The order is saved just after the email goes out: wait for it.
+    const savedOrder = async () => (await store.listSponsorOrders()).find(o => o.id === AD);
+    await waitFor(async () => Boolean((await savedOrder())?.report_sent));
+    const saved = await savedOrder();
     expect(saved.report_sent).toBeTruthy();
     expect(saved.report).toMatchObject({ shown: 1, page_views: 1 });
 
