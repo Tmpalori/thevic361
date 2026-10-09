@@ -302,7 +302,7 @@ describe('signup flow', () => {
     expect((await store.countSubscribers()).active).toBe(1);
     await vi.waitFor(() => {
       expect(sent.single.some(m => m.subject === 'Welcome to The Vic 361')).toBe(true);
-      expect(pings.some(p => p.title.includes('New newsletter subscriber'))).toBe(true);
+      expect(pings.find(p => p.title.includes('New newsletter subscriber'))).toMatchObject({ channel: 'hype' });
     }, { timeout: 2000 });
     // Signing up again while active sends nothing more.
     await post('/api/subscribe', { email: 'new@example.com' });

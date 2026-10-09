@@ -141,6 +141,7 @@ describe('server wiring', () => {
     await fetch(baseUrl + '/api/stripe/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': `t=${t},v1=${sig}` }, body: raw });
     const paid = sent.find(m => m.kind === 'notify' && m.title.startsWith('💰'));
     expect(paid.title).toBe('💰 New sponsor: Acme');
+    expect(paid.channel).toBe('hype');
     expect(paid.fields.find(f => f[0] === 'Paid')[1]).toBe('$300');
   });
 });
@@ -185,5 +186,16 @@ describe('contact form', () => {
 
     await post({ name: 'Bot', email: 'b@b.example', message: 'spam spam', company: 'x' });
     expect(sent).toHaveLength(1);
+  });
+});
+
+describe('hype and inbox channels', () => {
+  const H = n => `https://hooks.slack.com/services/T/B/${n}`;
+  it('fall back to sales and activity until they have their own webhook', () => {
+    const base = { SLACK_WEBHOOK_URL: H('main'), SLACK_SALES_WEBHOOK_URL: H('sales'), SLACK_ACTIVITY_WEBHOOK_URL: H('act') };
+    expect(slackConfig(base).urls).toMatchObject({ hype: H('sales'), inbox: H('act') });
+    expect(slackConfig({ SLACK_WEBHOOK_URL: H('main') }).urls).toMatchObject({ hype: H('main'), inbox: H('main') });
+    expect(slackConfig({ ...base, SLACK_HYPE_WEBHOOK_URL: H('hype'), SLACK_INBOX_WEBHOOK_URL: H('inbox') }).urls)
+      .toMatchObject({ hype: H('hype'), inbox: H('inbox'), sales: H('sales'), activity: H('act') });
   });
 });
