@@ -222,12 +222,12 @@ These matter the moment a second town exists. All keep Victoria's values.
       this month, open sponsor weeks, picks sold, waiting submissions,
       health), each linking into that town's admin (which still asks for
       its own login).
-- [ ] **4.3 Slack `[Town]` tag**: `SLACK_TOWN_TAG` prefixes every title in
+- [x] **4.3 Slack `[Town]` tag**: `SLACK_TOWN_TAG` prefixes every title in
       `server/slack.js` `notify` and `scripts/slack_notify.py`. Unset = no
       change. Turn it on for new towns first; turn it on for Victoria last,
       as an owner-approved change to message wording. All towns post to the
       same channels: #hype-train, #inbox, #sales, #alerts (activity can map
-      to #inbox or its own channel).
+      to #inbox or its own channel). (Code done; Victoria's stays unset.)
 
 ## Phase 5: launching a town
 
