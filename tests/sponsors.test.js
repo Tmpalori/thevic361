@@ -926,7 +926,7 @@ describe('sponsor promises (review fixes)', () => {
     expect(newsletterCovers('2026-10-10', NOW)).toBe(false);          // this week's issue went out Monday
     expect(newsletterCovers('2026-10-14', NOW)).toBe(true);           // next Monday's issue
     expect(newsletterCovers('2026-10-14', new Date('2026-10-11T18:00:00Z'))).toBe(false); // Sunday: no time to review
-    expect(renderPreview('featured', { date: '2026-10-10' }, { now: NOW })).toContain('that week’s newsletter goes out before we could add it');
+    expect(renderPreview('featured', { date: '2026-10-10' }, { now: NOW })).toContain('its newsletter goes out before we could add it');
     expect(renderPreview('featured', { date: '2026-10-14' }, { now: NOW })).toContain('starred in the Monday newsletter for the week of October 12');
     const late = renderSponsorConfirmed({ kind: 'featured', business: 'T', created_at: NOW.toISOString(), event: { name: 'Show', date: '2026-10-10' } }, { siteUrl: 'https://x' });
     expect(late.text).not.toContain('starred in');

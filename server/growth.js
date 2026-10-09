@@ -11,7 +11,7 @@
  *   cost per subscriber: Meta's spend that day over the subscribers who
  *   actually joined, not Meta's own "signups" (its pixel misses iPhones,
  *   in-app browsers and blockers).
- * - Each Monday issue: sent, unique opens, readers who came to the site
+ * - Each issue (Monday's week, Thursday's weekend): sent, unique opens, readers who came to the site
  *   from it (links carry utm_source=newsletter; a visit is credited to the
  *   issue sent before it): on the day it went out (the click rate; the
  *   visitor id changes daily, so later days can't be told apart from new
@@ -25,6 +25,7 @@
  */
 import crypto from 'node:crypto';
 import { localDateStr, addDays, currentWeek } from './seo.js';
+import { editionOf } from './newsletter.js';
 
 export const SUBSCRIBER_GOAL = 10000;
 export const REVENUE_GOAL_CENTS = 1000000;
@@ -97,7 +98,8 @@ export function sumDays(daily) {
   return t;
 }
 
-// One row per Monday issue, newest first.
+// One row per issue (Monday's and Thursday's), newest first. A visit is
+// credited to the latest issue before it, so the two split the week.
 export function issueReport(sends, opens, subs, rows, events) {
   const sorted = (sends || []).filter(x => x && x.sent_at).slice().sort((a, b) => (a.sent_at < b.sent_at ? -1 : 1));
   const pageEvent = new Map();
@@ -122,7 +124,7 @@ export function issueReport(sends, opens, subs, rows, events) {
     const opened = opens[s.week_key] || 0;
     const unsubscribed = (subs || []).filter(x => { const u = dayOf(x.unsubscribed_at); return u && u >= from && u <= end; }).length;
     return {
-      week: s.week_key, subject: s.subject || '', sent_at: s.sent_at, sent, opens: opened,
+      week: s.week_key, edition: editionOf(s.week_key), subject: s.subject || '', sent_at: s.sent_at, sent, opens: opened,
       open_rate: sent ? Math.round(opened / sent * 1000) / 10 : null,
       clickers: firstDay, click_rate: sent ? Math.round(firstDay / sent * 1000) / 10 : null, reader_days: readerDays,
       visits: visits.reduce((a, r) => a + weight(r), 0),
@@ -246,7 +248,7 @@ export function registerGrowth(app, { store, requireAdmin, nowFn = () => new Dat
         res.set('Cache-Control', 'no-store');
         return res.json({ ok: true, today, goals: goals(subs, dailyGrowth(subs, [], { today, days: 15 }), monthRevenue(orders, today), today) });
       }
-      const sends = typeof store.listNewsletterSends === 'function' ? await store.listNewsletterSends(8).catch(() => []) : [];
+      const sends = typeof store.listNewsletterSends === 'function' ? await store.listNewsletterSends(16).catch(() => []) : [];
       // Enough history for the 14-day pace and every listed issue's week.
       const oldestSend = sends.map(s => dayOf(s.sent_at)).filter(Boolean).sort()[0];
       const since = [addDays(today, -(Math.max(days, 15) - 1)), oldestSend].filter(Boolean).sort()[0];

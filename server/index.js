@@ -32,7 +32,7 @@ import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys, keyedEvents
 import { registerGrowth } from './growth.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
 import { createTremendous, tremendousConfig } from './referralRewards.js';
-import { createMailer, renderSubmissionReceived, renderSubmissionLive } from './notify.js';
+import { createMailer, renderSubmissionReceived, renderSubmissionLive, setWeekendIssue } from './notify.js';
 import { registerSubmissionReview, isPaidPick } from './submissionReview.js';
 import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage, sameEvent, eventWeekStats, LEAD_IN_DAYS } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
@@ -252,7 +252,7 @@ export async function createApp(opts = {}) {
     console.error('[db] production database had no', tables.join(', '), 'table: created empty');
     slack.alert('db-fresh', 'Production database looks new and empty',
       `The server had to create the ${tables.join(' and ')} table${tables.length > 1 ? 's' : ''}, so this database has no subscribers or sponsor orders. ` +
-      'If DATABASE_URL now points at a recreated Postgres, restore the latest Railway backup (AGENTS.md, Backups) before the Monday newsletter.');
+      'If DATABASE_URL now points at a recreated Postgres, restore the latest Railway backup (AGENTS.md, Backups) before the next newsletter (Monday or Thursday).');
   };
   const storeBundle = opts.storeBundle ?? await createStore({
     databaseUrl: opts.databaseUrl,
@@ -294,6 +294,8 @@ export async function createApp(opts = {}) {
   const stripeCfg = stripeConfig(process.env, opts);
   // Resend: the newsletter and the "we got it" emails (server/notify.js).
   const newsletter = newsletterConfig(process.env, opts);
+  // Sales and confirmation copy only promise the Thursday issue while it's on.
+  setWeekendIssue(newsletter.weekend);
   const nlResend = opts.resend || createResend(newsletter.apiKey);
   // Referral gift cards (server/referralRewards.js); unset means the owner
   // sends them by hand from the admin list.
@@ -1349,15 +1351,24 @@ export async function createApp(opts = {}) {
         store.listTraffic(addDays(start, -LEAD_IN_DAYS)), getPublicPayload(), listArchived().catch(() => [])
       ]);
       const events = [...((payload && payload.events) || []), ...(archived || [])];
+      // That week's two issues: Monday's (keyed by `start`) and Thursday's.
       let recipients = 0, opens = 0;
+      const weekend = { recipients: 0, opens: 0 };
       try {
-        const sent = typeof store.getNewsletterSend === 'function' ? await store.getNewsletterSend(start) : null;
-        recipients = sent ? Number(sent.recipients) || 0 : 0;
-        if (typeof store.countEmailOpens === 'function') opens = (await store.countEmailOpens([start]))[start] || 0;
+        const thu = addDays(start, 3);
+        const [mon, wk] = typeof store.getNewsletterSend === 'function'
+          ? await Promise.all([store.getNewsletterSend(start), store.getNewsletterSend(thu)]) : [null, null];
+        recipients = mon ? Number(mon.recipients) || 0 : 0;
+        weekend.recipients = wk ? Number(wk.recipients) || 0 : 0;
+        if (typeof store.countEmailOpens === 'function') {
+          const o = await store.countEmailOpens([start, thu]);
+          opens = o[start] || 0;
+          weekend.opens = o[thu] || 0;
+        }
       } catch { /* the table still shows without the newsletter line */ }
       res.set('Cache-Control', 'no-store');
       res.json({ ok: true, week_start: start, week_end: end, this_week: start === thisMonday,
-        newsletter: { recipients, opens }, events: eventWeekStats(rows, events, { start, end }) });
+        newsletter: { recipients, opens, weekend }, events: eventWeekStats(rows, events, { start, end }) });
     } catch (err) {
       console.error('[traffic] event stats failed:', err.message);
       res.status(500).json({ ok: false, error: 'event-stats-failed', message: err.message });
@@ -2050,6 +2061,8 @@ export async function createApp(opts = {}) {
     handlers: {
       newsletter: () => newsletterApi.scheduledSend(),
       newsletterReady: () => newsletter.enabled && newsletter.autosend,
+      newsletterWeekend: () => newsletterApi.scheduledSend('weekend'),
+      newsletterWeekendReady: () => newsletter.enabled && newsletter.autosend && newsletter.weekend,
       // Weekly sponsor reports (server/sponsors.js), once that exists.
       sponsorReports: typeof sponsors.sendSponsorReports === 'function'
         ? now => sponsors.sendSponsorReports(now)
@@ -2166,7 +2179,7 @@ export async function createApp(opts = {}) {
         fix: slackRefusedText() || 'Set SLACK_WEBHOOK_URL in Railway (and as a GitHub secret) to get pings for breakage, sponsors and submissions. Optional: SLACK_SALES_WEBHOOK_URL, SLACK_ACTIVITY_WEBHOOK_URL and SLACK_ALERTS_WEBHOOK_URL send each kind to its own channel.' },
       { key: 'newsletter', label: 'Email newsletter (Resend)', ok: newsletter.enabled && Boolean(newsletter.address), level: 'recommended',
         fix: newsletter.enabled ? 'Set NEWSLETTER_ADDRESS (a mailing address is required by law in every email).' : 'Set RESEND_API_KEY and NEWSLETTER_ADDRESS in Railway.' },
-      { key: 'newsletter_auto', label: 'Newsletter sends itself Mondays at 7:43 AM', ok: newsletter.enabled && newsletter.autosend, level: 'recommended',
+      { key: 'newsletter_auto', label: newsletter.weekend ? 'Newsletter sends itself (Mondays 7:43 AM, Thursdays 7:00 AM)' : 'Newsletter sends itself (Mondays 7:43 AM)', ok: newsletter.enabled && newsletter.autosend, level: 'recommended',
         fix: !newsletter.enabled ? 'Set RESEND_API_KEY in Railway first.'
           : 'NEWSLETTER_AUTOSEND=0 is set in Railway; remove it to send automatically. (Optional backup: NEWSLETTER_CRON_SECRET in Railway and GitHub lets GitHub retry later in the day.)' },
       { key: 'reply_to', label: 'Customer email replies reach you', ok: Boolean(newsletter.replyTo), level: 'recommended',

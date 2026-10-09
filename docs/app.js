@@ -248,7 +248,7 @@
   }
 
   // ─── NEWSLETTER CARD ───
-  // A "get this every Monday" card two days into the list, where people
+  // A "get this every Monday and Thursday" card two days into the list, where people
   // already finding the list useful are reading, instead of only in the
   // footer. Hidden after someone subscribes on this device.
   var SUB_KEY = 'vic361-subscribed';
@@ -263,7 +263,7 @@
     var card = document.createElement('section');
     card.className = 'nl-card';
     card.innerHTML =
-      '<div class="nl-card__title">Get this list every Monday</div>' +
+      '<div class="nl-card__title">Get this list every Monday and Thursday</div>' +
       '<p class="nl-card__text">The week\'s best events in Victoria, in your inbox. Free, no spam.</p>' +
       '<form class="signup-form js-subscribe" novalidate data-turnstile="fetch">' +
         '<label class="visually-hidden" for="nl-card-email">Email address</label>' +
