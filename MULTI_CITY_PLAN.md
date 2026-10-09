@@ -166,11 +166,14 @@ These matter the moment a second town exists. All keep Victoria's values.
       collect and social-kit commit steps, and sweep `--wait-for` all take
       the town's paths. (Done: `townPaths()` / `town_paths()`, and a
       `Town paths` step in each workflow that touches these files.)
-- [ ] **2.5 Boot guards** for non-Victoria towns: refuse to start if
+- [x] **2.5 Boot guards** for non-Victoria towns: refuse to start if
       `SITE_URL` is unset or points at thevic361.com, if `NEWSLETTER_FROM`
       or GA ID is Victoria's, or if the database's stored `meta.town`
       doesn't match `TOWN` (written on first boot; catches a service wired
-      to Victoria's database).
+      to Victoria's database). (Done. An unset `SITE_URL` is allowed:
+      it falls back to the town's own URL, never Victoria's. An unclaimed
+      database that already has subscribers, orders or submissions is
+      treated as Victoria's and refused too.)
 - [ ] **2.6 Railway watch paths** per service (shared code plus the town's
       own `towns/<slug>/**`; Victoria also watches its root data files), so
       one town's collect or social commit doesn't redeploy every town.

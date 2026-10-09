@@ -331,6 +331,22 @@ class FileStore {
 
   async ready() { return true; }
 
+  // Which town this store belongs to (MULTI_CITY_PLAN.md 2.5): claimTown
+  // writes `id` the first time, unless the store already holds people's
+  // data (subscribers, orders, submissions) from before towns, which is
+  // Victoria's. Returns { town, claimed, hasData }. Victoria never calls it.
+  async claimTown(id) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      if (data.town_meta && data.town_meta.town) return { town: data.town_meta.town, claimed: false, hasData: null };
+      const hasData = data.subscribers.length + data.sponsor_orders.length + data.submissions.length > 0;
+      if (hasData) return { town: null, claimed: false, hasData };
+      data.town_meta = { town: id };
+      await this._write(data);
+      return { town: id, claimed: true, hasData };
+    });
+  }
+
   async insert(row) {
     return this._withWrite(async () => {
       const data = await this._read();
@@ -1294,6 +1310,23 @@ class PgStore {
       review_history: r.review_history || [],
       ai_review: r.ai_review || null
     };
+  }
+
+  // See FileStore.claimTown. town_meta is created here, not in ready(), so
+  // Victoria's database (which never claims) gets no new table.
+  async claimTown(id) {
+    await this.ready();
+    await this.pool.query('CREATE TABLE IF NOT EXISTS town_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    const owner = async () => ((await this.pool.query("SELECT value FROM town_meta WHERE key = 'town'")).rows[0] || {}).value || null;
+    const town = await owner();
+    if (town) return { town, claimed: false, hasData: null };
+    const n = await this.pool.query(`SELECT (SELECT COUNT(*) FROM subscribers) + (SELECT COUNT(*) FROM sponsor_orders)
+      + (SELECT COUNT(*) FROM event_submissions) AS n`);
+    const hasData = Number(n.rows[0].n) > 0;
+    if (hasData) return { town: null, claimed: false, hasData };
+    await this.pool.query("INSERT INTO town_meta (key, value) VALUES ('town', $1) ON CONFLICT (key) DO NOTHING", [id]);
+    const now = await owner();   // another instance may have claimed it first
+    return { town: now, claimed: now === id, hasData };
   }
 
   async insert(row) {
