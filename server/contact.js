@@ -10,6 +10,7 @@
  */
 
 import { SITE_NAME, escHtml, layout } from './seo.js';
+import { replyLink } from './inbound.js';
 import { normalizeEmail } from './newsletter.js';
 import { newId, nowIso } from './db.js';
 
@@ -95,8 +96,8 @@ export function registerContact(app, { siteUrl, slack, store = null, requireAdmi
         title: `✉️ Website message: ${topic}`,
         fields: [['From', values.name], ['Email', email], ['Business', values.business]],
         text: values.message,
-        link: `${siteUrl}/admin.html`,
-        footer: 'Reply by email to the sender',
+        link: replyLink(siteUrl, { to: email, subject: `Your message to The Vic 361` }), linkLabel: 'Reply as news@',
+        footer: 'Their answer comes back here',
         channel: values.topic === 'advertising' ? 'sales' : 'activity'
       });
       // Every message is kept in the database too (listed on admin Home),

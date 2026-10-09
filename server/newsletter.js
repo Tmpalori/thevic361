@@ -55,6 +55,7 @@ import { emailKey } from './db.js';
 import { REFERRAL_TIERS, DRAWING_AMOUNT, referralFlags, createReferralRewards } from './referralRewards.js';
 
 export { REFERRAL_TIERS, referralFlags };
+import { inboundConfig } from './inbound.js';
 import {
   SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank, parseTimes,
   sponsorLinkUrl, formatTime, placeText, iconKeys
@@ -75,7 +76,9 @@ export function newsletterConfig(env = process.env, overrides = {}) {
     replyTo: overrides.newsletterReplyTo ?? env.NEWSLETTER_REPLY_TO ?? '',
     address: overrides.newsletterAddress ?? env.NEWSLETTER_ADDRESS ?? '',
     cronSecret: overrides.newsletterCronSecret ?? env.NEWSLETTER_CRON_SECRET ?? '',
-    testTo: overrides.newsletterTestTo ?? env.NEWSLETTER_TEST_TO ?? ''
+    testTo: overrides.newsletterTestTo ?? env.NEWSLETTER_TEST_TO ?? '',
+    // Replies to news@ reach Slack (server/inbound.js) once receiving is set up.
+    inbound: inboundConfig(env, overrides).enabled
   };
   c.enabled = Boolean(c.apiKey);
   // The one switch for the automatic Monday send (Railway variable): on
@@ -858,7 +861,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
         const openPixelUrl = s.id ? openPixel(key, s.id) : '';
         const code = s.id && refs.codes[s.id];
         const referral = code ? { code, count: refs.counts[code] || 0 } : null;
-        const issue = renderWeekly(payload.events, { siteUrl, now, sponsor: payload.sponsor, unsubscribeUrl, address: config.address, openPixelUrl, referral, replyAsk: Boolean(config.replyTo),
+        const issue = renderWeekly(payload.events, { siteUrl, now, sponsor: payload.sponsor, unsubscribeUrl, address: config.address, openPixelUrl, referral, replyAsk: Boolean(config.replyTo || config.inbound),
           edition, prefsUrl: s.token && config.weekend ? prefsLink(s) : '' });
         return {
           from: config.from, to: [s.email], subject: issue.subject, html: issue.html, text: issue.text,
@@ -1028,7 +1031,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       const payload = await getPublicPayload();
       const unsubscribeUrl = `${siteUrl}/unsubscribe?token=${encodeURIComponent(sub.token)}`;
       const referral = await referralFor(sub);
-      const mail = renderWelcomeEmail(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl, address: config.address, referral, replyAsk: Boolean(config.replyTo) });
+      const mail = renderWelcomeEmail(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl, address: config.address, referral, replyAsk: Boolean(config.replyTo || config.inbound) });
       await resend.send({
         from: config.from, to: [sub.email], subject: mail.subject, html: mail.html, text: mail.text,
         ...(config.replyTo ? { reply_to: config.replyTo } : {}),
@@ -1243,7 +1246,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   const editionParam = v => (v === 'weekend' ? 'weekend' : 'weekly');
   app.get('/api/admin/newsletter/preview', requireAdmin, async (req, res) => {
     const payload = await getPublicPayload();
-    const issue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: '#', address: config.address, replyAsk: Boolean(config.replyTo),
+    const issue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: '#', address: config.address, replyAsk: Boolean(config.replyTo || config.inbound),
       edition: editionParam(req.query.edition), prefsUrl: config.weekend ? '#' : '' });
     res.type('html').send(issue.html);
   });
@@ -1254,7 +1257,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     if (!to) return res.status(400).json({ ok: false, error: 'no-test-address', message: 'Enter an address to send the test to.' });
     try {
       const payload = await getPublicPayload();
-      const issue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: `${siteUrl}/unsubscribe`, address: config.address, replyAsk: Boolean(config.replyTo),
+      const issue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: `${siteUrl}/unsubscribe`, address: config.address, replyAsk: Boolean(config.replyTo || config.inbound),
         edition: editionParam((req.body || {}).edition), prefsUrl: config.weekend ? `${siteUrl}/email-prefs` : '' });
       await resend.send({ from: config.from, to: [to], subject: `[Test] ${issue.subject}`, html: issue.html, text: issue.text, ...(config.replyTo ? { reply_to: config.replyTo } : {}) });
       res.json({ ok: true, to });

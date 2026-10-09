@@ -1339,3 +1339,7 @@ code {
 .growth-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .growth-table .muted { color: var(--admin-muted); }
 .growth-table td:first-child { white-space: nowrap; }
+
+/* Reply as news@ (the modal reuses the event-edit styles). */
+.event-edit-form__hint { margin: 4px 0 0; font-size: 0.85rem; color: var(--admin-muted); }
+#reply-form .event-edit-form__field { display: flex; flex-direction: column; margin-bottom: 10px; }

@@ -560,6 +560,45 @@
     </div>
   </div>
 
+  <!-- Reply as news@: opened from a Slack "Reply as news@" link
+       (admin.html#reply?to=…&subject=…&ref=…). Sends through Resend, so
+       their answer comes back to Slack (server/inbound.js). -->
+  <div id="reply-modal" class="event-edit-modal" hidden
+       role="dialog" aria-modal="true" aria-labelledby="reply-title">
+    <div class="event-edit-modal__backdrop" data-act="close"></div>
+    <div class="event-edit-modal__panel" role="document">
+      <header class="event-edit-modal__header">
+        <h2 id="reply-title">Reply as news@thevic361.com</h2>
+        <button type="button" class="event-edit-modal__close" data-act="close" aria-label="Close">×</button>
+      </header>
+      <form id="reply-form" class="event-edit-form" novalidate>
+        <p id="reply-form-error" class="event-edit-form__error" role="alert" hidden></p>
+        <label class="event-edit-form__field">
+          <span>To</span>
+          <input type="email" name="to" maxlength="254" required>
+          <span class="event-edit-form__field-error" data-error-for="to"></span>
+        </label>
+        <label class="event-edit-form__field">
+          <span>Subject</span>
+          <input type="text" name="subject" maxlength="200" required>
+          <span class="event-edit-form__field-error" data-error-for="subject"></span>
+        </label>
+        <label class="event-edit-form__field">
+          <span>Message</span>
+          <textarea name="text" rows="9" maxlength="10000" required placeholder="Hi! Thanks for reaching out…"></textarea>
+          <span class="event-edit-form__field-error" data-error-for="text"></span>
+        </label>
+        <input type="hidden" name="ref">
+        <p class="event-edit-form__hint">Signed “— The Vic 361”. Their answer comes back to Slack.</p>
+        <footer class="event-edit-form__actions">
+          <span id="reply-status" class="event-edit-form__status" role="status" aria-live="polite"></span>
+          <button type="button" class="btn btn--outline" data-act="close">Cancel</button>
+          <button type="submit" class="btn btn--primary" id="reply-send-btn">Send</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
   <script src="./admin.js"></script>
   <script src="./admin-submissions.js"></script>
 </body>

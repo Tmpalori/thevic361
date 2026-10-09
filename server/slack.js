@@ -92,14 +92,14 @@ export function createSlack(config, { fetchImpl = globalThis.fetch, nowFn = () =
   }
 
   // A titled message with optional "label: value" fields and a footer line.
-  function notify({ title, fields = [], text = '', link = null, footer = '', channel = 'activity' }) {
+  function notify({ title, fields = [], text = '', link = null, linkLabel = 'Open', footer = '', channel = 'activity' }) {
     const e = slackEscape;
     const blocks = [{ type: 'header', text: { type: 'plain_text', text: String(title).slice(0, 150) } }];
     const f = fields.filter(([, v]) => v != null && v !== '').slice(0, 10)
       .map(([k, v]) => ({ type: 'mrkdwn', text: `*${e(k)}*\n${e(v).slice(0, 500)}` }));
     if (f.length) blocks.push({ type: 'section', fields: f });
     if (text) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: e(text).slice(0, 2900) } });
-    const ctx = [footer, link ? `<${link}|Open>` : '', config.environment !== 'production' ? `env: ${config.environment}` : '']
+    const ctx = [footer, link ? `<${link}|${linkLabel}>` : '', config.environment !== 'production' ? `env: ${config.environment}` : '']
       .filter(Boolean).join(' · ');
     if (ctx) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: ctx }] });
     return post(String(title), blocks, channel);
