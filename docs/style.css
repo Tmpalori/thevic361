@@ -1894,13 +1894,29 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
   .day-section--fold details[open] summary.day-header { padding-inline: calc(var(--space-3) + 3px); }
   .day-section--fold:not(.day-section--past) details[open] summary.day-header { padding-right: calc(var(--space-3) + 9px); }
 }
-.day-count { margin-left: auto; font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
-.day-count::after { content: " ▾"; }
-.day-section--fold details[open] .day-count::after { content: " ▴"; }
+.day-count { margin-left: auto; display: inline-flex; align-items: center; gap: 0.3em; font-size: var(--text-base); font-weight: 800; color: var(--ink); white-space: nowrap; }
+/* Chunky rounded chevron: a thick round-capped stroke, drawn as a mask so it
+   takes the ink color. Points down when folded, flips up when open. */
+.day-count::after {
+  content: ""; flex: none; width: 1.05em; height: 1.05em; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 9l7 7 7-7' fill='none' stroke='black' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 9l7 7 7-7' fill='none' stroke='black' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  transition: transform 0.2s ease;
+}
+.day-section--fold details[open] .day-count::after { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .day-count::after { transition: none; } }
 @media (max-width: 639px) {
   .day-section--fold summary.day-header { gap: var(--space-2); padding-inline: var(--space-3); }
   .day-section--fold .dd-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .day-section--fold .dd-short { display: inline; }
+}
+/* Small phones: on today's row the Today badge stands in for the date pill
+   (kept for screen readers), so the count and chevron fit on one row. */
+@media (max-width: 419px) {
+  .day-section--fold summary.day-header:has(.today-badge) .day-date { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; padding: 0; border: 0; }
+}
+@media (max-width: 359px) {
+  .day-section--fold .day-count { font-size: var(--text-sm); }
 }
 
 /* Small phones: logo, "+ Event" and Subscribe on one row at 360px. The
