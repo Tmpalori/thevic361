@@ -35,6 +35,7 @@
  * most MAX_PER_RUN decisions per call.
  */
 
+import { town } from './town.js';
 import crypto from 'node:crypto';
 import { validateSubmission } from './validate.js';
 import { normalizePayload, eventKeyOf } from './db.js';
@@ -134,11 +135,11 @@ export async function remindPaidPicks({ store, slack, nowFn, siteUrl = '', rows:
   const at = now.toISOString();
   for (const r of due) {
     await store.update(r.id, { review_history: [...(Array.isArray(r.review_history) ? r.review_history : []),
-      { at, action: 'reminder', note: 'Reminded in Slack: paid Vic’s Pick not published yet' }] });
+      { at, action: 'reminder', note: `Reminded in Slack: paid ${town.pickName} not published yet` }] });
   }
   slack.notify({
     channel: 'sales',
-    title: `⏰ ${due.length === 1 ? 'A paid Vic’s Pick isn’t' : `${due.length} paid Vic’s Picks aren’t`} on the site yet`,
+    title: `⏰ ${due.length === 1 ? `A paid ${town.pickName} isn’t` : `${due.length} paid ${town.pickName}s aren’t`} on the site yet`,
     text: due.map(r => {
       const why = r.status === 'approved' ? ': approved, but publishing it failed (retrying)'
         : r.ai_review && r.ai_review.reason ? `: ${r.ai_review.reason}` : r.ai_review ? '' : ': not reviewed yet';
@@ -291,7 +292,7 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
         // pick: the pin finds the listed one.
         if (paid && decision === 'reject') {
           decision = 'flag';
-          reasonNote = `paid Vic’s Pick the review would have turned away${reason ? `: ${reason}` : ''}`;
+          reasonNote = `paid ${town.pickName} the review would have turned away${reason ? `: ${reason}` : ''}`;
         } else if (paid && decision === 'duplicate') {
           decision = 'approve';
         }
@@ -373,7 +374,7 @@ export function registerSubmissionReview(app, { store, secret, nowFn, autoApprov
           const notLive = d.retrying ? ': not live yet, publishing is retried on the next run'
             : d.decision === 'approve' && d.live === false
               ? ': ⚠️ approved but not on the site (removed before, or matches an event already listed); check it' : '';
-          return `• *${LABEL[d.decision]}*${d.paid ? ' (💰 paid Vic’s Pick)' : ''}: ${ev.name} · ${ev.date}${fixed}${notLive}${d.decision === 'approve' ? '' : `: ${d.reason}`}`;
+          return `• *${LABEL[d.decision]}*${d.paid ? ` (💰 paid ${town.pickName})` : ''}: ${ev.name} · ${ev.date}${fixed}${notLive}${d.decision === 'approve' ? '' : `: ${d.reason}`}`;
         });
         const live = done.filter(d => d.decision === 'approve' && d.live !== false).length;
         const flagged = done.filter(d => d.decision === 'flag').length;

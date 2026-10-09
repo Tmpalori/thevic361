@@ -235,6 +235,14 @@ export function darkSafe(html) {
 // stop at the preheader instead of running on into the header text.
 const PREHEADER_FILLER = '&#847;&zwnj;&nbsp;'.repeat(80);
 
+// The header wordmark: the town's two-tone title (town.siteNameHtml, "The Vic
+// <span>361</span>") as bold text plus a yellow badge for the <span> part.
+function emailWordmark() {
+  const m = /^(.*?)\s*<span>(.*)<\/span>\s*$/.exec(town.siteNameHtml);
+  const text = `<span style="font-size:22px;font-weight:bold;">${m ? m[1] : town.siteNameHtml}</span>`;
+  return m ? `${text} <span style="display:inline-block;font-size:18px;font-weight:bold;background:${C.sun};border:3px solid ${C.ink};border-radius:8px;padding:0 6px;">${m[2]}</span>` : text;
+}
+
 export function emailShell({ title, preheader, bodyHtml, footerHtml, siteUrl, pixelUrl = '' }) {
   return darkSafe(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only"><title>${escHtml(title)}</title>
@@ -244,7 +252,7 @@ export function emailShell({ title, preheader, bodyHtml, footerHtml, siteUrl, pi
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.bg};"><tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:${C.card};border:3px solid ${C.ink};border-radius:20px;box-shadow:6px 6px 0 ${C.ink};overflow:hidden;">
 <tr><td align="center" style="background:${C.sky};padding:22px 24px 0;font-family:${DISPLAY};color:${C.ink};">
-<div><span style="font-size:22px;font-weight:bold;">The Vic</span> <span style="display:inline-block;font-size:18px;font-weight:bold;background:${C.sun};border:3px solid ${C.ink};border-radius:8px;padding:0 6px;">361</span></div>
+<div>${emailWordmark()}</div>
 <div style="font-size:30px;font-weight:bold;line-height:1.15;margin:10px 0 12px;">${escHtml(title)}</div></td></tr>
 <tr><td style="background:${C.sky};padding:0;line-height:0;border-bottom:3px solid ${C.ink};"><img src="${siteUrl}/email/skyline.png" width="600" alt="" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>
 <tr><td style="padding:8px 22px 26px;font-family:${BODY};color:${C.ink};font-size:15px;line-height:1.5;">${bodyHtml}</td></tr>

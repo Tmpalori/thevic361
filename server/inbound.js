@@ -100,8 +100,15 @@ export function renderReply(text, siteUrl) {
   return { html, text: `${body}\n\n— ${sig}` };
 }
 
-// Replies about money (Vic's Picks, sponsor weeks, refunds) get a 💰.
+// Replies about money (Vic's Picks, sponsor weeks, refunds) get a 💰. The
+// town's own pick name counts too ("Vic's Pick", with or without the
+// apostrophe, in Victoria).
 const SALES_RE = /vic[’']?s pick|sponsor|booked|receipt|refund|invoice|order|payment|report:/i;
+const reEsc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function isSales(subject) {
+  const pick = reEsc(town.pickNamePlain.toLowerCase()).replace(/'/g, "[’']?");
+  return SALES_RE.test(subject) || new RegExp(pick, 'i').test(subject);
+}
 
 export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl = globalThis.fetch, nowFn = () => Date.now() }) {
   const seen = new Set();
@@ -127,7 +134,7 @@ export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl =
     const subject = String(email.subject || event.data.subject || '(no subject)');
     const text = newText(bodyText(email)) || '(no text)';
     const files = (email.attachments || event.data.attachments || []).filter(a => a.content_disposition !== 'inline').map(a => a.filename).filter(Boolean);
-    const sales = SALES_RE.test(subject);
+    const sales = isSales(subject);
     if (slack) {
       await slack.notify({
         title: `${sales ? '💰' : '📬'} Email from ${addr || 'unknown sender'}`.slice(0, 150),

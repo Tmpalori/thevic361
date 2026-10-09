@@ -752,7 +752,7 @@ export function renderEventItem(ev) {
   return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}"${ad} data-icons="${escHtml((ev.icons || []).join(' ') + (ev.free === true ? ' free' : ''))}">` +
     `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
     '<div class="event-details">' +
-      (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
+      (ev.featured ? `<span class="badge badge--featured">${town.pickName}</span> ` : '') +
       nearbyBadge(ev) +
       (ev.time ? `<span class="event-time">${escHtml(formatTime(ev.time))}</span> ` : '') +
       `<span class="event-name"><a href="${escHtml(ev.page)}">${escHtml(ev.name)}</a></span>` +
@@ -1069,7 +1069,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   const body = `
     <p class="breadcrumbs"><a href="/">This week</a> › ${escHtml(ev.name)}</p>
     <h1 class="page-title">${escHtml(ev.name)}</h1>
-    ${ev.featured ? `<p class="event-pick"><span class="badge badge--featured">Vic’s Pick</span> Featured on ${town.siteName}</p>` : ''}
+    ${ev.featured ? `<p class="event-pick"><span class="badge badge--featured">${town.pickName}</span> Featured on ${town.siteName}</p>` : ''}
     <p class="page-lead">${escHtml(lead)}</p>
     ${ev.date < today ? `<p class="past-notice">This event has passed. <a href="/">See what's happening this week</a>.</p>` : ''}
     <dl class="event-facts">
@@ -1190,15 +1190,15 @@ export const AD_PACKAGES = [
   },
   {
     key: 'featured',
-    name: 'Vic’s Pick',
-    cta: 'Make my event a Vic’s Pick',
+    get name() { return town.pickName; },
+    get cta() { return `Make my event a ${town.pickName}`; },
     price: '$49 Mon–Thu · $89 Fri–Sun',
     amount: 4900,
-    blurb: 'Tell us about your event. Once it\'s listed, it\'s highlighted on its day with the Vic’s Pick badge.',
+    get blurb() { return `Tell us about your event. Once it's listed, it's highlighted on its day with the ${town.pickName} badge.`; },
     limit: 'Only 3 a day Mon–Thu and 4 a day Fri–Sun, so book early.',
     get points() {
       return [
-        ['Vic’s Pick badge', 'your event stands out on its day'],
+        [`${town.pickName} badge`, 'your event stands out on its day'],
         ['Guaranteed listing', 'free listings aren’t'],
         ['Starred in the newsletter', 'when you book before the issue goes out'],
         ['Featured first on Facebook', 'in our posts for your day'],
@@ -1264,11 +1264,11 @@ export function adFlowHtml() {
 // the site does (server/sponsors.js, server/newsletter.js).
 const adFaq = () => [
   [`Who reads ${town.siteName}?`, `People in ${town.city} and the towns around it who are planning what to do: families looking for weekend plans, couples planning a night out, newcomers finding their way around. They come to the site and open the newsletter to decide where to go.`],
-  ['How fast does it go live?', 'A weekly sponsorship goes live on its own the Monday of the week you book. A Vic’s Pick is checked by our editors and highlighted as soon as your event is listed, usually the same day.'],
-  ['When does it make the newsletter?', 'Monday’s issue covers the whole week and Thursday’s covers the weekend. Book a Vic’s Pick before the issue goes out and it’s starred in it; a weekly sponsor is at the top of both issues of its week.'],
+  ['How fast does it go live?', `A weekly sponsorship goes live on its own the Monday of the week you book. A ${town.pickName} is checked by our editors and highlighted as soon as your event is listed, usually the same day.`],
+  ['When does it make the newsletter?', `Monday’s issue covers the whole week and Thursday’s covers the weekend. Book a ${town.pickName} before the issue goes out and it’s starred in it; a weekly sponsor is at the top of both issues of its week.`],
   ['Can I change something after I pay?', 'Yes. Reply to your confirmation email with the change and we’ll update it.'],
-  ['What’s in the report?', 'Weekly sponsors get one the Monday after: how often your block was seen, where, and how many people clicked. A Vic’s Pick gets one the day after your event: times seen, page views, clicks, calendar adds and shares.'],
-  ['What if my day is sold out?', 'Vic’s Picks are limited each day so they stand out. Pick another day, or book a weekly sponsorship to be on every page all week.']
+  ['What’s in the report?', `Weekly sponsors get one the Monday after: how often your block was seen, where, and how many people clicked. A ${town.pickName} gets one the day after your event: times seen, page views, clicks, calendar adds and shares.`],
+  ['What if my day is sold out?', `${town.pickName}s are limited each day so they stand out. Pick another day, or book a weekly sponsorship to be on every page all week.`]
 ];
 
 // previews: { [package key]: html } sample placements from
@@ -1318,7 +1318,7 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
   return layout({
     siteUrl, path: '/advertise', wide: true,
     title: `Advertise | ${town.siteName}`,
-    description: `Sponsor ${town.siteName} for a week or make your event a Vic’s Pick to reach people looking for things to do in ${town.cityState}.`,
+    description: `Sponsor ${town.siteName} for a week or make your event a ${town.pickName} to reach people looking for things to do in ${town.cityState}.`,
     body
   });
 }
@@ -1511,14 +1511,14 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
       '', `${sponsor.name} is this week's paid sponsor of ${town.siteName}.`, '');
   }
   if (picks.length) {
-    lines.push("## Vic's Picks", '',
+    lines.push(`## ${town.pickNamePlain}s`, '',
       `Featured events, highlighted on their day on ${town.siteName}. Some are our editors' can't-miss picks; some are paid placements by the venue or organizer.`, '',
       ...picks.map(line), '');
   }
   lines.push(`## Upcoming events (as of ${formatDay(today, { month: 'long', day: 'numeric', year: 'numeric' })})`, '');
   if (!upcoming.length) lines.push('- No events listed yet this week.');
   for (const ev of upcoming) {
-    lines.push(line(ev) + (ev.featured ? " (Vic's Pick)" : '') + (ev.description ? ` - ${ev.description}` : ''));
+    lines.push(line(ev) + (ev.featured ? ` (${town.pickNamePlain})` : '') + (ev.description ? ` - ${ev.description}` : ''));
   }
   return lines.join('\n') + '\n';
 }
