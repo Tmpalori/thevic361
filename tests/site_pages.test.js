@@ -243,16 +243,18 @@ describe('homepage', () => {
 });
 
 describe('about and llms.txt', () => {
-  it('describe how events are really checked', async () => {
+  it('describe the list as locally made, without overclaiming hand review', async () => {
     await startApp();
     const about = (await get('/about')).text;
     expect(about).not.toContain('reviews every event');
-    expect(about).toContain('gather events automatically');
-    expect(about).toContain('a local editor reviews anything they flag');
+    expect(about).toContain('put together right here in Victoria');
+    expect(about).not.toMatch(/\bAI\b|automat/i);
+    expect(about).toContain('a local editor keeps an eye on the list');
     expect(about).toContain('href="/contact"');
     const llms = (await get('/llms.txt')).text;
     expect(llms).not.toContain('reviewed by a local editor and');
-    expect(llms).toContain('Collected automatically, checked by automated rules and AI');
+    expect(llms).toContain('Put together locally in Victoria');
+    expect(llms).not.toMatch(/\bAI\b|automat/i);
   });
 });
 

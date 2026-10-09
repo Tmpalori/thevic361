@@ -918,6 +918,7 @@ ${body}
 ${footerHtml()}
 ${pixel ? '<script src="/pixel.js" defer></script>\n' : ''}<script src="/track.js" defer></script>
 <script src="/turnstile.js" defer></script>
+<script src="/scrollfade.js" defer></script>
 </body>
 </html>`;
 }
@@ -1094,7 +1095,7 @@ export function renderAboutPage({ siteUrl }) {
     <h1 class="page-title">About The Vic 361</h1>
     <p class="page-lead">The Vic 361 is a free weekly guide to events and things to do in Victoria, Texas. Every week we collect concerts, festivals, family activities, markets, and community events from across Victoria and publish them in one list, on this site and in our email newsletter.</p>
     <h2 class="section-heading">How we build the list</h2>
-    <p>We gather events automatically from the City of Victoria, the Victoria Public Library, the Chamber of Commerce, local venues' calendars and social pages, and community submissions. Every event is checked by automated rules and AI for duplicates, wrong dates, and things that aren't really events, and a local editor reviews anything they flag. Spot a mistake? <a href="/contact">Let us know</a> and we'll fix it.</p>
+    <p>The Vic 361 is put together right here in Victoria. We round up what's happening from the City of Victoria, the Victoria Public Library, the Chamber of Commerce, local venues and small businesses, and neighbors who send in their own events, and a local editor keeps an eye on the list so it stays accurate and worth your time. We especially love giving a spotlight to the small businesses and community groups that make Victoria feel like home. Spot a mistake? <a href="/contact">Let us know</a> and we'll fix it.</p>
     <h2 class="section-heading">Get it in your inbox</h2>
     <p><a href="/subscribe">Subscribe to the newsletter</a> for the week's best events every Monday, and the weekend's every Thursday.</p>
     <h2 class="section-heading">List your event or business</h2>
@@ -1342,7 +1343,7 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
   const lines = [
     '# The Vic 361',
     '',
-    '> Free weekly guide to events and things to do in Victoria, Texas (the 361 area code). Concerts, festivals, family activities, farmers markets, art shows, and community events. Collected automatically, checked by automated rules and AI, with a local editor reviewing anything flagged; updated every week.',
+    '> Free weekly guide to events and things to do in Victoria, Texas (the 361 area code). Concerts, festivals, family activities, farmers markets, art shows, and community events. Put together locally in Victoria, with a local editor keeping the list accurate and a spotlight on small businesses and community groups; updated twice a week.',
     '',
     '## Pages',
     '',
