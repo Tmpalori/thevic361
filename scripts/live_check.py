@@ -2,8 +2,8 @@
 """Did a deploy change what Victoria serves? (MULTI_CITY_PLAN.md, Phase 0.4.)
 
 Fetches the public pages of the live site, normalizes the parts that change
-on their own (asset ?v= hashes, timestamps, sitemap dates, the
-.ics DTSTAMP), saves them under
+on their own (asset ?v= hashes, clock timestamps, sitemap dates, the
+.ics DTSTAMP; event start times are kept), saves them under
 DIR/<UTC time>/ and diffs them against the previous run in DIR. Run it right
 before a deploy and right after: an empty diff means visitors see the same
 site.
@@ -63,7 +63,11 @@ def fetch(url, timeout=TIMEOUT):
 def normalize(text):
     """Remove what changes without a deploy changing anything."""
     text = re.sub(r"\?v=[0-9a-f]{6,}", "?v=HASH", text)
-    text = re.sub(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:?\d\d)?", "TIMESTAMP", text)
+    # Clock stamps (UTC "Z", or with fractional seconds: when the feed was
+    # published, when the page was built). Event times carry the town's
+    # offset ("2026-10-09T18:00:00-05:00") and are kept: a timezone slip
+    # must show up here.
+    text = re.sub(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+Z?|Z)", "TIMESTAMP", text)
     text = re.sub(r"<lastmod>[^<]*</lastmod>", "<lastmod>DATE</lastmod>", text)
     text = re.sub(r"DTSTAMP:\d{8}T\d{6}Z", "DTSTAMP:TIMESTAMP", text)   # .ics: the time of the request
     return text
