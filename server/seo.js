@@ -86,178 +86,178 @@ export const HUB_PAGES = [
   {
     path: '/today',
     nav: 'Today',
-    title: 'Things To Do in Victoria, TX Today',
-    h1: 'Things to do in Victoria, TX today',
-    description: 'Events happening today in Victoria, Texas: live music, family activities, markets, and more.',
+    get title() { return `Things To Do in ${town.cityState} Today`; },
+    get h1() { return `Things to do in ${town.cityState} today`; },
+    get description() { return `Events happening today in ${town.cityStateLong}: live music, family activities, markets, and more.`; },
     range: 'today',
     lead: (n, label) => n
-      ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} in Victoria, TX today (${label})`
-      : `Nothing is listed in Victoria, TX for today (${label}) yet`
+      ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} in ${town.cityState} today (${label})`
+      : `Nothing is listed in ${town.cityState} for today (${label}) yet`
   },
   {
     path: '/this-weekend',
     nav: 'This Weekend',
-    title: 'Things To Do in Victoria, TX This Weekend',
-    h1: 'Things to do in Victoria, TX this weekend',
-    description: 'Events in Victoria, Texas this weekend: concerts, festivals, family events, markets, and free things to do Friday through Sunday.',
+    get title() { return `Things To Do in ${town.cityState} This Weekend`; },
+    get h1() { return `Things to do in ${town.cityState} this weekend`; },
+    get description() { return `Events in ${town.cityStateLong} this weekend: concerts, festivals, family events, markets, and free things to do Friday through Sunday.`; },
     range: 'weekend',
     lead: (n, label) => n
-      ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} in Victoria, TX this weekend (${label})`
-      : `Nothing is listed in Victoria, TX for this weekend (${label}) yet`
+      ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} in ${town.cityState} this weekend (${label})`
+      : `Nothing is listed in ${town.cityState} for this weekend (${label}) yet`
   },
   {
     path: '/free-things-to-do',
     nav: 'Free',
-    title: 'Free Things To Do in Victoria, TX',
-    h1: 'Free things to do in Victoria, TX',
-    description: 'Upcoming free events in Victoria, Texas: library programs, community events, outdoor activities, and more.',
+    get title() { return `Free Things To Do in ${town.cityState}`; },
+    get h1() { return `Free things to do in ${town.cityState}`; },
+    get description() { return `Upcoming free events in ${town.cityStateLong}: library programs, community events, outdoor activities, and more.`; },
     range: 'upcoming',
     filter: ev => ev.free === true || (ev.icons || []).includes('free'),
     lead: (n) => n
-      ? `There ${n === 1 ? 'is 1 free event' : `are ${n} free events`} coming up in Victoria, TX`
-      : 'No free events are listed in Victoria, TX right now'
+      ? `There ${n === 1 ? 'is 1 free event' : `are ${n} free events`} coming up in ${town.cityState}`
+      : `No free events are listed in ${town.cityState} right now`
   },
   {
     path: '/kids-and-family',
     nav: 'Kids & Family',
-    title: 'Kids & Family Events in Victoria, TX',
-    h1: 'Kids and family events in Victoria, TX',
-    description: 'Family-friendly things to do in Victoria, Texas: story times, kids activities, all-ages shows, and outdoor fun.',
+    get title() { return `Kids & Family Events in ${town.cityState}`; },
+    get h1() { return `Kids and family events in ${town.cityState}`; },
+    get description() { return `Family-friendly things to do in ${town.cityStateLong}: story times, kids activities, all-ages shows, and outdoor fun.`; },
     range: 'upcoming',
     filter: ev => (ev.icons || []).includes('family'),
     lead: (n) => n
-      ? `There ${n === 1 ? 'is 1 family-friendly event' : `are ${n} family-friendly events`} coming up in Victoria, TX`
-      : 'No family events are listed in Victoria, TX right now'
+      ? `There ${n === 1 ? 'is 1 family-friendly event' : `are ${n} family-friendly events`} coming up in ${town.cityState}`
+      : `No family events are listed in ${town.cityState} right now`
   },
   {
     path: '/live-music',
     nav: 'Live Music',
-    title: 'Live Music in Victoria, TX This Week',
-    h1: 'Live music in Victoria, TX',
-    description: 'Live music in Victoria, Texas: concerts, bands, open mics, and karaoke at local bars and venues.',
+    get title() { return `Live Music in ${town.cityState} This Week`; },
+    get h1() { return `Live music in ${town.cityState}`; },
+    get description() { return `Live music in ${town.cityStateLong}: concerts, bands, open mics, and karaoke at local bars and venues.`; },
     range: 'upcoming',
     filter: ev => (ev.icons || []).includes('music'),
     lead: (n) => n
-      ? `There ${n === 1 ? 'is 1 live music event' : `are ${n} live music events`} coming up in Victoria, TX`
-      : 'No live music is listed in Victoria, TX right now'
+      ? `There ${n === 1 ? 'is 1 live music event' : `are ${n} live music events`} coming up in ${town.cityState}`
+      : `No live music is listed in ${town.cityState} right now`
   },
   {
     path: '/food-and-drink',
     nav: 'Food & Drink',
-    title: 'Food & Drink Events in Victoria, TX',
-    h1: 'Food and drink events in Victoria, TX',
-    description: 'Food and drink events in Victoria, Texas: farmers markets, food trucks, tastings, brunches, and happy hours.',
+    get title() { return `Food & Drink Events in ${town.cityState}`; },
+    get h1() { return `Food and drink events in ${town.cityState}`; },
+    get description() { return `Food and drink events in ${town.cityStateLong}: farmers markets, food trucks, tastings, brunches, and happy hours.`; },
     range: 'upcoming',
     filter: ev => (ev.icons || []).some(i => i === 'food' || i === 'drinks'),
     lead: (n) => n
-      ? `There ${n === 1 ? 'is 1 food and drink event' : `are ${n} food and drink events`} coming up in Victoria, TX`
-      : 'No food and drink events are listed in Victoria, TX right now'
+      ? `There ${n === 1 ? 'is 1 food and drink event' : `are ${n} food and drink events`} coming up in ${town.cityState}`
+      : `No food and drink events are listed in ${town.cityState} right now`
   },
   {
     path: '/tonight',
     nav: 'Tonight',
     hidden: true,
-    title: 'Things To Do in Victoria, TX Tonight',
-    h1: 'Things to do in Victoria, TX tonight',
-    description: 'What\'s happening tonight in Victoria, Texas: live music, trivia, karaoke, shows, and late events starting this evening.',
+    get title() { return `Things To Do in ${town.cityState} Tonight`; },
+    get h1() { return `Things to do in ${town.cityState} tonight`; },
+    get description() { return `What's happening tonight in ${town.cityStateLong}: live music, trivia, karaoke, shows, and late events starting this evening.`; },
     range: 'today',
     filter: isEvening,
     lead: (n, label) => n
-      ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} tonight in Victoria, TX (${label})`
-      : `Nothing is listed for tonight in Victoria, TX (${label}) yet`
+      ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} tonight in ${town.cityState} (${label})`
+      : `Nothing is listed for tonight in ${town.cityState} (${label}) yet`
   },
   {
     path: '/date-night',
     nav: 'Date Night',
     hidden: true,
-    title: 'Date Night Ideas in Victoria, TX',
-    h1: 'Date night ideas in Victoria, TX',
-    description: 'Date night in Victoria, Texas: live music, theatre, art nights, wine and beer, and dinner events this week.',
+    get title() { return `Date Night Ideas in ${town.cityState}`; },
+    get h1() { return `Date night ideas in ${town.cityState}`; },
+    get description() { return `Date night in ${town.cityStateLong}: live music, theatre, art nights, wine and beer, and dinner events this week.`; },
     range: 'upcoming',
     filter: ev => isEvening(ev) && (ev.icons || []).some(i => ['music', 'arts', 'drinks', 'food'].includes(i)) &&
       !(ev.icons || []).includes('family'),
     lead: (n) => n
-      ? `There ${n === 1 ? 'is 1 date-night pick' : `are ${n} date-night picks`} coming up in Victoria, TX`
-      : 'No date-night events are listed in Victoria, TX right now'
+      ? `There ${n === 1 ? 'is 1 date-night pick' : `are ${n} date-night picks`} coming up in ${town.cityState}`
+      : `No date-night events are listed in ${town.cityState} right now`
   },
   {
     path: '/next-week',
     nav: 'Next Week',
     hidden: true,
-    title: 'Things To Do in Victoria, TX Next Week',
-    h1: 'Things to do in Victoria, TX next week',
-    description: 'Events in Victoria, Texas next week, Monday through Sunday: live music, festivals, family events, markets, and more.',
+    get title() { return `Things To Do in ${town.cityState} Next Week`; },
+    get h1() { return `Things to do in ${town.cityState} next week`; },
+    get description() { return `Events in ${town.cityStateLong} next week, Monday through Sunday: live music, festivals, family events, markets, and more.`; },
     range: 'next-week',
     weekLink: { href: '/', label: '← This week' },
     lead: (n, label) => n
-      ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} in Victoria, TX next week (${label})`
-      : `Nothing is listed in Victoria, TX for next week (${label}) yet. New events are added every Sunday and Wednesday`
+      ? `There ${n === 1 ? 'is 1 event' : `are ${n} events`} in ${town.cityState} next week (${label})`
+      : `Nothing is listed in ${town.cityState} for next week (${label}) yet. New events are added every Sunday and Wednesday`
   },
   {
     path: '/this-weekend-with-kids',
     nav: 'Weekend with Kids',
     hidden: true,
-    title: 'Things To Do With Kids in Victoria, TX This Weekend',
-    h1: 'Things to do with kids in Victoria, TX this weekend',
-    description: 'Kid-friendly events in Victoria, Texas this weekend: story times, festivals, the zoo, crafts, and family fun.',
+    get title() { return `Things To Do With Kids in ${town.cityState} This Weekend`; },
+    get h1() { return `Things to do with kids in ${town.cityState} this weekend`; },
+    get description() { return `Kid-friendly events in ${town.cityStateLong} this weekend: story times, festivals, the zoo, crafts, and family fun.`; },
     range: 'weekend',
     filter: ev => (ev.icons || []).includes('family'),
     lead: (n, label) => n
-      ? `There ${n === 1 ? 'is 1 kid-friendly event' : `are ${n} kid-friendly events`} in Victoria, TX this weekend (${label})`
+      ? `There ${n === 1 ? 'is 1 kid-friendly event' : `are ${n} kid-friendly events`} in ${town.cityState} this weekend (${label})`
       : `No kid-friendly events are listed for this weekend (${label}) yet`
   },
   {
     path: '/free-this-weekend',
     nav: 'Free This Weekend',
     hidden: true,
-    title: 'Free Things To Do in Victoria, TX This Weekend',
-    h1: 'Free things to do in Victoria, TX this weekend',
-    description: 'Free events in Victoria, Texas this weekend: markets, library programs, festivals, outdoor fun, and community events.',
+    get title() { return `Free Things To Do in ${town.cityState} This Weekend`; },
+    get h1() { return `Free things to do in ${town.cityState} this weekend`; },
+    get description() { return `Free events in ${town.cityStateLong} this weekend: markets, library programs, festivals, outdoor fun, and community events.`; },
     range: 'weekend',
     filter: ev => ev.free === true || (ev.icons || []).includes('free'),
     lead: (n, label) => n
-      ? `There ${n === 1 ? 'is 1 free event' : `are ${n} free events`} in Victoria, TX this weekend (${label})`
+      ? `There ${n === 1 ? 'is 1 free event' : `are ${n} free events`} in ${town.cityState} this weekend (${label})`
       : `No free events are listed for this weekend (${label}) yet`
   },
   {
     path: '/nightlife',
     nav: 'Nightlife',
     hidden: true,
-    title: 'Nightlife in Victoria, TX: Bars, Live Music & Karaoke',
-    h1: 'Nightlife in Victoria, TX',
-    description: 'Nightlife in Victoria, Texas this week: bar shows, live bands, karaoke, trivia, and late events.',
+    get title() { return `Nightlife in ${town.cityState}: Bars, Live Music & Karaoke`; },
+    get h1() { return `Nightlife in ${town.cityState}`; },
+    get description() { return `Nightlife in ${town.cityStateLong} this week: bar shows, live bands, karaoke, trivia, and late events.`; },
     range: 'upcoming',
     filter: ev => isEvening(ev) && (ev.icons || []).some(i => ['music', 'drinks'].includes(i)) &&
       !(ev.icons || []).includes('family'),
     lead: (n) => n
-      ? `There ${n === 1 ? 'is 1 nightlife event' : `are ${n} nightlife events`} coming up in Victoria, TX`
-      : 'No nightlife events are listed in Victoria, TX right now'
+      ? `There ${n === 1 ? 'is 1 nightlife event' : `are ${n} nightlife events`} coming up in ${town.cityState}`
+      : `No nightlife events are listed in ${town.cityState} right now`
   },
   {
     path: '/arts-and-culture',
     nav: 'Arts & Culture',
     hidden: true,
-    title: 'Arts & Culture Events in Victoria, TX',
-    h1: 'Arts and culture events in Victoria, TX',
-    description: 'Art, theatre, museums, and culture in Victoria, Texas: gallery nights, plays, concerts, and exhibits coming up.',
+    get title() { return `Arts & Culture Events in ${town.cityState}`; },
+    get h1() { return `Arts and culture events in ${town.cityState}`; },
+    get description() { return `Art, theatre, museums, and culture in ${town.cityStateLong}: gallery nights, plays, concerts, and exhibits coming up.`; },
     range: 'upcoming',
     filter: ev => (ev.icons || []).includes('arts'),
     lead: (n) => n
-      ? `There ${n === 1 ? 'is 1 arts event' : `are ${n} arts and culture events`} coming up in Victoria, TX`
-      : 'No arts events are listed in Victoria, TX right now'
+      ? `There ${n === 1 ? 'is 1 arts event' : `are ${n} arts and culture events`} coming up in ${town.cityState}`
+      : `No arts events are listed in ${town.cityState} right now`
   },
   {
     path: '/outdoor-events',
     nav: 'Outdoors',
     hidden: true,
-    title: 'Outdoor Events in Victoria, TX',
-    h1: 'Outdoor events in Victoria, TX',
-    description: 'Outdoor things to do in Victoria, Texas: parks, runs, markets, festivals, and events at Riverside Park and around town.',
+    get title() { return `Outdoor Events in ${town.cityState}`; },
+    get h1() { return `Outdoor events in ${town.cityState}`; },
+    get description() { return `Outdoor things to do in ${town.cityStateLong}: parks, runs, markets, festivals, and events at Riverside Park and around town.`; },
     range: 'upcoming',
     filter: ev => (ev.icons || []).includes('outdoors'),
     lead: (n) => n
-      ? `There ${n === 1 ? 'is 1 outdoor event' : `are ${n} outdoor events`} coming up in Victoria, TX`
-      : 'No outdoor events are listed in Victoria, TX right now'
+      ? `There ${n === 1 ? 'is 1 outdoor event' : `are ${n} outdoor events`} coming up in ${town.cityState}`
+      : `No outdoor events are listed in ${town.cityState} right now`
   }
 ];
 
@@ -871,7 +871,7 @@ function footerHtml() {
       <div class="footer-grid">
         <div class="footer-section">
           <h2>Stay in the loop</h2>
-          <p>Get Victoria's best events in your inbox every Monday and Thursday.</p>
+          <p>Get ${town.city}'s best events in your inbox every Monday and Thursday.</p>
           <a href="/subscribe" class="btn btn--primary">Subscribe free</a>
         </div>
         <div class="footer-section">
@@ -1137,9 +1137,9 @@ export function renderPrivacyPage({ siteUrl }) {
 export function renderAboutPage({ siteUrl }) {
   const body = `
     <h1 class="page-title">About ${town.siteName}</h1>
-    <p class="page-lead">${town.siteName} is a free weekly guide to events and things to do in ${town.cityStateLong}. Every week we collect concerts, festivals, family activities, markets, and community events from across Victoria and publish them in one list, on this site and in our email newsletter.</p>
+    <p class="page-lead">${town.siteName} is a free weekly guide to events and things to do in ${town.cityStateLong}. Every week we collect concerts, festivals, family activities, markets, and community events from across ${town.city} and publish them in one list, on this site and in our email newsletter.</p>
     <h2 class="section-heading">How we build the list</h2>
-    <p>${town.siteName} is put together right here in Victoria. We round up what's happening from the City of Victoria, the Victoria Public Library, the Chamber of Commerce, local venues and small businesses, and neighbors who send in their own events, and a local editor keeps an eye on the list so it stays accurate and worth your time. We especially love giving a spotlight to the small businesses and community groups that make Victoria feel like home. Spot a mistake? <a href="/contact">Let us know</a> and we'll fix it.</p>
+    <p>${town.siteName} is put together right here in ${town.city}. We round up what's happening from ${town.localSources}, local venues and small businesses, and neighbors who send in their own events, and a local editor keeps an eye on the list so it stays accurate and worth your time. We especially love giving a spotlight to the small businesses and community groups that make ${town.city} feel like home. Spot a mistake? <a href="/contact">Let us know</a> and we'll fix it.</p>
     <h2 class="section-heading">Get it in your inbox</h2>
     <p><a href="/subscribe">Subscribe to the newsletter</a> for the week's best events every Monday, and the weekend's every Thursday.</p>
     <h2 class="section-heading">List your event or business</h2>
@@ -1263,7 +1263,7 @@ export function adFlowHtml() {
 // Questions a business asks before buying. Keep every answer true to what
 // the site does (server/sponsors.js, server/newsletter.js).
 const adFaq = () => [
-  [`Who reads ${town.siteName}?`, 'People in Victoria and the towns around it who are planning what to do: families looking for weekend plans, couples planning a night out, newcomers finding their way around. They come to the site and open the newsletter to decide where to go.'],
+  [`Who reads ${town.siteName}?`, `People in ${town.city} and the towns around it who are planning what to do: families looking for weekend plans, couples planning a night out, newcomers finding their way around. They come to the site and open the newsletter to decide where to go.`],
   ['How fast does it go live?', 'A weekly sponsorship goes live on its own the Monday of the week you book. A Vic’s Pick is checked by our editors and highlighted as soon as your event is listed, usually the same day.'],
   ['When does it make the newsletter?', 'Monday’s issue covers the whole week and Thursday’s covers the weekend. Book a Vic’s Pick before the issue goes out and it’s starred in it; a weekly sponsor is at the top of both issues of its week.'],
   ['Can I change something after I pay?', 'Yes. Reply to your confirmation email with the change and we’ll update it.'],
@@ -1280,8 +1280,8 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
     stats.events ? [stats.events, 'events listed this week'] : null,
     stats.venues ? [stats.venues, 'venues this week'] : null,
     ['2', 'newsletters a week (Mon & Thu)'],
-    // Victoria plus at least two nearby towns, or it undersells.
-    stats.towns >= 2 ? [stats.towns + 1, 'towns: Victoria and nearby'] : null,
+    // The town plus at least two nearby towns, or it undersells.
+    stats.towns >= 2 ? [stats.towns + 1, `towns: ${town.city} and nearby`] : null,
     stats.subscribers ? [`${stats.subscribers}+`, 'local subscribers'] : null
   ].filter(Boolean) : [];
   const body = `
@@ -1484,7 +1484,7 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
   const lines = [
     `# ${town.siteName}`,
     '',
-    `> Free weekly guide to events and things to do in ${town.cityStateLong} (the 361 area code). Concerts, festivals, family activities, farmers markets, art shows, and community events. Put together locally in Victoria, with a local editor keeping the list accurate and a spotlight on small businesses and community groups; updated twice a week.`,
+    `> Free weekly guide to events and things to do in ${town.cityStateLong}${town.areaCode ? ` (the ${town.areaCode} area code)` : ''}. Concerts, festivals, family activities, farmers markets, art shows, and community events. Put together locally in ${town.city}, with a local editor keeping the list accurate and a spotlight on small businesses and community groups; updated twice a week.`,
     '',
     '## Pages',
     '',

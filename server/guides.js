@@ -153,7 +153,7 @@ export function renderVenuePage(venue, live, archived, { siteUrl, now, sponsor, 
       `<a class="btn btn--outline" href="${escHtml(u)}" target="_blank" rel="noopener noreferrer">${l}</a>`).join(' ')}</p>` : ''}
     <h2 class="section-heading">Upcoming events</h2>
     ${upcoming.length ? renderGrouped(upcoming, today)
-      : `<div class="empty-state">Check <a href="/">this week's full list</a> for everything happening in Victoria.</div>`}
+      : `<div class="empty-state">Check <a href="/">this week's full list</a> for everything happening in ${town.city}.</div>`}
     ${past.length ? `<h2 class="section-heading">Recent events</h2>
     <ul class="event-list" role="list">${past.map(renderEventItem).join('')}</ul>` : ''}
     ${sponsorHtml(sponsor)}
@@ -189,7 +189,7 @@ export function renderVenueIndex(venues, live, archived, { siteUrl, now }) {
     .sort((a, b) => b.n - a.n || a.v.name.localeCompare(b.v.name));
   const body = `
     <h1 class="page-title">Event venues in ${town.cityState}</h1>
-    <p class="page-lead">Bars, music venues, theaters, museums, markets, and event spaces around Victoria, with what's coming up at each.</p>
+    <p class="page-lead">Bars, music venues, theaters, museums, markets, and event spaces around ${town.city}, with what's coming up at each.</p>
     <ul class="venue-index" role="list">
       ${rows.map(({ v, n }) => `<li><a href="${v.path}">${escHtml(v.name)}</a>
         <span class="venue-meta">${escHtml(v.category)}${n ? ` · ${n} upcoming` : ''}</span></li>`).join('\n      ')}
@@ -240,71 +240,71 @@ export function venuesWithEvents(venues, live, archived, now) {
 export const SEASONS = [
   {
     path: '/crawfish', nav: 'Crawfish', months: [1, 2, 3, 4, 5, 6],
-    title: 'Crawfish Boils in Victoria, TX', h1: 'Crawfish boils in Victoria, TX',
-    description: 'Crawfish boils, crawfish festivals, and all-you-can-eat crawfish nights in Victoria, TX.',
+    get title() { return `Crawfish Boils in ${town.cityState}`; }, get h1() { return `Crawfish boils in ${town.cityState}`; },
+    get description() { return `Crawfish boils, crawfish festivals, and all-you-can-eat crawfish nights in ${town.cityState}.`; },
     intro: 'Crawfish boils, festivals, and all-you-can-eat nights while the season lasts.',
     match: /crawfish|crawdad|mudbug/i
   },
   {
     path: '/valentines-day', nav: "Valentine's", months: [2],
-    title: "Valentine's Day Events in Victoria, TX", h1: "Valentine's Day in Victoria, TX",
-    description: "Valentine's Day events in Victoria, TX: date nights, dinners, dances, and Galentine's parties.",
-    intro: "Date nights, special dinners, dances, and Galentine's parties around Victoria.",
+    get title() { return `Valentine's Day Events in ${town.cityState}`; }, get h1() { return `Valentine's Day in ${town.cityState}`; },
+    get description() { return `Valentine's Day events in ${town.cityState}: date nights, dinners, dances, and Galentine's parties.`; },
+    get intro() { return `Date nights, special dinners, dances, and Galentine's parties around ${town.city}.`; },
     match: /valentine|galentine/i
   },
   {
     path: '/mardi-gras', nav: 'Mardi Gras', months: [2, 3],
-    title: 'Mardi Gras Events in Victoria, TX', h1: 'Mardi Gras in Victoria, TX',
-    description: 'Mardi Gras events in Victoria, TX: Fat Tuesday parties, crawfish, king cake, and parades.',
-    intro: 'Fat Tuesday parties, crawfish boils, king cake, and parades around Victoria.',
+    get title() { return `Mardi Gras Events in ${town.cityState}`; }, get h1() { return `Mardi Gras in ${town.cityState}`; },
+    get description() { return `Mardi Gras events in ${town.cityState}: Fat Tuesday parties, crawfish, king cake, and parades.`; },
+    get intro() { return `Fat Tuesday parties, crawfish boils, king cake, and parades around ${town.city}.`; },
     match: /mardi\s*gras|fat\s*tuesday/i
   },
   {
     path: '/st-patricks-day', nav: "St. Patrick's", months: [3],
-    title: "St. Patrick's Day Events in Victoria, TX", h1: "St. Patrick's Day in Victoria, TX",
-    description: "St. Patrick's Day events in Victoria, TX: pub crawls, Irish music, green beer, and family fun.",
-    intro: "Pub crawls, Irish music, and wearing green around Victoria.",
+    get title() { return `St. Patrick's Day Events in ${town.cityState}`; }, get h1() { return `St. Patrick's Day in ${town.cityState}`; },
+    get description() { return `St. Patrick's Day events in ${town.cityState}: pub crawls, Irish music, green beer, and family fun.`; },
+    get intro() { return `Pub crawls, Irish music, and wearing green around ${town.city}.`; },
     match: /\b(st\.?|saint)\s*(patrick['’]?s\s*day|patty['’]?s?\s*day|paddy['’]?s?\s*day|patrick['’]?s\s*(parade|pub|party|celebration|bash|fest))|\bst\.?\s*(patty|paddy)['’]?s?\b(?!\s*(church|parish|school|catholic))/i,
     exclude: /\b(church|parish|catholic|mass)\b/i
   },
   {
     path: '/spring-break', nav: 'Spring Break', months: [3],
-    title: 'Spring Break in Victoria, TX', h1: 'Spring Break things to do in Victoria, TX',
-    description: 'Spring Break activities in Victoria, TX: camps, kids programs, and family outings.',
+    get title() { return `Spring Break in ${town.cityState}`; }, get h1() { return `Spring Break things to do in ${town.cityState}`; },
+    get description() { return `Spring Break activities in ${town.cityState}: camps, kids programs, and family outings.`; },
     intro: 'Camps, kids programs, and family outings to fill the week off school.',
     match: /spring\s*break/i
   },
   {
     path: '/easter-events', nav: 'Easter', months: [3, 4],
-    title: 'Easter Events in Victoria, TX', h1: 'Easter events in Victoria, TX',
-    description: 'Easter events in Victoria, TX: egg hunts, Easter Bunny photos, and spring family events.',
-    intro: 'Egg hunts, Easter Bunny photos, and spring family events around Victoria.',
+    get title() { return `Easter Events in ${town.cityState}`; }, get h1() { return `Easter events in ${town.cityState}`; },
+    get description() { return `Easter events in ${town.cityState}: egg hunts, Easter Bunny photos, and spring family events.`; },
+    get intro() { return `Egg hunts, Easter Bunny photos, and spring family events around ${town.city}.`; },
     match: /\beaster\b|egg\s*hunt|eggstravaganza|egg[\s-]*stravaganza/i
   },
   {
     path: '/earth-day', nav: 'Earth Day', months: [4],
-    title: 'Earth Day Events in Victoria, TX', h1: 'Earth Day in Victoria, TX',
-    description: 'Earth Day events in Victoria, TX: cleanups, tree plantings, nature programs, and recycling drives.',
-    intro: 'Cleanups, tree plantings, nature programs, and recycling drives around Victoria.',
+    get title() { return `Earth Day Events in ${town.cityState}`; }, get h1() { return `Earth Day in ${town.cityState}`; },
+    get description() { return `Earth Day events in ${town.cityState}: cleanups, tree plantings, nature programs, and recycling drives.`; },
+    get intro() { return `Cleanups, tree plantings, nature programs, and recycling drives around ${town.city}.`; },
     match: /earth\s*day|arbor\s*day/i
   },
   {
     path: '/cinco-de-mayo', nav: 'Cinco de Mayo', months: [5],
-    title: 'Cinco de Mayo in Victoria, TX', h1: 'Cinco de Mayo in Victoria, TX',
-    description: 'Cinco de Mayo events in Victoria, TX: festivals, live music, folklórico, and food.',
-    intro: 'Festivals, live music, folklórico, and food specials around Victoria.',
+    get title() { return `Cinco de Mayo in ${town.cityState}`; }, get h1() { return `Cinco de Mayo in ${town.cityState}`; },
+    get description() { return `Cinco de Mayo events in ${town.cityState}: festivals, live music, folklórico, and food.`; },
+    get intro() { return `Festivals, live music, folklórico, and food specials around ${town.city}.`; },
     match: /cinco\s*de\s*mayo/i
   },
   {
     path: '/mothers-day', nav: "Mother's Day", months: [5],
-    title: "Mother's Day Events in Victoria, TX", h1: "Mother's Day in Victoria, TX",
-    description: "Mother's Day events in Victoria, TX: brunches, markets, and things to do with Mom.",
-    intro: "Brunches, markets, and things to do with Mom around Victoria.",
+    get title() { return `Mother's Day Events in ${town.cityState}`; }, get h1() { return `Mother's Day in ${town.cityState}`; },
+    get description() { return `Mother's Day events in ${town.cityState}: brunches, markets, and things to do with Mom.`; },
+    get intro() { return `Brunches, markets, and things to do with Mom around ${town.city}.`; },
     match: /mother['’]?s\s*day|mom['’]?s\s*day/i,
     exclude: /day\s*out\b/i  // "Mother's Day Out" is a preschool program
   },
   {
-    path: '/bach-festival', nav: 'Bach Festival', months: [5, 6],
+    only: 'victoria', path: '/bach-festival', nav: 'Bach Festival', months: [5, 6],
     title: 'Victoria Bach Festival', h1: 'Victoria Bach Festival events',
     description: 'Victoria Bach Festival concerts and events in Victoria, TX.',
     intro: 'Concerts and events from the Victoria Bach Festival, one of Texas\'s longest-running classical music festivals.',
@@ -312,56 +312,56 @@ export const SEASONS = [
   },
   {
     path: '/memorial-day', nav: 'Memorial Day', months: [5],
-    title: 'Memorial Day Events in Victoria, TX', h1: 'Memorial Day in Victoria, TX',
-    description: 'Memorial Day events in Victoria, TX: ceremonies, remembrances, and holiday weekend things to do.',
+    get title() { return `Memorial Day Events in ${town.cityState}`; }, get h1() { return `Memorial Day in ${town.cityState}`; },
+    get description() { return `Memorial Day events in ${town.cityState}: ceremonies, remembrances, and holiday weekend things to do.`; },
     intro: 'Ceremonies honoring the fallen, and things to do over the long weekend.',
     match: /memorial\s*day/i
   },
   {
     path: '/juneteenth', nav: 'Juneteenth', months: [6],
-    title: 'Juneteenth in Victoria, TX', h1: 'Juneteenth in Victoria, TX',
-    description: 'Juneteenth celebrations in Victoria, TX: festivals, parades, cookouts, and live music.',
-    intro: 'Festivals, parades, cookouts, and live music celebrating Juneteenth in Victoria.',
+    get title() { return `Juneteenth in ${town.cityState}`; }, get h1() { return `Juneteenth in ${town.cityState}`; },
+    get description() { return `Juneteenth celebrations in ${town.cityState}: festivals, parades, cookouts, and live music.`; },
+    get intro() { return `Festivals, parades, cookouts, and live music celebrating Juneteenth in ${town.city}.`; },
     match: /juneteenth|emancipation\s*day/i
   },
   {
     path: '/fathers-day', nav: "Father's Day", months: [6],
-    title: "Father's Day Events in Victoria, TX", h1: "Father's Day in Victoria, TX",
-    description: "Father's Day events in Victoria, TX: cookouts, car shows, fishing, and things to do with Dad.",
-    intro: "Cookouts, car shows, and things to do with Dad around Victoria.",
+    get title() { return `Father's Day Events in ${town.cityState}`; }, get h1() { return `Father's Day in ${town.cityState}`; },
+    get description() { return `Father's Day events in ${town.cityState}: cookouts, car shows, fishing, and things to do with Dad.`; },
+    get intro() { return `Cookouts, car shows, and things to do with Dad around ${town.city}.`; },
     match: /father['’]?s\s*day|dad['’]?s\s*day/i,
     exclude: /day\s*out\b/i
   },
   {
     path: '/fourth-of-july', nav: 'July 4th', months: [6, 7],
-    title: 'Fourth of July in Victoria, TX', h1: 'Fourth of July events in Victoria, TX',
-    description: 'Fourth of July events in Victoria, TX: fireworks, parades, and Independence Day celebrations.',
-    intro: 'Fireworks, parades, and Independence Day celebrations around Victoria.',
+    get title() { return `Fourth of July in ${town.cityState}`; }, get h1() { return `Fourth of July events in ${town.cityState}`; },
+    get description() { return `Fourth of July events in ${town.cityState}: fireworks, parades, and Independence Day celebrations.`; },
+    get intro() { return `Fireworks, parades, and Independence Day celebrations around ${town.city}.`; },
     match: /fourth\s*of\s*july|july\s*4|4th\s*of\s*july|independence\s*day|firework/i
   },
   {
     path: '/back-to-school', nav: 'Back to School', months: [7, 8],
-    title: 'Back to School Events in Victoria, TX', h1: 'Back to school in Victoria, TX',
-    description: 'Back-to-school events in Victoria, TX: free school supply giveaways, backpack drives, and kids events.',
+    get title() { return `Back to School Events in ${town.cityState}`; }, get h1() { return `Back to school in ${town.cityState}`; },
+    get description() { return `Back-to-school events in ${town.cityState}: free school supply giveaways, backpack drives, and kids events.`; },
     intro: 'School supply giveaways, backpack drives, and kids events before the first day.',
     match: /back[\s-]*to[\s-]*school|school\s*suppl(y|ies)|backpack\s*(giveaway|drive|bash)/i
   },
   {
     path: '/labor-day', nav: 'Labor Day', months: [9],
-    title: 'Labor Day Weekend in Victoria, TX', h1: 'Labor Day weekend in Victoria, TX',
-    description: 'Labor Day weekend events in Victoria, TX: cookouts, live music, and things to do.',
+    get title() { return `Labor Day Weekend in ${town.cityState}`; }, get h1() { return `Labor Day weekend in ${town.cityState}`; },
+    get description() { return `Labor Day weekend events in ${town.cityState}: cookouts, live music, and things to do.`; },
     intro: 'Cookouts, live music, and things to do over the long weekend.',
     match: /labor\s*day/i
   },
   {
     path: '/oktoberfest', nav: 'Oktoberfest', months: [9, 10, 11],
-    title: 'Oktoberfest in Victoria, TX', h1: 'Oktoberfest in Victoria, TX',
-    description: 'Oktoberfest celebrations in Victoria, TX: German beer, brats, polka, and fall festivals.',
-    intro: 'German beer, brats, polka, and stein-hoisting around Victoria.',
+    get title() { return `Oktoberfest in ${town.cityState}`; }, get h1() { return `Oktoberfest in ${town.cityState}`; },
+    get description() { return `Oktoberfest celebrations in ${town.cityState}: German beer, brats, polka, and fall festivals.`; },
+    get intro() { return `German beer, brats, polka, and stein-hoisting around ${town.city}.`; },
     match: /o[ck]tober\s*fest|wurst\s*fest|german\s*fest|polka\s*fest/i
   },
   {
-    path: '/tejas-fest', nav: 'Tejas Fest', months: [9, 10],
+    only: 'victoria', path: '/tejas-fest', nav: 'Tejas Fest', months: [9, 10],
     title: 'Tejas Fest in Victoria, TX', h1: 'Tejas Fest in Victoria, TX',
     description: 'Tejas Fest schedule and related events in downtown Victoria, TX: Tejano and Texas Country music, food, vendors, and family activities.',
     intro: "Tejas Fest is Victoria's free downtown festival of Tejano and Texas Country music, food, vendors, and family activities.",
@@ -369,44 +369,44 @@ export const SEASONS = [
   },
   {
     path: '/halloween-events', nav: 'Halloween', months: [9, 10],  // haunted houses open in late September
-    title: 'Halloween Events in Victoria, TX', h1: 'Halloween events in Victoria, TX',
-    description: 'Halloween events in Victoria, TX: trunk or treats, haunted houses, costume parties, fall festivals, and pumpkin patches.',
-    intro: 'Trunk or treats, haunted houses, costume parties, fall festivals, and pumpkin patches around Victoria.',
+    get title() { return `Halloween Events in ${town.cityState}`; }, get h1() { return `Halloween events in ${town.cityState}`; },
+    get description() { return `Halloween events in ${town.cityState}: trunk or treats, haunted houses, costume parties, fall festivals, and pumpkin patches.`; },
+    get intro() { return `Trunk or treats, haunted houses, costume parties, fall festivals, and pumpkin patches around ${town.city}.`; },
     match: /hallowe+n|trunk[\s-]*or[\s-]*treat|haunted|costume|spooky|pumpkin|fall\s*fest|d[ií]a\s*de\s*(los\s*)?muertos|cemetery\s*tour/i
   },
   {
     path: '/dia-de-los-muertos', nav: 'Día de los Muertos', months: [10, 11],
-    title: 'Día de los Muertos in Victoria, TX', h1: 'Día de los Muertos in Victoria, TX',
-    description: 'Día de los Muertos events in Victoria, TX: altars, festivals, calavera face painting, and Day of the Dead celebrations.',
-    intro: 'Ofrendas, festivals, face painting, and Day of the Dead celebrations around Victoria.',
+    get title() { return `Día de los Muertos in ${town.cityState}`; }, get h1() { return `Día de los Muertos in ${town.cityState}`; },
+    get description() { return `Día de los Muertos events in ${town.cityState}: altars, festivals, calavera face painting, and Day of the Dead celebrations.`; },
+    get intro() { return `Ofrendas, festivals, face painting, and Day of the Dead celebrations around ${town.city}.`; },
     match: /d[ií]a\s*de\s*(los\s*)?muertos|day\s*of\s*the\s*dead/i
   },
   {
     path: '/veterans-day', nav: 'Veterans Day', months: [11],
-    title: 'Veterans Day Events in Victoria, TX', h1: 'Veterans Day in Victoria, TX',
-    description: 'Veterans Day events in Victoria, TX: parades, ceremonies, and free meals and deals for veterans.',
-    intro: 'Parades, ceremonies, and thank-yous for veterans around Victoria.',
+    get title() { return `Veterans Day Events in ${town.cityState}`; }, get h1() { return `Veterans Day in ${town.cityState}`; },
+    get description() { return `Veterans Day events in ${town.cityState}: parades, ceremonies, and free meals and deals for veterans.`; },
+    get intro() { return `Parades, ceremonies, and thank-yous for veterans around ${town.city}.`; },
     match: /veterans?['’]?\s*day/i
   },
   {
     path: '/thanksgiving-events', nav: 'Thanksgiving', months: [11],
-    title: 'Thanksgiving Events in Victoria, TX', h1: 'Thanksgiving events in Victoria, TX',
-    description: 'Thanksgiving events in Victoria, TX: turkey trots, community dinners, and holiday weekend things to do.',
+    get title() { return `Thanksgiving Events in ${town.cityState}`; }, get h1() { return `Thanksgiving events in ${town.cityState}`; },
+    get description() { return `Thanksgiving events in ${town.cityState}: turkey trots, community dinners, and holiday weekend things to do.`; },
     intro: 'Turkey trots, community dinners, and things to do over the holiday weekend.',
     match: /thanksgiving|turkey\s*trot|friendsgiving/i
   },
   {
     path: '/christmas-events', nav: 'Christmas', months: [11, 12],
-    title: 'Christmas Events in Victoria, TX', h1: 'Christmas and holiday events in Victoria, TX',
-    description: 'Christmas events in Victoria, TX: lighted parades, holiday markets, Santa visits, light displays, and holiday concerts.',
-    intro: 'Lighted parades, holiday markets, Santa visits, light displays, and holiday concerts around Victoria.',
+    get title() { return `Christmas Events in ${town.cityState}`; }, get h1() { return `Christmas and holiday events in ${town.cityState}`; },
+    get description() { return `Christmas events in ${town.cityState}: lighted parades, holiday markets, Santa visits, light displays, and holiday concerts.`; },
+    get intro() { return `Lighted parades, holiday markets, Santa visits, light displays, and holiday concerts around ${town.city}.`; },
     match: /christmas|holiday\s*(market|parade|lights?|concert|bazaar|festival|party|show|open\s*house)|\bsanta\b(?!\s*(rosa|fe|clara|ana|cruz|maria|barbara|monica))|lighted\s*parade|light(s)?\s*(display|show|tour)|nutcracker|carol(s|ing)\b|winter\s*wonderland|jingle/i
   },
   {
     path: '/new-years-eve', nav: "New Year's Eve", months: [12, 1],
-    title: "New Year's Eve in Victoria, TX", h1: "New Year's Eve in Victoria, TX",
-    description: "New Year's Eve parties and events in Victoria, TX.",
-    intro: "Parties, countdowns, and live music to ring in the new year in Victoria.",
+    get title() { return `New Year's Eve in ${town.cityState}`; }, get h1() { return `New Year's Eve in ${town.cityState}`; },
+    get description() { return `New Year's Eve parties and events in ${town.cityState}.`; },
+    get intro() { return `Parties, countdowns, and live music to ring in the new year in ${town.city}.`; },
     match: /new\s*year['’]?s?\s*(eve|party|bash|celebration|countdown|ball|gala|dance)|\bnye\s*(party|bash|celebration|countdown|gala|ball|dance)|countdown\s*to\s*20\d\d/i,
     exclude: /lunar|chinese|vietnamese|t[eế]t\b/i
   }
@@ -438,6 +438,13 @@ function seasonEvents(season, live, archived, today) {
   };
 }
 
+// The guides this town has: the shared ones plus its own (`only: <town id>`,
+// like Victoria's Bach Festival and Tejas Fest). Another town's guides get no
+// route, nav entry or sitemap line here.
+export function townSeasons() {
+  return SEASONS.filter(s => !s.only || s.only === town.id);
+}
+
 // Seasonal pages with at least one upcoming event. Being in season isn't
 // enough: a guide with nothing on it stays out of the nav and sitemap.
 // Upcoming events come from the live list only (see seasonEvents), so the
@@ -445,7 +452,7 @@ function seasonEvents(season, live, archived, today) {
 // whole archive once per season cost real CPU as it grew.
 export function activeSeasons(live, _archived, now) {
   const today = localDateStr(now);
-  return SEASONS.filter(s => (live || []).some(ev => ev && ev.page && ev.date >= today && seasonMatches(s, ev)));
+  return townSeasons().filter(s => (live || []).some(ev => ev && ev.page && ev.date >= today && seasonMatches(s, ev)));
 }
 
 export function renderSeasonPage(season, live, archived, { siteUrl, now, sponsor }) {

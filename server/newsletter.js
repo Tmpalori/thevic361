@@ -441,7 +441,7 @@ export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, ad
   const topShown = total >= 6 ? top : [];
   const short = d => formatDay(d, { month: 'short', day: 'numeric' });
   const range = week.length ? (week.length === 1 ? short(week[0]) : `${short(week[0])}–${short(week[week.length - 1])}`) : '';
-  const title = weekend ? 'This weekend in Victoria' : 'This week in Victoria';
+  const title = weekend ? `This weekend in ${town.city}` : `This week in ${town.city}`;
   const listPath = weekend ? '/this-weekend' : '/';
   const subject = `${title}: ${total} ${total === 1 ? 'thing' : 'things'} to do (${range})`;
   const preheader = top.map(e => e.name).join(' · ');
@@ -508,15 +508,15 @@ export const inboxKey = emailKey;
 
 export function renderConfirmEmail({ siteUrl, confirmUrl, address, reminder = false }) {
   const lead = reminder
-    ? `You asked for ${town.siteName} yesterday but haven't confirmed yet. One tap and Victoria's best events land in your inbox ${SCHEDULE}.`
-    : `Tap the button to confirm and start getting Victoria's events ${SCHEDULE}.`;
+    ? `You asked for ${town.siteName} yesterday but haven't confirmed yet. One tap and ${town.city}'s best events land in your inbox ${SCHEDULE}.`
+    : `Tap the button to confirm and start getting ${town.city}'s events ${SCHEDULE}.`;
   const bodyHtml = `<p style="margin:18px 0;font-size:16px;">${escHtml(lead)}</p>
 <p style="text-align:center;">${btn(confirmUrl, 'Confirm my subscription')}</p>
 <p style="color:${C.muted};font-size:13px;">Didn't sign up? Ignore this email and you won't hear from us${reminder ? ' again' : ''}.</p>`;
   return {
-    subject: reminder ? 'Still want Victoria\'s events? Tap to confirm' : 'Confirm your Vic 361 subscription',
+    subject: reminder ? `Still want ${town.city}'s events? Tap to confirm` : `Confirm your ${town.shortName} subscription`,
     html: emailShell({ title: reminder ? 'Just one tap left' : 'One tap to confirm',
-      preheader: reminder ? 'Your Vic 361 signup is waiting on one tap' : `Confirm to get Victoria events ${SCHEDULE}`, bodyHtml, siteUrl,
+      preheader: reminder ? `Your ${town.shortName} signup is waiting on one tap` : `Confirm to get ${town.city} events ${SCHEDULE}`, bodyHtml, siteUrl,
       footerHtml: `${escHtml(town.siteName)} · ${escHtml(address || town.cityState)}` }),
     text: reminder
       ? `${lead}\n\nConfirm: ${confirmUrl}\n\nDidn't sign up? Ignore this email and you won't hear from us again.`
@@ -554,7 +554,7 @@ function referralHtml({ siteUrl, code, count = 0 }) {
   return `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0 0;border-collapse:separate;"><tr><td style="background:${C.sunLight};border:2px solid ${C.ink};border-radius:14px;padding:16px 18px;">
 <p style="margin:0 0 6px;font-family:${DISPLAY};font-size:19px;font-weight:bold;">Share ${town.siteName}, get local perks</p>
-<p style="margin:0 0 10px;font-size:14px;">Know someone who's always asking what there is to do in Victoria? Send them your link:</p>
+<p style="margin:0 0 10px;font-size:14px;">Know someone who's always asking what there is to do in ${town.city}? Send them your link:</p>
 <p style="margin:0 0 10px;text-align:center;"><a href="${url}" style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:17px;color:${C.ink};background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:6px 16px;text-decoration:none;">${escHtml(url.replace(/^https?:\/\/(www\.)?/, ''))}</a></p>
 <p style="margin:0 0 8px;font-size:14px;font-weight:bold;">${escHtml(referralProgress(count))}</p>
 <p style="margin:0;font-size:12px;color:${C.muted};">${tiers}<br>Every friend who joins in a month is another entry in that month's drawing. A friend counts a day after they sign up with your link and confirm their email, for as long as they stay subscribed. Gift cards arrive by email. <a href="${siteUrl}/referral-rules" style="color:${C.muted};">Rules</a></p>
@@ -629,7 +629,7 @@ ${soon.length > picks.length ? `<p style="margin:12px 0 4px;text-align:center;">
 ${replyAsk ? replyAskHtml(true) : ''}
 ${coming}${sponsorHtml(sponsor, siteUrl, 'welcome')}
 <p style="margin:26px 0 0;text-align:center;">${btn(`${siteUrl}/`, "See this week's events")}</p>
-${referral ? referralHtml({ siteUrl, ...referral }) : `<p style="margin:22px 0 0;font-size:14px;color:${C.muted};">Know someone who's always asking what there is to do in Victoria? Forward them this email or send them to <a href="${siteUrl}/" style="color:${C.accent};font-weight:bold;">${town.domain}</a>.</p>`}`;
+${referral ? referralHtml({ siteUrl, ...referral }) : `<p style="margin:22px 0 0;font-size:14px;color:${C.muted};">Know someone who's always asking what there is to do in ${town.city}? Forward them this email or send them to <a href="${siteUrl}/" style="color:${C.accent};font-weight:bold;">${town.domain}</a>.</p>`}`;
   const text = [
     `You're in! Every Monday morning you'll get the week's events in ${town.cityState}, and every Thursday the weekend's best.`, '',
     ...(replyAsk ? [replyAskText(true), ''] : []),
@@ -640,7 +640,7 @@ ${referral ? referralHtml({ siteUrl, ...referral }) : `<p style="margin:22px 0 0
   ].join('\n');
   return {
     subject: `Welcome to ${town.siteName}`,
-    html: utmTag(emailShell({ title: `Welcome to ${town.siteName}`, preheader: picks.length ? `Coming up: ${picks.slice(0, 3).map(e => e.name).join(' · ')}` : `Victoria's events, ${SCHEDULE}`,
+    html: utmTag(emailShell({ title: `Welcome to ${town.siteName}`, preheader: picks.length ? `Coming up: ${picks.slice(0, 3).map(e => e.name).join(' · ')}` : `${town.city}'s events, ${SCHEDULE}`,
       bodyHtml, siteUrl, footerHtml: footer({ siteUrl, unsubscribeUrl, address }) }), siteUrl, 'welcome'),
     text: utmTag(text, siteUrl, 'welcome', '&')
   };
@@ -692,17 +692,17 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0,
     .filter(e => e.page && !seen.has(e.name) && seen.add(e.name)).slice(0, 5))
     .map(e => ({ ...e, time: [dayOf(e.date), e.time].filter(Boolean).join(' · ') }));
   const crowd = subscriberCount >= SHOW_COUNT_FROM
-    ? `<p class="sub-crowd">Join ${Math.floor(subscriberCount / 10) * 10}+ Victoria locals who already get it.</p>` : '';
+    ? `<p class="sub-crowd">Join ${Math.floor(subscriberCount / 10) * 10}+ ${town.city} locals who already get it.</p>` : '';
   const proof = picks.length ? `
     <h2 class="section-heading">Coming up in the next week</h2>
-    <p class="sub-proof-lead">${next7.length} things to do in Victoria in the next seven days, including:</p>
+    <p class="sub-proof-lead">${next7.length} things to do in ${town.city} in the next seven days, including:</p>
     <ul class="event-list sub-picks" role="list">${picks.map(renderEventItem).join('')}</ul>
     <p class="sub-again"><a class="btn btn--primary" href="#signup-email">Get the full list ${SCHEDULE}</a> <a class="btn btn--outline" href="/">See this week's events</a></p>` : '';
   const body = `
     <section class="sub-hero">
       ${invited ? `<p class="sub-invited">🎁 A friend invited you to ${town.siteName}</p>` : ''}
       <p class="sub-kicker">Free · Mondays and Thursdays · ${town.cityState}</p>
-      <h1 class="page-title">Victoria's best events, in your inbox ${SCHEDULE}.</h1>
+      <h1 class="page-title">${town.city}'s best events, in your inbox ${SCHEDULE}.</h1>
       ${signupFormHtml({ source: 'subscribe-page', button: 'Subscribe free' })}
       <p class="sub-fine">No spam, ever. Unsubscribe with one click.</p>
       <p class="page-lead">The whole week on Monday, the weekend on Thursday: live music, festivals, markets, family days, and new spots opening.</p>

@@ -25,6 +25,7 @@ export const VICTORIA = Object.freeze({
   // Identity
   siteName: 'The Vic 361',
   siteNameHtml: 'The Vic <span>361</span>',   // the header's two-tone title
+  shortName: 'Vic 361',                        // "Confirm your Vic 361 subscription"
   domain: 'thevic361.com',
   siteUrl: 'https://www.thevic361.com',
   emailFrom: 'The Vic 361 <news@thevic361.com>',
@@ -36,6 +37,10 @@ export const VICTORIA = Object.freeze({
   stateName: 'Texas',
   cityState: 'Victoria, TX',          // place labels, footers, page text
   cityStateLong: 'Victoria, Texas',   // schema.org areaServed, about text
+  // Copy only a local would write: who we gather from (about page) and the
+  // area code people know the region by (llms.txt).
+  localSources: 'the City of Victoria, the Victoria Public Library, the Chamber of Commerce',
+  areaCode: '361',
   timezone: 'America/Chicago'
 });
 
@@ -50,6 +55,9 @@ function complete(id, raw) {
   const domain = String(raw.domain);
   return {
     siteNameHtml: raw.siteName,
+    shortName: String(raw.siteName).replace(/^the\s+/i, ''),
+    localSources: 'the city, the library, the chamber of commerce',
+    areaCode: '',
     siteUrl: `https://www.${domain}`,
     emailFrom: `${raw.siteName} <news@${domain}>`,
     gaId: '',
@@ -71,7 +79,7 @@ function fromFile(id, dir) {
 }
 
 function check(t) {
-  for (const k of ['siteName', 'city', 'state', 'stateName', 'cityState', 'cityStateLong']) {
+  for (const k of ['siteName', 'shortName', 'city', 'state', 'stateName', 'cityState', 'cityStateLong', 'localSources']) {
     if (!SAFE_TEXT.test(String(t[k] || ''))) throw new Error(`TOWN=${t.id}: ${k} can't be empty or contain < > & "`);
   }
   for (const k of ['domain', 'icalDomain']) {
@@ -79,6 +87,7 @@ function check(t) {
   }
   if (!/^[^<>&"]+ <[^<>&"\s@]+@[a-z0-9.-]+>$/.test(String(t.emailFrom))) throw new Error(`TOWN=${t.id}: emailFrom must look like Name <news@domain>`);
   if (!/^https:\/\/[a-z0-9.-]+$/.test(t.siteUrl)) throw new Error(`TOWN=${t.id}: siteUrl must be https://host with no path`);
+  if (t.areaCode && !/^\d{3}$/.test(t.areaCode)) throw new Error(`TOWN=${t.id}: areaCode must be 3 digits or empty`);
   if (t.gaId && !/^G-[A-Z0-9]+$/.test(t.gaId)) throw new Error(`TOWN=${t.id}: gaId must look like G-XXXXXXX`);
   try { new Intl.DateTimeFormat('en-US', { timeZone: t.timezone }); } catch (_) {
     throw new Error(`TOWN=${t.id}: unknown timezone "${t.timezone}"`);

@@ -312,7 +312,7 @@ export function renderSponsorTooLate(order, { siteUrl, address }) {
     'Want to book another date instead? Reply to this email and we’ll set it up.'
   ];
   return {
-    subject: 'Your Vic 361 payment cleared too late: we’re refunding you',
+    subject: `Your ${town.shortName} payment cleared too late: we’re refunding you`,
     html: emailShell({ title: 'Sorry, that date has passed', preheader: 'We’re refunding your payment in full.', siteUrl,
       bodyHtml: lines.map(l => p(escHtml(l))).join(''), footerHtml: contactFooter(siteUrl, address) }),
     text: [...lines, contactText(siteUrl)].join('\n\n')
@@ -374,7 +374,7 @@ export function renderSponsorReport(order, stats, { siteUrl, address }) {
     p(`${escHtml(COUNTER_NOTE)} In your own analytics our visits are tagged utm_source=thevic361.`, `color:${C.muted};font-size:13px;`) +
     box(`<strong>Want another week?</strong> One sponsor a week, so book early.<br><br>${btn(`${siteUrl}/advertise/checkout?package=weekly`, 'Book another week')}`);
   return {
-    subject: `Your Vic 361 sponsor week: ${people(total)} clicked`,
+    subject: `Your ${town.shortName} sponsor week: ${people(total)} clicked`,
     html: emailShell({ title: 'Your sponsor report', preheader: `${people(total)} clicked through to ${business} during ${range}.`, bodyHtml, siteUrl,
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
