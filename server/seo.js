@@ -1147,6 +1147,7 @@ export const AD_PACKAGES = [
   {
     key: 'weekly',
     name: 'Weekly sponsor',
+    cta: 'Book your sponsor week',
     price: '$300 / week',
     amount: 30000,
     blurb: 'Pick a week and write your message; it goes live on its own that Monday.',
@@ -1168,6 +1169,7 @@ export const AD_PACKAGES = [
   {
     key: 'featured',
     name: 'Vic’s Pick',
+    cta: 'Make my event a Vic’s Pick',
     price: '$49 Mon–Thu · $89 Fri–Sun',
     amount: 4900,
     blurb: 'Tell us about your event. Once it\'s listed, it\'s highlighted on its day with the Vic’s Pick badge.',
@@ -1237,12 +1239,12 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
             <p class="ad-price">${escHtml(p.price)}</p>
             <p class="ad-where"><strong>Where it shows:</strong> ${escHtml(p.where)}</p>
             <p class="ad-limit">${escHtml(p.limit)}</p>
-            ${checkout ? `<a class="btn btn--primary ad-buy" href="/advertise/checkout?package=${escHtml(p.key)}">Preview yours and book →</a>` : ''}
           </div>
           <div class="ad-checklist-wrap">
             <p class="ad-checklist-title">What you get</p>
             <ul class="ad-checklist" role="list">${p.points.map(([b, rest]) => `<li><span class="ad-check" aria-hidden="true">✓</span><span><strong>${escHtml(b)}</strong>${rest ? ` <span class="ad-check-rest">${escHtml(rest)}</span>` : ''}</span></li>`).join('')}</ul>
           </div>
+          ${checkout ? `<div class="ad-cta"><a class="btn ad-buy" href="/advertise/checkout?package=${escHtml(p.key)}">${escHtml(p.cta)} →</a><span class="ad-cta-note">See a live preview before you pay · takes 2 minutes</span></div>` : ''}
         </div>
         ${previews[p.key] || emailPreviews[p.key] ? `<div class="ad-package__preview" aria-label="Example of a ${escHtml(p.name)}">` +
           (previews[p.key] ? `<div class="ad-preview"><p class="ad-preview-label">On the site</p>${previews[p.key]}</div>` : '') +

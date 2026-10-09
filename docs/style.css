@@ -1806,24 +1806,38 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
 .ad-package--row { display: grid; grid-template-columns: 1fr; gap: var(--space-5); align-items: start; }
 /* The page is wide (layout wide: true): details on top, price beside the
    bullet list, then the site and newsletter examples side by side. */
-.ad-package__info { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+.ad-package__info { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
+.ad-package__head .ad-where { max-width: 70ch; }
 /* "What you get": a checklist of perks, each with a chunky green check
    sticker, on a sunny card so it reads like a prize list. */
 .ad-checklist-wrap { background: var(--sun-light); color: var(--ink); border: 3px solid var(--ink); border-radius: 18px; box-shadow: 4px 4px 0 var(--ink); padding: var(--space-4); }
 .ad-checklist-title { font-family: var(--font-display); font-weight: 700; font-size: var(--text-lg); margin: 0 0 var(--space-3); }
-.ad-checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.ad-checklist { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3) var(--space-5); }
+@media (max-width: 760px) { .ad-checklist { grid-template-columns: 1fr; gap: var(--space-2); } }
 .ad-checklist li { display: flex; gap: var(--space-3); align-items: flex-start; line-height: 1.35; }
 .ad-check { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--cactus); color: #fff; border: 2.5px solid var(--ink); box-shadow: 2px 2px 0 var(--ink);
   display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: 15px; transform: rotate(-6deg); }
 .ad-checklist li:nth-child(even) .ad-check { transform: rotate(5deg); }
 .ad-check-rest { color: #4A4466; font-weight: 500; }
 .ad-package__preview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+/* On /advertise the "where it shows" and price lines above the site example
+   repeat the package details, so only the placement itself shows. */
+.ad-preview .co-preview-where, .ad-preview .co-preview-price { display: none; }
 @media (max-width: 760px) {
-  .ad-package__info, .ad-package__preview { grid-template-columns: 1fr; }
+  .ad-package__preview { grid-template-columns: 1fr; }
 }
 .ad-where, .ad-limit { font-size: var(--text-sm); margin: 0 0 var(--space-3); }
 .ad-limit { font-weight: 800; color: var(--color-text-muted); margin-top: var(--space-3); }
-.ad-package .ad-buy { margin-top: var(--space-2); }
+/* The book button: big, sunset orange, chunky shadow, a little bounce. */
+.ad-cta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.ad-package .ad-buy { background: var(--sunset); color: var(--ink); border: 3px solid var(--ink); border-radius: 999px; box-shadow: 5px 5px 0 var(--ink);
+  font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; padding: 0.75em 1.6em; text-decoration: none;
+  transition: transform .12s ease, box-shadow .12s ease; }
+.ad-package .ad-buy:hover, .ad-package .ad-buy:focus-visible { transform: translate(-2px, -2px) rotate(-1deg); box-shadow: 7px 7px 0 var(--ink); }
+.ad-package .ad-buy:active { transform: translate(3px, 3px); box-shadow: 2px 2px 0 var(--ink); }
+.ad-cta-note { font-size: var(--text-sm); font-weight: 700; color: var(--color-text-muted); }
+@media (max-width: 760px) { .ad-package .ad-buy { width: 100%; text-align: center; font-size: 1.15rem; } }
+@media (prefers-reduced-motion: reduce) { .ad-package .ad-buy { transition: none; } }
 .ad-preview-label, .co-preview-h { font-family: var(--font-display); font-weight: 700; font-size: var(--text-sm); text-transform: uppercase; letter-spacing: .04em; color: var(--color-text-muted); margin: 0 0 var(--space-2); }
 .ad-package__preview .sponsor-section, .co-preview .sponsor-section { margin: 0; }
 .ad-package__preview .day-section, .co-preview .day-section { margin: 0; }

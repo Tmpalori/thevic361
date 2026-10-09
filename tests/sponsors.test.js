@@ -507,7 +507,9 @@ describe('Vic’s Pick: price by day, daily limits, preview', () => {
     expect(html).toContain('Only 3 a day Mon–Thu and 4 a day Fri–Sun');
     expect(html).toContain('Where it shows:');
     expect((html.match(/ad-package__preview/g) || []).length).toBe(2);
-    expect(html).toContain('Preview yours and book');
+    expect(html).toContain('Book your sponsor week →');
+    expect(html).toContain('Make my event a Vic’s Pick →');
+    expect(html).toContain('See a live preview before you pay');
   });
 });
 
