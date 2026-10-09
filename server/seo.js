@@ -1,3 +1,4 @@
+import { town } from './town.js';
 /* server/seo.js — Server-rendered pages for search engines and AI crawlers.
  *
  * Why this exists: the public site renders events in the browser from
@@ -19,8 +20,6 @@
  * the server itself runs in UTC on Railway.
  */
 
-export const SITE_NAME = 'The Vic 361';
-const GA_ID = 'G-52YHD3X3C2';
 const TZ = 'America/Chicago';
 const UPCOMING_DAYS = 60;
 // Link-preview image: 1200x630 (the shape Facebook, X and iMessage use for
@@ -34,8 +33,11 @@ const OG_IMAGE = '/og-image.png';
 // /subscribe/confirm and /unsubscribe). Send only origin + path, plus the
 // campaign tags GA needs to attribute ads. docs/index.html and
 // docs/submit.html carry this same snippet (tests/seo.test.js checks it).
-export const GA_SNIPPET = `<script async src="https://www.googletagmanager.com/gtag/js?id=${GA_ID}"></script>
-<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());(function(){var k=new URLSearchParams();new URLSearchParams(location.search).forEach(function(v,n){if(/^(utm_[a-z]+|gclid)$/.test(n))k.append(n,v);});var q=k.toString();gtag('config','${GA_ID}',{page_location:location.origin+location.pathname+(q?'?'+q:'')});})();</script>`;
+export function gaSnippet(id = town.gaId) {
+  if (!id) return '';
+  return `<script async src="https://www.googletagmanager.com/gtag/js?id=${id}"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());(function(){var k=new URLSearchParams();new URLSearchParams(location.search).forEach(function(v,n){if(/^(utm_[a-z]+|gclid)$/.test(n))k.append(n,v);});var q=k.toString();gtag('config','${id}',{page_location:location.origin+location.pathname+(q?'?'+q:'')});})();</script>`;
+}
 
 // Light/dark choice, saved per device and applied before first paint so
 // every page (not just the homepage) keeps it. With nothing saved there's
@@ -842,10 +844,10 @@ function headerHtml() {
   return `<header class="site-header" id="site-header">
     <div class="container header-inner">
       <a class="logo-group" href="/">
-        <img src="/logo.png" width="48" height="48" alt="The Vic 361 logo" class="site-logo site-logo--light" />
+        <img src="/logo.png" width="48" height="48" alt="${town.siteName} logo" class="site-logo site-logo--light" />
         <img src="/logo-dark.png" width="48" height="48" alt="" aria-hidden="true" class="site-logo site-logo--dark" />
         <div>
-          <div class="site-title">The Vic <span>361</span></div>
+          <div class="site-title">${town.siteNameHtml}</div>
           <div class="tagline">Events &amp; Things To Do in <span class="tagline-accent">Victoria, TX</span></div>
         </div>
       </a>
@@ -880,7 +882,7 @@ function footerHtml() {
         <div class="footer-section">
           <h2>About</h2>
           <ul class="footer-links" role="list">
-            <li><a href="/about">About The Vic 361</a></li>
+            <li><a href="/about">About ${town.siteName}</a></li>
             <li><a href="/submit">Submit an event</a></li>
             <li><a href="/venues">Venues</a></li>
             <li><a href="/advertise">Advertise</a></li>
@@ -889,7 +891,7 @@ function footerHtml() {
           </ul>
         </div>
       </div>
-      <div class="footer-bottom"><span>&copy; ${year} The Vic 361 · Victoria, TX</span>${THEME_TOGGLE}</div>
+      <div class="footer-bottom"><span>&copy; ${year} ${town.siteName} · Victoria, TX</span>${THEME_TOGGLE}</div>
     </div>
   </footer>`;
 }
@@ -908,13 +910,13 @@ export function breadcrumbLd(siteUrl, trail) {
 // follows it) leaves Google Analytics off too. Pages reached from links
 // carrying a subscriber's token (confirm, unsubscribe) use it: both tools
 // report the page URL to a third party, and no third party should see the
-// token. GA_SNIPPET strips query strings anyway; this is belt and braces.
+// token. gaSnippet() strips query strings anyway; this is belt and braces.
 export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = OG_IMAGE, imageSize = image === OG_IMAGE ? [1200, 630] : null, pixel = true, analytics = pixel, wide = false }) {
   const url = siteUrl + path;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-${analytics ? `<!-- Google tag (gtag.js); same property as docs/index.html -->\n${GA_SNIPPET}\n` : ''}<meta charset="UTF-8">
+${analytics && town.gaId ? `<!-- Google tag (gtag.js); same property as docs/index.html -->\n${gaSnippet()}\n` : ''}<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escHtml(title)}</title>
 <meta name="description" content="${escHtml(description)}">
@@ -923,7 +925,7 @@ ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <meta property="og:title" content="${escHtml(title)}">
 <meta property="og:description" content="${escHtml(description)}">
 <meta property="og:url" content="${escHtml(url)}">
-<meta property="og:site_name" content="${SITE_NAME}">
+<meta property="og:site_name" content="${town.siteName}">
 <meta property="og:image" content="${siteUrl}${image}">
 ${imageSize ? `<meta property="og:image:width" content="${imageSize[0]}">\n<meta property="og:image:height" content="${imageSize[1]}">\n` : ''}<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="${siteUrl}${image}">
@@ -999,7 +1001,7 @@ export function sponsorHtml(sponsor) {
 }
 
 export function ctaHtml() {
-  return `<p class="page-cta">Get the full list every Monday and Thursday: <a href="/subscribe">subscribe to The Vic 361 newsletter</a>. Know something we missed? <a href="/submit">Submit an event</a>.</p>`;
+  return `<p class="page-cta">Get the full list every Monday and Thursday: <a href="/subscribe">subscribe to ${town.siteName} newsletter</a>. Know something we missed? <a href="/submit">Submit an event</a>.</p>`;
 }
 
 // Short "including A, B, and C" clause from the first few names, Vic's
@@ -1028,10 +1030,10 @@ export function renderHubPage(page, events, { siteUrl, now, sponsor }) {
     ${sponsorHtml(sponsor)}
     ${ctaHtml()}`;
   const ld = [
-    breadcrumbLd(siteUrl, [{ name: SITE_NAME, path: '/' }, { name: page.nav, path: page.path }]),
+    breadcrumbLd(siteUrl, [{ name: town.siteName, path: '/' }, { name: page.nav, path: page.path }]),
     ...list.map(ev => eventJsonLd(ev, siteUrl))
   ];
-  return layout({ siteUrl, path: page.path, title: `${page.title} | ${SITE_NAME}`, description: page.description, body, ld });
+  return layout({ siteUrl, path: page.path, title: `${page.title} | ${town.siteName}`, description: page.description, body, ld });
 }
 
 // image: the event's own link-preview card (server/ogImage.js), passed in
@@ -1065,7 +1067,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   const body = `
     <p class="breadcrumbs"><a href="/">This week</a> › ${escHtml(ev.name)}</p>
     <h1 class="page-title">${escHtml(ev.name)}</h1>
-    ${ev.featured ? '<p class="event-pick"><span class="badge badge--featured">Vic’s Pick</span> Featured on The Vic 361</p>' : ''}
+    ${ev.featured ? `<p class="event-pick"><span class="badge badge--featured">Vic’s Pick</span> Featured on ${town.siteName}</p>` : ''}
     <p class="page-lead">${escHtml(lead)}</p>
     ${ev.date < today ? `<p class="past-notice">This event has passed. <a href="/">See what's happening this week</a>.</p>` : ''}
     <dl class="event-facts">
@@ -1083,11 +1085,11 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
     ${ctaHtml()}`;
   const ld = [
     eventJsonLd(ev, siteUrl),
-    breadcrumbLd(siteUrl, [{ name: SITE_NAME, path: '/' }, { name: ev.name, path: ev.page }])
+    breadcrumbLd(siteUrl, [{ name: town.siteName, path: '/' }, { name: ev.name, path: ev.page }])
   ];
   return layout({
     siteUrl, path: ev.page, nav: null,
-    title: `${heading} | ${SITE_NAME}`,
+    title: `${heading} | ${town.siteName}`,
     description: description.slice(0, 300), body, ld,
     ...(image ? { image, imageSize: [1200, 630] } : {})
   });
@@ -1099,7 +1101,7 @@ export const PRIVACY_UPDATED = 'October 8, 2026';
 export function renderPrivacyPage({ siteUrl }) {
   const body = `
     <h1 class="page-title">Privacy</h1>
-    <p class="page-lead">The Vic 361 is a free events guide for Victoria, Texas. This page explains what we collect, why, and the choices you have. Last updated ${PRIVACY_UPDATED}.</p>
+    <p class="page-lead">${town.siteName} is a free events guide for Victoria, Texas. This page explains what we collect, why, and the choices you have. Last updated ${PRIVACY_UPDATED}.</p>
     <h2 class="section-heading">What you give us</h2>
     <ul>
       <li><strong>Newsletter:</strong> your email address, so we can send the newsletter (Mondays and Thursdays). Every email has a one-click unsubscribe link. We don't sell or share your address.</li>
@@ -1124,18 +1126,18 @@ export function renderPrivacyPage({ siteUrl }) {
     </ul>`;
   return layout({
     siteUrl, path: '/privacy',
-    title: `Privacy | ${SITE_NAME}`,
-    description: 'What The Vic 361 collects, why, and the choices you have.',
+    title: `Privacy | ${town.siteName}`,
+    description: `What ${town.siteName} collects, why, and the choices you have.`,
     body
   });
 }
 
 export function renderAboutPage({ siteUrl }) {
   const body = `
-    <h1 class="page-title">About The Vic 361</h1>
-    <p class="page-lead">The Vic 361 is a free weekly guide to events and things to do in Victoria, Texas. Every week we collect concerts, festivals, family activities, markets, and community events from across Victoria and publish them in one list, on this site and in our email newsletter.</p>
+    <h1 class="page-title">About ${town.siteName}</h1>
+    <p class="page-lead">${town.siteName} is a free weekly guide to events and things to do in Victoria, Texas. Every week we collect concerts, festivals, family activities, markets, and community events from across Victoria and publish them in one list, on this site and in our email newsletter.</p>
     <h2 class="section-heading">How we build the list</h2>
-    <p>The Vic 361 is put together right here in Victoria. We round up what's happening from the City of Victoria, the Victoria Public Library, the Chamber of Commerce, local venues and small businesses, and neighbors who send in their own events, and a local editor keeps an eye on the list so it stays accurate and worth your time. We especially love giving a spotlight to the small businesses and community groups that make Victoria feel like home. Spot a mistake? <a href="/contact">Let us know</a> and we'll fix it.</p>
+    <p>${town.siteName} is put together right here in Victoria. We round up what's happening from the City of Victoria, the Victoria Public Library, the Chamber of Commerce, local venues and small businesses, and neighbors who send in their own events, and a local editor keeps an eye on the list so it stays accurate and worth your time. We especially love giving a spotlight to the small businesses and community groups that make Victoria feel like home. Spot a mistake? <a href="/contact">Let us know</a> and we'll fix it.</p>
     <h2 class="section-heading">Get it in your inbox</h2>
     <p><a href="/subscribe">Subscribe to the newsletter</a> for the week's best events every Monday, and the weekend's every Thursday.</p>
     <h2 class="section-heading">List your event or business</h2>
@@ -1143,7 +1145,7 @@ export function renderAboutPage({ siteUrl }) {
   const ld = [{
     '@context': 'https://schema.org',
     '@type': 'Organization',
-    name: SITE_NAME,
+    name: town.siteName,
     url: siteUrl + '/',
     logo: siteUrl + '/logo-512.png',
     description: 'Weekly guide to events and things to do in Victoria, Texas.',
@@ -1151,8 +1153,8 @@ export function renderAboutPage({ siteUrl }) {
   }];
   return layout({
     siteUrl, path: '/about',
-    title: `About | ${SITE_NAME}`,
-    description: 'The Vic 361 is a free weekly guide to events and things to do in Victoria, Texas.',
+    title: `About | ${town.siteName}`,
+    description: `${town.siteName} is a free weekly guide to events and things to do in Victoria, Texas.`,
     body, ld
   });
 }
@@ -1170,16 +1172,19 @@ export const AD_PACKAGES = [
     limit: 'One sponsor a week, so you’re the only one.',
     // The "what you get" checklist: [bold, rest]. Every line must be true
     // (newsletter.js sponsorHtml, seo.js sponsorHtml, social_kit.py
-    // sponsor_lines, sponsors.js sponsorStats).
-    points: [
-      ['Top of the newsletter', 'in both issues that week, Monday and Thursday'],
-      ['Every page of thevic361.com', 'all week long'],
-      ['Shout-out on Facebook', 'in our posts that week, with your link'],
-      ['Shout-out on Instagram', 'in our posts that week'],
-      ['Your logo, message and button', 'written by you'],
-      ['No competitors', 'one sponsor a week, so it’s all yours'],
-      ['Your results report', 'views, clicks and where you were seen, the Monday after']
-    ]
+    // sponsor_lines, sponsors.js sponsorStats). A getter, so it names the
+    // town in use (server/town.js), not the one at load.
+    get points() {
+      return [
+        ['Top of the newsletter', 'in both issues that week, Monday and Thursday'],
+        [`Every page of ${town.domain}`, 'all week long'],
+        ['Shout-out on Facebook', 'in our posts that week, with your link'],
+        ['Shout-out on Instagram', 'in our posts that week'],
+        ['Your logo, message and button', 'written by you'],
+        ['No competitors', 'one sponsor a week, so it’s all yours'],
+        ['Your results report', 'views, clicks and where you were seen, the Monday after']
+      ];
+    }
   },
   {
     key: 'featured',
@@ -1189,15 +1194,17 @@ export const AD_PACKAGES = [
     amount: 4900,
     blurb: 'Tell us about your event. Once it\'s listed, it\'s highlighted on its day with the Vic’s Pick badge.',
     limit: 'Only 3 a day Mon–Thu and 4 a day Fri–Sun, so book early.',
-    points: [
-      ['Vic’s Pick badge', 'your event stands out on its day'],
-      ['Guaranteed listing', 'free listings aren’t'],
-      ['Starred in the newsletter', 'when you book before the issue goes out'],
-      ['Featured first on Facebook', 'in our posts for your day'],
-      ['Featured first on Instagram', 'in our posts for your day'],
-      ['Highlighted on its event page', 'tagged Featured on The Vic 361'],
-      ['Your results report', 'views, clicks, calendar adds and shares, the day after']
-    ]
+    get points() {
+      return [
+        ['Vic’s Pick badge', 'your event stands out on its day'],
+        ['Guaranteed listing', 'free listings aren’t'],
+        ['Starred in the newsletter', 'when you book before the issue goes out'],
+        ['Featured first on Facebook', 'in our posts for your day'],
+        ['Featured first on Instagram', 'in our posts for your day'],
+        ['Highlighted on its event page', `tagged Featured on ${town.siteName}`],
+        ['Your results report', 'views, clicks, calendar adds and shares, the day after']
+      ];
+    }
   }
 ];
 
@@ -1226,8 +1233,8 @@ const FLOW_ICONS = {
   facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#1877F2" stroke="#1F1A3D" stroke-width="2"/><path d="M13.3 21v-6.6h2.2l.35-2.6H13.3v-1.7c0-.75.21-1.27 1.3-1.27h1.38V6.5a18 18 0 0 0-2-.1c-2 0-3.35 1.2-3.35 3.43v1.97H8.4v2.6h2.23V21" fill="#fff"/></svg>',
   instagram: '<svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".35" stop-color="#FA7E1E"/><stop offset=".65" stop-color="#D62976"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="url(#ig-g)" stroke="#1F1A3D" stroke-width="2"/><rect x="6.5" y="6.5" width="11" height="11" rx="3.5" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="16.4" cy="7.6" r="1" fill="#fff"/></svg>'
 };
-const FLOW_CHANNELS = [
-  ['web', 'thevic361.com', 'on the site, all week'],
+const flowChannels = () => [
+  ['web', town.domain, 'on the site, all week'],
   ['email', 'The newsletter', 'Monday and Thursday issues'],
   ['facebook', 'Facebook', 'in our posts'],
   ['instagram', 'Instagram', 'in our posts']
@@ -1245,7 +1252,7 @@ export function adFlowHtml() {
       <div class="ad-flow__grid">
         <div class="ad-flow__ad"><span class="ad-flow__tag">Your ad</span><img src="${SAMPLE_LOGO}" alt="" width="176" height="51"><strong>Your Business</strong><span>Your message and button</span></div>
         ${FLOW_FAN}${FLOW_DOWN}
-        <ul class="ad-flow__channels" role="list">${FLOW_CHANNELS.map(([k, name, sub]) =>
+        <ul class="ad-flow__channels" role="list">${flowChannels().map(([k, name, sub]) =>
           `<li class="ad-flow__ch ad-flow__ch--${k}"><span class="ad-flow__icon">${FLOW_ICONS[k]}</span><span><strong>${escHtml(name)}</strong><small>${escHtml(sub)}</small></span></li>`).join('')}</ul>
       </div>
     </section>`;
@@ -1253,8 +1260,8 @@ export function adFlowHtml() {
 
 // Questions a business asks before buying. Keep every answer true to what
 // the site does (server/sponsors.js, server/newsletter.js).
-const AD_FAQ = [
-  ['Who reads The Vic 361?', 'People in Victoria and the towns around it who are planning what to do: families looking for weekend plans, couples planning a night out, newcomers finding their way around. They come to the site and open the newsletter to decide where to go.'],
+const adFaq = () => [
+  [`Who reads ${town.siteName}?`, 'People in Victoria and the towns around it who are planning what to do: families looking for weekend plans, couples planning a night out, newcomers finding their way around. They come to the site and open the newsletter to decide where to go.'],
   ['How fast does it go live?', 'A weekly sponsorship goes live on its own the Monday of the week you book. A Vic’s Pick is checked by our editors and highlighted as soon as your event is listed, usually the same day.'],
   ['When does it make the newsletter?', 'Monday’s issue covers the whole week and Thursday’s covers the weekend. Book a Vic’s Pick before the issue goes out and it’s starred in it; a weekly sponsor is at the top of both issues of its week.'],
   ['Can I change something after I pay?', 'Yes. Reply to your confirmation email with the change and we’ll update it.'],
@@ -1276,7 +1283,7 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
     stats.subscribers ? [`${stats.subscribers}+`, 'local subscribers'] : null
   ].filter(Boolean) : [];
   const body = `
-    <h1 class="page-title">Advertise on The Vic 361</h1>
+    <h1 class="page-title">Advertise on ${town.siteName}</h1>
     <p class="page-lead">Reach people in Victoria, TX who are actively looking for something to do this week. Here’s exactly what each option gets you and where it shows.</p>
     ${statItems.length ? `<ul class="ad-stats" role="list">${statItems.map(([n, l]) => `<li><strong>${escHtml(String(n))}</strong><span>${escHtml(l)}</span></li>`).join('')}</ul>` : ''}
     ${adFlowHtml()}
@@ -1302,14 +1309,14 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
       </section>`).join('')}
     </div>
     <h2 class="section-heading">Common questions</h2>
-    <div class="ad-faq">${AD_FAQ.map(([q, a]) => `<details><summary>${escHtml(q)}</summary><p>${escHtml(a)}</p></details>`).join('')}</div>
+    <div class="ad-faq">${adFaq().map(([q, a]) => `<details><summary>${escHtml(q)}</summary><p>${escHtml(a)}</p></details>`).join('')}</div>
     <h2 class="section-heading">${checkout ? 'Something else?' : 'Get started'}</h2>
     <p>${checkout ? 'Pick a package above to book and pay online in a couple of minutes. Questions or a custom package?' : 'Tell us your business name and what you\'d like to promote, and we\'ll reply with open dates and our latest audience numbers.'} <a href="/contact?topic=advertising">Send us a message</a>.</p>
     <p>Listing a community event is always free: <a href="/submit">submit it here</a>.</p>`;
   return layout({
     siteUrl, path: '/advertise', wide: true,
-    title: `Advertise | ${SITE_NAME}`,
-    description: 'Sponsor The Vic 361 for a week or make your event a Vic’s Pick to reach people looking for things to do in Victoria, TX.',
+    title: `Advertise | ${town.siteName}`,
+    description: `Sponsor ${town.siteName} for a week or make your event a Vic’s Pick to reach people looking for things to do in Victoria, TX.`,
     body
   });
 }
@@ -1349,7 +1356,7 @@ export function renderNotFoundPage({ siteUrl, kind = 'page' }) {
     <p class="page-actions">${copy.links.map(([href, label], i) =>
       `<a class="btn ${i ? 'btn--outline' : 'btn--primary'}" href="${href}">${escHtml(label)}</a>`).join(' ')}</p>`;
   const title = kind === 'unavailable' ? 'Try again shortly' : 'Not found';
-  return layout({ siteUrl, path: '/404', nav: null, noindex: true, title: `${title} | ${SITE_NAME}`, description: kind === 'unavailable' ? 'Temporarily unavailable.' : 'Page not found.', body });
+  return layout({ siteUrl, path: '/404', nav: null, noindex: true, title: `${title} | ${town.siteName}`, description: kind === 'unavailable' ? 'Temporarily unavailable.' : 'Page not found.', body });
 }
 
 // Homepage: inject this week's events + JSON-LD into docs/index.html so
@@ -1418,7 +1425,7 @@ export function renderHome(template, events, { siteUrl, now, signupHtml = null }
     {
       '@context': 'https://schema.org',
       '@type': 'WebSite',
-      name: SITE_NAME,
+      name: town.siteName,
       url: siteUrl + '/',
       description: 'Events and things to do in Victoria, TX, updated every week.'
     },
@@ -1473,7 +1480,7 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
   const upcoming = eventsBetween(events, today, addDays(today, UPCOMING_DAYS));
   const picks = upcoming.filter(ev => ev.featured);
   const lines = [
-    '# The Vic 361',
+    `# ${town.siteName}`,
     '',
     '> Free weekly guide to events and things to do in Victoria, Texas (the 361 area code). Concerts, festivals, family activities, farmers markets, art shows, and community events. Put together locally in Victoria, with a local editor keeping the list accurate and a spotlight on small businesses and community groups; updated twice a week.',
     '',
@@ -1482,7 +1489,7 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
     `- [This week in Victoria, TX](${siteUrl}/): every event Monday through Sunday`,
     ...HUB_PAGES.map(p => `- [${p.title}](${siteUrl}${p.path}): ${p.description}`),
     ...extraLinks.map(([title, path, desc]) => `- [${title}](${siteUrl}${path})${desc ? `: ${desc}` : ''}`),
-    `- [About](${siteUrl}/about): who runs The Vic 361 and how events are chosen`,
+    `- [About](${siteUrl}/about): who runs ${town.siteName} and how events are chosen`,
     `- [Submit an event](${siteUrl}/submit)`,
     `- [Advertise](${siteUrl}/advertise): sponsorships and featured listings for local businesses`,
     '',
@@ -1499,11 +1506,11 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
     lines.push("## This week's sponsor", '',
       `- ${sponsorUrl ? `[${sponsor.name}](${sponsorUrl})` : sponsor.name}${sponsor.text ? `: ${sponsor.text}` : ''}` +
         `${sponsor.address ? ` (${sponsor.address})` : ''}`,
-      '', `${sponsor.name} is this week's paid sponsor of The Vic 361.`, '');
+      '', `${sponsor.name} is this week's paid sponsor of ${town.siteName}.`, '');
   }
   if (picks.length) {
     lines.push("## Vic's Picks", '',
-      "Featured events, highlighted on their day on The Vic 361. Some are our editors' can't-miss picks; some are paid placements by the venue or organizer.", '',
+      `Featured events, highlighted on their day on ${town.siteName}. Some are our editors' can't-miss picks; some are paid placements by the venue or organizer.`, '',
       ...picks.map(line), '');
   }
   lines.push(`## Upcoming events (as of ${formatDay(today, { month: 'long', day: 'numeric', year: 'numeric' })})`, '');

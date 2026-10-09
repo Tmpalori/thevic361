@@ -8,7 +8,8 @@
  * sees the on-page confirmation. Off until RESEND_API_KEY is set.
  */
 
-import { SITE_NAME, escHtml, formatDay, safeUrl, currentWeek, addDays, localDateStr, formatTime, placeText } from './seo.js';
+import { town } from './town.js';
+import { escHtml, formatDay, safeUrl, currentWeek, addDays, localDateStr, formatTime, placeText } from './seo.js';
 import { C, btn, emailShell, eventRow } from './newsletter.js';
 
 // "Saturday, October 10, 7 PM · Venue · address" for the plain-text emails,
@@ -118,8 +119,8 @@ const box = html => `<table role="presentation" width="100%" cellpadding="0" cel
 
 function contactFooter(siteUrl, address) {
   const a = 'color:#FFC93C;';
-  return `Questions or something not right? Just reply to this email, or reach us at <a href="${siteUrl}/contact" style="${a}">thevic361.com/contact</a>.<br>` +
-    `${escHtml(SITE_NAME)} · ${escHtml(address || 'Victoria, TX')}`;
+  return `Questions or something not right? Just reply to this email, or reach us at <a href="${siteUrl}/contact" style="${a}">${town.domain}/contact</a>.<br>` +
+    `${escHtml(town.siteName)} · ${escHtml(address || 'Victoria, TX')}`;
 }
 const contactText = siteUrl => `Questions or something not right? Reply to this email or reach us at ${siteUrl}/contact`;
 
@@ -145,7 +146,7 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
     `<h2 style="font-size:18px;margin:20px 0 4px;">What happens next</h2>` +
     steps([
       'We review every submission, usually within the hour, and we’ll email you when it’s live; some need a closer look and take a day or two.',
-      `If it's a fit, it goes on <a href="${siteUrl}" style="color:${C.accent};">thevic361.com</a> and can show up in our Monday and Thursday newsletters and our social posts.`,
+      `If it's a fit, it goes on <a href="${siteUrl}" style="color:${C.accent};">${town.domain}</a> and can show up in our Monday and Thursday newsletters and our social posts.`,
       'Free listings aren’t guaranteed a spot, and we may tidy up the wording.'
     ]) +
     box(`<strong>Want it guaranteed and highlighted on its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`) +
@@ -182,8 +183,8 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
   const pickShare = `Share that link anywhere you promote the event. It’s ${pickWhere(ev.date, at)}.`;
   const offer = !pick && Boolean(upgradeUrl);
   const lead = pick
-    ? `Good news: <strong>${escHtml(name)}</strong> is live on The Vic 361 as a Vic’s Pick, highlighted on its day.`
-    : `Good news: <strong>${escHtml(name)}</strong> is now on The Vic 361.`;
+    ? `Good news: <strong>${escHtml(name)}</strong> is live on ${town.siteName} as a Vic’s Pick, highlighted on its day.`
+    : `Good news: <strong>${escHtml(name)}</strong> is now on ${town.siteName}.`;
   const bodyHtml =
     p(lead) +
     eventTable(ev, siteUrl) +
@@ -195,10 +196,10 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
       : 'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
   return {
     subject: pick ? `Your Vic's Pick is live: ${name}` : `You're live: ${name}`,
-    html: emailShell({ title: pick ? 'Your Vic’s Pick is live!' : 'Your event is live!', preheader: `${name} is now on thevic361.com.`, bodyHtml, siteUrl,
+    html: emailShell({ title: pick ? 'Your Vic’s Pick is live!' : 'Your event is live!', preheader: `${name} is now on ${town.domain}.`, bodyHtml, siteUrl,
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
-      pick ? `Good news: "${name}" is live on The Vic 361 as a Vic's Pick, highlighted on its day.` : `Good news: "${name}" is now on The Vic 361.`, '',
+      pick ? `Good news: "${name}" is live on ${town.siteName} as a Vic's Pick, highlighted on its day.` : `Good news: "${name}" is now on ${town.siteName}.`, '',
       eventLine(ev), '',
       `See it: ${link}`,
       pick ? pickShare
@@ -238,20 +239,20 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
       p(`Thanks, ${escHtml(business)}! Your payment went through and <strong>the week of ${escHtml(week)}</strong> is yours.`) +
       `<h2 style="font-size:18px;margin:20px 0 4px;">What happens next</h2>` +
       steps([
-        `Your sponsor block goes live on its own on <strong>${escHtml(week)}</strong>, on every page of thevic361.com for the whole week.`,
+        `Your sponsor block goes live on its own on <strong>${escHtml(week)}</strong>, on every page of ${town.domain} for the whole week.`,
         escHtml(newsletterLine),
         'The Monday after your week, we’ll email you how it did: how many times people saw your block, where, and how many clicked through.'
       ]) +
       p('Here’s your block as it will run:') + block +
       p(`Want to change the wording or link before it goes live? Reply to this email. ${receipt}`, `color:${C.muted};font-size:14px;`);
     return {
-      subject: `You're booked: The Vic 361 sponsor, week of ${formatDay(start, { month: 'short', day: 'numeric' })}`,
+      subject: `You're booked: ${town.siteName} sponsor, week of ${formatDay(start, { month: 'short', day: 'numeric' })}`,
       html: emailShell({ title: 'You’re booked!', preheader: `Your sponsor block goes live ${week}.`, bodyHtml, siteUrl,
         footerHtml: contactFooter(siteUrl, address) }),
       text: [
         `Thanks, ${business}! Your payment went through and the week of ${week} is yours.`, '',
         'What happens next:',
-        `1. Your sponsor block goes live on its own on ${week}, on every page of thevic361.com for the whole week.`,
+        `1. Your sponsor block goes live on its own on ${week}, on every page of ${town.domain} for the whole week.`,
         `2. ${newsletterLine}`,
         '3. The Monday after your week, we’ll email you how it did: how many times people saw your block, where, and how many clicked through.', '',
         `Your block: ${s.name || business}: ${s.text || ''} ${href ? `(${s.cta || 'Learn more'}: ${href})` : ''}`.trim(), '',
@@ -272,7 +273,7 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
     `<h2 style="font-size:18px;margin:20px 0 4px;">What happens next</h2>` +
     steps([
       'We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
-      `Then it’s <strong>highlighted on ${escHtml(day)}</strong> on thevic361.com and its event page, with the Vic’s Pick badge.`,
+      `Then it’s <strong>highlighted on ${escHtml(day)}</strong> on ${town.domain} and its event page, with the Vic’s Pick badge.`,
       `It’s ${escHtml(where)}.`,
       'The day after your event, we’ll email you how it did: how many times it was seen, page views, clicks to your link, calendar adds and shares.'
     ]) +
@@ -286,7 +287,7 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
       eventLine(ev), '',
       'What happens next:',
       '1. We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
-      `2. Then it's highlighted on ${day} on thevic361.com and its event page, with the Vic's Pick badge.`,
+      `2. Then it's highlighted on ${day} on ${town.domain} and its event page, with the Vic's Pick badge.`,
       `3. It's ${where}.`,
       '4. The day after your event, we’ll email you how it did: how many times it was seen, page views, clicks to your link, calendar adds and shares.', '',
       `Need to change a detail? Reply to this email. ${receipt}`,
@@ -357,16 +358,16 @@ export function renderSponsorReport(order, stats, { siteUrl, address }) {
   const total = stats.site_people + stats.email_people + (Number(stats.social_people) || 0);
   const views = Number(stats.views) || 0;
   const rows = [
-    ...(views ? [['Your block was seen on thevic361.com', plural(views, 'time', 'times')]] : []),
-    ['Clicked your button on thevic361.com', people(stats.site_people)],
+    ...(views ? [[`Your block was seen on ${town.domain}`, plural(views, 'time', 'times')]] : []),
+    [`Clicked your button on ${town.domain}`, people(stats.site_people)],
     ['Clicked your button in our emails', people(stats.email_people)],
     ...(stats.social_people ? [['Clicked your link in our Facebook and Instagram posts', people(stats.social_people)]] : []),
     ...(stats.newsletter_recipients ? [[stats.newsletter_issues > 1 ? 'Newsletter copies with your block (Monday and Thursday issues)' : 'Newsletter copies with your block',
       String(stats.newsletter_recipients)]] : []),
-    ...(stats.site_visitors ? [['Visits to thevic361.com that week', String(stats.site_visitors)]] : [])
+    ...(stats.site_visitors ? [[`Visits to ${town.domain} that week`, String(stats.site_visitors)]] : [])
   ];
   const bodyHtml =
-    p(`Thanks for sponsoring The Vic 361, ${escHtml(business)}! Here’s how your week (${escHtml(range)}) went.`) +
+    p(`Thanks for sponsoring ${town.siteName}, ${escHtml(business)}! Here’s how your week (${escHtml(range)}) went.`) +
     p(`<strong>${escHtml(people(total))}</strong> clicked through to you in total.`, 'font-size:17px;') +
     statsTable(rows) +
     whereHtml(stats.where) +
@@ -377,7 +378,7 @@ export function renderSponsorReport(order, stats, { siteUrl, address }) {
     html: emailShell({ title: 'Your sponsor report', preheader: `${people(total)} clicked through to ${business} during ${range}.`, bodyHtml, siteUrl,
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
-      `Thanks for sponsoring The Vic 361, ${business}! Here's how your week (${range}) went.`, '',
+      `Thanks for sponsoring ${town.siteName}, ${business}! Here's how your week (${range}) went.`, '',
       `${people(total)} clicked through to you in total.`,
       ...rows.map(([k, v]) => `- ${k}: ${v}`), '',
       ...whereText(stats.where),
@@ -404,7 +405,7 @@ export function renderPickReport(order, stats, { siteUrl, address }) {
   ];
   const headline = `${name} was seen ${plural(shown, 'time', 'times')} as a Vic’s Pick.`;
   const bodyHtml =
-    p(`Thanks for making <strong>${escHtml(name)}</strong> a Vic’s Pick, ${escHtml(business)}! Here’s how it did on The Vic 361.`) +
+    p(`Thanks for making <strong>${escHtml(name)}</strong> a Vic’s Pick, ${escHtml(business)}! Here’s how it did on ${town.siteName}.`) +
     statsTable(rows) +
     whereHtml(stats.where) +
     p(escHtml(COUNTER_NOTE), `color:${C.muted};font-size:13px;`) +
@@ -414,7 +415,7 @@ export function renderPickReport(order, stats, { siteUrl, address }) {
     html: emailShell({ title: 'Your Vic’s Pick report', preheader: headline, bodyHtml, siteUrl,
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
-      `Thanks for making "${name}" a Vic's Pick, ${business}! Here's how it did on The Vic 361.`, '',
+      `Thanks for making "${name}" a Vic's Pick, ${business}! Here's how it did on ${town.siteName}.`, '',
       ...rows.map(([k, v]) => `- ${k}: ${v}`), '',
       ...whereText(stats.where),
       COUNTER_NOTE, '',

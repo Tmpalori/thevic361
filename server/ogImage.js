@@ -8,6 +8,7 @@
  * prebuilt binary, no system Chrome or fonts needed on Railway), in the
  * same palette and fonts as the site and the social-kit slides.
  */
+import { town } from './town.js';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -120,7 +121,7 @@ export function eventCardSvg(ev) {
   const parts = [];
   // Header: logo + name on the left, the day pill on the right.
   parts.push(`<image href="${logo}" x="${left}" y="40" width="92" height="92"/>`);
-  parts.push(`<text x="${left + 112}" y="104" font-family="Fredoka" font-weight="700" font-size="46" fill="${INK}">The Vic 361</text>`);
+  parts.push(`<text x="${left + 112}" y="104" font-family="Fredoka" font-weight="700" font-size="46" fill="${INK}">${town.siteName}</text>`);
   const dayPillW = textWidth(day, 38) + 44;
   parts.push(pill(W - left - dayPillW - 5, 52, day, 38, DAY_COLORS[weekday]).svg);
 

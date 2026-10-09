@@ -13,7 +13,7 @@ import http from 'node:http';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
 import {
-  GA_SNIPPET, THEME_SCRIPT, formatTime, eventJsonLd, withPages, layout, sponsorHtml, sponsorLinkUrl,
+  gaSnippet, THEME_SCRIPT, formatTime, eventJsonLd, withPages, layout, sponsorHtml, sponsorLinkUrl,
   renderNotFoundPage
 } from '../server/seo.js';
 import { streetAddress } from '../server/guides.js';
@@ -56,7 +56,7 @@ const get = async (p, headers = {}) => {
 
 // Runs the inline GA snippet against a fake page and returns what it sent.
 function gaConfig(search) {
-  const inline = GA_SNIPPET.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const inline = gaSnippet().match(/<script>([\s\S]*?)<\/script>/)[1];
   const window = {};
   const ctx = { window, location: { origin: SITE, pathname: '/unsubscribe', search }, URLSearchParams, Date };
   ctx.dataLayer = window.dataLayer = [];
@@ -74,10 +74,10 @@ describe('Google Analytics never sees a token URL', () => {
   it('every page with GA uses the same sanitized snippet', () => {
     for (const f of ['index.html', 'submit.html']) {
       const html = readFileSync(path.join(DOCS, f), 'utf8');
-      expect(html, f).toContain(GA_SNIPPET);
+      expect(html, f).toContain(gaSnippet());
       expect(html, f).not.toMatch(/gtag\('config',\s*'G-[A-Z0-9]+'\)/);
     }
-    expect(layout({ siteUrl: SITE, path: '/x', title: 't', description: 'd', body: '' })).toContain(GA_SNIPPET);
+    expect(layout({ siteUrl: SITE, path: '/x', title: 't', description: 'd', body: '' })).toContain(gaSnippet());
   });
 
   it('pages without the pixel (token links) load no analytics at all', () => {

@@ -17,6 +17,7 @@
  *   - Slack: one "🎁 Referral rewards" note per run, and an alert when a
  *     send fails (it's retried every Monday until it goes through).
  */
+import { town } from './town.js';
 import crypto from 'node:crypto';
 import { emailKey, REF_HOLD_HOURS } from './db.js';
 
@@ -60,7 +61,7 @@ export function createTremendous(config, fetchImpl = globalThis.fetch) {
             campaign_id: config.campaignId,
             value: { denomination: amount, currency_code: 'USD' },
             recipient: { name, email },
-            delivery: { method: 'EMAIL', meta: { sender_name: 'The Vic 361', message } }
+            delivery: { method: 'EMAIL', meta: { sender_name: town.siteName, message } }
           }
         })
       });
@@ -170,8 +171,8 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
     let patch;
     try {
       const message = row.kind === 'drawing'
-        ? `You won The Vic 361's ${monthName(row.month)} referral drawing! Thanks for sharing the newsletter with your friends.`
-        : `Thanks for sharing The Vic 361! You've brought in ${row.tier} friends, so here's a $${row.amount} gift card on us.`;
+        ? `You won ${town.siteName}'s ${monthName(row.month)} referral drawing! Thanks for sharing the newsletter with your friends.`
+        : `Thanks for sharing ${town.siteName}! You've brought in ${row.tier} friends, so here's a $${row.amount} gift card on us.`;
       const r = await tremendous.sendReward({
         externalId: `vic361-${row.key.replace(/:/g, '-')}`, amount: row.amount,
         email: row.email, name: row.email.split('@')[0], message
