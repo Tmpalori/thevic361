@@ -23,6 +23,20 @@ describe('createSlack', () => {
     expect(slackConfig({ SLACK_WEBHOOK_URL: 'https://evil.example/x' }).enabled).toBe(false);
   });
 
+  it('prefixes every title with SLACK_TOWN_TAG, and changes nothing without it (MULTI_CITY_PLAN.md 4.3)', async () => {
+    const send = async env => {
+      const bodies = [];
+      const s = createSlack(slackConfig({ SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/T/B/x', RAILWAY_ENVIRONMENT_NAME: 'production', ...env }),
+        { fetchImpl: async (_u, o) => { bodies.push(JSON.parse(o.body)); return { ok: true }; } });
+      await s.notify({ title: '🎉 New subscriber' });
+      await s.alert('k', 'Broke', 'detail');
+      return bodies.map(b => [b.text, b.blocks[0].text.text]);
+    };
+    expect(await send({})).toEqual([['🎉 New subscriber', '🎉 New subscriber'], ['🚨 Broke', '🚨 Broke']]);
+    expect(await send({ SLACK_TOWN_TAG: ' Bay City ' })).toEqual([
+      ['[Bay City] 🎉 New subscriber', '[Bay City] 🎉 New subscriber'], ['[Bay City] 🚨 Broke', '[Bay City] 🚨 Broke']]);
+  });
+
   it('escapes user text and de-duplicates alerts per window', async () => {
     const bodies = [];
     let now = 0;
