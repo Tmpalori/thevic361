@@ -177,7 +177,7 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
         ? `You won ${town.siteName}'s ${monthName(row.month)} referral drawing! Thanks for sharing the newsletter with your friends.`
         : `Thanks for sharing ${town.siteName}! You've brought in ${row.tier} friends, so here's a $${row.amount} gift card on us.`;
       const r = await tremendous.sendReward({
-        externalId: `vic361-${row.key.replace(/:/g, '-')}`, amount: row.amount,
+        externalId: `${town.keyPrefix}-${row.key.replace(/:/g, '-')}`, amount: row.amount,
         email: row.email, name: row.email.split('@')[0], message
       });
       patch = /^(FAILED|CANCELED)$/.test(r.status || '')

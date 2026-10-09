@@ -532,7 +532,7 @@ export async function createApp(opts = {}) {
     // Tell them it worked and what happens next (no-op without Resend).
     if (row.submitter_email && receiptLimiter.check(row.submitter_email.toLowerCase()).ok) {
       const mail = renderSubmissionReceived(ev, { siteUrl, address: newsletter.address, upgradeUrl: upgradeUrlFor(row) });
-      mailer.send(row.submitter_email, mail, `vic361-submission-${row.id}`);
+      mailer.send(row.submitter_email, mail, `${town.keyPrefix}-submission-${row.id}`);
     }
     return res.status(201).json({ ok: true, queued: true, id: row.id });
   }));
@@ -1970,7 +1970,7 @@ export async function createApp(opts = {}) {
       // retryLive every review run with the same idempotency key until the
       // date passes), so a buyer promised this email isn't left without it
       // after a short Resend outage. With email off there's nothing to retry.
-      const result = await mailer.deliver(row.submitter_email, mail, `vic361-submission-live-${row.id}`);
+      const result = await mailer.deliver(row.submitter_email, mail, `${town.keyPrefix}-submission-live-${row.id}`);
       if (result === 'failed') {
         const err = new Error('live email failed');
         err.code = 'live-email-failed';

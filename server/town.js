@@ -34,6 +34,10 @@ export const VICTORIA = Object.freeze({
   gaId: 'G-52YHD3X3C2',
   icalDomain: 'thevic361.com',
   utmSource: 'thevic361',                       // utm_source on links we send people out through
+  // Starts every key we hand Stripe (lookup keys, idempotency keys, product
+  // metadata), Resend (idempotency keys) and Tremendous (external_id), so
+  // two towns on one account never collide. Another town's is its slug.
+  keyPrefix: 'vic361',
   // Geography
   city: 'Victoria',
   state: 'TX',
@@ -88,6 +92,7 @@ function complete(id, raw) {
     gaId: '',
     icalDomain: domain,
     utmSource: domain.replace(/\.[a-z]+$/, '').replace(/[^a-z0-9]/g, ''),
+    keyPrefix: id,
     cityState: `${raw.city}, ${raw.state}`,
     cityStateLong: `${raw.city}, ${raw.stateName}`,
     ...raw,
@@ -117,6 +122,9 @@ function check(t) {
   if (!/^[^<>&"]+ <[^<>&"\s@]+@[a-z0-9.-]+>$/.test(String(t.emailFrom))) throw new Error(`TOWN=${t.id}: emailFrom must look like Name <news@domain>`);
   if (!/^https:\/\/[a-z0-9.-]+$/.test(t.siteUrl)) throw new Error(`TOWN=${t.id}: siteUrl must be https://host with no path`);
   if (!/^[a-z0-9_-]+$/.test(String(t.utmSource))) throw new Error(`TOWN=${t.id}: utmSource must be lowercase letters, digits, - or _`);
+  if (!/^[a-z0-9-]+$/.test(String(t.keyPrefix)) || (t.id !== VICTORIA.id && t.keyPrefix === VICTORIA.keyPrefix)) {
+    throw new Error(`TOWN=${t.id}: keyPrefix must be lowercase letters, digits or -, and not Victoria's`);
+  }
   if (t.areaCode && !/^\d{3}$/.test(t.areaCode)) throw new Error(`TOWN=${t.id}: areaCode must be 3 digits or empty`);
   if (t.gaId && !/^G-[A-Z0-9]+$/.test(t.gaId)) throw new Error(`TOWN=${t.id}: gaId must look like G-XXXXXXX`);
   const b = t.business || {};
