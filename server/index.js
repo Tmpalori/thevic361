@@ -325,7 +325,8 @@ export async function createApp(opts = {}) {
   // Replies to news@thevic361.com, received by Resend, posted to Slack
   // (server/inbound.js). Raw body too, so also before the JSON parser.
   const inbound = createInbound({ config: inboundConfig(process.env, opts), apiKey: newsletter.apiKey, slack, siteUrl,
-    fetchImpl: opts.inboundFetch || globalThis.fetch, nowFn: () => (opts.now ? opts.now().getTime() : Date.now()) });
+    fetchImpl: opts.inboundFetch || globalThis.fetch, nowFn: () => (opts.now ? opts.now().getTime() : Date.now()),
+    otherDomains: opts.inboundOtherDomains });
   inbound.register(app);
 
   // The admin's sponsor edit can carry a new logo (a data URL, shrunk in

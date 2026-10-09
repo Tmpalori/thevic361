@@ -155,6 +155,20 @@ export function townConfig(env = process.env, overrides = {}) {
   return check(fromFile(id, overrides.townsDir || path.join(ROOT, 'towns')));
 }
 
+// Every other town's domain, from towns/*/town.json (unreadable or
+// domain-less files are skipped): what Victoria's inbound email filter
+// leaves to them.
+export function otherTownDomains(t = town, townsDir = path.join(ROOT, 'towns')) {
+  let ids = [];
+  try { ids = fs.readdirSync(townsDir); } catch (_) { return []; }
+  return ids.filter(id => id !== t.id).flatMap(id => {
+    try {
+      const d = JSON.parse(fs.readFileSync(path.join(townsDir, id, 'town.json'), 'utf8')).domain;
+      return typeof d === 'string' && d && d !== t.domain ? [d.toLowerCase()] : [];
+    } catch (_) { return []; }
+  });
+}
+
 // The process's town. A live binding: modules that import it see useTown's
 // change, so read its fields when rendering, never copy them at load.
 export let town = townConfig();
