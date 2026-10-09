@@ -31,7 +31,7 @@ describe('Victoria (config without a town)', () => {
   it('keeps its labels, repo and Central week', async () => {
     const api = await boot({});
     expect(api.town()).toMatchObject({ siteName: 'The Vic 361', domain: 'thevic361.com', timezone: 'America/Chicago' });
-    expect(api.repo()).toEqual({ owner: 'Tmpalori', name: 'thevic361', branch: 'main', eventsPath: 'docs/events.json' });
+    expect(api.repo()).toEqual({ owner: 'Tmpalori', name: 'thevic361', branch: 'main', eventsPath: 'docs/events.json', candidatesPath: 'candidates.json' });
     expect(document.title).toBe('Admin — The Vic 361');
     expect(document.getElementById('reply-title').textContent).toBe('Reply as news@thevic361.com');
     expect(document.querySelector('#reply-modal .event-edit-form__hint').textContent).toBe('Signed “— The Vic 361”. Their answer comes back to Slack.');
@@ -40,13 +40,13 @@ describe('Victoria (config without a town)', () => {
 
 describe('another town', () => {
   const config = {
-    github_owner: 'Tmpalori', github_repo: 'thebay979', github_branch: 'live', github_events_path: 'towns/bay/events.json',
+    github_owner: 'Tmpalori', github_repo: 'thebay979', github_branch: 'live', github_events_path: 'towns/bay/public/events.json', github_candidates_path: 'towns/bay/candidates.json',
     town: { id: 'bay', siteName: 'The Bay 979', domain: 'thebay979.com', city: 'Bay City', pickName: 'Bay’s Best', timezone: 'America/Los_Angeles' }
   };
 
   it('publishes to its own repo and labels the admin with its name', async () => {
     const api = await boot(config);
-    expect(api.repo()).toEqual({ owner: 'Tmpalori', name: 'thebay979', branch: 'live', eventsPath: 'towns/bay/events.json' });
+    expect(api.repo()).toEqual({ owner: 'Tmpalori', name: 'thebay979', branch: 'live', eventsPath: 'towns/bay/public/events.json', candidatesPath: 'towns/bay/candidates.json' });
     expect(document.title).toBe('Admin — The Bay 979');
     expect(document.getElementById('reply-title').textContent).toBe('Reply as news@thebay979.com');
     expect(document.querySelector('#reply-modal .event-edit-form__hint').textContent).toContain('— The Bay 979');

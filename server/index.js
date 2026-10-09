@@ -13,7 +13,7 @@
  *   - Submitter email + IP never leave the admin scope.
  */
 
-import { town, townConfig, useTown, VICTORIA, townAssetPath } from './town.js';
+import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths } from './town.js';
 import { localizeHtml } from './localize.js';
 import express from 'express';
 import compression from 'compression';
@@ -60,10 +60,6 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DOCS_DIR = path.join(REPO_ROOT, 'docs');
-const CANDIDATES_FILE = path.join(REPO_ROOT, 'candidates.json');
-const COLLECTION_METADATA_FILE = path.join(REPO_ROOT, 'collection_metadata.json');
-const EVENTS_FILE = path.join(DOCS_DIR, 'events.json');
-const VENUES_FILE = path.join(REPO_ROOT, 'venues.json');
 const WEEKLY_COLLECT_WORKFLOW = 'weekly-collect.yml';
 // Hourly site check (healthCheck): fewer upcoming events than this, or no
 // new collect in this many days (it runs Sunday and Wednesday), alerts.
@@ -149,6 +145,12 @@ export async function createApp(opts = {}) {
   // search engines see one site instead of two copies.
   // The town (server/town.js): TOWN in Railway, unset = Victoria; opts.town for tests.
   useTown(townConfig(process.env, opts));
+  // The town's data files (townPaths): repo-relative for GitHub, absolute on disk.
+  const PATHS = townPaths();
+  const CANDIDATES_FILE = path.join(REPO_ROOT, PATHS.candidates);
+  const COLLECTION_METADATA_FILE = path.join(REPO_ROOT, PATHS.collectionMetadata);
+  const EVENTS_FILE = path.join(REPO_ROOT, PATHS.events);
+  const VENUES_FILE = path.join(REPO_ROOT, PATHS.venues);
   checkTownSchedule();
   const siteUrl = (opts.siteUrl ?? process.env.SITE_URL ?? town.siteUrl).replace(/\/+$/, '');
   // Owner pings in Slack (server/slack.js); a no-op until SLACK_WEBHOOK_URL is set.
@@ -360,7 +362,8 @@ export async function createApp(opts = {}) {
       github_owner: github.owner,
       github_repo: github.repo,
       github_branch: github.branch,
-      github_events_path: 'docs/events.json',
+      github_events_path: PATHS.events,
+      github_candidates_path: PATHS.candidates,
       // What the admin needs to word things for this town (docs/admin.js).
       town: { id: town.id, siteName: town.siteName, domain: town.domain, city: town.city, pickName: town.pickName, timezone: town.timezone },
       // The Sources tab uses this to enable or disable the manual-pull button.
@@ -742,7 +745,7 @@ export async function createApp(opts = {}) {
 
     if (github.isConfigured()) {
       try {
-        const got = await github.getJsonFile('candidates.json');
+        const got = await github.getJsonFile(PATHS.candidates);
         sha = got.sha;
         events = Array.isArray(got.data && got.data.events) ? got.data.events : [];
         source = 'github';
@@ -1035,7 +1038,7 @@ export async function createApp(opts = {}) {
     if (github.isConfigured()) {
       let sha = null;
       try {
-        const cur = await github.getJsonFile('docs/events.json');
+        const cur = await github.getJsonFile(PATHS.events);
         sha = cur.sha;
       } catch (err) {
         if (err.status !== 404) {
@@ -1046,7 +1049,7 @@ export async function createApp(opts = {}) {
         ? body.message.trim().slice(0, 200)
         : `Publish events ${new Date().toISOString().slice(0, 10)} (${events.length} picks)`;
       try {
-        const gh = await github.putJsonFile('docs/events.json', payload, message, sha);
+        const gh = await github.putJsonFile(PATHS.events, payload, message, sha);
         result.destinations.github = {
           ok: true,
           commit: gh && gh.commit ? {

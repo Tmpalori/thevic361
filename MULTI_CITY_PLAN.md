@@ -164,7 +164,8 @@ These matter the moment a second town exists. All keep Victoria's values.
       `extras.yaml`, the events bundle and `social/latest/`. Victoria keeps
       the root paths. The server, the GitHub API reads and writes, the
       collect and social-kit commit steps, and sweep `--wait-for` all take
-      the town's paths.
+      the town's paths. (Server and admin done: `townPaths()`; the
+      Python scripts and workflows next.)
 - [ ] **2.5 Boot guards** for non-Victoria towns: refuse to start if
       `SITE_URL` is unset or points at thevic361.com, if `NEWSLETTER_FROM`
       or GA ID is Victoria's, or if the database's stored `meta.town`
