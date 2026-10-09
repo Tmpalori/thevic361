@@ -1766,6 +1766,7 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
 .sub-hero .signup-form input[type="email"] { flex: 1 1 220px; font-size: 1.05rem; padding-block: 0.7em; }
 .sub-hero .signup-form .btn { font-size: 1.05rem; }
 .sub-fine { margin: var(--space-1) 0 0; font-size: var(--text-sm); color: var(--color-text-muted); font-weight: 700; }
+.sub-fine + .page-lead { margin-top: var(--space-4); }
 .sub-crowd { margin: var(--space-3) 0 0; font-weight: 800; }
 .sub-perks { list-style: none; padding: 0; margin: 0 0 var(--space-6, 1.5rem); display: grid; gap: var(--space-3); }
 .sub-perks li { padding-left: 2rem; position: relative; }
