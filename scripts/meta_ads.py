@@ -40,6 +40,8 @@ import requests
 
 sys.path.insert(0, os.path.dirname(__file__))
 import slack_notify  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from town import TOWN, site_url  # noqa: E402
 
 # One place for the Graph/Marketing API version. The GRAPH_API_VERSION repo
 # variable (passed in meta-ads.yml) overrides it, so moving off a version
@@ -48,8 +50,8 @@ GRAPH_VERSION = os.environ.get("GRAPH_API_VERSION", "").strip() or "v23.0"
 GRAPH_VERSION = GRAPH_VERSION if GRAPH_VERSION.startswith("v") else f"v{GRAPH_VERSION}"
 GRAPH = f"https://graph.facebook.com/{GRAPH_VERSION}"
 MAX_DAILY_BUDGET = 50  # dollars; a typo like 1000 shouldn't go live
-SITE = (os.environ.get("SITE_URL", "").strip() or "https://www.thevic361.com").rstrip("/")
-CENTRAL = ZoneInfo("America/Chicago")
+SITE = site_url()
+CENTRAL = ZoneInfo(TOWN["timezone"])  # the town's zone (Central for Victoria)
 NEEDS = ("ads_read", "ads_management")
 
 

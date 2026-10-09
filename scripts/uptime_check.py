@@ -24,6 +24,8 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import slack_notify  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from town import TOWN, site_url  # noqa: E402
 
 TIMEOUT = 20
 SLOW = 10
@@ -71,16 +73,16 @@ def decide(state, found, now):
     if found:
         what = "; ".join(found)
         if not state.get("down_since"):
-            return f"🚨 thevic361.com is DOWN: {what}", {"down_since": stamp, "last_alert": stamp}
+            return f"🚨 {TOWN['domain']} is DOWN: {what}", {"down_since": stamp, "last_alert": stamp}
         since = dt.datetime.fromisoformat(state["down_since"])
         last = dt.datetime.fromisoformat(state.get("last_alert") or state["down_since"])
         if now - last >= dt.timedelta(minutes=REMIND_MIN):
             mins = int((now - since).total_seconds() // 60)
-            return f"🚨 thevic361.com still DOWN ({mins} min): {what}", {**state, "last_alert": stamp}
+            return f"🚨 {TOWN['domain']} still DOWN ({mins} min): {what}", {**state, "last_alert": stamp}
         return None, state
     if state.get("down_since"):
         mins = int((now - dt.datetime.fromisoformat(state["down_since"])).total_seconds() // 60)
-        return f"✅ thevic361.com is back up (down about {mins} min)", {}
+        return f"✅ {TOWN['domain']} is back up (down about {mins} min)", {}
     return None, {}
 
 
@@ -92,7 +94,7 @@ def push(message, site):
     down = message.startswith("🚨")
     req = urllib.request.Request(
         f"https://ntfy.sh/{topic}", data=message.encode(),
-        headers={"Title": "thevic361.com", "Priority": "urgent" if down else "default",
+        headers={"Title": TOWN["domain"], "Priority": "urgent" if down else "default",
                  "Click": site, "Tags": "rotating_light" if down else "white_check_mark"})
     try:
         urllib.request.urlopen(req, timeout=15).read()
@@ -110,7 +112,7 @@ def load(path):
 
 
 def main(argv, fetch=fetch, sleep=time.sleep, now=None):
-    site = argv[0] if argv else "https://www.thevic361.com"
+    site = argv[0] if argv else site_url()
     state_file = argv[1] if len(argv) > 1 else "uptime-state.json"
     found, body = problems(site, fetch)
     if found:

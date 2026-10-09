@@ -37,28 +37,32 @@ try:
 except ImportError:  # pragma: no cover
     ZoneInfo = None
 
-SITE = os.environ.get("SITE_URL", "https://www.thevic361.com").rstrip("/")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from town import TOWN, site_url  # noqa: E402  (repo root; TOWN unset = Victoria)
+
+SITE = site_url()
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "docs", "social", "latest")
 # A sneak peek, not the whole list: two per day (Vic's Picks / sponsored
 # first; select_events sorts them to the top), then "+ N more" and the link.
 PER_DAY_CAPTION = 2
 
-HASHTAGS = "#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361"
+HASHTAGS = TOWN["hashtags"]
 VENUES_FILE = os.path.join(os.path.dirname(__file__), "..", "venues.json")
 KINDS = ("week", "weekend", "today")
 TITLES = {
-    "week": ("This week in Victoria, TX", "This Week in Victoria", "/"),
-    "weekend": ("This weekend in Victoria, TX", "This Weekend in Victoria", "/this-weekend"),
-    "today": ("Today in Victoria, TX", "Today in Victoria", "/today"),
+    "week": (f"This week in {TOWN['city_state']}", f"This Week in {TOWN['city']}", "/"),
+    "weekend": (f"This weekend in {TOWN['city_state']}", f"This Weekend in {TOWN['city']}", "/this-weekend"),
+    "today": (f"Today in {TOWN['city_state']}", f"Today in {TOWN['city']}", "/today"),
 }
 MAX_TAGS = 15  # Instagram allows 20 @mentions per caption
 IG_MAX_CAPTION = 2200  # Instagram rejects longer captions
-MORE_ONLINE = "+ more at thevic361.com"
+MORE_ONLINE = f"+ more at {TOWN['domain']}"
 TRIM_NAME = 50  # a long name or venue is cut to this when a caption runs long
 # Venue names too generic to tag anyone by (an event "@ Victoria" is not
-# Theatre Victoria).
-GENERIC_VENUES = {"victoria", "victoria tx", "victoria texas", "downtown", "downtown victoria",
-                  "tba", "tbd", "online", "various", "various locations", "texas", "tx"}
+# Theatre Victoria): the town's own name, alone or with its state.
+_c, _st, _stn = TOWN["city"].lower(), TOWN["state"].lower(), TOWN["state_name"].lower()
+GENERIC_VENUES = {_c, f"{_c} {_st}", f"{_c} {_stn}", "downtown", f"downtown {_c}",
+                  "tba", "tbd", "online", "various", "various locations", _stn, _st}
 
 
 def pick_rank(e):
@@ -70,9 +74,18 @@ def is_paid_pick(e):
     return bool(e.get("featured")) and not e.get("editor_pick")
 
 
+# "CT" in the social kit page's timestamp; another zone's short name.
+_ZONE_LABELS = {"America/Chicago": "CT", "America/New_York": "ET", "America/Denver": "MT", "America/Los_Angeles": "PT"}
+
+
+def zone_label():
+    tzname = TOWN["timezone"]
+    return _ZONE_LABELS.get(tzname) or (datetime.now(ZoneInfo(tzname)).strftime("%Z") if ZoneInfo else tzname)
+
+
 def today_central():
     if ZoneInfo:
-        return datetime.now(ZoneInfo("America/Chicago")).date()
+        return datetime.now(ZoneInfo(TOWN["timezone"])).date()
     return date.today()
 
 
@@ -227,7 +240,7 @@ def _body(groups, kind, limit=None, keep=None):
     of the non-pick event lines survive (earliest first); the rest fold into
     a "+ more at thevic361.com" line. Vic's Picks are never dropped."""
     if not groups:
-        return ["Nothing listed yet. Know something happening? Submit it at thevic361.com/submit", ""]
+        return [f"Nothing listed yet. Know something happening? Submit it at {TOWN['domain']}/submit", ""]
     body, plain = [], 0
     for d, evs in groups.items():
         lines = []
@@ -279,7 +292,7 @@ def captions(groups, start, end, kind, handles=None, sponsor=None):
                                           f"Don't miss a thing: get every event free in your inbox every Monday and Thursday 👉 {SITE}/subscribe", "", HASHTAGS])
 
     def ig_caption(body, tags):
-        return "\n".join([head, ""] + sponsor_lines(sponsor, start, "instagram") + body + [f"{see_all}link in bio (thevic361.com)",
+        return "\n".join([head, ""] + sponsor_lines(sponsor, start, "instagram") + body + [f"{see_all}link in bio ({TOWN['domain']})",
                                                 "Don't miss a thing: get every event free in your inbox every Monday and Thursday (subscribe at the link in bio)", ""]
                          + ([" ".join(tags), ""] if tags else []) + [HASHTAGS]).strip() + "\n"
 
@@ -360,8 +373,8 @@ def _header(draw, kicker, title):
         y += 84
 
 
-def _footer(draw, text="thevic361.com"):
-    draw.text((72, H - 100), text, font=_font(True, 36), fill=ACCENT)
+def _footer(draw, text=None):
+    draw.text((72, H - 100), text or TOWN["domain"], font=_font(True, 36), fill=ACCENT)
 
 
 def render_slides(groups, start, end, kind, out_dir):
@@ -403,7 +416,7 @@ def render_plain_slides(groups, start, end, kind, out_dir):
 
     # Cover
     img, d = new()
-    _header(d, "The Vic 361", title)
+    _header(d, TOWN["site_name"], title)
     total = sum(len(v) for v in groups.values())
     d.text((72, 380), start.strftime("%A, %b ") + str(start.day) if kind == "today" else _range_label(start, end),
            font=_font(True, 64), fill=INK)
@@ -424,8 +437,8 @@ def render_plain_slides(groups, start, end, kind, out_dir):
     # CTA
     img, d = new()
     _header(d, "Never miss a thing", "Get the full list every Monday & Thursday")
-    for i, line in enumerate(["Every event, every day, in one place:", "thevic361.com", "",
-                              "Have an event? Submit it free.", "Own a venue? Become a Vic’s Pick."]):
+    for i, line in enumerate(["Every event, every day, in one place:", TOWN["domain"], "",
+                              "Have an event? Submit it free.", f"Own a venue? Become a {TOWN['pick_name']}."]):
         d.text((72, 400 + i * 80), line, font=_font(i in (1,), 52 if i == 1 else 44), fill=ACCENT if i == 1 else INK)
     _footer(d)
     files.append(img)
@@ -537,7 +550,7 @@ def render_page(kits, generated_at):
                         f'<div class="slides">{imgs}</div>{caps}</section>')
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex"><title>Social kit | The Vic 361</title>
+<meta name="robots" content="noindex"><title>Social kit | {TOWN['site_name']}</title>
 <style>
 body{{font:16px/1.5 system-ui,sans-serif;background:#FAF5E4;color:#1E1B33;margin:0;padding:16px;max-width:900px;margin-inline:auto}}
 h1{{font-size:1.5rem;margin:0 0 4px}} .meta{{color:#5C5878;margin:0 0 16px}}
@@ -673,7 +686,7 @@ def main(argv=None):
         for kind, kit in kits.items():
             f.write(f"===== {kind.upper()} · FACEBOOK =====\n{kit['captions']['facebook']}\n")
             f.write(f"===== {kind.upper()} · INSTAGRAM =====\n{kit['captions']['instagram']}\n")
-    stamp = datetime.now(ZoneInfo("America/Chicago")).strftime("%a %b %d, %I:%M %p CT") if ZoneInfo else str(today)
+    stamp = datetime.now(ZoneInfo(TOWN["timezone"])).strftime("%a %b %d, %I:%M %p ") + zone_label() if ZoneInfo else str(today)
     with open(os.path.join(args.out, "index.html"), "w") as f:
         f.write(render_page(kits, stamp))
     return 0
