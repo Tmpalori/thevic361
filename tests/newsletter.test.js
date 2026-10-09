@@ -279,11 +279,11 @@ describe('dark mode', () => {
 });
 
 describe('welcome email', () => {
-  it('lists the coming week with Vic\'s Picks first and escapes event names', () => {
+  it('lists the coming week in time order (picks always in) and escapes event names', () => {
     const mail = renderWelcomeEmail(withPages(EVENTS), { siteUrl: 'https://www.thevic361.com', now: NOW, sponsor: null,
       unsubscribeUrl: 'https://www.thevic361.com/unsubscribe?token=t', address: 'PO Box 1, Victoria, TX' });
     expect(mail.subject).toBe('Welcome to The Vic 361');
-    expect(mail.html.indexOf('Farmers Market')).toBeLessThan(mail.html.indexOf('Friday &lt;Live&gt; Music'));
+    expect(mail.html.indexOf('Friday &lt;Live&gt; Music')).toBeLessThan(mail.html.indexOf('Farmers Market'));
     expect(mail.html).not.toContain('<Live>');
     expect(mail.html).not.toContain('Last Week'); // already past
     expect(mail.text).toContain('Saturday 8:00 AM: Farmers Market');

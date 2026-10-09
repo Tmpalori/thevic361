@@ -692,8 +692,16 @@ export function eventJsonLd(ev, siteUrl) {
 
 // ─── HTML pieces ─────────────────────────────────────────────────────────
 
+// The icon keys an event shows: `free: true` shows the Free icon even when
+// the collector didn't tag it, the same as the filter (data-icons) and the
+// newsletter. docs/app.js iconKeys matches.
+export function iconKeys(ev) {
+  const keys = (ev.icons || []).filter(k => ICON_KEYS.has(k));
+  return ev.free === true && !keys.includes('free') ? [...keys, 'free'] : keys;
+}
+
 function icons(ev) {
-  return (ev.icons || []).filter(k => ICON_KEYS.has(k)).map(iconSvg).join('');
+  return iconKeys(ev).map(iconSvg).join('');
 }
 
 // Mirrors renderEvent() in docs/app.js so the server markup and the
@@ -745,6 +753,14 @@ function dayCount(n) {
   return n === 0 ? 'No events' : n === 1 ? '1 event' : `${n} events`;
 }
 
+// "day--d0" (Monday) … "day--d6" (Sunday): a day's color follows its
+// weekday, like the newsletter's DAY_COLORS, whatever else sits in the list
+// (the newsletter card, hub pages that skip empty days). docs/app.js same.
+export function dayClass(dateStr) {
+  const dow = new Date(dateStr + 'T12:00:00Z').getUTCDay();
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateStr || '') && !isNaN(dow) ? ` day--d${(dow + 6) % 7}` : '';
+}
+
 function renderDay(dateStr, list, idx, today, fold = null) {
   const badge = dateStr === today ? ' <span class="today-badge">Today</span>' : '';
   const body = list.length
@@ -758,11 +774,11 @@ function renderDay(dateStr, list, idx, today, fold = null) {
     const foldHead = `<h2 class="day-name">${formatDay(dateStr, { weekday: 'long' })}${badge}</h2>` +
       `<span class="day-date"><span class="dd-long">${formatDay(dateStr, { month: 'long', day: 'numeric' })}</span>` +
       `<span class="dd-short" aria-hidden="true">${formatDay(dateStr, { month: 'short', day: 'numeric' })}</span></span>`;
-    return `<section class="day-section day-section--fold${past}" id="day-${idx}"><details${fold === 'open' ? ' open' : ''}>` +
+    return `<section class="day-section day-section--fold${past}${dayClass(dateStr)}" id="day-${idx}"><details${fold === 'open' ? ' open' : ''}>` +
       `<summary class="day-header">${foldHead}<span class="day-count">${dayCount(list.length)}</span></summary>` +
       body + '</details></section>';
   }
-  return `<section class="day-section" id="day-${idx}">` +
+  return `<section class="day-section${dayClass(dateStr)}" id="day-${idx}">` +
     '<div class="day-header">' + head + '</div>' + body +
   '</section>';
 }

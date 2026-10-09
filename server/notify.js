@@ -8,8 +8,15 @@
  * sees the on-page confirmation. Off until RESEND_API_KEY is set.
  */
 
-import { SITE_NAME, escHtml, formatDay, safeUrl, currentWeek, addDays, localDateStr } from './seo.js';
+import { SITE_NAME, escHtml, formatDay, safeUrl, currentWeek, addDays, localDateStr, formatTime, placeText } from './seo.js';
 import { C, btn, emailShell, eventRow } from './newsletter.js';
+
+// "Saturday, October 10, 7 PM · Venue · address" for the plain-text emails,
+// formatted like the HTML row and the site (not the stored date and time).
+function eventLine(ev) {
+  const when = [ev.date ? formatDay(ev.date, { weekday: 'long', month: 'long', day: 'numeric' }) : '', formatTime(ev.time)].filter(Boolean).join(', ');
+  return [when, placeText(ev)].filter(Boolean).join(' · ');
+}
 
 // ─── Vic’s Pick and the newsletter ──────────────────────────────────────
 // The newsletter goes out twice a week: Monday morning with the whole week,
@@ -149,7 +156,7 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
       `Thanks for sending in "${name}". It's in our review queue.`, '',
-      `${ev.date || ''} ${ev.time || ''} · ${ev.venue || ''}`.trim(), '',
+      eventLine(ev), '',
       'What happens next:',
       '1. We review every submission, usually within the hour, and we’ll email you when it’s live; some need a closer look and take a day or two.',
       `2. If it's a fit, it goes on ${siteUrl} and can show up in our Monday and Thursday newsletters and our social posts.`,
@@ -192,7 +199,7 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
       pick ? `Good news: "${name}" is live on The Vic 361 as a Vic's Pick, highlighted on its day.` : `Good news: "${name}" is now on The Vic 361.`, '',
-      `${ev.date || ''} ${ev.time || ''} · ${ev.venue || ''}`.trim(), '',
+      eventLine(ev), '',
       `See it: ${link}`,
       pick ? pickShare
         : 'Share that link anywhere you promote the event. It can also show up in our Monday and Thursday newsletters and our social posts.', '',
@@ -276,7 +283,7 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
       `Thanks, ${business}! Your payment went through and "${ev.name || 'your event'}" is a Vic's Pick.`, '',
-      `${day}${ev.time ? `, ${ev.time}` : ''} · ${ev.venue || ''}`, '',
+      eventLine(ev), '',
       'What happens next:',
       '1. We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
       `2. Then it's highlighted on ${day} on thevic361.com and its event page, with the Vic's Pick badge.`,

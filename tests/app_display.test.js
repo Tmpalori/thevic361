@@ -55,7 +55,7 @@ describe('docs/app.js matches the server renderer', () => {
     const html = document.getElementById('events-container').innerHTML;
     const server = renderDays(['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11'],
       events, '2026-10-07');
-    const pastIds = h => [...h.matchAll(/day-section--past" id="(day-\d)"/g)].map(m => m[1]);
+    const pastIds = h => [...h.matchAll(/day-section--past day--d\d" id="(day-\d)"/g)].map(m => m[1]);
     expect(pastIds(html)).toEqual(['day-0', 'day-1']);
     expect(pastIds(server)).toEqual(['day-0', 'day-1']);
     const summary = h => h.match(/<summary class="day-header">[\s\S]*?<\/summary>/)[0];
@@ -83,7 +83,7 @@ describe('docs/app.js matches the server renderer', () => {
     expect(shape(html)).toEqual(shape(server));
     const open = () => [...document.querySelectorAll('.day-section details')].filter(d => d.open).map(d => d.closest('section').id);
     expect(open()).toEqual(['day-2']);
-    expect(shape(html)[3]).toEqual(['day-3', 'day-section day-section--fold', false, 'No events']);
+    expect(shape(html)[3]).toEqual(['day-3', 'day-section day-section--fold day--d3', false, 'No events']);
     // A category filter opens the days that have a match and folds the rest.
     app.applyFilter('music');
     expect(open()).toEqual(['day-5']);

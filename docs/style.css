@@ -1234,6 +1234,15 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 .day-section:nth-of-type(7n+5) { --day: var(--sunset); --day-light: var(--sun-light); }
 .day-section:nth-of-type(7n+6) { --day: var(--lilac);  --day-light: var(--lilac-light); }
 .day-section:nth-of-type(7n+7) { --day: var(--coral);  --day-light: var(--pink-light); }
+/* By weekday when the markup says (server/seo.js dayClass, docs/app.js), so
+   Saturday is lilac on the site and in the newsletter wherever it sits. */
+.day-section.day--d0 { --day: var(--sun);    --day-light: var(--sun-light); }
+.day-section.day--d1 { --day: var(--sky);    --day-light: var(--sky-light); }
+.day-section.day--d2 { --day: var(--pink);   --day-light: var(--pink-light); }
+.day-section.day--d3 { --day: var(--cactus); --day-light: var(--cactus-light); }
+.day-section.day--d4 { --day: var(--sunset); --day-light: var(--sun-light); }
+.day-section.day--d5 { --day: var(--lilac);  --day-light: var(--lilac-light); }
+.day-section.day--d6 { --day: var(--coral);  --day-light: var(--pink-light); }
 
 .day-header {
   margin: 0;

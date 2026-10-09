@@ -57,7 +57,7 @@ import { REFERRAL_TIERS, DRAWING_AMOUNT, referralFlags, createReferralRewards } 
 export { REFERRAL_TIERS, referralFlags };
 import {
   SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank, parseTimes,
-  sponsorLinkUrl
+  sponsorLinkUrl, formatTime, placeText, iconKeys
 } from './seo.js';
 
 const RESEND_API = 'https://api.resend.com';
@@ -258,16 +258,31 @@ You're getting this because you subscribed at <a href="${siteUrl}" style="${a}">
 ${escHtml(SITE_NAME)}${address ? ` · ${escHtml(address)}` : ' · Victoria, TX'}`;
 }
 
+// Up to three icons, the site's set (iconKeys: `free: true` is the Free
+// icon). Free always makes the cut: it's the one readers scan for.
 function iconImgs(ev, siteUrl) {
-  return (ev.icons || []).filter(k => ICON_KEYS.has(k)).slice(0, 3)
+  const keys = iconKeys(ev).filter(k => ICON_KEYS.has(k));
+  const shown = keys.slice(0, 3);
+  if (keys.includes('free') && !shown.includes('free')) shown[2] = 'free';
+  return shown
     .map(k => `<img src="${siteUrl}/email/${k}.png" width="22" height="22" alt="" style="vertical-align:middle;border:0;margin-right:2px;">`).join('');
+}
+
+// "7 PM" / "7:30 AM": the start of an event's time, with AM/PM even when
+// the stored range shares one ("4-10 p.m." starts at 4 PM), or ''.
+function clockOf(time) {
+  const t = parseTimes(time)[0];
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''} ${h < 12 ? 'AM' : 'PM'}`;
 }
 
 // A Vic's Pick is its own yellow card with space around it, so the dashed
 // divider is left off the row just above one (`next` is the row after).
 export function eventRow(ev, siteUrl, next) {
   const link = ev.page ? `${siteUrl}${ev.page}` : (safeUrl(ev.url) || siteUrl);
-  const where = [ev.venue].filter(Boolean).join('');
+  // Same place line and "Nearby · Cuero" tag as the site's list items.
+  const where = placeText(ev);
   const rowStyle = ev.featured
     ? `padding:10px 12px;background:${C.sunLight};border:2px solid ${C.ink};border-radius:12px;`
     : `padding:10px 4px;${next?.featured ? '' : `border-bottom:2px dashed ${C.line};`}`;
@@ -277,9 +292,10 @@ export function eventRow(ev, siteUrl, next) {
   const close = ev.featured ? '</td></tr></table></td></tr>' : '</td></tr>';
   return `${open}
 ${ev.featured ? `<span style="display:inline-block;background:${C.sunset};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">★ VIC’S PICK</span>` : ''}
+${ev.town ? `<span style="display:inline-block;background:${C.sky};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">Nearby · ${escHtml(ev.town)}</span>` : ''}
 ${iconImgs(ev, siteUrl)}
-${ev.time ? `<span style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:12px;padding:0 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">${escHtml(ev.time)}</span>` : ''}
-<a href="${escHtml(link)}" style="color:${C.ink};font-weight:800;text-decoration:none;">${escHtml(ev.name)}</a>${where ? ` <span style="color:${C.muted};">· ${escHtml(where)}</span>` : ''}${ev.also ? ` <span style="color:${C.muted};font-size:13px;font-weight:bold;">· also ${escHtml(ev.also)}</span>` : ''}${ev.free === true && !(ev.icons || []).includes('free') ? ` <span style="color:#2FA876;font-size:13px;font-weight:bold;">· Free</span>` : ''}
+${ev.time ? `<span style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:12px;padding:0 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">${escHtml(formatTime(ev.time))}</span>` : ''}
+<a href="${escHtml(link)}" style="color:${C.ink};font-weight:800;text-decoration:none;">${escHtml(ev.name)}</a>${where ? ` <span style="color:${C.muted};">· ${escHtml(where)}</span>` : ''}${ev.also ? ` <span style="color:${C.muted};font-size:13px;font-weight:bold;">· also ${escHtml(ev.also)}</span>` : ''}
 ${ev.description ? `<div style="color:${C.muted};font-size:13px;margin-top:2px;">${escHtml(ev.description)}</div>` : ''}
 ${close}`;
 }
@@ -407,11 +423,11 @@ export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, ad
   const listPath = weekend ? '/this-weekend' : '/';
   const subject = `${title}: ${total} ${total === 1 ? 'thing' : 'things'} to do (${range})`;
   const preheader = top.map(e => e.name).join(' · ');
-  const when = e => [dayShort(e.date), (parseTimes(e.time)[0] ? e.time.split(/\s*[–—-]\s*/)[0] : '')].filter(Boolean).join(' ');
+  const when = e => [dayShort(e.date), clockOf(e.time)].filter(Boolean).join(' ');
   const topHtml = topShown.length ? `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;background:#fff;border:3px solid ${C.ink};border-radius:16px;"><tr><td style="padding:12px 16px;">
 <div style="font-family:${DISPLAY};font-size:19px;font-weight:bold;margin-bottom:4px;">Don’t miss ${weekend ? 'this weekend' : 'this week'}</div>
-${topShown.map((e, i) => `<div style="margin-top:6px;font-size:15px;"><strong>${i + 1}.</strong> <a href="${escHtml(e.page ? siteUrl + e.page : (safeUrl(e.url) || siteUrl))}" style="color:${C.ink};font-weight:800;">${escHtml(e.name)}</a> <span style="color:${C.muted};">· ${escHtml([when(e), e.venue].filter(Boolean).join(' · '))}</span></div>`).join('')}
+${topShown.map((e, i) => `<div style="margin-top:6px;font-size:15px;"><strong>${i + 1}.</strong> <a href="${escHtml(e.page ? siteUrl + e.page : (safeUrl(e.url) || siteUrl))}" style="color:${C.ink};font-weight:800;">${escHtml(e.name)}</a> <span style="color:${C.muted};">· ${escHtml([when(e), e.venue || placeText(e)].filter(Boolean).join(' · '))}</span></div>`).join('')}
 </td></tr></table>` : '';
 
   // Day colors follow the weekday (Monday yellow ... Sunday coral), like the site.
@@ -422,7 +438,7 @@ ${topShown.map((e, i) => `<div style="margin-top:6px;font-size:15px;"><strong>${
 <span style="display:inline-block;margin-left:6px;font-size:13px;font-weight:bold;background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:0 9px;">${escHtml(formatDay(d, { month: 'long', day: 'numeric' }))}</span></td></tr>
 <tr><td style="padding:6px 12px 10px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${shownOf(list).map((e, i, arr) => eventRow(e, siteUrl, arr[i + 1])).join('')}</table>
-${list.length > PER_DAY ? `<p style="margin:12px 0 4px;text-align:center;"><a href="${siteUrl}${listPath}" style="${MORE_PILL}background:${dayColor};">+${list.length - PER_DAY} more on ${escHtml(formatDay(d, { weekday: 'long' }))} →</a></p>` : ''}
+${list.length > PER_DAY ? `<p style="margin:12px 0 4px;text-align:center;"><a href="${siteUrl}${weekend ? listPath : `/#day-${currentWeek(d).indexOf(d)}`}" style="${MORE_PILL}background:${dayColor};">+${list.length - PER_DAY} more on ${escHtml(formatDay(d, { weekday: 'long' }))} →</a></p>` : ''}
 </td></tr></table>`; }).join('');
 
   const sponsorBlock = sponsorHtml(sponsor, siteUrl);
@@ -443,9 +459,9 @@ ${referral ? referralHtml({ siteUrl, ...referral }) : ''}`;
   const campaign = `${weekend ? 'weekend' : 'weekly'}-${(EDITIONS[edition] || EDITIONS.weekly).key(today)}`;
   const text = [
     `${subject}`, '', ...sponsorLine,
-    ...(topShown.length ? [`DON'T MISS ${weekend ? 'THIS WEEKEND' : 'THIS WEEK'}`, ...topShown.map((e, i) => `${i + 1}. ${e.name} (${[when(e), e.venue].filter(Boolean).join(', ')})${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
+    ...(topShown.length ? [`DON'T MISS ${weekend ? 'THIS WEEKEND' : 'THIS WEEK'}`, ...topShown.map((e, i) => `${i + 1}. ${e.name} (${[when(e), e.venue || placeText(e)].filter(Boolean).join(', ')})${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
     ...byDay.flatMap(({ d, list }) => [formatDay(d, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase(),
-      ...shownOf(list).map(e => `- ${e.time ? e.time + ' ' : ''}${e.name}${e.venue ? ' @ ' + e.venue : ''}${e.also ? ' (also ' + e.also + ')' : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), '']),
+      ...shownOf(list).map(e => `- ${e.time ? formatTime(e.time) + ' ' : ''}${e.name}${placeText(e) ? ' @ ' + placeText(e) : ''}${e.town ? ' (' + e.town + ')' : ''}${e.also ? ' (also ' + e.also + ')' : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), '']),
     `Full list: ${siteUrl}${listPath}`, '', ...(referral ? referralText({ siteUrl, ...referral }) : []),
     ...(prefsUrl ? [`${weekend ? 'Just want Mondays? Skip the weekend email' : 'Email settings'}: ${prefsUrl}`] : []),
     `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
@@ -558,8 +574,12 @@ const PIXEL_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAA
 export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeUrl, address, referral = null }) {
   const today = localDateStr(now);
   const soon = sortEvents((events || []).filter(e => e.date >= today && e.date <= addDays(today, 6)));
-  const picks = [...soon.filter(e => e.featured).sort((a, b) => pickRank(a) - pickRank(b)), ...soon.filter(e => !e.featured)].slice(0, WELCOME_PICKS);
-  const dayLabel = (d) => d === today ? 'Today' : formatDay(d, { weekday: 'long' });
+  // Picks always make the five, then they're shown in time order like the
+  // site; days past this Sunday carry their date (they aren't on the
+  // homepage's week yet).
+  const picks = sortEvents([...soon.filter(e => e.featured).sort((a, b) => pickRank(a) - pickRank(b)), ...soon.filter(e => !e.featured)].slice(0, WELCOME_PICKS));
+  const weekEnd = currentWeek(today)[6];
+  const dayLabel = (d) => d === today ? 'Today' : d > weekEnd ? formatDay(d, { weekday: 'short', month: 'short', day: 'numeric' }) : formatDay(d, { weekday: 'long' });
   const coming = picks.length ? `
 <p style="margin:22px 0 6px;font-family:${DISPLAY};font-size:19px;font-weight:bold;">Coming up this week</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${picks.map((e, i) =>
@@ -573,7 +593,7 @@ ${referral ? referralHtml({ siteUrl, ...referral }) : `<p style="margin:22px 0 0
   const text = [
     "You're in! Every Monday morning you'll get the week's events in Victoria, TX, and every Thursday the weekend's best.", '',
     ...(picks.length ? ['COMING UP THIS WEEK', ...picks.map(e =>
-      `- ${dayLabel(e.date)}${e.time ? ' ' + e.time : ''}: ${e.name}${e.venue ? ' @ ' + e.venue : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
+      `- ${dayLabel(e.date)}${e.time ? ' ' + formatTime(e.time) : ''}: ${e.name}${placeText(e) ? ' @ ' + placeText(e) : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
     `This week's events: ${siteUrl}/`, '', ...(referral ? referralText({ siteUrl, ...referral }) : []),
     `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
   ].join('\n');
