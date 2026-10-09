@@ -371,7 +371,7 @@ export function renderSponsorReport(order, stats, { siteUrl, address }) {
     p(`<strong>${escHtml(people(total))}</strong> clicked through to you in total.`, 'font-size:17px;') +
     statsTable(rows) +
     whereHtml(stats.where) +
-    p(`${escHtml(COUNTER_NOTE)} In your own analytics our visits are tagged utm_source=thevic361.`, `color:${C.muted};font-size:13px;`) +
+    p(`${escHtml(COUNTER_NOTE)} In your own analytics our visits are tagged utm_source=${town.utmSource}.`, `color:${C.muted};font-size:13px;`) +
     box(`<strong>Want another week?</strong> One sponsor a week, so book early.<br><br>${btn(`${siteUrl}/advertise/checkout?package=weekly`, 'Book another week')}`);
   return {
     subject: `Your ${town.shortName} sponsor week: ${people(total)} clicked`,

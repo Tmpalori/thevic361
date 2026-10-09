@@ -118,7 +118,7 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
         existing server template (`/submit` gets a route); canonicals,
         `og:url`, GA ID and prices from `town`. For Victoria the output must
         be byte-identical.
-  - [ ] c. `docs/app.js`: timezone, pick label and `utm_source` from an
+  - [x] c. `docs/app.js`: timezone, pick label and `utm_source` from an
         injected `window.__TOWN__`, defaulting to today's values.
   - [ ] d. Admin: repo owner/name and events path from `/api/config` (it
         already returns them); week math in the town's timezone; sponsor

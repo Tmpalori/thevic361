@@ -1,4 +1,8 @@
 /* app.js — The Vic 361 */
+// The town this page is for. Another town's server sets window.__TOWN__
+// (server/localize.js); without it, Victoria.
+var TOWN = Object.assign({ timezone: 'America/Chicago', city: 'Victoria', pickName: 'Vic’s Pick', utmSource: 'thevic361' },
+  (typeof window !== 'undefined' && window.__TOWN__) || {});
 
 (function () {
   'use strict';
@@ -46,17 +50,18 @@
   }, { passive: true });
 
   // ─── DATE HELPERS ───
-  // Days are YYYY-MM-DD strings in Victoria's time (America/Chicago), like
-  // currentWeek/addDays in server/seo.js. The browser's own zone would
+  // Days are YYYY-MM-DD strings in the town's time (TOWN.timezone; Victoria:
+  // America/Chicago), like currentWeek/addDays in server/seo.js. The
+  // browser's own zone would
   // move "Today" and the week for a visitor whose clock says UTC (privacy
   // browsers, VMs) or who is traveling, and this render replaces the
   // server's correct grid.
-  var CHICAGO_DAY = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit'
+  var TOWN_DAY = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TOWN.timezone, year: 'numeric', month: '2-digit', day: '2-digit'
   });
 
-  function victoriaToday() {
-    return CHICAGO_DAY.format(new Date());
+  function townToday() {
+    return TOWN_DAY.format(new Date());
   }
 
   // Noon UTC on the day: formatting it in UTC can't slip to a neighbor day.
@@ -79,7 +84,7 @@
   }
 
   function isToday(dateStr) {
-    return dateStr === victoriaToday();
+    return dateStr === townToday();
   }
 
   // ─── RENDER ICONS ───
@@ -159,7 +164,7 @@
     if (!href || /[?&](amp;)?utm_/i.test(href)) return href;
     try {
       var u = new URL(url.trim());
-      u.searchParams.set('utm_source', 'thevic361');
+      u.searchParams.set('utm_source', TOWN.utmSource);
       u.searchParams.set('utm_medium', 'sponsor');
       u.searchParams.set('utm_campaign', 'weekly-sponsor');
       return safeHref(u.toString()) || href;
@@ -211,7 +216,7 @@
     return '<li class="event-entry' + (ev.featured ? ' event-entry--featured' : '') + '"' + ad + ' data-icons="' + escHtml(iconAttr) + '">' +
       '<span class="event-icons" aria-hidden="true">' + iconHtml + '</span>' +
       '<div class="event-details">' +
-        (ev.featured ? '<span class="badge badge--featured">Vic’s Pick</span> ' : '') +
+        (ev.featured ? '<span class="badge badge--featured">' + escHtml(TOWN.pickName) + '</span> ' : '') +
         // Nearby-town events (ev.town), same as nearbyBadge in server/seo.js.
         (ev.town ? '<span class="badge badge--nearby">Nearby · ' + escHtml(ev.town) + '</span> ' : '') +
         (ev.time ? '<span class="event-time">' + escHtml(formatTime(timeText(ev))) + '</span> ' : '') +
@@ -233,7 +238,7 @@
     // Every day is folded to its header bar except openDate (today), so the
     // list opens on today and any day is one tap away (same markup as
     // renderDay in server/seo.js).
-    var past = dateStr < victoriaToday();
+    var past = dateStr < townToday();
 
     var eventsForDay = events.filter(function (e) { return e.date === dateStr; });
     // Sort by time ascending (events without time go last); at the same
@@ -286,7 +291,7 @@
     card.className = 'nl-card';
     card.innerHTML =
       '<div class="nl-card__title">Get this list every Monday and Thursday</div>' +
-      '<p class="nl-card__text">The week\'s best events in Victoria, in your inbox. Free, no spam.</p>' +
+      '<p class="nl-card__text">The week\'s best events in ' + escHtml(TOWN.city) + ', in your inbox. Free, no spam.</p>' +
       '<form class="signup-form js-subscribe" novalidate data-turnstile="fetch">' +
         '<label class="visually-hidden" for="nl-card-email">Email address</label>' +
         '<input id="nl-card-email" name="email" type="email" required autocomplete="email" placeholder="you@example.com">' +
@@ -472,7 +477,7 @@
         }
 
         // Build Mon–Sun of the current week in Victoria
-        var todayStr = victoriaToday();
+        var todayStr = townToday();
         var dayOfWeek = dayAt(todayStr).getUTCDay(); // 0=Sun, 1=Mon … 6=Sat
         var monday = addDays(todayStr, dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
 
@@ -653,7 +658,8 @@
       formatTime: formatTime,
       timeMins: timeMins,
       renderEvent: renderEvent,
-      renderSponsor: renderSponsor
+      renderSponsor: renderSponsor,
+      today: townToday
     };
   }
 
