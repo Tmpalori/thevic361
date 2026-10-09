@@ -189,6 +189,21 @@ export function townPaths(t = town) {
   };
 }
 
+// Settings a service copied from Victoria's would keep: another town
+// refuses to start on Victoria's site URL, sender address or Google tag
+// (it would link, mail and count as The Vic 361). Victoria passes.
+export function townBootProblems(t, { siteUrl = '', emailFrom = '' } = {}) {
+  if (t.id === VICTORIA.id) return [];
+  const host = u => { try { return new URL(u).hostname.toLowerCase(); } catch (_) { return ''; } };
+  const onVictoria = h => h === VICTORIA.domain || h.endsWith('.' + VICTORIA.domain);
+  const problems = [];
+  if (onVictoria(host(siteUrl))) problems.push(`SITE_URL is Victoria's (${siteUrl}); set it to ${t.siteUrl}`);
+  const sender = (/@([^>\s]+)/.exec(String(emailFrom)) || [])[1] || '';
+  if (onVictoria(sender.toLowerCase())) problems.push(`NEWSLETTER_FROM sends as Victoria (${emailFrom}); use an address on ${t.domain}`);
+  if (t.gaId && t.gaId === VICTORIA.gaId) problems.push(`gaId is Victoria's Google tag (${t.gaId}); leave it out or use the town's own`);
+  return problems;
+}
+
 // The process's town. A live binding: modules that import it see useTown's
 // change, so read its fields when rendering, never copy them at load.
 export let town = townConfig();

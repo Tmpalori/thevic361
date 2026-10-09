@@ -13,7 +13,7 @@
  *   - Submitter email + IP never leave the admin scope.
  */
 
-import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths } from './town.js';
+import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths, townBootProblems } from './town.js';
 import { localizeHtml } from './localize.js';
 import express from 'express';
 import compression from 'compression';
@@ -306,6 +306,20 @@ export async function createApp(opts = {}) {
   const stripeCfg = stripeConfig(process.env, opts);
   // Resend: the newsletter and the "we got it" emails (server/notify.js).
   const newsletter = newsletterConfig(process.env, opts);
+  // Another town on settings or a database copied from Victoria's would
+  // link, mail and write as The Vic 361: stop before serving anything
+  // (MULTI_CITY_PLAN.md 2.5). Victoria skips both checks.
+  if (town.id !== VICTORIA.id) {
+    const problems = townBootProblems(town, { siteUrl, emailFrom: newsletter.from });
+    if (problems.length) throw new Error(`TOWN=${town.id} won't start: ${problems.join('; ')}`);
+    if (typeof store.claimTown === 'function') {
+      const owner = await store.claimTown(town.id);
+      if (owner.town !== town.id) {
+        throw new Error(`TOWN=${town.id} won't start: its database ${owner.town ? `belongs to TOWN=${owner.town}`
+          : 'already holds subscribers, orders or submissions from before towns (Victoria\'s)'}; check DATABASE_URL`);
+      }
+    }
+  }
   // Sales and confirmation copy only promise the Thursday issue while it's on.
   setWeekendIssue(newsletter.weekend);
   const nlResend = opts.resend || createResend(newsletter.apiKey);
