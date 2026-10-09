@@ -56,7 +56,10 @@ export const VICTORIA = Object.freeze({
     drawingAmount: 25,                          // monthly referral drawing, dollars
     rewardCards: [{ n: 5, amount: 10 }, { n: 10, amount: 25 }],   // referral gift cards, dollars
     showSubscribersFrom: 100                    // say "N+ subscribers" only from here
-  })
+  }),
+  // Job start times that differ from server/scheduler.js JOBS (Central-style
+  // "HH:MM" in the town's timezone). Victoria runs the defaults.
+  schedule: Object.freeze({})
 });
 
 // What another town starts from when its town.json leaves a number out.
@@ -87,6 +90,7 @@ function complete(id, raw) {
     cityStateLong: `${raw.city}, ${raw.stateName}`,
     ...raw,
     business: { ...SHARED_BUSINESS, ...(raw.business || {}) },
+    schedule: { ...(raw.schedule || {}) },
     id
   };
 }
@@ -119,6 +123,9 @@ function check(t) {
   if (![b.pickCap, b.dayMax, b.picks, b.picksMin].every(v => pair(v, count))) throw new Error(`TOWN=${t.id}: business caps need weekday and weekend counts`);
   if (!Number.isInteger(b.drawingAmount) || !Array.isArray(b.rewardCards) || !Number.isInteger(b.showSubscribersFrom)) {
     throw new Error(`TOWN=${t.id}: business needs drawingAmount, rewardCards and showSubscribersFrom`);
+  }
+  for (const [job, at] of Object.entries(t.schedule || {})) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(at))) throw new Error(`TOWN=${t.id}: schedule.${job} must be "HH:MM"`);
   }
   try { new Intl.DateTimeFormat('en-US', { timeZone: t.timezone }); } catch (_) {
     throw new Error(`TOWN=${t.id}: unknown timezone "${t.timezone}"`);
