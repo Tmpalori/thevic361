@@ -359,6 +359,9 @@ export async function createApp(opts = {}) {
       github_owner: github.owner,
       github_repo: github.repo,
       github_branch: github.branch,
+      github_events_path: 'docs/events.json',
+      // What the admin needs to word things for this town (docs/admin.js).
+      town: { id: town.id, siteName: town.siteName, domain: town.domain, city: town.city, pickName: town.pickName, timezone: town.timezone },
       // The Sources tab uses this to enable or disable the manual-pull button.
       // We piggyback on github_publish_enabled because both gates require a
       // GITHUB_TOKEN. The actual trigger endpoint also enforces this. Note:

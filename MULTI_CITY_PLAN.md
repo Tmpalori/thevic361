@@ -120,7 +120,7 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
         be byte-identical.
   - [x] c. `docs/app.js`: timezone, pick label and `utm_source` from an
         injected `window.__TOWN__`, defaulting to today's values.
-  - [ ] d. Admin: repo owner/name and events path from `/api/config` (it
+  - [x] d. Admin: repo owner/name and events path from `/api/config` (it
         already returns them); week math in the town's timezone; sponsor
         pitch copy from `town`. Keep every `vic361_*` key.
   - [ ] e. `robots.txt` from a route using `siteUrl`.

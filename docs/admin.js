@@ -141,9 +141,42 @@
     return [ev.date || '', ev.name || '', ev.venue || ''].join('|');
   }
 
+  // The town this admin runs (from /api/config; Victoria until it loads).
+  const TOWN_DEFAULTS = { id: 'victoria', siteName: 'The Vic 361', domain: 'thevic361.com', city: 'Victoria', pickName: 'Vic’s Pick', timezone: 'America/Chicago' };
+  function town() {
+    return Object.assign({}, TOWN_DEFAULTS, (state.serverConfig && state.serverConfig.town) || {});
+  }
+  // Where Save & Publish writes (the server's GitHub settings, else these).
+  function repo() {
+    const c = state.serverConfig || {};
+    return { owner: c.github_owner || REPO_OWNER, name: c.github_repo || REPO_NAME, branch: c.github_branch || BRANCH,
+      eventsPath: c.github_events_path || EVENTS_PATH };
+  }
+
+  // The few labels admin.html writes as Victoria's, set from the town once
+  // /api/config has loaded (the same text for Victoria).
+  function applyTownLabels() {
+    const t = town();
+    document.title = 'Admin — ' + t.siteName;
+    const h1 = document.querySelector('.auth-card h1, body > header h1, h1');
+    if (h1 && /— Admin$/.test(h1.textContent)) h1.textContent = t.siteName + ' — Admin';
+    const reply = document.getElementById('reply-title');
+    if (reply) reply.textContent = 'Reply as news@' + t.domain;
+    const hint = document.querySelector('#reply-modal .event-edit-form__hint');
+    if (hint && /^Signed /.test(hint.textContent)) hint.textContent = 'Signed “— ' + t.siteName + '”. Their answer comes back to Slack.';
+  }
+
+  // Midnight (local clock) of today's date in the town, whatever zone the
+  // browser is in, so "this week" is the town's week.
+  function townToday(now) {
+    const s = new Intl.DateTimeFormat('en-CA', { timeZone: town().timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
+      .format(now || new Date());
+    const p = s.split('-').map(Number);
+    return new Date(p[0], p[1] - 1, p[2]);
+  }
+
   function getMondayOfWeek(now) {
-    const base = now ? new Date(now.getTime()) : new Date();
-    base.setHours(0, 0, 0, 0);
+    const base = townToday(now);
     const dow = base.getDay();
     const daysFromMonday = dow === 0 ? 6 : dow - 1;
     base.setDate(base.getDate() - daysFromMonday);
@@ -407,13 +440,13 @@
     };
   }
   function ghContentsUrl(p, ref) {
-    let u = 'https://api.github.com/repos/' + REPO_OWNER + '/' + REPO_NAME +
+    let u = 'https://api.github.com/repos/' + repo().owner + '/' + repo().name +
             '/contents/' + p;
     if (ref) u += '?ref=' + encodeURIComponent(ref);
     return u;
   }
   async function ghGetJsonFile(p) {
-    const res = await fetch(ghContentsUrl(p, BRANCH), {
+    const res = await fetch(ghContentsUrl(p, repo().branch), {
       headers: ghHeaders(), cache: 'no-store'
     });
     if (!res.ok) {
@@ -445,7 +478,7 @@
     const body = {
       message: message,
       content: utf8ToBase64(JSON.stringify(dataObj, null, 2) + '\n'),
-      branch: BRANCH
+      branch: repo().branch
     };
     if (sha) body.sha = sha;
     const res = await fetch(ghContentsUrl(p), {
@@ -461,7 +494,7 @@
     return res.json();
   }
   async function verifyPat(pat) {
-    const res = await fetch('https://api.github.com/repos/' + REPO_OWNER + '/' + REPO_NAME, {
+    const res = await fetch('https://api.github.com/repos/' + repo().owner + '/' + repo().name, {
       headers: {
         Authorization: 'Bearer ' + pat,
         Accept: 'application/vnd.github+json'
@@ -642,7 +675,7 @@
         const publishedPill = state.hiddenKeys.has(k)
           ? '<span class="src-pill src-pill--hidden" title="Published, but the event check hid it from the site. Restore it on the Home tab.">Hidden by check</span>'
           : state.publishedKeys.has(k)
-          ? '<span class="src-pill src-pill--published" title="Currently live on thevic361.com">On site</span>'
+          ? '<span class="src-pill src-pill--published" title="Currently live on ' + escapeHtml(town().domain) + '">On site</span>'
           : '';
         const submitterMeta = ev._submitter_kind
           ? '<span class="src-meta">' + escapeHtml(ev._submitter_kind === 'organizer'
@@ -966,7 +999,7 @@
     const groups = groupByDate(picks);
     const parts = [];
     parts.push('<div style="font-family: Georgia, serif; color:#222; max-width:640px;">');
-    parts.push('<h1 style="font-family: Georgia, serif;">This Week in The Vic 361</h1>');
+    parts.push('<h1 style="font-family: Georgia, serif;">This Week in ' + escapeHtml(town().siteName) + '</h1>');
     for (const [date, evs] of groups) {
       const heading = date === '(undated)' ? 'Undated' : formatDateHeading(date);
       parts.push('<h2 style="border-bottom:2px solid #2d5b8a; padding-bottom:4px;">' +
@@ -1601,11 +1634,11 @@
       } else {
         // Legacy PAT fallback.
         let sha = null;
-        try { sha = (await ghGetJsonFile(EVENTS_PATH)).sha; }
+        try { sha = (await ghGetJsonFile(repo().eventsPath)).sha; }
         catch (err) { console.warn('Could not get current events.json sha:', err.message); }
         const msg = 'Publish events ' + new Date().toISOString().slice(0, 10) +
                     ' (' + picks.length + ' picks)';
-        await ghPutJsonFile(EVENTS_PATH, payload, msg, sha);
+        await ghPutJsonFile(repo().eventsPath, payload, msg, sha);
       }
       setStatus('Published ' + picks.length + ' event(s) to docs/events.json.', 'success');
     } catch (err) {
@@ -2276,15 +2309,15 @@
     const mon = d.newsletter || {};
     const wk = mon.weekend || {};
     const parts = [
-      mon.recipients ? 'Our Monday newsletter that week went to ' + mon.recipients + ' Victoria locals' + (mon.opens ? ' (' + mon.opens + ' opened it)' : '') : '',
+      mon.recipients ? 'Our Monday newsletter that week went to ' + mon.recipients + ' ' + town().city + ' locals' + (mon.opens ? ' (' + mon.opens + ' opened it)' : '') : '',
       wk.recipients ? (mon.recipients ? 'and Thursday\'s weekend issue to ' : 'Our Thursday weekend newsletter that week went to ') + wk.recipients +
-        (mon.recipients ? '' : ' Victoria locals') + (wk.opens ? ' (' + wk.opens + ' opened it)' : '') : ''
+        (mon.recipients ? '' : ' ' + town().city + ' locals') + (wk.opens ? ' (' + wk.opens + ' opened it)' : '') : ''
     ].filter(Boolean);
     const nl = parts.length ? ' ' + parts.join(', ') + '.' : '';
     return 'Hi ' + (ev.venue || 'there') + '!\n\n' +
-      'We featured ' + ev.name + ' on The Vic 361, Victoria\'s free events guide, and it got ' + list + '.' + nl + '\n\n' +
+      'We featured ' + ev.name + ' on ' + town().siteName + ', ' + town().city + '\'s free events guide, and it got ' + list + '.' + nl + '\n\n' +
       'Want your next event front and center? A Vic\'s Pick highlights it on its day on the site (booked in time, it\'s starred in the newsletter too): ' +
-      location.origin + '/advertise\n\nThanks!\nThe Vic 361';
+      location.origin + '/advertise\n\nThanks!\n' + town().siteName;
   }
 
   function renderEventStats(d) {
@@ -2870,6 +2903,7 @@
     // Best-effort fetch of server config so the UI knows which auth flows are
     // usable. Failures here are non-fatal — falls back to login form visible.
     state.serverConfig = await fetchServerConfig();
+    applyTownLabels();
     applyServerConfigToUi(state.serverConfig);
 
     if (state.session) {
@@ -2942,7 +2976,7 @@
     applyFilters, groupByDate, buildNewsletterHtml,
     utf8ToBase64,
     buildEventsPayload, buildPreviewSrc, writePreviewToStorage,
-    getMondayOfWeek, getWeekRange, inWeekBucket, toLocalDateStr,
+    getMondayOfWeek, getWeekRange, inWeekBucket, toLocalDateStr, town, repo, applyTownLabels,
     pruneStalePastSelections, loadCandidates, loadHome, activateTab, publish,
     inferSource, sourceLabel, mergeCandidateEvents, stripPrivateFields,
     publishMode,
