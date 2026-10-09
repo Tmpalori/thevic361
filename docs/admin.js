@@ -1944,14 +1944,16 @@
               (editable ? '<button type="button" class="btn btn--ghost" data-sponsor-action="edit" data-id="' + escapeHtml(o.id) + '">Edit</button>' : '') +
               (live ?'<button type="button" class="btn btn--ghost" data-sponsor-action="hide" data-id="' + escapeHtml(o.id) + '">Hide</button>'
               : o.status === 'hidden' ? '<button type="button" class="btn btn--ghost" data-sponsor-action="restore" data-id="' + escapeHtml(o.id) + '">Restore</button>' : '') +
-              (hasLogo ? '<button type="button" class="btn btn--ghost" data-sponsor-action="remove-logo" data-id="' + escapeHtml(o.id) + '">Remove logo</button>' : '');
+              (hasLogo ? '<button type="button" class="btn btn--ghost" data-sponsor-action="remove-logo" data-id="' + escapeHtml(o.id) + '">Remove logo</button>' : '') +
+              (o.paid_at ? '<button type="button" class="btn btn--ghost" data-sponsor-action="' + (o.test ? 'unmark-test' : 'mark-test') + '" data-id="' + escapeHtml(o.id) + '">' +
+                (o.test ? 'Not a test' : 'Mark as test') + '</button>' : '');
             // Filled in by loadSponsorLogos (the image needs the admin session).
             const logo = hasLogo ? '<br><img class="sponsor-admin-logo" alt="Uploaded logo" data-logo-id="' + escapeHtml(o.id) + '">' : '';
             return '<tr><td>' + escapeHtml((o.paid_at || o.created_at || '').slice(0, 10)) + '</td>' +
               '<td>' + escapeHtml(SPONSOR_KIND[o.kind] || o.kind) + '</td>' +
               '<td>' + escapeHtml(o.business || '') + '<br><small>' + escapeHtml(o.email || '') + '</small></td>' +
               '<td>' + escapeHtml(sponsorDetail(o)) + logo + '</td>' +
-              '<td>$' + escapeHtml(String(Math.round((o.amount || 0) / 100))) + '</td>' +
+              '<td>$' + escapeHtml(String(Math.round((o.amount || 0) / 100))) + (o.test ? '<br><small>Test, not counted</small>' : '') + '</td>' +
               // on_site false: a paid Vic's Pick whose event the pin can't
               // find on the site (not approved yet, rejected, or edited).
               '<td>' + (o.on_site === false
@@ -2733,6 +2735,7 @@
       if (action === 'edit') { openSponsorEdit(b.getAttribute('data-id'), b); return; }
       if (action === 'report') { openSponsorReport(b.getAttribute('data-id'), b); return; }
       if (action === 'hide' && !confirm('Hide this placement from the site? (Refund it in Stripe separately.)')) return;
+      if (action === 'mark-test' && !confirm('Mark this order as a test? It stops counting toward revenue. (Hide it too if it\'s still on the site.)')) return;
       if (action === 'remove-logo' && !confirm('Remove this sponsor’s logo? Their block stays up without it. This can’t be undone.')) return;
       sponsorAction(b.getAttribute('data-id'), action);
     });
