@@ -677,16 +677,32 @@ export function eventJsonLd(ev, siteUrl) {
     image: [`${siteUrl}/og-image.png`],
     url: `${siteUrl}${ev.page}`
   };
-  if (times[1]) obj.endDate = `${endDay}T${times[1]}:00${chicagoOffset(endDay)}`;
+  // Google flags a missing endDate. With no end time listed, the event ends
+  // when it starts rather than at a made-up hour.
+  obj.endDate = times[1] ? `${endDay}T${times[1]}:00${chicagoOffset(endDay)}` : startDate;
   if (ev.description) obj.description = ev.description;
-  if (ev.free === true) {
-    obj.isAccessibleForFree = true;
-    obj.offers = {
-      '@type': 'Offer', price: 0, priceCurrency: 'USD',
-      availability: 'https://schema.org/InStock',
-      url: safeUrl(ev.url) || `${siteUrl}${ev.page}`
-    };
+  // We don't track organizers or performers; the venue is who hosts it.
+  // Without a venue there's nothing honest to name, so both stay off.
+  if (ev.venue) {
+    const host = { '@type': 'Organization', name: ev.venue };
+    if (safeUrl(ev.url)) host.url = safeUrl(ev.url);
+    obj.organizer = host;
+    obj.performer = host;
   }
+  // Every event gets an offer pointing at its details link. Price only when
+  // we know it (free); validFrom is the listing date, never after the event,
+  // so Google doesn't read it as tickets not yet on sale.
+  const today = localDateStr(new Date());
+  const validDay = today < ev.date ? today : ev.date;
+  obj.offers = {
+    '@type': 'Offer',
+    ...(ev.free === true ? { price: 0 } : {}),
+    priceCurrency: 'USD',
+    availability: 'https://schema.org/InStock',
+    validFrom: `${validDay}T00:00:00${chicagoOffset(validDay)}`,
+    url: safeUrl(ev.url) || `${siteUrl}${ev.page}`
+  };
+  if (ev.free === true) obj.isAccessibleForFree = true;
   return obj;
 }
 

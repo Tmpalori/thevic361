@@ -189,6 +189,23 @@ describe('Event JSON-LD', () => {
     expect(eventJsonLd(same, SITE).endDate).toBe('2026-10-07T21:00:00-05:00');
   });
 
+  it('fills the fields Search Console asks for', () => {
+    const [paid] = withPages([{ date: '2099-10-07', name: 'Show', time: '7 PM', venue: 'The Hall', url: 'https://hall.example/show', free: false }]);
+    const ld = eventJsonLd(paid, SITE);
+    expect(ld.endDate).toBe(ld.startDate);
+    expect(ld.organizer).toEqual({ '@type': 'Organization', name: 'The Hall', url: 'https://hall.example/show' });
+    expect(ld.performer).toEqual(ld.organizer);
+    expect(ld.offers.url).toBe('https://hall.example/show');
+    expect(ld.offers.price).toBeUndefined();
+    expect(ld.offers.validFrom < ld.startDate).toBe(true);
+    const [free] = withPages([{ date: '2020-01-04', name: 'Market', free: true }]);
+    const fl = eventJsonLd(free, SITE);
+    expect(fl.endDate).toBe('2020-01-04');
+    expect(fl.offers.price).toBe(0);
+    expect(fl.offers.validFrom).toBe('2020-01-04T00:00:00-06:00');
+    expect(fl.organizer).toBeUndefined();
+  });
+
   it('uses the next day’s offset across the DST change', () => {
     const [ev] = withPages([{ date: '2026-10-31', name: 'Late Party', time: '10 PM - 2 AM' }]);
     expect(eventJsonLd(ev, SITE).endDate).toBe('2026-11-01T02:00:00-06:00');
