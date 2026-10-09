@@ -1104,7 +1104,7 @@ describe('selling it on /advertise', () => {
     expect(html.match(/<p class="ad-preview-label">On the site<\/p>/g)).toHaveLength(2);
     expect(html.match(/<p class="ad-preview-label">In the newsletter<\/p>/g)).toHaveLength(2);
     expect(html).toContain('THIS WEEK\'S SPONSOR');
-    expect(html.match(/src="\/sample-logo.svg"/g)).toHaveLength(2); // the example logo, on the site and in the email
+    expect(html.match(/src="\/sample-logo.svg"/g)).toHaveLength(3); // the example logo: the diagram, the site and the email
     expect(html).toContain('★ VIC’S PICK');
     expect(html).toContain('<summary>How fast does it go live?</summary>');
     expect(html).not.toMatch(/\bAI\b|automat/i);
