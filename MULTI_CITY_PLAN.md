@@ -105,7 +105,10 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
         (Covered by 1.2a–d2; `tests/town_copy.test.js` sweeps 13 emails.)
   - [x] f. Business constants (prices, caps, thresholds), with the price
         strings generated.
-  - [ ] g. Scheduler job times and the duplicated schedule copy.
+  - [x] g. Scheduler job times and the duplicated schedule copy.
+        (Decision: issue days stay Monday and Thursday for every town, so
+        the "every Monday and Thursday" copy stays shared; a town moves
+        job start times with `town.schedule` to stagger sends and collects.)
 - [ ] **1.3 `docs/` and admin**:
   - [ ] a. Static assets: an overlay lookup (`towns/<slug>/public/` checked
         before `docs/` only for non-Victoria towns), used by

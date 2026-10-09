@@ -80,6 +80,31 @@ export const JOBS = [
   { name: 'health', every: 60 }
 ];
 
+// A job's start time in the town: JOBS' time unless the town moves it
+// (town.schedule, { "newsletter": "07:13" }), so several towns' sends and
+// collects can be staggered. Days stay the same everywhere: the issues are
+// Monday's and Thursday's for every town.
+export function startOf(job) {
+  return (town.schedule && town.schedule[job.name]) || job.at;
+}
+
+// "7:43 AM" for a job, for labels (the admin setup checklist).
+export function startLabel(name, jobs = JOBS) {
+  const job = jobs.find(j => j.name === name);
+  const [h, m] = startOf(job).split(':').map(Number);
+  return `${(h + 11) % 12 + 1}:${pad(m)} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+// A town's schedule must name real jobs and start them before their
+// cutoff (a newsletter moved past noon would never send). Checked at boot.
+export function checkTownSchedule(jobs = JOBS) {
+  for (const [name, at] of Object.entries(town.schedule || {})) {
+    const job = jobs.find(j => j.name === name);
+    if (!job || job.every) throw new Error(`TOWN=${town.id}: schedule.${name} isn't a daily or weekly job in server/scheduler.js`);
+    if (hm(at) > hm(job.until)) throw new Error(`TOWN=${town.id}: schedule.${name} (${at}) is after its cutoff (${job.until})`);
+  }
+}
+
 // The slot a job is due in right now, or null when it isn't due.
 export function dueSlot(job, now) {
   const c = localParts(now);
@@ -88,7 +113,7 @@ export function dueSlot(job, now) {
     return `${c.date}T${pad(Math.floor(n / 60))}:${pad(n % 60)}`;
   }
   if (job.dow != null && c.dow !== job.dow) return null;
-  if (c.minutes < hm(job.at) || c.minutes > hm(job.until)) return null;
+  if (c.minutes < hm(startOf(job)) || c.minutes > hm(job.until)) return null;
   return c.date;
 }
 
@@ -100,7 +125,7 @@ export function lastSlot(job, now) {
   for (let i = 0; i <= 7; i++) {
     const d = prevDate(c.date, i);
     if (job.dow != null && dowOf(d) !== job.dow) continue;
-    if (i === 0 && c.minutes < hm(job.at)) continue;
+    if (i === 0 && c.minutes < hm(startOf(job))) continue;
     return d;
   }
   return null;
@@ -116,6 +141,7 @@ export function schedulerEnabled(env = process.env) {
  *   sponsorReports / health may be missing: the job is then skipped.
  */
 export function createScheduler({ store, github, slack = null, nowFn = () => new Date(), handlers = {}, siteUrl = '', jobs = JOBS, log = console }) {
+  checkTownSchedule(jobs);
   const memory = new Map(); // job → last in-memory slot
   const busy = new Set();
   const state = { dispatchBlocked: null, lastTick: null };
