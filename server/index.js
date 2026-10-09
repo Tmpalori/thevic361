@@ -53,7 +53,7 @@ import {
 } from './seo.js';
 import {
   buildVenues, venueFor, renderVenuePage, renderVenueIndex, venuesWithEvents,
-  SEASONS, activeSeasons, renderSeasonPage, renderIcs, eventActionsHtml
+  townSeasons, activeSeasons, renderSeasonPage, renderIcs, eventActionsHtml
 } from './guides.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1870,7 +1870,7 @@ export async function createApp(opts = {}) {
     sendHtml(res, renderVenuePage(venue, payload.events, ctx.archived, ctx));
   }));
 
-  for (const season of SEASONS) {
+  for (const season of townSeasons()) {
     app.get(season.path, pageHandler(async (req, res, payload, ctx) => {
       sendHtml(res, renderSeasonPage(season, payload.events, ctx.archived, ctx));
     }));

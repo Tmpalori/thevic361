@@ -96,8 +96,11 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
         `guides.js` `ctz`).
   - [x] c. Geography in JSON-LD and venues (`townOf`, `addressRegion`,
         `addressLocality`, `guides.js` venue cleanup).
-  - [ ] d. Page copy (15 hub pages, about, privacy, advertise, llms, 24
-        guides).
+  - [x] d. Page copy (15 hub pages, about, privacy, advertise, llms, 24
+        guides). (Victoria-only guides carry `only: 'victoria'`.)
+  - [ ] d2. Pick name: "Vic's Pick" in badges, copy and emails from a
+        `pickName` field. Keep `/api/vics-pick/*`, `vic361_*` keys and
+        Stripe lookup keys as they are.
   - [ ] e. Email copy (newsletter, notify, referral, inbound signature).
   - [ ] f. Business constants (prices, caps, thresholds), with the price
         strings generated.
