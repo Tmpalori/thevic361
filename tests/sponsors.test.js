@@ -1161,3 +1161,13 @@ describe('weekly sponsor on Facebook and Instagram', () => {
     }
   });
 });
+
+describe('where your ad goes', () => {
+  it('shows the ad with arrows to the site, newsletter, Facebook and Instagram', async () => {
+    const { adFlowHtml } = await import('../server/seo.js');
+    const html = adFlowHtml();
+    for (const name of ['thevic361.com', 'The newsletter', 'Facebook', 'Instagram']) expect(html).toContain(`<strong>${name}</strong>`);
+    expect(html.match(/<path d="M6 160 C/g)).toHaveLength(4); // one arrow per channel
+    expect(html).toContain('class="ad-flow__down"');            // phones: one arrow down
+  });
+});

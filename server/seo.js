@@ -1202,6 +1202,41 @@ export function advertiseStats(events, now, subscriberCount = 0) {
   };
 }
 
+// "Where your ad goes": your ad, with cartoon arrows fanning out to the four
+// places it shows (both packages show in all four: the site, the newsletter,
+// and the Facebook and Instagram posts; see AD_PACKAGES points). Arrows fan
+// out beside the tiles on desktop and point down at a 2x2 grid on phones.
+const FLOW_ICONS = {
+  web: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="3" fill="#8FD3FF" stroke="#1F1A3D" stroke-width="2"/><path d="M2.5 8.5h19" stroke="#1F1A3D" stroke-width="2"/><circle cx="5.5" cy="6.3" r=".9" fill="#1F1A3D"/><circle cx="8.2" cy="6.3" r=".9" fill="#1F1A3D"/><rect x="5.5" y="11" width="13" height="2.2" rx="1.1" fill="#fff"/><rect x="5.5" y="15" width="8" height="2.2" rx="1.1" fill="#fff"/></svg>',
+  email: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="3" fill="#FFC93C" stroke="#1F1A3D" stroke-width="2"/><path d="M3.5 7l8.5 6.5L20.5 7" fill="none" stroke="#1F1A3D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#1877F2" stroke="#1F1A3D" stroke-width="2"/><path d="M13.3 21v-6.6h2.2l.35-2.6H13.3v-1.7c0-.75.21-1.27 1.3-1.27h1.38V6.5a18 18 0 0 0-2-.1c-2 0-3.35 1.2-3.35 3.43v1.97H8.4v2.6h2.23V21" fill="#fff"/></svg>',
+  instagram: '<svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".35" stop-color="#FA7E1E"/><stop offset=".65" stop-color="#D62976"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="url(#ig-g)" stroke="#1F1A3D" stroke-width="2"/><rect x="6.5" y="6.5" width="11" height="11" rx="3.5" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="16.4" cy="7.6" r="1" fill="#fff"/></svg>'
+};
+const FLOW_CHANNELS = [
+  ['web', 'thevic361.com', 'on the site, all week'],
+  ['email', 'The newsletter', 'Monday and Thursday issues'],
+  ['facebook', 'Facebook', 'in our posts'],
+  ['instagram', 'Instagram', 'in our posts']
+];
+// Four arrows from the ad card's edge to the middle of each tile (68px tiles,
+// 16px apart: centers at 34, 118, 202, 286 in a 320px-tall column).
+const FLOW_FAN = '<svg class="ad-flow__fan" viewBox="0 0 140 320" width="140" height="320" aria-hidden="true">' +
+  [34, 118, 202, 286].map((y, i) => `<path d="M6 160 C 70 160, 58 ${y}, 120 ${y}" fill="none" stroke="#1F1A3D" stroke-width="4" stroke-linecap="round" stroke-dasharray="${i % 2 ? '0' : '1 9'}"/>` +
+    `<path d="M112 ${y - 8} L 128 ${y} L 112 ${y + 8}" fill="none" stroke="#1F1A3D" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`).join('') +
+  '</svg>';
+const FLOW_DOWN = '<svg class="ad-flow__down" viewBox="0 0 40 56" width="40" height="56" aria-hidden="true"><path d="M20 4 C 30 18, 10 32, 20 46" fill="none" stroke="#1F1A3D" stroke-width="4" stroke-linecap="round"/><path d="M11 39 L 20 50 L 29 39" fill="none" stroke="#1F1A3D" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+export function adFlowHtml() {
+  return `<section class="ad-flow" aria-label="Where your ad goes">
+      <h2 class="section-heading">Where your ad goes</h2>
+      <div class="ad-flow__grid">
+        <div class="ad-flow__ad"><span class="ad-flow__tag">Your ad</span><img src="${SAMPLE_LOGO}" alt="" width="176" height="51"><strong>Your Business</strong><span>Your message and button</span></div>
+        ${FLOW_FAN}${FLOW_DOWN}
+        <ul class="ad-flow__channels" role="list">${FLOW_CHANNELS.map(([k, name, sub]) =>
+          `<li class="ad-flow__ch ad-flow__ch--${k}"><span class="ad-flow__icon">${FLOW_ICONS[k]}</span><span><strong>${escHtml(name)}</strong><small>${escHtml(sub)}</small></span></li>`).join('')}</ul>
+      </div>
+    </section>`;
+}
+
 // Questions a business asks before buying. Keep every answer true to what
 // the site does (server/sponsors.js, server/newsletter.js).
 const AD_FAQ = [
@@ -1230,6 +1265,7 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
     <h1 class="page-title">Advertise on The Vic 361</h1>
     <p class="page-lead">Reach people in Victoria, TX who are actively looking for something to do this week. Here’s exactly what each option gets you and where it shows.</p>
     ${statItems.length ? `<ul class="ad-stats" role="list">${statItems.map(([n, l]) => `<li><strong>${escHtml(String(n))}</strong><span>${escHtml(l)}</span></li>`).join('')}</ul>` : ''}
+    ${adFlowHtml()}
     <div class="ad-packages ad-packages--rows">
       ${AD_PACKAGES.map(p => `
       <section class="ad-package ad-package--row" id="${escHtml(p.key)}">
