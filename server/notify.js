@@ -8,7 +8,7 @@
  * sees the on-page confirmation. Off until RESEND_API_KEY is set.
  */
 
-import { town } from './town.js';
+import { town, dollars } from './town.js';
 import { escHtml, formatDay, safeUrl, currentWeek, addDays, localDateStr, formatTime, placeText } from './seo.js';
 import { C, btn, emailShell, eventRow } from './newsletter.js';
 
@@ -149,7 +149,7 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
       `If it's a fit, it goes on <a href="${siteUrl}" style="color:${C.accent};">${town.domain}</a> and can show up in our Monday and Thursday newsletters and our social posts.`,
       'Free listings aren’t guaranteed a spot, and we may tidy up the wording.'
     ]) +
-    box(`<strong>Want it guaranteed and highlighted on its day?</strong> Make it a ${town.pickName} ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, `Make it a ${town.pickName}`)}`) +
+    box(`<strong>Want it guaranteed and highlighted on its day?</strong> Make it a ${town.pickName} (${dollars(town.business.pickAmount.weekday)} Mon–Thu, ${dollars(town.business.pickAmount.weekend)} Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, `Make it a ${town.pickName}`)}`) +
     p('Need to change a detail? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
   return {
     subject: 'We got your event submission',
@@ -191,7 +191,7 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
     `<div style="margin:16px 0;">${btn(link, 'See it on the site')}</div>` +
     p(pick ? escHtml(pickShare)
       : 'Share that link anywhere you promote the event. It can also show up in our Monday and Thursday newsletters and our social posts.') +
-    (!offer ? '' : box(`<strong>Want it to stand out on its day?</strong> Make it a ${town.pickName} ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, `Make it a ${town.pickName}`)}`)) +
+    (!offer ? '' : box(`<strong>Want it to stand out on its day?</strong> Make it a ${town.pickName} (${dollars(town.business.pickAmount.weekday)} Mon–Thu, ${dollars(town.business.pickAmount.weekend)} Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, `Make it a ${town.pickName}`)}`)) +
     p(pick ? 'Something wrong? Reply to this email with the fix.'
       : 'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
   return {

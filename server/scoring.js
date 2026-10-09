@@ -21,9 +21,11 @@
  * values, so nothing is dropped just for lacking data.
  */
 
+import { town } from './town.js';
 import { venueFor } from './guides.js';
 
-export const DAY_MAX = { weekday: 15, weekend: 20 };
+// Per day, from the town (town.business), read when used.
+export const DAY_MAX = { get weekday() { return town.business.dayMax.weekday; }, get weekend() { return town.business.dayMax.weekend; } };
 // Variety: a day of 12 trunk-or-treats, or one venue's whole lineup, crowds
 // out everything else. Past these, an event needs VARIETY_OVERRIDE to get
 // in ahead of something different; leftover room is filled by score after.
@@ -164,8 +166,8 @@ export const shown = events => (events || []).filter(ev => !ev.overflow);
 // and social posts) plus `editor_pick`, which keeps them out of "Coming
 // up" and the paid wording in llms.txt, and off anything stored: computed
 // on read like the score.
-export const PICKS = { weekday: 2, weekend: 3 };
-export const PICKS_MIN = { weekday: 1, weekend: 2 };
+export const PICKS = { get weekday() { return town.business.picks.weekday; }, get weekend() { return town.business.picks.weekend; } };
+export const PICKS_MIN = { get weekday() { return town.business.picksMin.weekday; }, get weekend() { return town.business.picksMin.weekend; } };
 const PICK_SCORE = 70;
 const PICK_FLOOR = 65;
 // Picks are one-time Victoria events: a weekly favorite (corn maze, the

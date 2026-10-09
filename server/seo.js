@@ -1,4 +1,4 @@
-import { town } from './town.js';
+import { town, dollars } from './town.js';
 /* server/seo.js — Server-rendered pages for search engines and AI crawlers.
  *
  * Why this exists: the public site renders events in the browser from
@@ -1168,8 +1168,8 @@ export const AD_PACKAGES = [
     key: 'weekly',
     name: 'Weekly sponsor',
     cta: 'Book your sponsor week',
-    price: '$300 / week',
-    amount: 30000,
+    get price() { return `${dollars(this.amount)} / week`; },
+    get amount() { return town.business.weeklyAmount; },
     blurb: 'Pick a week and write your message; it goes live on its own that Monday.',
     limit: 'One sponsor a week, so you’re the only one.',
     // The "what you get" checklist: [bold, rest]. Every line must be true
@@ -1192,10 +1192,10 @@ export const AD_PACKAGES = [
     key: 'featured',
     get name() { return town.pickName; },
     get cta() { return `Make my event a ${town.pickName}`; },
-    price: '$49 Mon–Thu · $89 Fri–Sun',
-    amount: 4900,
+    get price() { const a = town.business.pickAmount; return `${dollars(a.weekday)} Mon–Thu · ${dollars(a.weekend)} Fri–Sun`; },
+    get amount() { return town.business.pickAmount.weekday; },
     get blurb() { return `Tell us about your event. Once it's listed, it's highlighted on its day with the ${town.pickName} badge.`; },
-    limit: 'Only 3 a day Mon–Thu and 4 a day Fri–Sun, so book early.',
+    get limit() { const c = town.business.pickCap; return `Only ${c.weekday} a day Mon–Thu and ${c.weekend} a day Fri–Sun, so book early.`; },
     get points() {
       return [
         [`${town.pickName} badge`, 'your event stands out on its day'],
@@ -1213,7 +1213,6 @@ export const AD_PACKAGES = [
 // Live, true-today numbers for /advertise: this week's listed events, the
 // venues and nearby towns they cover, and subscribers once there's a real
 // crowd (the same 100 the subscribe page waits for).
-export const SHOW_SUBSCRIBERS_FROM = 100;
 export function advertiseStats(events, now, subscriberCount = 0) {
   const week = currentWeek(localDateStr(now));
   const list = (events || []).filter(ev => ev.date >= week[0] && ev.date <= week[6]);
@@ -1221,7 +1220,7 @@ export function advertiseStats(events, now, subscriberCount = 0) {
   const towns = new Set(list.map(ev => String(ev.town || '').trim()).filter(Boolean));
   return {
     events: list.length, venues: venues.size, towns: towns.size,
-    subscribers: subscriberCount >= SHOW_SUBSCRIBERS_FROM ? Math.floor(subscriberCount / 10) * 10 : null
+    subscribers: subscriberCount >= town.business.showSubscribersFrom ? Math.floor(subscriberCount / 10) * 10 : null
   };
 }
 
