@@ -96,3 +96,18 @@ describe('which events and in what order', () => {
     expect(issue.text).not.toContain('DON\'T MISS');
   });
 });
+
+describe('layout', () => {
+  const evs = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((name, i) => ({ date: '2026-10-10', name, time: `${i + 8} AM`, venue: 'V', appeal: 4, ...(i === 1 || i === 2 ? { featured: true, sponsor_order: 'o' + i } : {}) }));
+  const html = renderWeekly(withPages(evs), opts).html;
+
+  it('Vic’s Picks get space around them and no dashed line above', () => {
+    const rowA = html.slice(html.indexOf('>A</a>') - 900, html.indexOf('>A</a>'));
+    expect(rowA.split('<tr><td').pop()).not.toContain('dashed');
+    expect(html.match(/<tr><td style="padding:6px 0;"><table/g)).toHaveLength(2);
+  });
+
+  it('"+N more" is a pill in the day’s color, not a plain link', () => {
+    expect(html).toMatch(/<a [^>]*border-radius:999px[^>]*>\+2 more on Saturday →<\/a>/);
+  });
+});
