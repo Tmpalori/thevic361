@@ -44,6 +44,11 @@ def main(argv):
         link = args[i + 1] if i + 1 < len(args) else None
         del args[i:i + 2]
     text = " ".join(args).strip() or "(no message)"
+    # SLACK_TOWN_TAG: "[Bay City] " first, so towns can share channels
+    # (MULTI_CITY_PLAN.md 4.3, same as server/slack.js). Unset: no change.
+    tag = os.environ.get("SLACK_TOWN_TAG", "").strip()
+    if tag:
+        text = f"[{escape(tag)}] {text}"
     if link:
         text += f" <{link}|Open>"
     req = urllib.request.Request(url, data=json.dumps({"text": text}).encode(),

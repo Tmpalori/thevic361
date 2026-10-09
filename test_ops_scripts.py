@@ -78,3 +78,28 @@ def test_slack_refused_webhook_fails_the_step(monkeypatch, capsys):
 def test_slack_hiccup_stays_green(monkeypatch):
     assert _slack_answer(monkeypatch, 500, "rollup_error") == 0
     assert _slack_answer(monkeypatch, 429, "rate_limited") == 0
+
+
+def test_slack_town_tag(monkeypatch):
+    # MULTI_CITY_PLAN.md 4.3: SLACK_TOWN_TAG prefixes every message so towns
+    # can share channels; unset (Victoria) sends exactly what it did.
+    import json as _json
+    import slack_notify
+    sent = []
+
+    class _Ok:
+        def read(self):
+            return b"ok"
+
+    def fake_urlopen(req, timeout=None):
+        sent.append(_json.loads(req.data)["text"])
+        return _Ok()
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/T/B/x")
+    monkeypatch.setattr(slack_notify.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.delenv("SLACK_TOWN_TAG", raising=False)
+    slack_notify.main(["🗓️ Collect done", "--link", "https://x.example/admin.html"])
+    monkeypatch.setenv("SLACK_TOWN_TAG", "Bay City")
+    slack_notify.main(["🗓️ Collect done"])
+    monkeypatch.setenv("SLACK_TOWN_TAG", "A<b>")
+    slack_notify.main(["hi"])
+    assert sent == ["🗓️ Collect done <https://x.example/admin.html|Open>", "[Bay City] 🗓️ Collect done", "[A&lt;b&gt;] hi"]

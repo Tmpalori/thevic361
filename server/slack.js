@@ -44,6 +44,9 @@ export function slackConfig(env = process.env, overrides = {}) {
     urls,
     enabled: SLACK_CHANNELS.some(ch => urls[ch]),
     // Railway sets these; they label which deploy sent the message.
+    // SLACK_TOWN_TAG: "[Bay City] " before every title, so several towns can
+    // share the same channels (MULTI_CITY_PLAN.md 4.3). Unset: no change.
+    townTag: String(overrides.slackTownTag ?? env.SLACK_TOWN_TAG ?? '').trim(),
     environment: env.RAILWAY_ENVIRONMENT_NAME || env.NODE_ENV || 'local',
     commit: (env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7)
   };
@@ -101,6 +104,7 @@ export function createSlack(config, { fetchImpl = globalThis.fetch, nowFn = () =
   // A titled message with optional "label: value" fields and a footer line.
   function notify({ title, fields = [], text = '', link = null, linkLabel = 'Open', footer = '', channel = 'activity' }) {
     const e = slackEscape;
+    if (config.townTag) title = `[${config.townTag}] ${title}`;
     const blocks = [{ type: 'header', text: { type: 'plain_text', text: String(title).slice(0, 150) } }];
     const f = fields.filter(([, v]) => v != null && v !== '').slice(0, 10)
       .map(([k, v]) => ({ type: 'mrkdwn', text: `*${e(k)}*\n${e(v).slice(0, 500)}` }));
