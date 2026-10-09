@@ -7,7 +7,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import crypto from 'node:crypto';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
-import { verifySvix, newText, bodyText, isAutomatic, replyLink, renderReply } from '../server/inbound.js';
+import { verifySvix, newText, bodyText, isAutomatic, replyLink, renderReply, isForTown } from '../server/inbound.js';
+import { townConfig, VICTORIA, otherTownDomains } from '../server/town.js';
 import { newsletterConfig } from '../server/newsletter.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -64,6 +65,44 @@ describe('pieces', () => {
   it('the reply ask turns on once receiving is set up', () => {
     expect(newsletterConfig({}).inbound).toBe(false);
     expect(newsletterConfig({ RESEND_WEBHOOK_SECRET: SECRET }).inbound).toBe(true);
+  });
+});
+
+describe('which town a received email is for (MULTI_CITY_PLAN.md 2.3)', () => {
+  const BAY = townConfig({}, { town: { id: 'bay', siteName: 'The Bay 979', domain: 'thebay979.com', city: 'Bay City', state: 'TX', stateName: 'Texas', timezone: 'America/Chicago' } });
+  const others = ['thebay979.com'];
+
+  it('another town takes only mail to its own domain', () => {
+    expect(isForTown(['news@thebay979.com'], BAY, ['thevic361.com'])).toBe(true);
+    expect(isForTown(['The Bay <News@TheBay979.com>'], BAY, [])).toBe(true);
+    expect(isForTown(['news@reply.thebay979.com'], BAY, [])).toBe(true);
+    expect(isForTown(['news@thevic361.com'], BAY, [])).toBe(false);
+    expect(isForTown(['me@gmail.com'], BAY, [])).toBe(false); // a Bcc: Victoria's Slack gets it
+    expect(isForTown([], BAY, [])).toBe(false);
+    expect(isForTown(['news@notthebay979.com'], BAY, [])).toBe(false);
+  });
+
+  it('Victoria takes everything but mail only to another town', () => {
+    expect(isForTown(['news@thevic361.com'], VICTORIA, others)).toBe(true);
+    expect(isForTown(['me@gmail.com'], VICTORIA, others)).toBe(true);
+    expect(isForTown([], VICTORIA, others)).toBe(true);
+    expect(isForTown(['news@thebay979.com', 'news@thevic361.com'], VICTORIA, others)).toBe(true);
+    expect(isForTown(['news@thebay979.com'], VICTORIA, others)).toBe(false);
+    expect(isForTown(['news@thebay979.com'], VICTORIA, [])).toBe(true); // no such town here
+  });
+
+  it("reads other towns' domains from towns/*/town.json", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-towns-'));
+    try {
+      for (const [id, body] of [['bay', '{"domain":"thebay979.com"}'], ['broken', '{'], ['nodomain', '{}']]) {
+        await fs.mkdir(path.join(dir, id));
+        await fs.writeFile(path.join(dir, id, 'town.json'), body);
+      }
+      expect(otherTownDomains(VICTORIA, dir)).toEqual(['thebay979.com']);
+      expect(otherTownDomains(VICTORIA, path.join(dir, 'missing'))).toEqual([]);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -127,6 +166,17 @@ describe('the endpoints', () => {
     emails.e3 = { id: 'e3', from: 'x@y.com', subject: 'Automatic reply: This week in Victoria', text: 'I am out', headers: {} };
     expect(await (await webhook(received('e3'))).json()).toEqual({ ok: true, result: 'automatic' });
     expect(pings).toHaveLength(2);
+  });
+
+  it("leaves another town's mail to it", async () => {
+    await startApp({ inboundOtherDomains: ['thebay979.com'] });
+    emails.b1 = { id: 'b1', from: 'sam@gmail.com', to: ['news@thebay979.com'], subject: 'Hi', text: 'Hello Bay', headers: {}, attachments: [] };
+    const bay = { ...received('b1'), data: { ...received('b1').data, to: ['news@thebay979.com'] } };
+    expect(await (await webhook(bay)).json()).toEqual({ ok: true, result: 'other-town' });
+    expect(pings).toHaveLength(0);
+    emails.e1 = { id: 'e1', from: 'mary@gmail.com', to: ['news@thevic361.com'], subject: 'Hi', text: 'Hello Vic', headers: {}, attachments: [] };
+    expect(await (await webhook(received('e1'))).json()).toEqual({ ok: true, result: 'posted' });
+    expect(pings).toHaveLength(1);
   });
 
   it('refuses unsigned or forged webhooks, and asks Resend to retry when it can’t fetch the email', async () => {

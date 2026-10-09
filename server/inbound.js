@@ -14,7 +14,7 @@
  * Unset, the endpoint answers 503 and the reply ask stays off (newsletter.js).
  */
 
-import { town } from './town.js';
+import { town, VICTORIA, otherTownDomains } from './town.js';
 import crypto from 'node:crypto';
 import express from 'express';
 
@@ -110,8 +110,23 @@ function isSales(subject) {
   return SALES_RE.test(subject) || new RegExp(pick, 'i').test(subject);
 }
 
-export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl = globalThis.fetch, nowFn = () => Date.now() }) {
+// Is a received email this town's? One Resend account can receive for
+// several towns' domains, and each town's webhook sees all of them. Another
+// town takes only mail to (or cc) its own domain or a subdomain. Victoria
+// takes everything except mail addressed only to another town's domain, so
+// a reply that reached it by Bcc or a forward is never lost.
+export function isForTown(recipients, t = town, others = []) {
+  const domains = (recipients || []).map(r => String(r).toLowerCase())
+    .map(r => ((/<([^>]+)>/.exec(r) || [, r])[1].trim().split('@')[1] || '').replace(/\.$/, '')).filter(Boolean);
+  const on = (d, dom) => d === dom || d.endsWith('.' + dom);
+  if (domains.some(d => on(d, t.domain))) return true;
+  if (t.id !== VICTORIA.id) return false;
+  return !domains.length || !domains.every(d => others.some(o => on(d, o)));
+}
+
+export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl = globalThis.fetch, nowFn = () => Date.now(), otherDomains }) {
   const seen = new Set();
+  const others = otherDomains || otherTownDomains();
 
   async function fetchEmail(id) {
     const r = await fetchImpl(`${RESEND_API}/emails/receiving/${encodeURIComponent(id)}`, {
@@ -124,6 +139,7 @@ export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl =
   async function handle(event) {
     if (!event || event.type !== 'email.received' || !event.data || !event.data.email_id) return 'ignored';
     const id = event.data.email_id;
+    if (!isForTown([...(event.data.to || []), ...(event.data.cc || [])], town, others)) return 'other-town';
     if (seen.has(id)) return 'duplicate';
     const email = await fetchEmail(id);
     seen.add(id);

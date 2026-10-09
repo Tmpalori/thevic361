@@ -154,8 +154,10 @@ These matter the moment a second town exists. All keep Victoria's values.
       warning when an order matches. (Done; Victoria's requests stay
       untagged, since untagged means Victoria, and it still alerts on
       unmatched warnings.)
-- [ ] **2.3 Inbound email filter.** Ignore `email.received` unless a `to`
+- [x] **2.3 Inbound email filter.** Ignore `email.received` unless a `to`
       address is on the town's own domain (Victoria keeps `thevic361.com`).
+      (Done; Victoria skips only mail addressed solely to another town's
+      domain, so a Bcc or forward is never lost.)
 - [ ] **2.4 Per-town data paths.** New towns read and write
       `towns/<slug>/candidates.json`, `collection_metadata.json`,
       `enrichment_cache.json`, `venues.json`, `local_events.yaml`,

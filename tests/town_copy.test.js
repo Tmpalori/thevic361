@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
-import { townConfig, useTown, VICTORIA } from '../server/town.js';
+import { town, townConfig, useTown, VICTORIA } from '../server/town.js';
 import { HUB_PAGES, renderHubPage, withPages } from '../server/seo.js';
 import { SEASONS, townSeasons, activeSeasons, renderSeasonPage } from '../server/guides.js';
 import { createApp } from '../server/index.js';
@@ -174,7 +174,7 @@ describe('email replies about the town’s pick', () => {
     const mail = subject => ({ from: 'a@b.example', subject, text: 'hi', headers: {} });
     const run = async (subject, i) => {
       const inbound = createInbound({ config: { enabled: true }, apiKey: 'k', slack, siteUrl: SITE, fetchImpl: async () => ({ ok: true, json: async () => mail(subject) }) });
-      await inbound.handle({ type: 'email.received', data: { email_id: 'e' + i } });
+      await inbound.handle({ type: 'email.received', data: { email_id: 'e' + i, to: [`news@${town.domain}`] } });
       return pings.at(-1).title.startsWith('💰');
     };
     useTown(VICTORIA);
