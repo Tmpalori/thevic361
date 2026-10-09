@@ -579,11 +579,11 @@ function replyAskHtml(welcome) {
   return welcome
     ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;background:${C.sky};border:2px solid ${C.ink};border-radius:14px;border-collapse:separate;"><tr><td style="padding:12px 16px;font-size:15px;">
 <strong style="font-family:${DISPLAY};font-size:17px;">One quick favor: hit reply 👋</strong><br>
-Tell us what you're most into (${REPLY_TOPICS}...). We read every reply and use it to pick what goes in, and your reply helps make sure this lands in your inbox, not spam.</td></tr></table>`
+Tell us what you're most into (${REPLY_TOPICS}...). We read every reply and use it to pick what goes in, and a reply helps make sure we keep landing in your inbox.</td></tr></table>`
     : `<p style="margin:22px 0 0;font-size:14px;text-align:center;color:${C.muted};">What do you want more of? <strong style="color:${C.ink};">Just hit reply</strong> and tell us. We read every one.</p>`;
 }
 const replyAskText = welcome => welcome
-  ? `ONE QUICK FAVOR: hit reply and tell us what you're most into (${REPLY_TOPICS}...). We read every reply, and it helps make sure this lands in your inbox, not spam.`
+  ? `ONE QUICK FAVOR: hit reply and tell us what you're most into (${REPLY_TOPICS}...). We read every reply, and a reply helps make sure we keep landing in your inbox.`
   : 'What do you want more of? Just hit reply and tell us. We read every one.';
 
 // A transparent 1x1 GIF, the newsletter's open-tracking image.
