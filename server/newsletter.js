@@ -408,7 +408,7 @@ export function dontMiss(byDay, n = 3) {
 
 // An issue: the rest of this week (weekly, Monday) or Friday through
 // Sunday (weekend, Thursday). See EDITIONS.
-export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, address, openPixelUrl = '', referral = null, edition = 'weekly', prefsUrl = '' }) {
+export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, address, openPixelUrl = '', referral = null, edition = 'weekly', prefsUrl = '', replyAsk = false }) {
   const today = localDateStr(now);
   const weekend = edition === 'weekend';
   const week = (EDITIONS[edition] || EDITIONS.weekly).days(today);
@@ -449,6 +449,7 @@ ${list.length > PER_DAY ? `<p style="margin:12px 0 4px;text-align:center;"><a hr
 <div>${weekend ? pill('/', 'All week') : pill('/this-weekend', 'This weekend')}${pill('/free-things-to-do', 'Free')}${pill('/kids-and-family', 'Kids')}${pill('/live-music', 'Live music')}</div>
 ${sponsorBlock}${topHtml}${days}
 <p style="margin:28px 0 0;text-align:center;">${btn(`${siteUrl}${listPath}`, weekend ? 'See the whole weekend' : 'See the full list')}</p>
+${replyAsk ? replyAskHtml(false) : ''}
 ${referral ? referralHtml({ siteUrl, ...referral }) : ''}`;
 
   // Sponsors are sold "the top of the newsletter": first in both parts (and
@@ -462,7 +463,7 @@ ${referral ? referralHtml({ siteUrl, ...referral }) : ''}`;
     ...(topShown.length ? [`DON'T MISS ${weekend ? 'THIS WEEKEND' : 'THIS WEEK'}`, ...topShown.map((e, i) => `${i + 1}. ${e.name} (${[when(e), e.venue || placeText(e)].filter(Boolean).join(', ')})${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
     ...byDay.flatMap(({ d, list }) => [formatDay(d, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase(),
       ...shownOf(list).map(e => `- ${e.time ? formatTime(e.time) + ' ' : ''}${e.name}${placeText(e) ? ' @ ' + placeText(e) : ''}${e.town ? ' (' + e.town + ')' : ''}${e.also ? ' (also ' + e.also + ')' : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), '']),
-    `Full list: ${siteUrl}${listPath}`, '', ...(referral ? referralText({ siteUrl, ...referral }) : []),
+    `Full list: ${siteUrl}${listPath}`, '', ...(replyAsk ? [replyAskText(false), ''] : []), ...(referral ? referralText({ siteUrl, ...referral }) : []),
     ...(prefsUrl ? [`${weekend ? 'Just want Mondays? Skip the weekend email' : 'Email settings'}: ${prefsUrl}`] : []),
     `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
   ].join('\n');
@@ -569,9 +570,25 @@ function referralText({ siteUrl, code, count = 0 }) {
 // sponsor, and a nudge to share.
 const WELCOME_PICKS = 5;
 
+// "Hit reply" asks (only when NEWSLETTER_REPLY_TO is set, so a reply never
+// bounces). Readers tell us what they want more of, and a reply teaches
+// Gmail and friends the issue is wanted mail, which keeps it out of spam
+// and Promotions.
+const REPLY_TOPICS = 'live music, family stuff, food & drink, markets, nightlife, arts';
+function replyAskHtml(welcome) {
+  return welcome
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;background:${C.sky};border:2px solid ${C.ink};border-radius:14px;border-collapse:separate;"><tr><td style="padding:12px 16px;font-size:15px;">
+<strong style="font-family:${DISPLAY};font-size:17px;">One quick favor: hit reply 👋</strong><br>
+Tell us what you're most into (${REPLY_TOPICS}...). We read every reply and use it to pick what goes in, and a reply helps make sure we keep landing in your inbox.</td></tr></table>`
+    : `<p style="margin:22px 0 0;font-size:14px;text-align:center;color:${C.muted};">What do you want more of? <strong style="color:${C.ink};">Just hit reply</strong> and tell us. We read every one.</p>`;
+}
+const replyAskText = welcome => welcome
+  ? `ONE QUICK FAVOR: hit reply and tell us what you're most into (${REPLY_TOPICS}...). We read every reply, and a reply helps make sure we keep landing in your inbox.`
+  : 'What do you want more of? Just hit reply and tell us. We read every one.';
+
 // A transparent 1x1 GIF, the newsletter's open-tracking image.
 const PIXEL_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
-export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeUrl, address, referral = null }) {
+export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeUrl, address, referral = null, replyAsk = false }) {
   const today = localDateStr(now);
   const soon = sortEvents((events || []).filter(e => e.date >= today && e.date <= addDays(today, 6)));
   // Picks always make the five, then they're shown in time order like the
@@ -587,11 +604,13 @@ export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeU
 ${soon.length > picks.length ? `<p style="margin:12px 0 4px;text-align:center;"><a href="${siteUrl}/" style="${MORE_PILL}background:${C.sun};">+${soon.length - picks.length} more this week →</a></p>` : ''}` : '';
   const bodyHtml = `
 <p style="margin:18px 0 4px;font-size:16px;"><strong>You're in!</strong> Every Monday morning you'll get the week's events in Victoria, TX (concerts, markets, festivals, family stuff and more), and every Thursday morning the weekend's best.</p>
+${replyAsk ? replyAskHtml(true) : ''}
 ${coming}${sponsorHtml(sponsor, siteUrl, 'welcome')}
 <p style="margin:26px 0 0;text-align:center;">${btn(`${siteUrl}/`, "See this week's events")}</p>
 ${referral ? referralHtml({ siteUrl, ...referral }) : `<p style="margin:22px 0 0;font-size:14px;color:${C.muted};">Know someone who's always asking what there is to do in Victoria? Forward them this email or send them to <a href="${siteUrl}/" style="color:${C.accent};font-weight:bold;">thevic361.com</a>.</p>`}`;
   const text = [
     "You're in! Every Monday morning you'll get the week's events in Victoria, TX, and every Thursday the weekend's best.", '',
+    ...(replyAsk ? [replyAskText(true), ''] : []),
     ...(picks.length ? ['COMING UP THIS WEEK', ...picks.map(e =>
       `- ${dayLabel(e.date)}${e.time ? ' ' + formatTime(e.time) : ''}: ${e.name}${placeText(e) ? ' @ ' + placeText(e) : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
     `This week's events: ${siteUrl}/`, '', ...(referral ? referralText({ siteUrl, ...referral }) : []),
@@ -699,9 +718,13 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   // without passing the check, so they share one hourly budget: a script
   // can't use the form to mail strangers at scale (and hurt the domain).
   const unverifiedLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30 });
-  // The open pixel writes on every hit: a per-IP cap keeps a loop from
-  // filling the table (one person opening every issue is a handful).
-  const pixelLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120 });
+  // The open pixel writes on every hit, so a per-IP cap keeps a loop from
+  // hammering the table. It's high: Gmail's image proxy and Apple Mail
+  // Privacy Protection fetch for many readers from shared IPs right after a
+  // send, and a low cap (it was 120) dropped real opens. Made-up URLs can't
+  // pad the count anyway (recordEmailOpen ignores non-subscriber ids and
+  // counts each subscriber once per issue).
+  const pixelLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5000 });
   const supported = typeof store.addSubscriber === 'function';
 
   const openPixel = (week, id) => `${siteUrl}/email/o/${week}/${encodeURIComponent(id)}.gif`;
@@ -835,7 +858,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
         const openPixelUrl = s.id ? openPixel(key, s.id) : '';
         const code = s.id && refs.codes[s.id];
         const referral = code ? { code, count: refs.counts[code] || 0 } : null;
-        const issue = renderWeekly(payload.events, { siteUrl, now, sponsor: payload.sponsor, unsubscribeUrl, address: config.address, openPixelUrl, referral,
+        const issue = renderWeekly(payload.events, { siteUrl, now, sponsor: payload.sponsor, unsubscribeUrl, address: config.address, openPixelUrl, referral, replyAsk: Boolean(config.replyTo),
           edition, prefsUrl: s.token && config.weekend ? prefsLink(s) : '' });
         return {
           from: config.from, to: [s.email], subject: issue.subject, html: issue.html, text: issue.text,
@@ -1005,7 +1028,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       const payload = await getPublicPayload();
       const unsubscribeUrl = `${siteUrl}/unsubscribe?token=${encodeURIComponent(sub.token)}`;
       const referral = await referralFor(sub);
-      const mail = renderWelcomeEmail(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl, address: config.address, referral });
+      const mail = renderWelcomeEmail(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl, address: config.address, referral, replyAsk: Boolean(config.replyTo) });
       await resend.send({
         from: config.from, to: [sub.email], subject: mail.subject, html: mail.html, text: mail.text,
         ...(config.replyTo ? { reply_to: config.replyTo } : {}),
@@ -1220,7 +1243,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   const editionParam = v => (v === 'weekend' ? 'weekend' : 'weekly');
   app.get('/api/admin/newsletter/preview', requireAdmin, async (req, res) => {
     const payload = await getPublicPayload();
-    const issue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: '#', address: config.address,
+    const issue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: '#', address: config.address, replyAsk: Boolean(config.replyTo),
       edition: editionParam(req.query.edition), prefsUrl: config.weekend ? '#' : '' });
     res.type('html').send(issue.html);
   });
@@ -1231,9 +1254,9 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     if (!to) return res.status(400).json({ ok: false, error: 'no-test-address', message: 'Enter an address to send the test to.' });
     try {
       const payload = await getPublicPayload();
-      const issue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: `${siteUrl}/unsubscribe`, address: config.address,
+      const issue = renderWeekly(payload.events, { siteUrl, now: nowFn(), sponsor: payload.sponsor, unsubscribeUrl: `${siteUrl}/unsubscribe`, address: config.address, replyAsk: Boolean(config.replyTo),
         edition: editionParam((req.body || {}).edition), prefsUrl: config.weekend ? `${siteUrl}/email-prefs` : '' });
-      await resend.send({ from: config.from, to: [to], subject: `[Test] ${issue.subject}`, html: issue.html, text: issue.text });
+      await resend.send({ from: config.from, to: [to], subject: `[Test] ${issue.subject}`, html: issue.html, text: issue.text, ...(config.replyTo ? { reply_to: config.replyTo } : {}) });
       res.json({ ok: true, to });
     } catch (err) {
       res.status(502).json({ ok: false, error: 'send-failed', message: err.message });
