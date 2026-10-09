@@ -1799,8 +1799,11 @@ class PgStore {
 
   async listArchivedEvents() {
     await this.ready();
+    // page (the key) breaks date ties, so same-day rows come back in the same
+    // order every time; physical row order shifts when rows are rewritten,
+    // which reordered same-time events on venue pages between deploys.
     const r = await this.pool.query(
-      'SELECT payload FROM event_archive WHERE event_date IS NULL OR event_date >= CURRENT_DATE - $1::int ORDER BY event_date DESC NULLS LAST',
+      'SELECT payload FROM event_archive WHERE event_date IS NULL OR event_date >= CURRENT_DATE - $1::int ORDER BY event_date DESC NULLS LAST, page',
       [ARCHIVE_RETENTION_DAYS]
     );
     return r.rows.map(row => row.payload);
