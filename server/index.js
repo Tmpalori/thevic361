@@ -32,6 +32,7 @@ import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys, keyedEvents } from './eventcheck.js';
 import { registerGrowth } from './growth.js';
+import { registerHq, buildSummary } from './hq.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml, normalizeEmail, sampleEmailPreviews } from './newsletter.js';
 import { createTremendous, tremendousConfig } from './referralRewards.js';
 import { createMailer, renderSubmissionReceived, renderSubmissionLive, setWeekendIssue } from './notify.js';
@@ -2224,7 +2225,9 @@ export async function createApp(opts = {}) {
   // ─── Admin home: setup checklist + at-a-glance numbers ───
   // Presence checks only; no secret value ever leaves the server. Things the
   // server can't see (GitHub Actions secrets) are listed as "check in GitHub".
-  app.get('/api/admin/setup', requireAdmin, async (req, res) => {
+  // The checklist and status the admin's Setup card shows (and HQ's summary
+  // counts).
+  async function setupReport() {
     const env = process.env;
     const ghSecrets = `https://github.com/${github.owner}/${github.repo}/settings/secrets/actions`;
     const cronSecrets = [newsletter.cronSecret, eventCheckSecret, submissionReviewSecret].filter(Boolean);
@@ -2292,8 +2295,30 @@ export async function createApp(opts = {}) {
     try {
       if (typeof store.countSubscribers === 'function') status.subscribers = (await store.countSubscribers()).active || 0;
     } catch { /* none */ }
+    return { checks, status };
+  }
+
+  app.get('/api/admin/setup', requireAdmin, async (req, res) => {
+    const { checks, status } = await setupReport();
     res.set('Cache-Control', 'no-store');
     res.json({ ok: true, checks, status, site_url: siteUrl });
+  });
+
+  // HQ dashboard feed (server/hq.js): off (404) unless HQ_API_KEY is set.
+  registerHq(app, {
+    key: opts.hqApiKey ?? (process.env.HQ_API_KEY || '').trim(),
+    limiter: opts.hqLimiter || createRateLimiter({ windowMs: 60 * 1000, max: 30 }),
+    nowFn: () => (opts.now || (() => new Date()))(),
+    clientKey,
+    build: () => buildSummary({
+      store, town, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
+      commit: (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7),
+      getEvents: async () => [...(((await getPublicPayload()) || {}).events || []), ...(await listArchived().catch(() => []))],
+      getOrders: async () => (typeof store.listSponsorOrders === 'function' ? store.listSponsorOrders() : []),
+      setup: setupReport,
+      health: async () => ({ database: storeBundle.kind === 'postgres', scheduler_blocked: Boolean(scheduler.state.dispatchBlocked),
+        slack_refused: Boolean(slackRefusedText()) })
+    })
   });
 
   // ─── Static site ───

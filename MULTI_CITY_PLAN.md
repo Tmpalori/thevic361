@@ -208,7 +208,7 @@ These matter the moment a second town exists. All keep Victoria's values.
 
 ## Phase 4: HQ dashboard and shared Slack
 
-- [ ] **4.1 `GET /api/hq/summary`** on each town. Auth: `Bearer
+- [x] **4.1 `GET /api/hq/summary`** on each town. Auth: `Bearer
       <HQ_API_KEY>` (new per-town secret; route answers 404 when unset;
       never accepts an admin session and the key never works on admin
       routes). Read-only, no personal data, rate limited, cached 60 s:
