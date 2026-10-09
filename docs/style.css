@@ -1834,11 +1834,25 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
   z-index: 5;
   transition: border-radius 150ms ease, box-shadow 150ms ease;
 }
-/* While stuck (docs/app.js sets .is-stuck): a rounded floating bar. */
+/* While stuck (docs/app.js sets .is-stuck): a rounded floating bar, and
+   the gap above it is filled with the page background so the list
+   scrolling up disappears under the bar instead of showing through. The
+   clip margin lets that fill cover the card's side borders too. */
+.day-section--fold { overflow-clip-margin: 12px; }
 .day-section--fold summary.day-header.is-stuck {
   border: 3px solid var(--ink);
   border-radius: 16px;
   box-shadow: var(--shadow-sm);
+}
+.day-section--fold summary.day-header.is-stuck::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  right: -14px;
+  bottom: 100%;
+  height: calc(var(--space-2) + 6px);
+  background: var(--color-bg);
+  pointer-events: none;
 }
 .day-section--fold details[open] { padding-bottom: var(--space-1); }
 .day-count { margin-left: auto; font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
