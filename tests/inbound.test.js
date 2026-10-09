@@ -107,14 +107,14 @@ describe('the endpoints', () => {
   const received = (email_id, subject = 'Re: This week in Victoria') => ({ type: 'email.received', created_at: NOW.toISOString(),
     data: { email_id, from: 'mary@gmail.com', to: ['news@thevic361.com'], subject, attachments: [] } });
 
-  it('posts a reply to Slack once, with a "Reply as news@" link; money questions go to sales', async () => {
+  it('posts a reply to the inbox channel once, with a "Reply as news@" link; money questions get a 💰', async () => {
     await startApp();
     emails.e1 = { id: 'e1', from: 'Mary D <mary@gmail.com>', to: ['news@thevic361.com'], subject: 'Re: This week in Victoria',
       text: 'More live music and kid stuff!\n\nOn Mon, Oct 5 The Vic 361 wrote:\n> This week…', html: null, headers: {}, message_id: '<abc@mail.gmail.com>', attachments: [] };
     const r = await webhook(received('e1'), { id: 'msg_1' });
     expect(await r.json()).toEqual({ ok: true, result: 'posted' });
     expect(pings).toHaveLength(1);
-    expect(pings[0]).toMatchObject({ title: '📬 Email from mary@gmail.com', text: 'More live music and kid stuff!', channel: 'activity', linkLabel: 'Reply as news@' });
+    expect(pings[0]).toMatchObject({ title: '📬 Email from mary@gmail.com', text: 'More live music and kid stuff!', channel: 'inbox', linkLabel: 'Reply as news@' });
     expect(pings[0].link).toBe(replyLink('https://www.thevic361.com', { to: 'mary@gmail.com', subject: 'Re: This week in Victoria', ref: '<abc@mail.gmail.com>' }));
     // Resend retries the same email: posted once.
     expect(await (await webhook(received('e1'), { id: 'msg_2' })).json()).toEqual({ ok: true, result: 'duplicate' });
@@ -122,7 +122,7 @@ describe('the endpoints', () => {
 
     emails.e2 = { id: 'e2', from: 'shop@biz.com', to: ['news@thevic361.com'], subject: 'Re: You’re a Vic’s Pick!', text: 'Can I change the time?', headers: {}, attachments: [] };
     await webhook(received('e2', 'Re: You’re a Vic’s Pick!'));
-    expect(pings[1]).toMatchObject({ title: '💰 Email from shop@biz.com', channel: 'sales' });
+    expect(pings[1]).toMatchObject({ title: '💰 Email from shop@biz.com', channel: 'inbox' });
 
     emails.e3 = { id: 'e3', from: 'x@y.com', subject: 'Automatic reply: This week in Victoria', text: 'I am out', headers: {} };
     expect(await (await webhook(received('e3'))).json()).toEqual({ ok: true, result: 'automatic' });

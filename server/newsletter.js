@@ -1024,7 +1024,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   });
 
   async function welcome(sub) {
-    if (slack) slack.notify({ title: '📬 New newsletter subscriber', fields: [['Email', sub.email], ...(sub.source ? [['From', sub.source]] : []),
+    if (slack) slack.notify({ channel: 'hype', title: '📬 New newsletter subscriber', fields: [['Email', sub.email], ...(sub.source ? [['From', sub.source]] : []),
       ...(sub.referred_by ? [['Referred by', sub.referred_by]] : [])] });
     if (!config.enabled || !config.address) return; // never send without the required mailing address
     try {

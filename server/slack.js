@@ -9,6 +9,10 @@
  *   sales     SLACK_SALES_WEBHOOK_URL     sponsor orders, refunds, disputes
  *   activity  SLACK_ACTIVITY_WEBHOOK_URL  submissions, messages, subscribers, publishing
  *   alerts    SLACK_ALERTS_WEBHOOK_URL    anything broken (every alert())
+ *   hype      SLACK_HYPE_WEBHOOK_URL      wins only: new subscribers, new sponsors and Vic's Picks
+ *   inbox     SLACK_INBOX_WEBHOOK_URL     people talking to us: email replies, contact form, our replies
+ * hype falls back to sales and inbox to activity (then SLACK_WEBHOOK_URL),
+ * so nothing moves until those channels have their own webhook.
  *
  * Sends are fire-and-forget: a Slack outage must never break a submission,
  * a checkout or a page view. Alerts (things breaking) are de-duplicated by
@@ -22,15 +26,18 @@ const ALERT_WINDOW_MS = 15 * 60 * 1000;
 export const slackEscape = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-export const SLACK_CHANNELS = ['sales', 'activity', 'alerts'];
+export const SLACK_CHANNELS = ['sales', 'activity', 'alerts', 'hype', 'inbox'];
+const FALLBACK = { hype: 'sales', inbox: 'activity' };
 const isHook = (u) => /^https:\/\/hooks\.slack\.com\//.test(u || '');
 
 export function slackConfig(env = process.env, overrides = {}) {
   const url = overrides.slackWebhookUrl ?? env.SLACK_WEBHOOK_URL ?? '';
   const urls = {};
+  const ownUrl = ch => (overrides.slackUrls && overrides.slackUrls[ch]) ?? env[`SLACK_${ch.toUpperCase()}_WEBHOOK_URL`] ?? '';
   for (const ch of SLACK_CHANNELS) {
-    const own = (overrides.slackUrls && overrides.slackUrls[ch]) ?? env[`SLACK_${ch.toUpperCase()}_WEBHOOK_URL`] ?? '';
-    urls[ch] = isHook(own) ? own : isHook(url) ? url : '';
+    const own = ownUrl(ch);
+    const fb = FALLBACK[ch] ? ownUrl(FALLBACK[ch]) : '';
+    urls[ch] = isHook(own) ? own : isHook(fb) ? fb : isHook(url) ? url : '';
   }
   return {
     url,

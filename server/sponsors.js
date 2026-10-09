@@ -1092,7 +1092,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     // The "you're booked" email goes out after the lock (processEvent).
     if (slack) {
       const pkg = packageFor(order.kind);
-      slack.notify({ channel: 'sales',
+      slack.notify({ channel: 'hype',
         title: `💰 New sponsor: ${order.business}`,
         fields: [['Package', pkg ? pkg.name : order.kind], ['Paid', `$${Math.round((order.amount || 0) / 100)}${order.kind === 'partner' ? '/mo' : ''}`],
           ['Contact', order.email],

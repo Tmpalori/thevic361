@@ -113,12 +113,12 @@ describe('database down', () => {
 });
 
 describe('contact messages', () => {
-  it('are saved, listed in admin, and advertising goes to the sales channel', async () => {
+  it('are saved, listed in admin, and all go to the inbox channel', async () => {
     await start();
     const post = f => fetch(base + '/contact', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(f).toString() });
     await post({ topic: 'advertising', name: 'Ann', email: 'ann@shop.example', business: 'Shop', message: 'How much is a week?' });
     await post({ topic: 'event', name: 'Bob', email: 'bob@x.example', message: 'Is the market on?' });
-    expect(slack.notes.map(n => n.channel)).toEqual(['sales', 'activity']);
+    expect(slack.notes.map(n => n.channel)).toEqual(['inbox', 'inbox']);
     expect((await fetch(base + '/api/admin/messages')).status).toBe(401);
     const r = await (await fetch(base + '/api/admin/messages', { headers: await auth() })).json();
     expect(r.messages.map(m => m.name)).toEqual(expect.arrayContaining(['Ann', 'Bob']));

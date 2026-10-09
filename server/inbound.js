@@ -7,8 +7,8 @@
  * (Svix: HMAC-SHA256 over "id.timestamp.body" with the whsec_ secret),
  * fetch the message from GET /emails/receiving/:id and post the sender,
  * subject and new text (quoted history cut off) to Slack. No inbox to
- * check: replies about orders go to the sales channel, the rest to
- * activity. Resend keeps every message in its dashboard either way.
+ * check: they go to the inbox channel (💰 marks ones about orders).
+ * Resend keeps every message in its dashboard either way.
  *
  * Setup (Railway): RESEND_WEBHOOK_SECRET, the webhook's signing secret.
  * Unset, the endpoint answers 503 and the reply ask stays off (newsletter.js).
@@ -99,7 +99,7 @@ export function renderReply(text, siteUrl) {
   return { html, text: `${body}\n\n— ${sig}` };
 }
 
-// Replies about money (Vic's Picks, sponsor weeks, refunds) go to sales.
+// Replies about money (Vic's Picks, sponsor weeks, refunds) get a 💰.
 const SALES_RE = /vic[’']?s pick|sponsor|booked|receipt|refund|invoice|order|payment|report:/i;
 
 export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl = globalThis.fetch, nowFn = () => Date.now() }) {
@@ -134,7 +134,7 @@ export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl =
         text,
         link: addr ? replyLink(siteUrl, { to: addr, subject, ref: email.message_id || '' }) : null, linkLabel: 'Reply as news@',
         footer: 'Full message in Resend → Emails → Receiving',
-        channel: sales ? 'sales' : 'activity'
+        channel: 'inbox'
       });
     }
     return 'posted';
@@ -184,7 +184,7 @@ export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl =
         console.warn('[inbound] reply failed:', err.message);
         return res.status(502).json({ ok: false, error: 'send-failed', message: err.message });
       }
-      if (slack) slack.notify({ title: `↩️ Replied to ${to}`, fields: [['Subject', subject]], text: text.slice(0, 600), channel: 'activity' });
+      if (slack) slack.notify({ title: `↩️ Replied to ${to}`, fields: [['Subject', subject]], text: text.slice(0, 600), channel: 'inbox' });
       res.json({ ok: true });
     });
   }

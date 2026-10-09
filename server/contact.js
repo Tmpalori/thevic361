@@ -2,8 +2,8 @@
  *
  * Replaces the public email address: /contact posts here, and each message
  * arrives in Slack (server/slack.js) with the sender's email so the owner
- * can reply from wherever they like (advertising questions in the sales
- * channel). Nothing personal is published.
+ * can reply (the inbox channel, with a "Reply as news@" link). Nothing
+ * personal is published.
  *
  * Every message is also saved in the database and listed on admin Home, so
  * a Slack outage doesn't lose it; if both fail it goes to the server log.
@@ -90,15 +90,15 @@ export function registerContact(app, { siteUrl, slack, store = null, requireAdmi
       if (Object.keys(errors).length) return fail(errors);
 
       const topic = CONTACT_TOPICS.find(([k]) => k === values.topic)[1];
-      // Advertising questions are sales leads: they go where the owner
-      // watches for money, not the busy activity channel.
+      // Every message goes to the inbox channel, where replies to our
+      // emails land too, so all conversations are in one place.
       const delivered = await slack.notify({
         title: `✉️ Website message: ${topic}`,
         fields: [['From', values.name], ['Email', email], ['Business', values.business]],
         text: values.message,
         link: replyLink(siteUrl, { to: email, subject: `Your message to The Vic 361` }), linkLabel: 'Reply as news@',
         footer: 'Their answer comes back here',
-        channel: values.topic === 'advertising' ? 'sales' : 'activity'
+        channel: 'inbox'
       });
       // Every message is kept in the database too (listed on admin Home),
       // so a Slack outage or rotated webhook can't lose a lead.
