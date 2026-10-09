@@ -8,7 +8,7 @@
  * prebuilt binary, no system Chrome or fonts needed on Railway), in the
  * same palette and fonts as the site and the social-kit slides.
  */
-import { town } from './town.js';
+import { town, townAssetPath } from './town.js';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -17,7 +17,6 @@ import { Resvg } from '@resvg/resvg-js';
 import { formatDay, formatTime, placeText } from './seo.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DOCS = join(HERE, '..', 'docs');
 const FONT_FILES = [join(HERE, 'fonts', 'Fredoka-Bold.ttf'), join(HERE, 'fonts', 'Nunito-ExtraBold.ttf')];
 
 export const W = 1200, H = 630;
@@ -25,10 +24,11 @@ export const W = 1200, H = 630;
 const INK = '#1F1A3D', SUN = '#FFC93C', MUTED = '#554E7A';
 const DAY_COLORS = ['#FFC93C', '#8FD3FF', '#FF8FC0', '#3DBE8B', '#FF7A3D', '#B9A6FF', '#FF8A80']; // Mon..Sun
 
-const dataUri = file => `data:image/svg+xml;base64,${readFileSync(join(DOCS, file)).toString('base64')}`;
+// The town's logo and skyline (its overlay copy, else Victoria's in docs/).
+const dataUri = file => `data:image/svg+xml;base64,${readFileSync(townAssetPath(file)).toString('base64')}`;
 let assets = null;
 function getAssets() {
-  if (!assets) assets = { logo: dataUri('logo.svg'), skyline: dataUri('skyline.svg') };
+  if (!assets || assets.town !== town.id) assets = { town: town.id, logo: dataUri('logo.svg'), skyline: dataUri('skyline.svg') };
   return assets;
 }
 

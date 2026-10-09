@@ -13,12 +13,12 @@
  *   - Submitter email + IP never leave the admin scope.
  */
 
-import { town, townConfig, useTown, VICTORIA } from './town.js';
+import { town, townConfig, useTown, VICTORIA, townAssetPath } from './town.js';
 import { localizeHtml } from './localize.js';
 import express from 'express';
 import compression from 'compression';
 import path from 'node:path';
-import { promises as fsp, readFileSync } from 'node:fs';
+import { promises as fsp, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter, resolveEditKey, withPublishedLock } from './db.js';
@@ -2287,6 +2287,13 @@ export async function createApp(opts = {}) {
   // town gets it rewritten for it (server/localize.js), ahead of the static
   // handler; Victoria's keeps the static path untouched.
   if (town.id !== VICTORIA.id) {
+    // robots.txt names the town's own sitemap (its overlay copy as is).
+    app.get('/robots.txt', wrap(async (req, res) => {
+      const file = townAssetPath('robots.txt');
+      let text = await fsp.readFile(file, 'utf8');
+      if (file === path.join(DOCS_DIR, 'robots.txt')) text = text.split('https://www.thevic361.com').join(siteUrl);
+      res.type('text/plain').send(text);
+    }));
     let submitPage = null;
     app.get(['/submit', '/submit.html'], wrap(async (req, res) => {
       if (!submitPage || opts.reloadTemplates) submitPage = localizeHtml(await fsp.readFile(path.join(DOCS_DIR, 'submit.html'), 'utf8'));
@@ -2294,11 +2301,14 @@ export async function createApp(opts = {}) {
     }));
   }
 
-  app.use(express.static(DOCS_DIR, {
+  // Another town's own static files (towns/<slug>/public/: logo, share
+  // image, email skyline, robots.txt…) come first; anything it doesn't have
+  // falls through to docs/. Victoria has none.
+  const staticOptions = base => ({
     extensions: ['html'],
     index: false,
     setHeaders(res, file) {
-      const rel = path.relative(DOCS_DIR, file).split(path.sep).join('/');
+      const rel = path.relative(base, file).split(path.sep).join('/');
       let cc = 'public, max-age=0';
       if (rel.startsWith('social/')) cc = 'public, max-age=300';
       else if (/\.(png|jpe?g|webp|gif|svg|ico|woff2?)$/i.test(rel)) cc = 'public, max-age=86400';
@@ -2307,7 +2317,9 @@ export async function createApp(opts = {}) {
       // Whatever URL spelling reached it, the admin page gets the admin CSP.
       if (rel === 'admin.html') res.setHeader('Content-Security-Policy', adminCsp);
     }
-  }));
+  });
+  if (town.publicDir && existsSync(town.publicDir)) app.use(express.static(town.publicDir, staticOptions(town.publicDir)));
+  app.use(express.static(DOCS_DIR, staticOptions(DOCS_DIR)));
 
   // ─── 404 + error handlers ───
   app.use((req, res) => {
