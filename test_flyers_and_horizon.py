@@ -383,3 +383,20 @@ def test_organizer_accounts_are_not_places():
     ce._set_non_place_names(venues)
     for name in ("victoria film society", "victoria tnr", "scenic root", "tabree nashay entertainment"):
         assert name in ce._NON_PLACE_NAMES
+
+
+def test_enrich_looks_up_events_with_no_link_first(monkeypatch, tmp_path):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setattr(ce, "ENRICH_MAX_PER_RUN", 2)
+    asked = []
+
+    def post(url, **kw):
+        asked.append(kw["json"]["contents"][0]["parts"][0]["text"])
+        return _gemini_reply([])
+
+    # Soonest two have a link (thin only for time); the later two have none.
+    linked = [{**_thin(n, f"Linked {n}"), "url": f"https://example.com/{n}"} for n in (1, 2)]
+    bare = [_thin(n, f"Bare {n}") for n in (5, 6)]
+    ce.enrich_thin_events(linked + bare, cache_path=str(tmp_path / "c.json"), post=post)
+    text = "".join(asked)
+    assert "Bare 5 on" in text and "Bare 6 on" in text and "Linked" not in text
