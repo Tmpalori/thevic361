@@ -67,6 +67,25 @@ is reported as a warning and doesn't undo the save. Without the token the
 admin still loads candidates from the bundled `candidates.json` plus
 approved submissions.
 
+## HQ dashboard (optional, its own service)
+
+`hq/server.js` shows every town on one screen. It is a separate Railway
+service in the same project; it never touches a town's database.
+
+1. On each town's service, set `HQ_API_KEY` to a long random string (until
+   it's set, that town's `/api/hq/summary` is a 404). Use a different key
+   per town.
+2. Add a service from this repo with start command `node hq/server.js`, no
+   database, and these variables:
+   - `HQ_TOWNS`: `[{"slug":"victoria","site_url":"https://www.thevic361.com","key":"<Victoria's HQ_API_KEY>"}]`
+     (one entry per town)
+   - `HQ_USERNAME`, `HQ_PASSWORD` (12+ characters)
+   - `HQ_SESSION_SECRET` (32+ random characters)
+3. Give it a domain. It refuses to start and logs why when a variable is
+   missing or wrong. `/health` answers `{"ok":true}`.
+
+Each row links to that town's admin, which still asks for its own login.
+
 ## Local development
 
 ```bash
