@@ -110,7 +110,7 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
         the "every Monday and Thursday" copy stays shared; a town moves
         job start times with `town.schedule` to stagger sends and collects.)
 - [ ] **1.3 `docs/` and admin**:
-  - [ ] a. Static assets: an overlay lookup (`towns/<slug>/public/` checked
+  - [x] a. Static assets: an overlay lookup (`towns/<slug>/public/` checked
         before `docs/` only for non-Victoria towns), used by
         `express.static`, `ogImage.js` and the email header. Victoria has
         no overlay, so its bytes and URLs don't change.
@@ -123,7 +123,7 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
   - [x] d. Admin: repo owner/name and events path from `/api/config` (it
         already returns them); week math in the town's timezone; sponsor
         pitch copy from `town`. Keep every `vic361_*` key.
-  - [ ] e. `robots.txt` from a route using `siteUrl`.
+  - [x] e. `robots.txt` from a route using `siteUrl`.
 - [ ] **1.4 Python `town.py`** (twin of `server/town.js`, same
       `towns/<slug>/town.json`): timezone, `SITE_URL`, brand strings,
       hashtags, area ZIPs and other-towns list, AllEvents slug, Facebook and

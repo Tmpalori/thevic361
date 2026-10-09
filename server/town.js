@@ -99,11 +99,12 @@ function complete(id, raw) {
 
 function fromFile(id, dir) {
   const file = path.join(dir, id, 'town.json');
+  const publicDir = path.join(dir, id, 'public');
   let raw;
   try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (err) {
     throw new Error(`TOWN=${id}: can't read ${path.relative(ROOT, file) || file} (${err.code || err.message})`);
   }
-  return complete(id, raw);
+  return complete(id, { publicDir, ...raw });
 }
 
 function check(t) {
@@ -149,6 +150,18 @@ export function townConfig(env = process.env, overrides = {}) {
 // The process's town. A live binding: modules that import it see useTown's
 // change, so read its fields when rendering, never copy them at load.
 export let town = townConfig();
+
+// A static file for the town: its own copy in towns/<slug>/public/ (the
+// overlay) when there is one, else Victoria's in docs/. Victoria has no
+// overlay, so its files never move.
+export const DOCS_DIR = path.join(ROOT, 'docs');
+export function townAssetPath(file, t = town) {
+  if (t.publicDir) {
+    const own = path.join(t.publicDir, file);
+    if (own.startsWith(t.publicDir + path.sep) && fs.existsSync(own)) return own;
+  }
+  return path.join(DOCS_DIR, file);
+}
 
 // "$49", or "$49.50" when there are cents.
 export function dollars(cents) {
