@@ -32,12 +32,12 @@ const EVENTS = [
 
 let tmpDir, server, baseUrl;
 
-async function startApp({ sponsor = null } = {}) {
+async function startApp({ sponsor = null, events = EVENTS, ...extra } = {}) {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-site-'));
   const eventsFile = path.join(tmpDir, 'events.json');
-  await fs.writeFile(eventsFile, JSON.stringify({ last_updated: '2026-10-05T03:00:00-05:00', events: EVENTS, sponsor }));
+  await fs.writeFile(eventsFile, JSON.stringify({ last_updated: '2026-10-05T03:00:00-05:00', events, sponsor }));
   const storeBundle = { kind: 'file', store: new FileStore(path.join(tmpDir, 's.json')) };
-  const { app } = await createApp({ storeBundle, eventsFile, trustProxy: false, now: () => NOW, siteUrl: SITE });
+  const { app } = await createApp({ storeBundle, eventsFile, trustProxy: false, now: () => NOW, siteUrl: SITE, ...extra });
   server = http.createServer(app);
   await new Promise(r => server.listen(0, r));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -274,5 +274,27 @@ describe('venue addresses', () => {
     expect(streetAddress('101 W Juan Linn St, Victoria, TX 77901')).toBe('101 W Juan Linn St');
     expect(streetAddress('309 E Crestwood Dr')).toBe('309 E Crestwood Dr');
     expect(streetAddress('123 N Victoria')).toBe('123 N Victoria');
+  });
+});
+
+describe('PR preview sample events', () => {
+  it('moves the bundled sample into this week by whole weeks', async () => {
+    const { shiftToWeek } = await import('../server/seo.js');
+    const evs = [{ date: '2026-05-11', name: 'Mon' }, { date: '2026-05-16', name: 'Sat' }, { date: '2026-05-19', name: 'Next Tue' }];
+    // Wednesday Oct 7 2026: the sample's first week becomes Oct 5–11.
+    expect(shiftToWeek(evs, '2026-10-07').map(e => e.date)).toEqual(['2026-10-05', '2026-10-10', '2026-10-13']);
+    expect(shiftToWeek([], '2026-10-07')).toEqual([]);
+  });
+
+  it('only a PR preview environment shows them this week; production never does', async () => {
+    // The sample's dates 21 weeks back: May 11–16, 2026 is Mon–Sat, like Oct 5–10.
+    const may = EVENTS.map(e => ({ ...e, date: { '2026-10-05': '2026-05-11', '2026-10-07': '2026-05-13', '2026-10-09': '2026-05-15', '2026-10-10': '2026-05-16' }[e.date] }));
+    await startApp({ events: may, railwayEnvironment: 'thevic361-pr-134' });
+    expect((await get('/')).text).toContain('Monday Market');
+    expect((await get('/')).text).toMatch(/Monday[\s\S]*?<span class="day-count">1 event</);
+    await new Promise(r => server.close(r)); server = null;
+    await fs.rm(tmpDir, { recursive: true, force: true }); tmpDir = null;
+    await startApp({ events: may, railwayEnvironment: 'production' });
+    expect((await get('/')).text).not.toContain('Monday Market');
   });
 });

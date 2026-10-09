@@ -330,6 +330,19 @@ function formatRange(start, end) {
 }
 
 // Monday–Sunday of the current week, matching what docs/app.js renders.
+// PR previews: the bundled sample list is months old, so a preview's
+// homepage showed "No events" every day. This moves the whole list by
+// whole weeks so its first week is this week (weekdays and times kept).
+export function shiftToWeek(events, today) {
+  const list = Array.isArray(events) ? events : [];
+  const dates = list.map(ev => ev && ev.date).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d || '')).sort();
+  if (!dates.length) return list;
+  const days = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 864e5);
+  const shift = days(currentWeek(dates[0])[0], currentWeek(today)[0]);
+  if (!shift) return list;
+  return list.map(ev => ev && ev.date ? { ...ev, date: addDays(ev.date, shift) } : ev);
+}
+
 export function currentWeek(today) {
   const dow = weekday(today);
   const monday = addDays(today, dow === 0 ? -6 : 1 - dow);
@@ -740,8 +753,12 @@ function renderDay(dateStr, list, idx, today, fold = null) {
     `<span class="day-date">${formatDay(dateStr, { month: 'long', day: 'numeric' })}</span>`;
   if (fold) {
     const past = dateStr < today ? ' day-section--past' : '';
+    // Phones show "Oct 7" so the day, date and count fit on one row.
+    const foldHead = `<h2 class="day-name">${formatDay(dateStr, { weekday: 'long' })}${badge}</h2>` +
+      `<span class="day-date"><span class="dd-long">${formatDay(dateStr, { month: 'long', day: 'numeric' })}</span>` +
+      `<span class="dd-short" aria-hidden="true">${formatDay(dateStr, { month: 'short', day: 'numeric' })}</span></span>`;
     return `<section class="day-section day-section--fold${past}" id="day-${idx}"><details${fold === 'open' ? ' open' : ''}>` +
-      `<summary class="day-header">${head}<span class="day-count">${dayCount(list.length)}</span></summary>` +
+      `<summary class="day-header">${foldHead}<span class="day-count">${dayCount(list.length)}</span></summary>` +
       body + '</details></section>';
   }
   return `<section class="day-section" id="day-${idx}">` +

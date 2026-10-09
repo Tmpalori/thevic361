@@ -1822,16 +1822,33 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
 .day-section--past { box-shadow: none; }
 .day-section--fold summary.day-header { cursor: pointer; list-style: none; display: flex; border-bottom: 0; margin: 0; }
 .day-section--fold summary.day-header::-webkit-details-marker { display: none; }
+.day-section--fold summary.day-header { flex-wrap: nowrap; }
+.day-section--fold .day-name { white-space: nowrap; }
+.day-section--fold .day-date { white-space: nowrap; }
+.dd-short { display: none; }
 .day-section--fold details[open] summary.day-header {
   border-bottom: 3px solid var(--ink);
   position: sticky;
-  top: var(--header-height, 64px);
+  /* A gap under the site header so the stuck bar still reads as a card. */
+  top: calc(var(--header-height, 64px) + var(--space-2));
   z-index: 5;
+  transition: border-radius 150ms ease, box-shadow 150ms ease;
+}
+/* While stuck (docs/app.js sets .is-stuck): a rounded floating bar. */
+.day-section--fold summary.day-header.is-stuck {
+  border: 3px solid var(--ink);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
 }
 .day-section--fold details[open] { padding-bottom: var(--space-1); }
 .day-count { margin-left: auto; font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
 .day-count::after { content: " ▾"; }
 .day-section--fold details[open] .day-count::after { content: " ▴"; }
+@media (max-width: 639px) {
+  .day-section--fold summary.day-header { gap: var(--space-2); padding-inline: var(--space-3); }
+  .day-section--fold .dd-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .day-section--fold .dd-short { display: inline; }
+}
 
 /* Small phones: logo, "+ Event" and Subscribe on one row at 360px. The
    theme toggle moves to the footer only. */

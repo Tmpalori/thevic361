@@ -47,7 +47,7 @@ import net from 'node:net';
 import {
   HUB_PAGES, localDateStr, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderPrivacyPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
-  , fillSeasonalNav, currentWeek, addDays
+  , fillSeasonalNav, currentWeek, addDays, shiftToWeek
 } from './seo.js';
 import {
   buildVenues, venueFor, renderVenuePage, renderVenueIndex, venuesWithEvents,
@@ -242,6 +242,10 @@ export async function createApp(opts = {}) {
   }
 
   const railwayEnv = opts.railwayEnvironment ?? process.env.RAILWAY_ENVIRONMENT_NAME;
+  // A PR preview (Railway environment "<service>-pr-<n>", never production)
+  // has no published list, so it shows the bundled sample moved into this
+  // week (shiftToWeek) instead of a week of "No events".
+  const previewSample = opts.previewSample ?? (/-pr-\d+$/.test(railwayEnv || '') && railwayEnv !== 'production');
   // ready() had to create the subscribers or sponsor_orders table: in
   // production that's a new, empty database (a recreated Postgres service
   // or volume), and the list, orders, approvals and edits are gone unless
@@ -1469,7 +1473,8 @@ export async function createApp(opts = {}) {
       slack.alert('db-read', 'Database unreachable: the site is serving the old bundled event list', err.message);
     }
     try {
-      const bundled = await readJsonFile(eventsFile);
+      const raw = await readJsonFile(eventsFile);
+      const bundled = previewSample ? { ...raw, events: shiftToWeek(raw.events, localDateStr(nowFn())) } : raw;
       // The bundled copy can carry a `hidden` list too (Save & Publish
       // commits the whole payload), so a database outage hides the same.
       return { ...bundled, events: stripKeys(visibleKeyed(bundled, [])).map(withoutSubmitter), source: 'bundled' };

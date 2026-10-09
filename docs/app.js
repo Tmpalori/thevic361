@@ -22,6 +22,21 @@
   }
   setHeaderHeight();
   window.addEventListener('resize', setHeaderHeight, { passive: true });
+  // Mark an open day's header bar while it's stuck, so it can look like
+  // its own card (style.css .is-stuck).
+  var stuckQueued = false;
+  function markStuck() {
+    stuckQueued = false;
+    var top = (header ? header.offsetHeight : 0) + 8;
+    document.querySelectorAll('.day-section--fold details[open] > summary').forEach(function (s) {
+      var r = s.getBoundingClientRect();
+      var sec = s.closest('.day-section').getBoundingClientRect();
+      s.classList.toggle('is-stuck', r.top <= top + 1 && sec.top < top - 1 && sec.bottom > r.bottom + 4);
+    });
+  }
+  window.addEventListener('scroll', function () {
+    if (!stuckQueued) { stuckQueued = true; window.requestAnimationFrame(markStuck); }
+  }, { passive: true });
   window.addEventListener('scroll', function () {
     if (window.scrollY > 10) {
       header.classList.add('scrolled');
@@ -241,8 +256,11 @@
       '</ul>';
     }
 
+    // Phones show "Oct 7" so the day, date and count fit on one row.
+    var shortDay = dayAt(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
     var headHtml = '<h2 class="day-name">' + dayName + todayBadgeHtml + '</h2>' +
-      '<span class="day-date">' + monthDay + '</span>';
+      '<span class="day-date"><span class="dd-long">' + monthDay + '</span>' +
+      '<span class="dd-short" aria-hidden="true">' + shortDay + '</span></span>';
     var n = eventsForDay.length;
     return '<section class="day-section day-section--fold' + (past ? ' day-section--past' : '') + '" id="day-' + idx + '">' +
       '<details' + (dateStr === openDate ? ' open' : '') + '>' +
