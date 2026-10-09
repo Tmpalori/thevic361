@@ -16,7 +16,7 @@
 import express from 'express';
 import compression from 'compression';
 import path from 'node:path';
-import { promises as fsp } from 'node:fs';
+import { promises as fsp, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter, resolveEditKey, withPublishedLock } from './db.js';
@@ -47,7 +47,7 @@ import net from 'node:net';
 import {
   HUB_PAGES, localDateStr, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderPrivacyPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
-  , fillSeasonalNav, currentWeek, addDays
+  , fillSeasonalNav, currentWeek, addDays, shiftToWeek
 } from './seo.js';
 import {
   buildVenues, venueFor, renderVenuePage, renderVenueIndex, venuesWithEvents,
@@ -242,6 +242,10 @@ export async function createApp(opts = {}) {
   }
 
   const railwayEnv = opts.railwayEnvironment ?? process.env.RAILWAY_ENVIRONMENT_NAME;
+  // A PR preview (Railway environment "<service>-pr-<n>", never production)
+  // has no published list, so it shows the bundled sample moved into this
+  // week (shiftToWeek) instead of a week of "No events".
+  const previewSample = opts.previewSample ?? (/-pr-\d+$/.test(railwayEnv || '') && railwayEnv !== 'production');
   // ready() had to create the subscribers or sponsor_orders table: in
   // production that's a new, empty database (a recreated Postgres service
   // or volume), and the list, orders, approvals and edits are gone unless
@@ -1469,7 +1473,8 @@ export async function createApp(opts = {}) {
       slack.alert('db-read', 'Database unreachable: the site is serving the old bundled event list', err.message);
     }
     try {
-      const bundled = await readJsonFile(eventsFile);
+      const raw = await readJsonFile(eventsFile);
+      const bundled = previewSample ? { ...raw, events: shiftToWeek(raw.events, localDateStr(nowFn())) } : raw;
       // The bundled copy can carry a `hidden` list too (Save & Publish
       // commits the whole payload), so a database outage hides the same.
       return { ...bundled, events: stripKeys(visibleKeyed(bundled, [])).map(withoutSubmitter), source: 'bundled' };
@@ -1657,8 +1662,24 @@ export async function createApp(opts = {}) {
   const nowFn = opts.now || (() => new Date());
   let indexTemplate = null;
 
+  // The site's own CSS and JS are cached for 10 minutes; a page from a new
+  // deploy with the previous deploy's stylesheet looks broken. Pages link
+  // them with ?v=<hash of their contents>, so each deploy loads fresh files.
+  let assetVersion = null;
+  function versionAssets(html) {
+    if (assetVersion === null) {
+      try {
+        const h = crypto.createHash('sha1');
+        for (const f of ['base.css', 'style.css', 'app.js']) h.update(readFileSync(path.join(DOCS_DIR, f)));
+        assetVersion = h.digest('hex').slice(0, 10);
+      } catch (_) { assetVersion = ''; }
+    }
+    if (!assetVersion) return html;
+    return html.replace(/(href|src)="(\/|\.\/)(base\.css|style\.css|app\.js)"/g, `$1="$2$3?v=${assetVersion}"`);
+  }
+
   function sendHtml(res, html, status = 200, cacheControl = null) {
-    html = fillSeasonalNav(html, res.locals.seasons || [], res.req.path);
+    html = versionAssets(fillSeasonalNav(html, res.locals.seasons || [], res.req.path));
     // Short public cache: a new publish shows up within minutes, and a
     // burst of crawler traffic doesn't hit Postgres on every request.
     // A page built from a fallback list (database down) isn't cached:

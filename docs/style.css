@@ -1813,14 +1813,80 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
   :root:not([data-theme]) .theme-icon--moon { display: none; }
 }
 
-/* Days already over (homepage): folded to their header bar. */
-.day-section--past { margin-bottom: var(--space-4); box-shadow: none; }
-.day-section--past summary.day-header { cursor: pointer; list-style: none; display: flex; border-bottom: 0; margin: 0; }
-.day-section--past summary.day-header::-webkit-details-marker { display: none; }
-.day-section--past details[open] summary.day-header { border-bottom: 3px solid var(--ink); }
-.past-count { margin-left: auto; font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
-.past-count::after { content: " ▾"; }
-.day-section--past details[open] .past-count::after { content: " ▴"; }
+/* Homepage days: each folded to its header bar (only today opens by
+   default; seo.js renderDay). Days already over are flatter. While a day
+   is open its header bar sticks under the site header as you scroll
+   through it. */
+/* No clipping: the header bar rounds its own top corners (20px card
+   radius minus the 3px border), so the card needn't clip it, and the
+   stuck bar's background fill below can reach over the card's borders in
+   every browser (Safari has no overflow-clip-margin). */
+.day-section--fold { margin-bottom: var(--space-4); overflow: visible; }
+.day-section--fold summary.day-header { border-radius: 17px; }
+.day-section--fold details[open] summary.day-header { border-radius: 17px 17px 0 0; }
+.day-section--past { box-shadow: none; }
+.day-section--fold summary.day-header { cursor: pointer; list-style: none; display: flex; border-bottom: 0; margin: 0; }
+.day-section--fold summary.day-header::-webkit-details-marker { display: none; }
+.day-section--fold summary.day-header { flex-wrap: nowrap; }
+.day-section--fold .day-name { white-space: nowrap; }
+.day-section--fold .day-date { white-space: nowrap; }
+.dd-short { display: none; }
+.day-section--fold details[open] summary.day-header {
+  border-bottom: 3px solid var(--ink);
+  position: sticky;
+  top: var(--header-height, 64px);
+  z-index: 5;
+}
+/* An open day's header bar is drawn by ::before inside the bar's own box,
+   and the box itself is filled with the page background: an 8px band
+   above the card (the gap under the site header while stuck) and the
+   card's 3px border on each side. So the bar looks the same scrolling or
+   stuck, and while stuck the list disappears under it with nothing
+   poking out beside or above it. Everything stays inside the box, which
+   is all Safari will draw. */
+.day-section--fold details[open] summary.day-header {
+  background: var(--color-bg);
+  border-radius: 0;
+  margin: calc(-1 * (var(--space-2) + 3px)) -3px 0;
+  padding: calc(var(--space-3) + var(--space-2) + 3px) calc(var(--space-5) + 3px) var(--space-3);
+  border-bottom-color: transparent;
+}
+.day-section--fold details[open] summary.day-header::before {
+  content: "";
+  position: absolute;
+  inset: var(--space-2) 0 -3px;
+  z-index: -1;
+  background: var(--day);
+  border: 3px solid var(--ink);
+  border-radius: 20px 20px 0 0;
+  pointer-events: none;
+}
+/* Stuck: the box also covers the card's 6px drop shadow beside the bar. */
+.day-section--fold details[open] summary.day-header.is-stuck { margin-right: -9px; padding-right: calc(var(--space-5) + 9px); }
+/* ...and the bar carries the card's 6px drop shadow down its right side
+   (starting 6px below its top, like the card), so the card's edge runs
+   flush up along the stuck bar. The clip keeps the shadow off the list
+   below the bar. */
+.day-section--fold details[open] summary.day-header.is-stuck::before {
+  right: 6px;
+  box-shadow: 6px 6px 0 var(--ink);
+  clip-path: inset(0 -6px 0 0);
+}
+/* The bar stops at the last event, while the card's sides are still
+   straight, so it never runs into the card's rounded bottom. */
+.day-section--fold:has(> details[open]) { padding-bottom: 24px; }
+@media (max-width: 639px) {
+  .day-section--fold details[open] summary.day-header { padding-inline: calc(var(--space-3) + 3px); }
+  .day-section--fold details[open] summary.day-header.is-stuck { padding-right: calc(var(--space-3) + 9px); }
+}
+.day-count { margin-left: auto; font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
+.day-count::after { content: " ▾"; }
+.day-section--fold details[open] .day-count::after { content: " ▴"; }
+@media (max-width: 639px) {
+  .day-section--fold summary.day-header { gap: var(--space-2); padding-inline: var(--space-3); }
+  .day-section--fold .dd-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .day-section--fold .dd-short { display: inline; }
+}
 
 /* Small phones: logo, "+ Event" and Subscribe on one row at 360px. The
    theme toggle moves to the footer only. */

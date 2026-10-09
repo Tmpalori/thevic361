@@ -330,6 +330,19 @@ function formatRange(start, end) {
 }
 
 // Monday–Sunday of the current week, matching what docs/app.js renders.
+// PR previews: the bundled sample list is months old, so a preview's
+// homepage showed "No events" every day. This moves the whole list by
+// whole weeks so its first week is this week (weekdays and times kept).
+export function shiftToWeek(events, today) {
+  const list = Array.isArray(events) ? events : [];
+  const dates = list.map(ev => ev && ev.date).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d || '')).sort();
+  if (!dates.length) return list;
+  const days = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 864e5);
+  const shift = days(currentWeek(dates[0])[0], currentWeek(today)[0]);
+  if (!shift) return list;
+  return list.map(ev => ev && ev.date ? { ...ev, date: addDays(ev.date, shift) } : ev);
+}
+
 export function currentWeek(today) {
   const dow = weekday(today);
   const monday = addDays(today, dow === 0 ? -6 : 1 - dow);
@@ -721,20 +734,31 @@ export function renderEventItem(ev) {
   '</li>';
 }
 
-// collapsed: a day that's already over, folded to its header (a <details>)
-// so the homepage opens on today. Still in the markup for crawlers, and
-// still one .day-section per day so the weekend filter's Mon=0…Sun=6
-// indexing and the day colors hold. docs/app.js renders the same.
-function renderDay(dateStr, list, idx, today, collapsed = false) {
+// fold: the homepage's days are each a <details> folded to their header
+// bar, with only today open (fold === 'open'), so the page opens on today
+// and any day is one tap away; today folds up too. Past days keep the
+// --past look. Still in the markup for crawlers, and still one
+// .day-section per day so the weekend filter's Mon=0…Sun=6 indexing and
+// the day colors hold. docs/app.js renders the same.
+function dayCount(n) {
+  return n === 0 ? 'No events' : n === 1 ? '1 event' : `${n} events`;
+}
+
+function renderDay(dateStr, list, idx, today, fold = null) {
   const badge = dateStr === today ? ' <span class="today-badge">Today</span>' : '';
   const body = list.length
     ? `<ul class="event-list" role="list">${list.map(renderEventItem).join('')}</ul>`
     : '<div class="empty-state">Nothing listed yet — know something happening? <a href="/submit">Submit an event.</a></div>';
   const head = `<h2 class="day-name">${formatDay(dateStr, { weekday: 'long' })}${badge}</h2>` +
     `<span class="day-date">${formatDay(dateStr, { month: 'long', day: 'numeric' })}</span>`;
-  if (collapsed) {
-    return `<section class="day-section day-section--past" id="day-${idx}"><details>` +
-      `<summary class="day-header">${head}<span class="past-count">${list.length === 1 ? '1 event' : `${list.length} events`}</span></summary>` +
+  if (fold) {
+    const past = dateStr < today ? ' day-section--past' : '';
+    // Phones show "Oct 7" so the day, date and count fit on one row.
+    const foldHead = `<h2 class="day-name">${formatDay(dateStr, { weekday: 'long' })}${badge}</h2>` +
+      `<span class="day-date"><span class="dd-long">${formatDay(dateStr, { month: 'long', day: 'numeric' })}</span>` +
+      `<span class="dd-short" aria-hidden="true">${formatDay(dateStr, { month: 'short', day: 'numeric' })}</span></span>`;
+    return `<section class="day-section day-section--fold${past}" id="day-${idx}"><details${fold === 'open' ? ' open' : ''}>` +
+      `<summary class="day-header">${foldHead}<span class="day-count">${dayCount(list.length)}</span></summary>` +
       body + '</details></section>';
   }
   return `<section class="day-section" id="day-${idx}">` +
@@ -742,10 +766,17 @@ function renderDay(dateStr, list, idx, today, collapsed = false) {
   '</section>';
 }
 
-// Day sections for an arbitrary list of dates (homepage = Mon–Sun). Days
-// before today are collapsed (see renderDay).
+// The day a folded week opens on: today, or (a week that doesn't hold
+// today) its first day still ahead.
+export function openDay(dates, today) {
+  return dates.includes(today) ? today : dates.find(d => d >= today) || null;
+}
+
+// Day sections for an arbitrary list of dates (homepage = Mon–Sun), every
+// day folded but the one openDay picks (see renderDay).
 export function renderDays(dates, events, today) {
-  return dates.map((d, i) => renderDay(d, sortEvents(events.filter(ev => ev.date === d)), i, today, d < today)).join('');
+  const open = openDay(dates, today);
+  return dates.map((d, i) => renderDay(d, sortEvents(events.filter(ev => ev.date === d)), i, today, d === open ? 'open' : 'closed')).join('');
 }
 
 // Day sections only for dates that have events (intent pages).
