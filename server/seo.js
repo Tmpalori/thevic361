@@ -628,18 +628,19 @@ export function withPages(events) {
     });
 }
 
-// By date, then featured (paid) events first within a day, then by time.
-// Within a day: paid Vic's Picks first (sold as "pinned to the top"), then
-// editor's picks (server/scoring.js pickDays), then the rest by time.
+// Paid Vic's Picks rank before editor's picks (server/scoring.js pickDays),
+// then everything else: used where picks are chosen or break a tie.
 export function pickRank(ev) {
   return ev && ev.featured ? (ev.editor_pick ? 1 : 0) : 2;
 }
 
+// By date, then by time, like the newsletter: a Vic's Pick stands out by
+// its badge and card, not by jumping the day's order. Same time: picks first.
 export function sortEvents(list) {
   return list.slice().sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-    if (pickRank(a) !== pickRank(b)) return pickRank(a) - pickRank(b);
-    return timeKey(a) - timeKey(b);
+    if (timeKey(a) !== timeKey(b)) return timeKey(a) - timeKey(b);
+    return pickRank(a) - pickRank(b);
   });
 }
 
@@ -1019,7 +1020,9 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   const withVenue = venue && !/^\d/.test(venue) && !ev.name.toLowerCase().includes(venue.toLowerCase())
     ? `${ev.name} at ${venue} · ${shortDate}` : '';
   const heading = withVenue && withVenue.length <= 60 ? withVenue : `${ev.name} · ${shortDate}`;
-  const sameDay = sortEvents(events.filter(o => o.date === ev.date && o.page !== ev.page)).slice(0, 6);
+  // "Also that day": picks are always among the six, then shown in time order.
+  const sameDay = sortEvents(events.filter(o => o.date === ev.date && o.page !== ev.page)
+    .sort((a, b) => pickRank(a) - pickRank(b)).slice(0, 6));
   const description = (ev.description ? ev.description + ' ' : '') +
     `${when}${where ? ` at ${where}` : ''}, ${townOf(ev)}, TX.`;
   const body = `
@@ -1139,11 +1142,11 @@ export const AD_PACKAGES = [
     name: 'Vic’s Pick',
     price: '$49 Mon–Thu · $89 Fri–Sun',
     amount: 4900,
-    blurb: 'Tell us about your event. Once it\'s listed, it\'s pinned to the top of its day.',
-    where: 'Your event at the top of its day with the Vic’s Pick badge, on the site, its event page and our social posts, and in the newsletter when you book before the issue goes out (Monday’s covers the week, Thursday’s the weekend).',
+    blurb: 'Tell us about your event. Once it\'s listed, it\'s highlighted on its day with the Vic’s Pick badge.',
+    where: 'Your event highlighted on its day with the Vic’s Pick badge, on the site, its event page and our social posts, and in the newsletter when you book before the issue goes out (Monday’s covers the week, Thursday’s the weekend).',
     limit: 'Only 3 a day Mon–Thu and 4 a day Fri–Sun, so book early.',
     points: [
-      'Guaranteed listing, pinned at the top of its day on the site',
+      'Guaranteed listing, highlighted on its day on the site',
       'Featured first in our social posts, and starred in the newsletter when booked before the issue goes out',
       'A report the day after: times seen, page views, clicks, calendar adds and shares',
       'Best for concerts, fundraisers, openings, and festivals'
@@ -1371,7 +1374,7 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
   }
   if (picks.length) {
     lines.push("## Vic's Picks", '',
-      "Featured events, pinned to the top of their day on The Vic 361. Some are our editors' can't-miss picks; some are paid placements by the venue or organizer.", '',
+      "Featured events, highlighted on their day on The Vic 361. Some are our editors' can't-miss picks; some are paid placements by the venue or organizer.", '',
       ...picks.map(line), '');
   }
   lines.push(`## Upcoming events (as of ${formatDay(today, { month: 'long', day: 'numeric', year: 'numeric' })})`, '');

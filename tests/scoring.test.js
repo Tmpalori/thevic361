@@ -177,13 +177,15 @@ describe('editor’s picks (pickDays)', () => {
 });
 
 describe('order within a day', () => {
-  it('paid Vic’s Picks first, then editor’s picks, then the rest by time', () => {
+  it('time order, Vic’s Picks included; at the same time paid, then editor’s, then the rest', () => {
     const day = [
       { date: '2026-10-10', name: 'Plain', time: '9:00 AM' },
       { date: '2026-10-10', name: 'Editor Pick', time: '1:00 PM', featured: true, editor_pick: true },
-      { date: '2026-10-10', name: 'Paid Pick', time: '7:00 PM', featured: true }
+      { date: '2026-10-10', name: 'Paid Pick', time: '7:00 PM', featured: true },
+      { date: '2026-10-10', name: 'Same Time Plain', time: '1:00 PM' },
+      { date: '2026-10-10', name: 'Same Time Paid', time: '1:00 PM', featured: true }
     ];
-    expect(sortEvents(day).map(e => e.name)).toEqual(['Paid Pick', 'Editor Pick', 'Plain']);
+    expect(sortEvents(day).map(e => e.name)).toEqual(['Plain', 'Same Time Paid', 'Editor Pick', 'Same Time Plain', 'Paid Pick']);
   });
 });
 

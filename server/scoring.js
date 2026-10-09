@@ -5,8 +5,8 @@
  * Fri–Sun); the rest are marked `overflow` and left out of the day lists
  * (homepage, /today, /this-weekend, /next-week, /events.json, newsletter,
  * social kit) but keep their own page and stay in the guides (Halloween,
- * kids, venues...), which have no daily limit. Lists stay in time order with
- * Vic's Picks on top (sortEvents); the score only decides what's in.
+ * kids, venues...), which have no daily limit. Lists stay in time order
+ * (sortEvents), Vic's Picks included; the score only decides what's in.
  *
  * Always in, whatever the score: Vic's Picks / sponsored (`featured`) and
  * anything the admin chose to show anyway (`keep`, set from the admin).
@@ -159,7 +159,7 @@ export const shown = events => (events || []).filter(ev => !ev.overflow);
 // (and paid capacity is counted from orders in server/sponsors.js, never
 // from these). An event needs PICK_SCORE to be picked; a day with no event
 // that strong still gets PICKS_MIN of its best if they reach PICK_FLOOR.
-// Marked `featured` (pinned on top, the badge, starred in the newsletter
+// Marked `featured` (the badge and highlight, starred in the newsletter
 // and social posts) plus `editor_pick`, which keeps them out of "Coming
 // up" and the paid wording in llms.txt, and off anything stored: computed
 // on read like the score.

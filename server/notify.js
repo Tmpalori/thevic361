@@ -141,7 +141,7 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
       `If it's a fit, it goes on <a href="${siteUrl}" style="color:${C.accent};">thevic361.com</a> and can show up in our Monday and Thursday newsletters and our social posts.`,
       'Free listings aren’t guaranteed a spot, and we may tidy up the wording.'
     ]) +
-    box(`<strong>Want it guaranteed and pinned to the top of its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`) +
+    box(`<strong>Want it guaranteed and highlighted on its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`) +
     p('Need to change a detail? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
   return {
     subject: 'We got your event submission',
@@ -154,7 +154,7 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
       '1. We review every submission, usually within the hour, and we’ll email you when it’s live; some need a closer look and take a day or two.',
       `2. If it's a fit, it goes on ${siteUrl} and can show up in our Monday and Thursday newsletters and our social posts.`,
       '3. Free listings aren’t guaranteed a spot, and we may tidy up the wording.', '',
-      `Want it guaranteed and pinned to the top of its day? Make it a Vic's Pick: ${upgradeUrl}`, '',
+      `Want it guaranteed and highlighted on its day? Make it a Vic's Pick: ${upgradeUrl}`, '',
       'Need to change a detail? Reply to this email with the fix.',
       contactText(siteUrl)
     ].join('\n')
@@ -175,7 +175,7 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
   const pickShare = `Share that link anywhere you promote the event. It’s ${pickWhere(ev.date, at)}.`;
   const offer = !pick && Boolean(upgradeUrl);
   const lead = pick
-    ? `Good news: <strong>${escHtml(name)}</strong> is live on The Vic 361 as a Vic’s Pick, pinned to the top of its day.`
+    ? `Good news: <strong>${escHtml(name)}</strong> is live on The Vic 361 as a Vic’s Pick, highlighted on its day.`
     : `Good news: <strong>${escHtml(name)}</strong> is now on The Vic 361.`;
   const bodyHtml =
     p(lead) +
@@ -183,7 +183,7 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
     `<div style="margin:16px 0;">${btn(link, 'See it on the site')}</div>` +
     p(pick ? escHtml(pickShare)
       : 'Share that link anywhere you promote the event. It can also show up in our Monday and Thursday newsletters and our social posts.') +
-    (!offer ? '' : box(`<strong>Want it pinned to the top of its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`)) +
+    (!offer ? '' : box(`<strong>Want it to stand out on its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`)) +
     p(pick ? 'Something wrong? Reply to this email with the fix.'
       : 'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
   return {
@@ -191,12 +191,12 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
     html: emailShell({ title: pick ? 'Your Vic’s Pick is live!' : 'Your event is live!', preheader: `${name} is now on thevic361.com.`, bodyHtml, siteUrl,
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
-      pick ? `Good news: "${name}" is live on The Vic 361 as a Vic's Pick, pinned to the top of its day.` : `Good news: "${name}" is now on The Vic 361.`, '',
+      pick ? `Good news: "${name}" is live on The Vic 361 as a Vic's Pick, highlighted on its day.` : `Good news: "${name}" is now on The Vic 361.`, '',
       `${ev.date || ''} ${ev.time || ''} · ${ev.venue || ''}`.trim(), '',
       `See it: ${link}`,
       pick ? pickShare
         : 'Share that link anywhere you promote the event. It can also show up in our Monday and Thursday newsletters and our social posts.', '',
-      ...(!offer ? [] : [`Want it pinned to the top of its day? Make it a Vic's Pick: ${upgradeUrl}`, '']),
+      ...(!offer ? [] : [`Want it to stand out on its day? Make it a Vic's Pick: ${upgradeUrl}`, '']),
       pick ? 'Something wrong? Reply to this email with the fix.' : 'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.',
       contactText(siteUrl)
     ].join('\n')
@@ -265,21 +265,21 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
     `<h2 style="font-size:18px;margin:20px 0 4px;">What happens next</h2>` +
     steps([
       'We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
-      `Then it’s <strong>pinned to the top of ${escHtml(day)}</strong> on thevic361.com and its event page, with the Vic’s Pick badge.`,
+      `Then it’s <strong>highlighted on ${escHtml(day)}</strong> on thevic361.com and its event page, with the Vic’s Pick badge.`,
       `It’s ${escHtml(where)}.`,
       'The day after your event, we’ll email you how it did: how many times it was seen, page views, clicks to your link, calendar adds and shares.'
     ]) +
     p(`Need to change a detail? Reply to this email. ${receipt}`, `color:${C.muted};font-size:14px;`);
   return {
     subject: `Your Vic's Pick is confirmed: ${ev.name || 'your event'}`,
-    html: emailShell({ title: 'You’re a Vic’s Pick!', preheader: `${ev.name || 'Your event'} will be pinned to the top of ${day}.`, bodyHtml, siteUrl,
+    html: emailShell({ title: 'You’re a Vic’s Pick!', preheader: `${ev.name || 'Your event'} will be highlighted on ${day}.`, bodyHtml, siteUrl,
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
       `Thanks, ${business}! Your payment went through and "${ev.name || 'your event'}" is a Vic's Pick.`, '',
       `${day}${ev.time ? `, ${ev.time}` : ''} · ${ev.venue || ''}`, '',
       'What happens next:',
       '1. We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
-      `2. Then it's pinned to the top of ${day} on thevic361.com and its event page, with the Vic's Pick badge.`,
+      `2. Then it's highlighted on ${day} on thevic361.com and its event page, with the Vic's Pick badge.`,
       `3. It's ${where}.`,
       '4. The day after your event, we’ll email you how it did: how many times it was seen, page views, clicks to your link, calendar adds and shares.', '',
       `Need to change a detail? Reply to this email. ${receipt}`,
@@ -400,7 +400,7 @@ export function renderPickReport(order, stats, { siteUrl, address }) {
     statsTable(rows) +
     whereHtml(stats.where) +
     p(escHtml(COUNTER_NOTE), `color:${C.muted};font-size:13px;`) +
-    box(`<strong>Got another event coming up?</strong> Pin it to the top of its day too.<br><br>${btn(`${siteUrl}/advertise/checkout?package=featured`, 'Make it a Vic’s Pick')}`);
+    box(`<strong>Got another event coming up?</strong> Make it stand out on its day too.<br><br>${btn(`${siteUrl}/advertise/checkout?package=featured`, 'Make it a Vic’s Pick')}`);
   return {
     subject: `Your Vic's Pick report: ${name}`,
     html: emailShell({ title: 'Your Vic’s Pick report', preheader: headline, bodyHtml, siteUrl,
