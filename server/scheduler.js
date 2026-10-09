@@ -35,7 +35,7 @@
  * (401/403) gets one Slack alert a week and a setup-checklist warning.
  */
 
-import { town } from './town.js';
+import { town, townInputs } from './town.js';
 
 const MIN = 60 * 1000;
 
@@ -168,7 +168,7 @@ export function createScheduler({ store, github, slack = null, nowFn = () => new
 
   async function dispatch(job, now) {
     try {
-      await github.dispatchWorkflow(job.workflow, github.branch, job.inputs);
+      await github.dispatchWorkflow(job.workflow, github.branch, townInputs(job.inputs));
       state.dispatchBlocked = null;
       return { ok: true };
     } catch (err) {
