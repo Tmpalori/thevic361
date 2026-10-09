@@ -1,0 +1,23 @@
+{
+  "events": [
+    { "date": "2026-10-05", "name": "Monday Trivia", "time": "7:00 PM", "venue": "Aero Crafters", "address": "1502 E Airline Rd", "icons": ["drinks"], "description": "Teams of up to six; prizes for the top three.", "appeal": 3 },
+    { "date": "2026-10-06", "name": "Story Time at the Library", "time": "10:30 AM", "venue": "Victoria Public Library", "address": "302 N Main St", "icons": ["family"], "free": true, "description": "Picture books and songs for little ones.", "appeal": 3 },
+    { "date": "2026-10-07", "name": "Wednesday Farmers Market", "time": "4-7 p.m.", "venue": "Market Square", "icons": ["food", "shopping"], "free": true, "description": "Local produce, baked goods and crafts.", "appeal": 4 },
+    { "date": "2026-10-07", "name": "Open Mic Night", "time": "08:00 PM", "venue": "The Upper Room", "icons": ["music"], "description": "Sign-up at 7:30; all acts welcome.", "appeal": 3 },
+    { "date": "2026-10-08", "name": "Paint & Sip", "time": "6:30 PM", "end_time": "8:30 PM", "venue": "Victoria Fine Arts Association", "icons": ["arts", "drinks"], "url": "https://example.org/paint", "description": "All supplies included.", "appeal": 4 },
+    { "date": "2026-10-09", "name": "Friday Live Music", "time": "8:00 PM", "venue": "Aero Crafters", "icons": ["music"], "featured": true, "description": "Local bands on the patio.", "appeal": 5 },
+    { "date": "2026-10-09", "name": "Cuero Turkeyfest Parade", "time": "6:00 PM", "venue": "Downtown Cuero", "town": "Cuero", "icons": ["community", "family"], "free": true, "description": "The kickoff parade for Turkeyfest.", "appeal": 5 },
+    { "date": "2026-10-10", "name": "Fall Festival at De Leon Plaza", "time": "10:00 AM", "venue": "De Leon Plaza", "address": "101 N Main St", "icons": ["family", "food"], "free": true, "description": "Food, music, rides and a pumpkin patch.", "appeal": 5 },
+    { "date": "2026-10-10", "name": "Haunted Hayride", "time": "7 PM - 10 PM", "venue": "J Welch Farms", "icons": ["outdoors", "family"], "url": "https://example.org/hayride", "description": "A spooky ride through the fields.", "appeal": 4 },
+    { "date": "2026-10-11", "name": "Sunday Jazz Brunch", "time": "11:00 AM", "venue": "Fossati's Delicatessen", "icons": ["food", "music"], "description": "Live jazz with brunch.", "appeal": 4 },
+    { "date": "2026-10-11", "name": "Riverside Park Run", "time": "7:30 AM", "venue": "Riverside Park", "icons": ["outdoors"], "free": true, "description": "A 5K loop along the Guadalupe.", "appeal": 3 },
+    { "date": "2026-10-17", "name": "Victoria Bach Festival Preview", "time": "7:30 PM", "venue": "Victoria Fine Arts Center", "icons": ["music", "arts"], "big": true, "description": "A preview concert for next season.", "appeal": 5 },
+    { "date": "2026-10-31", "name": "Downtown Trick or Treat", "time": "5:00 PM", "venue": "Downtown Victoria", "icons": ["family", "community"], "free": true, "big": true, "description": "Candy from downtown shops.", "appeal": 5 }
+  ],
+  "sponsor": { "name": "Acme Tacos", "text": "Best tacos in town.", "cta": "Order now", "url": "https://acme.example", "address": "123 Main St" },
+  "venues": [
+    { "name": "Aero Crafters", "category": "Bar / Live Music", "address": "1502 E Airline Rd, Victoria, TX 77901" },
+    { "name": "De Leon Plaza", "category": "Park", "address": "101 N Main St, Victoria, TX 77901" },
+    { "name": "Victoria Public Library", "category": "Library", "address": "302 N Main St, Victoria, TX 77901" }
+  ]
+}

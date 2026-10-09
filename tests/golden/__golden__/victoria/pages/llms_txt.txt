@@ -1,0 +1,58 @@
+200 text/plain; charset=utf-8
+
+# The Vic 361
+
+> Free weekly guide to events and things to do in Victoria, Texas (the 361 area code). Concerts, festivals, family activities, farmers markets, art shows, and community events. Put together locally in Victoria, with a local editor keeping the list accurate and a spotlight on small businesses and community groups; updated twice a week.
+
+## Pages
+
+- [This week in Victoria, TX](https://www.thevic361.com/): every event Monday through Sunday
+- [Things To Do in Victoria, TX Today](https://www.thevic361.com/today): Events happening today in Victoria, Texas: live music, family activities, markets, and more.
+- [Things To Do in Victoria, TX This Weekend](https://www.thevic361.com/this-weekend): Events in Victoria, Texas this weekend: concerts, festivals, family events, markets, and free things to do Friday through Sunday.
+- [Free Things To Do in Victoria, TX](https://www.thevic361.com/free-things-to-do): Upcoming free events in Victoria, Texas: library programs, community events, outdoor activities, and more.
+- [Kids & Family Events in Victoria, TX](https://www.thevic361.com/kids-and-family): Family-friendly things to do in Victoria, Texas: story times, kids activities, all-ages shows, and outdoor fun.
+- [Live Music in Victoria, TX This Week](https://www.thevic361.com/live-music): Live music in Victoria, Texas: concerts, bands, open mics, and karaoke at local bars and venues.
+- [Food & Drink Events in Victoria, TX](https://www.thevic361.com/food-and-drink): Food and drink events in Victoria, Texas: farmers markets, food trucks, tastings, brunches, and happy hours.
+- [Things To Do in Victoria, TX Tonight](https://www.thevic361.com/tonight): What's happening tonight in Victoria, Texas: live music, trivia, karaoke, shows, and late events starting this evening.
+- [Date Night Ideas in Victoria, TX](https://www.thevic361.com/date-night): Date night in Victoria, Texas: live music, theatre, art nights, wine and beer, and dinner events this week.
+- [Things To Do in Victoria, TX Next Week](https://www.thevic361.com/next-week): Events in Victoria, Texas next week, Monday through Sunday: live music, festivals, family events, markets, and more.
+- [Things To Do With Kids in Victoria, TX This Weekend](https://www.thevic361.com/this-weekend-with-kids): Kid-friendly events in Victoria, Texas this weekend: story times, festivals, the zoo, crafts, and family fun.
+- [Free Things To Do in Victoria, TX This Weekend](https://www.thevic361.com/free-this-weekend): Free events in Victoria, Texas this weekend: markets, library programs, festivals, outdoor fun, and community events.
+- [Nightlife in Victoria, TX: Bars, Live Music & Karaoke](https://www.thevic361.com/nightlife): Nightlife in Victoria, Texas this week: bar shows, live bands, karaoke, trivia, and late events.
+- [Arts & Culture Events in Victoria, TX](https://www.thevic361.com/arts-and-culture): Art, theatre, museums, and culture in Victoria, Texas: gallery nights, plays, concerts, and exhibits coming up.
+- [Outdoor Events in Victoria, TX](https://www.thevic361.com/outdoor-events): Outdoor things to do in Victoria, Texas: parks, runs, markets, festivals, and events at Riverside Park and around town.
+- [Event venues in Victoria, TX](https://www.thevic361.com/venues): every venue we track, with its upcoming events
+- [Halloween Events in Victoria, TX](https://www.thevic361.com/halloween-events): Halloween events in Victoria, TX: trunk or treats, haunted houses, costume parties, fall festivals, and pumpkin patches.
+- [About](https://www.thevic361.com/about): who runs The Vic 361 and how events are chosen
+- [Submit an event](https://www.thevic361.com/submit)
+- [Advertise](https://www.thevic361.com/advertise): sponsorships and featured listings for local businesses
+
+
+## This week's sponsor
+
+- [Acme Tacos](https://acme.example): Best tacos in town. (123 Main St)
+
+Acme Tacos is this week's paid sponsor of The Vic 361.
+
+## Vic's Picks
+
+Featured events, highlighted on their day on The Vic 361. Some are our editors' can't-miss picks; some are paid placements by the venue or organizer.
+
+- Fri, Oct 9, 8:00 PM: [Friday Live Music](https://www.thevic361.com/events/2026-10-09-friday-live-music) at Aero Crafters
+- Sat, Oct 10, 10:00 AM: [Fall Festival at De Leon Plaza](https://www.thevic361.com/events/2026-10-10-fall-festival-at-de-leon-plaza) at De Leon Plaza (free)
+- Sat, Oct 17, 7:30 PM: [Victoria Bach Festival Preview](https://www.thevic361.com/events/2026-10-17-victoria-bach-festival-preview) at Victoria Fine Arts Center
+- Sat, Oct 31, 5:00 PM: [Downtown Trick or Treat](https://www.thevic361.com/events/2026-10-31-downtown-trick-or-treat) at Downtown Victoria (free)
+
+## Upcoming events (as of October 7, 2026)
+
+- Wed, Oct 7, 4 – 7 PM: [Wednesday Farmers Market](https://www.thevic361.com/events/2026-10-07-wednesday-farmers-market) at Market Square (free) - Local produce, baked goods and crafts.
+- Wed, Oct 7, 8:00 PM: [Open Mic Night](https://www.thevic361.com/events/2026-10-07-open-mic-night) at The Upper Room - Sign-up at 7:30; all acts welcome.
+- Thu, Oct 8, 6:30 PM – 8:30 PM: [Paint & Sip](https://www.thevic361.com/events/2026-10-08-paint-and-sip) at Victoria Fine Arts Association - All supplies included.
+- Fri, Oct 9, 6:00 PM: [Cuero Turkeyfest Parade](https://www.thevic361.com/events/2026-10-09-cuero-turkeyfest-parade) at Downtown Cuero (free) - The kickoff parade for Turkeyfest.
+- Fri, Oct 9, 8:00 PM: [Friday Live Music](https://www.thevic361.com/events/2026-10-09-friday-live-music) at Aero Crafters (Vic's Pick) - Local bands on the patio.
+- Sat, Oct 10, 10:00 AM: [Fall Festival at De Leon Plaza](https://www.thevic361.com/events/2026-10-10-fall-festival-at-de-leon-plaza) at De Leon Plaza (free) (Vic's Pick) - Food, music, rides and a pumpkin patch.
+- Sat, Oct 10, 7 PM – 10 PM: [Haunted Hayride](https://www.thevic361.com/events/2026-10-10-haunted-hayride) at J Welch Farms - A spooky ride through the fields.
+- Sun, Oct 11, 7:30 AM: [Riverside Park Run](https://www.thevic361.com/events/2026-10-11-riverside-park-run) at Riverside Park (free) - A 5K loop along the Guadalupe.
+- Sun, Oct 11, 11:00 AM: [Sunday Jazz Brunch](https://www.thevic361.com/events/2026-10-11-sunday-jazz-brunch) at Fossati's Delicatessen - Live jazz with brunch.
+- Sat, Oct 17, 7:30 PM: [Victoria Bach Festival Preview](https://www.thevic361.com/events/2026-10-17-victoria-bach-festival-preview) at Victoria Fine Arts Center (Vic's Pick) - A preview concert for next season.
+- Sat, Oct 31, 5:00 PM: [Downtown Trick or Treat](https://www.thevic361.com/events/2026-10-31-downtown-trick-or-treat) at Downtown Victoria (free) (Vic's Pick) - Candy from downtown shops.

@@ -1,0 +1,18 @@
+200 text/calendar; charset=utf-8
+
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//The Vic 361//Events//EN
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:20261007-2026-10-07-open-mic-night@thevic361.com
+DTSTAMP:20261007T170000Z
+DTSTART:20261008T010000Z
+DTEND:20261008T030000Z
+SUMMARY:Open Mic Night
+LOCATION:The Upper Room\, Victoria\, TX
+DESCRIPTION:Sign-up at 7:30\; all acts welcome.\n\nhttps://www.thevic361.co
+ m/events/2026-10-07-open-mic-night
+URL:https://www.thevic361.com/events/2026-10-07-open-mic-night
+END:VEVENT
+END:VCALENDAR

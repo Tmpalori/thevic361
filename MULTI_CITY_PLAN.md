@@ -31,9 +31,9 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
 
 ## Phase 0: safety net (before any refactor)
 
-- [ ] **0.1 Backups.** Confirm Railway scheduled Postgres backups are on and
+- [x] **0.1 Backups.** Confirm Railway scheduled Postgres backups are on and
       listed; take a manual backup. (Owner, in Railway.)
-- [ ] **0.2 Golden snapshots, server** (`tests/golden/`). `createApp` with a
+- [x] **0.2 Golden snapshots, server** (`tests/golden/`). `createApp` with a
       fixed clock, a frozen fixture payload, Victoria defaults, and fake
       `fetch`. Snapshot byte-for-byte:
   - Pages: `/`, every hub and intent page, 3 event pages plus `.ics`/`.png`,
@@ -55,7 +55,7 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
       production URLs and `/api/config` + `/api/health?deep=1`, normalize
       date-driven parts, and diff against the last run. Run before and after
       each deploy in this plan.
-- [ ] **0.5 Doc fix.** AGENTS.md says `GITHUB_TOKEN` is unset on
+- [x] **0.5 Doc fix.** AGENTS.md says `GITHUB_TOKEN` is unset on
       production; `/api/config` shows GitHub publishing is on. Correct it.
 
 ## Phase 1: town settings with Victoria as the default (no visible change)

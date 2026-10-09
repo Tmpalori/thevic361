@@ -1,0 +1,18 @@
+200 text/calendar; charset=utf-8
+
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//The Vic 361//Events//EN
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:20261005-2026-10-05-monday-trivia@thevic361.com
+DTSTAMP:20261007T170000Z
+DTSTART:20261006T000000Z
+DTEND:20261006T020000Z
+SUMMARY:Monday Trivia
+LOCATION:Aero Crafters\, 1502 E Airline Rd\, Victoria\, TX
+DESCRIPTION:Teams of up to six\; prizes for the top three.\n\nhttps://www.t
+ hevic361.com/events/2026-10-05-monday-trivia
+URL:https://www.thevic361.com/events/2026-10-05-monday-trivia
+END:VEVENT
+END:VCALENDAR

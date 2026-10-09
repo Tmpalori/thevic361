@@ -1,0 +1,277 @@
+[
+  {
+    "method": "POST",
+    "url": "https://hooks.slack.com/services/T/sales/x",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "text": "Title for sales",
+      "blocks": [
+        {
+          "type": "header",
+          "text": {
+            "type": "plain_text",
+            "text": "Title for sales"
+          }
+        },
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "*Email*\na@b.example"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Paid*\n$300"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "Body &lt;with&gt; &amp; marks"
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "footer · <https://www.thevic361.com/admin.html|Open>"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://hooks.slack.com/services/T/activity/x",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "text": "Title for activity",
+      "blocks": [
+        {
+          "type": "header",
+          "text": {
+            "type": "plain_text",
+            "text": "Title for activity"
+          }
+        },
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "*Email*\na@b.example"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Paid*\n$300"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "Body &lt;with&gt; &amp; marks"
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "footer · <https://www.thevic361.com/admin.html|Open>"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://hooks.slack.com/services/T/alerts/x",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "text": "Title for alerts",
+      "blocks": [
+        {
+          "type": "header",
+          "text": {
+            "type": "plain_text",
+            "text": "Title for alerts"
+          }
+        },
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "*Email*\na@b.example"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Paid*\n$300"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "Body &lt;with&gt; &amp; marks"
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "footer · <https://www.thevic361.com/admin.html|Open>"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://hooks.slack.com/services/T/hype/x",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "text": "Title for hype",
+      "blocks": [
+        {
+          "type": "header",
+          "text": {
+            "type": "plain_text",
+            "text": "Title for hype"
+          }
+        },
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "*Email*\na@b.example"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Paid*\n$300"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "Body &lt;with&gt; &amp; marks"
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "footer · <https://www.thevic361.com/admin.html|Open>"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://hooks.slack.com/services/T/inbox/x",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "text": "Title for inbox",
+      "blocks": [
+        {
+          "type": "header",
+          "text": {
+            "type": "plain_text",
+            "text": "Title for inbox"
+          }
+        },
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "*Email*\na@b.example"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Paid*\n$300"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "Body &lt;with&gt; &amp; marks"
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "footer · <https://www.thevic361.com/admin.html|Open>"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "url": "https://hooks.slack.com/services/T/alerts/x",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "text": "🚨 Something broke",
+      "blocks": [
+        {
+          "type": "header",
+          "text": {
+            "type": "plain_text",
+            "text": "🚨 Something broke"
+          }
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "details here"
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "<https://www.thevic361.com/admin.html|Open>"
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

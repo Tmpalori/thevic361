@@ -1,0 +1,18 @@
+200 text/calendar; charset=utf-8
+
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//The Vic 361//Events//EN
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:20261006-2026-10-06-story-time-at-the-library@thevic361.com
+DTSTAMP:20261007T170000Z
+DTSTART:20261006T153000Z
+DTEND:20261006T173000Z
+SUMMARY:Story Time at the Library
+LOCATION:Victoria Public Library\, 302 N Main St\, Victoria\, TX
+DESCRIPTION:Picture books and songs for little ones.\n\nhttps://www.thevic3
+ 61.com/events/2026-10-06-story-time-at-the-library
+URL:https://www.thevic361.com/events/2026-10-06-story-time-at-the-library
+END:VEVENT
+END:VCALENDAR
