@@ -1803,8 +1803,16 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
 /* /advertise: one row per package, details beside an example of the
    placement (rendered with the site's own markup). */
 .ad-packages--rows { grid-template-columns: 1fr; }
-.ad-package--row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: var(--space-5); align-items: start; }
-@media (max-width: 720px) { .ad-package--row { grid-template-columns: 1fr; } }
+.ad-package--row { display: grid; grid-template-columns: 1fr; gap: var(--space-5); align-items: start; }
+/* The page is wide (layout wide: true): details on top, price beside the
+   bullet list, then the site and newsletter examples side by side. */
+.ad-package__info { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+.ad-package__info .ad-points { margin: 0; padding-left: 1.2em; }
+.ad-package__info .ad-points li { margin-bottom: var(--space-2); }
+.ad-package__preview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+@media (max-width: 760px) {
+  .ad-package__info, .ad-package__preview { grid-template-columns: 1fr; }
+}
 .ad-where, .ad-limit { font-size: var(--text-sm); margin: 0 0 var(--space-3); }
 .ad-limit { font-weight: 800; color: var(--color-text-muted); margin-top: var(--space-3); }
 .ad-package .ad-buy { margin-top: var(--space-2); }
@@ -1812,14 +1820,14 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
 .ad-package__preview .sponsor-section, .co-preview .sponsor-section { margin: 0; }
 .ad-package__preview .day-section, .co-preview .day-section { margin: 0; }
 /* Live numbers under the lead: chunky sticker tiles. */
-.ad-stats { list-style: none; padding: 0; margin: var(--space-4) 0 var(--space-6); display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-3); }
+.ad-stats { list-style: none; padding: 0; margin: var(--space-4) 0 var(--space-6); display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: var(--space-3); }
+@media (max-width: 480px) { .ad-stats { gap: var(--space-2); } .ad-stats li { padding: var(--space-2); } .ad-stats strong { font-size: 1.4rem; } .ad-stats span { font-size: 0.8rem; } }
 .ad-stats li { background: var(--sun-light); color: var(--ink); border: 3px solid var(--ink); border-radius: 16px; box-shadow: 3px 3px 0 var(--ink); padding: var(--space-3); display: flex; flex-direction: column; gap: 2px; }
 .ad-stats strong { font-family: var(--font-display); font-size: 1.8rem; line-height: 1; }
 .ad-stats span { font-size: var(--text-sm); font-weight: 700; }
 /* Each package shows "On the site" and "In the newsletter". The email
    sample keeps the email's own light colors, so it sits on a light card
    in dark mode too, and its links don't go anywhere. */
-.ad-package__preview .ad-preview-label:not(:first-child) { margin-top: var(--space-4); }
 .ad-email-sample { background: #FFF6DC; border-radius: 16px; padding: 4px 12px 12px; pointer-events: none; }
 /* FAQ */
 .ad-faq details { border: 3px solid var(--ink); border-radius: 14px; background: var(--card); margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); }

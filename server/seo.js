@@ -893,7 +893,7 @@ export function breadcrumbLd(siteUrl, trail) {
 // carrying a subscriber's token (confirm, unsubscribe) use it: both tools
 // report the page URL to a third party, and no third party should see the
 // token. GA_SNIPPET strips query strings anyway; this is belt and braces.
-export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = OG_IMAGE, imageSize = image === OG_IMAGE ? [1200, 630] : null, pixel = true, analytics = pixel }) {
+export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = OG_IMAGE, imageSize = image === OG_IMAGE ? [1200, 630] : null, pixel = true, analytics = pixel, wide = false }) {
   const url = siteUrl + path;
   return `<!DOCTYPE html>
 <html lang="en">
@@ -928,7 +928,7 @@ ${ld.map(jsonLd).join('\n')}
 ${headerHtml()}
 ${navHtml(nav)}
 <main class="main-content" id="main">
-  <div class="container container--narrow">
+  <div class="container${wide ? '' : ' container--narrow'}">
 ${body}
   </div>
 </main>
@@ -1205,7 +1205,7 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
   const statItems = stats ? [
     stats.events ? [stats.events, 'events listed this week'] : null,
     stats.venues ? [stats.venues, 'venues this week'] : null,
-    ['2', 'newsletters a week, Monday and Thursday'],
+    ['2', 'newsletters a week (Mon & Thu)'],
     // Victoria plus at least two nearby towns, or it undersells.
     stats.towns >= 2 ? [stats.towns + 1, 'towns: Victoria and nearby'] : null,
     stats.subscribers ? [`${stats.subscribers}+`, 'local subscribers'] : null
@@ -1218,16 +1218,18 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
       ${AD_PACKAGES.map(p => `
       <section class="ad-package ad-package--row" id="${escHtml(p.key)}">
         <div class="ad-package__info">
-          <h2>${escHtml(p.name)}</h2>
-          <p class="ad-price">${escHtml(p.price)}</p>
-          <p class="ad-where"><strong>Where it shows:</strong> ${escHtml(p.where)}</p>
-          <ul>${p.points.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul>
-          <p class="ad-limit">${escHtml(p.limit)}</p>
-          ${checkout ? `<a class="btn btn--primary ad-buy" href="/advertise/checkout?package=${escHtml(p.key)}">Preview yours and book →</a>` : ''}
+          <div class="ad-package__head">
+            <h2>${escHtml(p.name)}</h2>
+            <p class="ad-price">${escHtml(p.price)}</p>
+            <p class="ad-where"><strong>Where it shows:</strong> ${escHtml(p.where)}</p>
+            <p class="ad-limit">${escHtml(p.limit)}</p>
+            ${checkout ? `<a class="btn btn--primary ad-buy" href="/advertise/checkout?package=${escHtml(p.key)}">Preview yours and book →</a>` : ''}
+          </div>
+          <ul class="ad-points">${p.points.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul>
         </div>
         ${previews[p.key] || emailPreviews[p.key] ? `<div class="ad-package__preview" aria-label="Example of a ${escHtml(p.name)}">` +
-          (previews[p.key] ? `<p class="ad-preview-label">On the site</p>${previews[p.key]}` : '') +
-          (emailPreviews[p.key] ? `<p class="ad-preview-label">In the newsletter</p><div class="ad-email-sample">${emailPreviews[p.key]}</div>` : '') +
+          (previews[p.key] ? `<div class="ad-preview"><p class="ad-preview-label">On the site</p>${previews[p.key]}</div>` : '') +
+          (emailPreviews[p.key] ? `<div class="ad-preview"><p class="ad-preview-label">In the newsletter</p><div class="ad-email-sample">${emailPreviews[p.key]}</div></div>` : '') +
           '</div>' : ''}
       </section>`).join('')}
     </div>
@@ -1237,7 +1239,7 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
     <p>${checkout ? 'Pick a package above to book and pay online in a couple of minutes. Questions or a custom package?' : 'Tell us your business name and what you\'d like to promote, and we\'ll reply with open dates and our latest audience numbers.'} <a href="/contact?topic=advertising">Send us a message</a>.</p>
     <p>Listing a community event is always free: <a href="/submit">submit it here</a>.</p>`;
   return layout({
-    siteUrl, path: '/advertise',
+    siteUrl, path: '/advertise', wide: true,
     title: `Advertise | ${SITE_NAME}`,
     description: 'Sponsor The Vic 361 for a week or make your event a Vic’s Pick to reach people looking for things to do in Victoria, TX.',
     body
