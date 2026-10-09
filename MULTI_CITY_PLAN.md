@@ -101,8 +101,9 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
   - [x] d2. Pick name: "Vic's Pick" in badges, copy and emails from a
         `pickName` field. Keep `/api/vics-pick/*`, `vic361_*` keys and
         Stripe lookup keys as they are.
-  - [ ] e. Email copy (newsletter, notify, referral, inbound signature).
-  - [ ] f. Business constants (prices, caps, thresholds), with the price
+  - [x] e. Email copy (newsletter, notify, referral, inbound signature).
+        (Covered by 1.2a–d2; `tests/town_copy.test.js` sweeps 13 emails.)
+  - [x] f. Business constants (prices, caps, thresholds), with the price
         strings generated.
   - [ ] g. Scheduler job times and the duplicated schedule copy.
 - [ ] **1.3 `docs/` and admin**:

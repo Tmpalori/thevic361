@@ -53,9 +53,9 @@
 import { town } from './town.js';
 import crypto from 'node:crypto';
 import { emailKey } from './db.js';
-import { REFERRAL_TIERS, DRAWING_AMOUNT, referralFlags, createReferralRewards } from './referralRewards.js';
+import { referralTiers, referralFlags, createReferralRewards } from './referralRewards.js';
 
-export { REFERRAL_TIERS, referralFlags };
+export { referralTiers, referralFlags };
 import { inboundConfig } from './inbound.js';
 import {
   escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank, parseTimes,
@@ -545,7 +545,7 @@ export function normalizeRefCode(raw) {
   return REF_CODE_RE.test(c) ? c : null;
 }
 export function refLink(siteUrl, code) { return `${siteUrl}/r/${code}`; }
-function nextTier(count) { return REFERRAL_TIERS.find(t => t.n > count) || null; }
+function nextTier(count) { return referralTiers().find(t => t.n > count) || null; }
 export function referralProgress(count) {
   const next = nextTier(count);
   const done = count === 1 ? "You've brought in 1 friend so far." : count ? `You've brought in ${count} friends so far.` : '';
@@ -558,7 +558,7 @@ export function referralProgress(count) {
 function referralHtml({ siteUrl, code, count = 0 }) {
   if (!code) return '';
   const url = refLink(siteUrl, code);
-  const tiers = REFERRAL_TIERS.map(t => `${t.n} ${t.n === 1 ? 'friend' : 'friends'}: ${escHtml(t.reward)}`).join('<br>');
+  const tiers = referralTiers().map(t => `${t.n} ${t.n === 1 ? 'friend' : 'friends'}: ${escHtml(t.reward)}`).join('<br>');
   return `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0 0;border-collapse:separate;"><tr><td style="background:${C.sunLight};border:2px solid ${C.ink};border-radius:14px;padding:16px 18px;">
 <p style="margin:0 0 6px;font-family:${DISPLAY};font-size:19px;font-weight:bold;">Share ${town.siteName}, get local perks</p>
@@ -569,7 +569,7 @@ function referralHtml({ siteUrl, code, count = 0 }) {
 </td></tr></table>`;
 }
 export function renderReferralRules({ siteUrl }) {
-  const cards = REFERRAL_TIERS.filter(t => t.amount);
+  const cards = referralTiers().filter(t => t.amount);
   const li = (title, text) => `<li><strong>${title}</strong> ${text}</li>`;
   return layout({
     siteUrl, path: '/referral-rules', nav: null, pixel: false, title: `Referral rewards: official rules | ${town.siteName}`,
@@ -579,7 +579,7 @@ export function renderReferralRules({ siteUrl }) {
 <ul>
 ${li('Who can take part.', `Anyone subscribed to ${town.siteName} newsletter who is 18 or older and lives in the United States. ${town.siteName}'s owner and their household can't win. Void where prohibited.`)}
 ${li('Your link.', 'Every subscriber gets a personal share link in each newsletter. A friend counts for you when they sign up through your link, confirm their email address, and stay subscribed for at least 24 hours. Each email inbox counts once, and your own addresses don\'t count.')}
-${li('Monthly drawing.', `Each friend who joins through your link during a calendar month is one entry in that month's drawing. In the first week of the next month, one entry is picked at random from all entries, and its owner gets a $${DRAWING_AMOUNT} digital gift card. Your odds depend on how many entries there are that month. Entries don't carry over to the next month.`)}
+${li('Monthly drawing.', `Each friend who joins through your link during a calendar month is one entry in that month's drawing. In the first week of the next month, one entry is picked at random from all entries, and its owner gets a $${town.business.drawingAmount} digital gift card. Your odds depend on how many entries there are that month. Entries don't carry over to the next month.`)}
 ${cards.map(t => li(`${t.n} friends.`, `A $${t.amount} digital gift card, once per subscriber.`)).join('\n')}
 ${li('How rewards arrive.', 'Gift cards are sent by email from our rewards partner, Tremendous, usually on the Monday after you earn them. You choose the store from their list. Tremendous gets your email address to send it.')}
 ${li('Fair play.', 'Referrals have to be real people who want the newsletter. We can hold back or cancel rewards for sign-ups that look made up (fake, throwaway or duplicate addresses), and our decisions about who counts are final.')}
@@ -684,7 +684,6 @@ f.addEventListener('submit',function(e){e.preventDefault();var b=f.querySelector
 
 // ─── Signup page ─────────────────────────────────────────────────────────
 
-const SHOW_COUNT_FROM = 100; // "Join 40 locals" undersells; say nothing until it's a real crowd
 
 // The signup page: what you get, the form, then proof (real events from
 // the next seven days) for people who scroll before deciding.
@@ -699,7 +698,7 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0,
   const picks = sortEvents(next7.filter(e => e.featured).sort((a, b) => pickRank(a) - pickRank(b)).concat(next7)
     .filter(e => e.page && !seen.has(e.name) && seen.add(e.name)).slice(0, 5))
     .map(e => ({ ...e, time: [dayOf(e.date), e.time].filter(Boolean).join(' · ') }));
-  const crowd = subscriberCount >= SHOW_COUNT_FROM
+  const crowd = subscriberCount >= town.business.showSubscribersFrom // "Join 40 locals" undersells
     ? `<p class="sub-crowd">Join ${Math.floor(subscriberCount / 10) * 10}+ ${town.city} locals who already get it.</p>` : '';
   const proof = picks.length ? `
     <h2 class="section-heading">Coming up in the next week</h2>
@@ -1257,7 +1256,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     res.json({
       ok: true, configured: config.enabled, from: config.from, address_set: Boolean(config.address),
       autosend: config.enabled && config.autosend, counts, next: { subject: issue.subject, events: issue.total },
-      referrers, referral_tiers: REFERRAL_TIERS, referral_rewards: referralRewards,
+      referrers, referral_tiers: referralTiers(), referral_rewards: referralRewards,
       gift_cards: tremendous && tremendous.enabled ? 'tremendous' : 'manual',
       this_week_sent: Boolean(record) && !failed,
       this_week_failed: failed,

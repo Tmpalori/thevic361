@@ -21,12 +21,15 @@ import { town } from './town.js';
 import crypto from 'node:crypto';
 import { emailKey, REF_HOLD_HOURS } from './db.js';
 
-export const DRAWING_AMOUNT = 25;
-export const REFERRAL_TIERS = [
-  { n: 1, reward: `an entry in our monthly $${DRAWING_AMOUNT} gift card drawing`, drawing: true },
-  { n: 5, reward: 'a $10 gift card', amount: 10 },
-  { n: 10, reward: 'a $25 gift card', amount: 25 }
-];
+// The town's tiers (town.business): every friend is a drawing entry, and
+// reaching a card tier earns that gift card. Built when used.
+export function referralTiers() {
+  const b = town.business;
+  return [
+    { n: 1, reward: `an entry in our monthly $${b.drawingAmount} gift card drawing`, drawing: true },
+    ...b.rewardCards.map(c => ({ n: c.n, reward: `a $${c.amount} gift card`, amount: c.amount }))
+  ];
+}
 
 const TREMENDOUS_API = { live: 'https://api.tremendous.com/api/v2', sandbox: 'https://testflight.tremendous.com/api/v2' };
 const TREMENDOUS_TIMEOUT_MS = 15000;
@@ -219,16 +222,16 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
   // in between leaves the tier due for next time (the row key stops a
   // second row).
   async function tierRewards(counts) {
-    const earned = Object.entries(counts).filter(([, n]) => n >= REFERRAL_TIERS[0].n);
+    const earned = Object.entries(counts).filter(([, n]) => n >= referralTiers()[0].n);
     if (!earned.length || typeof store.listRefTiers !== 'function') return [];
     const known = await store.listRefTiers(earned.map(([c]) => c));
     const due = [];
     for (const [code, n] of earned) {
-      const reached = REFERRAL_TIERS.filter(t => t.n <= n).pop();
+      const reached = referralTiers().filter(t => t.n <= n).pop();
       const k = known[code];
       if (!k || !reached || k.ref_tier >= reached.n) continue;
       // Every tier crossed since last time (someone can jump from 1 to 5).
-      due.push({ code, email: k.email, reached: reached.n, tiers: REFERRAL_TIERS.filter(t => t.n > k.ref_tier && t.n <= n && t.amount) });
+      due.push({ code, email: k.email, reached: reached.n, tiers: referralTiers().filter(t => t.n > k.ref_tier && t.n <= n && t.amount) });
     }
     if (!due.length) return [];
     const withCards = due.filter(d => d.tiers.length);
@@ -268,7 +271,7 @@ export function createReferralRewards({ store, slack = null, tremendous, nowFn =
     const twin = sameInboxFlag(entries[code].email, code, await rewardsSoFar());
     if (twin) flags.push(twin);
     return store.addReferralReward({ key: `draw:${month}`, kind: 'drawing', ref_code: code, email: entries[code].email, month,
-      amount: DRAWING_AMOUNT, entries: entries[code].keys.size, total_entries: total,
+      amount: town.business.drawingAmount, entries: entries[code].keys.size, total_entries: total,
       status: flags.length ? 'held' : 'pending', flags: flags.join('; ') || null });
   }
 

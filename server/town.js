@@ -43,8 +43,24 @@ export const VICTORIA = Object.freeze({
   // area code people know the region by (llms.txt).
   localSources: 'the City of Victoria, the Victoria Public Library, the Chamber of Commerce',
   areaCode: '361',
-  timezone: 'America/Chicago'
+  timezone: 'America/Chicago',
+  // Money and limits. Amounts are in cents (what Stripe charges); the
+  // price text on pages and emails is generated from them (dollars()).
+  business: Object.freeze({
+    weeklyAmount: 30000,                        // weekly sponsor
+    pickAmount: { weekday: 4900, weekend: 8900 },   // a pick, Mon–Thu / Fri–Sun
+    pickCap: { weekday: 3, weekend: 4 },        // picks sold per day
+    dayMax: { weekday: 15, weekend: 20 },       // events the curator lists per day
+    picks: { weekday: 2, weekend: 3 },          // editor's picks per day
+    picksMin: { weekday: 1, weekend: 2 },
+    drawingAmount: 25,                          // monthly referral drawing, dollars
+    rewardCards: [{ n: 5, amount: 10 }, { n: 10, amount: 25 }],   // referral gift cards, dollars
+    showSubscribersFrom: 100                    // say "N+ subscribers" only from here
+  })
 });
+
+// What another town starts from when its town.json leaves a number out.
+const SHARED_BUSINESS = VICTORIA.business;
 
 const REQUIRED = ['siteName', 'domain', 'city', 'state', 'stateName', 'timezone'];
 const SAFE_TEXT = /^[^<>&"]+$/;
@@ -70,6 +86,7 @@ function complete(id, raw) {
     cityState: `${raw.city}, ${raw.state}`,
     cityStateLong: `${raw.city}, ${raw.stateName}`,
     ...raw,
+    business: { ...SHARED_BUSINESS, ...(raw.business || {}) },
     id
   };
 }
@@ -94,6 +111,15 @@ function check(t) {
   if (!/^https:\/\/[a-z0-9.-]+$/.test(t.siteUrl)) throw new Error(`TOWN=${t.id}: siteUrl must be https://host with no path`);
   if (t.areaCode && !/^\d{3}$/.test(t.areaCode)) throw new Error(`TOWN=${t.id}: areaCode must be 3 digits or empty`);
   if (t.gaId && !/^G-[A-Z0-9]+$/.test(t.gaId)) throw new Error(`TOWN=${t.id}: gaId must look like G-XXXXXXX`);
+  const b = t.business || {};
+  const cents = v => Number.isInteger(v) && v >= 100;
+  const pair = (v, ok) => v && ok(v.weekday) && ok(v.weekend);
+  const count = v => Number.isInteger(v) && v >= 0 && v <= 100;
+  if (!cents(b.weeklyAmount) || !pair(b.pickAmount, cents)) throw new Error(`TOWN=${t.id}: business amounts must be whole cents, at least 100`);
+  if (![b.pickCap, b.dayMax, b.picks, b.picksMin].every(v => pair(v, count))) throw new Error(`TOWN=${t.id}: business caps need weekday and weekend counts`);
+  if (!Number.isInteger(b.drawingAmount) || !Array.isArray(b.rewardCards) || !Number.isInteger(b.showSubscribersFrom)) {
+    throw new Error(`TOWN=${t.id}: business needs drawingAmount, rewardCards and showSubscribersFrom`);
+  }
   try { new Intl.DateTimeFormat('en-US', { timeZone: t.timezone }); } catch (_) {
     throw new Error(`TOWN=${t.id}: unknown timezone "${t.timezone}"`);
   }
@@ -113,6 +139,11 @@ export function townConfig(env = process.env, overrides = {}) {
 // The process's town. A live binding: modules that import it see useTown's
 // change, so read its fields when rendering, never copy them at load.
 export let town = townConfig();
+
+// "$49", or "$49.50" when there are cents.
+export function dollars(cents) {
+  return '$' + (cents % 100 ? (cents / 100).toFixed(2) : String(cents / 100));
+}
 
 export function useTown(t) {
   town = t || VICTORIA;

@@ -45,7 +45,7 @@
  * then /advertise keeps the email-us flow.
  */
 
-import { town } from './town.js';
+import { town, dollars } from './town.js';
 import crypto from 'node:crypto';
 import express from 'express';
 import {
@@ -105,7 +105,13 @@ export function packageFor(key) {
 
 // ─── Vic’s Pick pricing and capacity ─────────────────────────────────────
 // "Weekend" is Fri–Sun, the site's own "This weekend". Caps are per day.
-export const VICS_PICK = { weekdayAmount: 4900, weekendAmount: 8900, weekdayCap: 3, weekendCap: 4 };
+// The town's numbers (town.business), read when used.
+export const VICS_PICK = {
+  get weekdayAmount() { return town.business.pickAmount.weekday; },
+  get weekendAmount() { return town.business.pickAmount.weekend; },
+  get weekdayCap() { return town.business.pickCap.weekday; },
+  get weekendCap() { return town.business.pickCap.weekend; }
+};
 
 export function isWeekendDate(dateStr) {
   const dow = new Date(`${dateStr}T12:00:00Z`).getUTCDay(); // 0 Sun … 6 Sat
@@ -739,7 +745,7 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
   };
   const items = sortEvents([ev, ...SAMPLE_OTHERS].map(x => ({ ...x, date: date || '2000-01-01' })))
     .map(x => x.featured ? previewItem(x) : previewItem(x).replace('class="event-entry"', 'class="event-entry co-preview-dim"'));
-  let price = `<strong>$${VICS_PICK.weekdayAmount / 100}</strong> Mon–Thu · <strong>$${VICS_PICK.weekendAmount / 100}</strong> Fri–Sun. Pick a date to see open spots.`;
+  let price = `<strong>${dollars(VICS_PICK.weekdayAmount)}</strong> Mon–Thu · <strong>${dollars(VICS_PICK.weekendAmount)}</strong> Fri–Sun. Pick a date to see open spots.`;
   if (date && now) {
     const a = pickAvailability(date, orders, now);
     const day = formatDay(date, { weekday: 'long', month: 'short', day: 'numeric' });
