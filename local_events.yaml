@@ -648,7 +648,7 @@ events:
     time: "6:30 PM"
     venue: "Victoria Fine Arts Center"
     address: "1002 Sam Houston Dr."
-    description: "Victoria Symphony's Halloween concert. Pre-show activities start at 5:30 PM. Tickets online."
+    description: "Victoria Symphony's Halloween concert; come in costume. Tickets online."
     icons: [music, family, arts]
     free: false
     url: "https://victoriasymphony.com/concert-series/"
@@ -927,7 +927,7 @@ events:
     time: "7:00 PM – 11:00 PM"
     venue: "The Texas Zoo"
     address: "110 Memorial Dr."
-    description: "Ages 21+. Details on the Texas Zoo's Facebook page."
+    description: "The Texas Zoo's Booze & Brew night. Ages 21+."
     icons: [drinks, outdoors]
     free: false
     url: "https://texaszoo.org/events/booze-brew-2026/"
@@ -1492,7 +1492,7 @@ events:
     description: "Free kids workshop. Register online."
     icons: [family, free]
     free: true
-    url: "https://www.lowes.com/events/register/holiday-engine"
+    url: "https://www.lowes.com/diy-projects-and-ideas/workshops"
 
   - date: "2026-11-16"
     name: "Kids Night at Texas Roadhouse"
@@ -1633,7 +1633,7 @@ events:
     description: "Free kids workshop. Register online."
     icons: [family, free]
     free: true
-    url: "https://www.lowes.com/events/register/holiday-trolley-car"
+    url: "https://www.lowes.com/diy-projects-and-ideas/workshops"
 
   - date: "2026-12-21"
     name: "Kids Night at Texas Roadhouse"
