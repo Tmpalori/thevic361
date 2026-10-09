@@ -172,7 +172,8 @@
 
   // ─── RENDER SINGLE EVENT ───
   function renderEvent(ev) {
-    var iconHtml = renderIcons(ev.icons);
+    // free: true shows the Free icon too (iconKeys in server/seo.js).
+    var iconHtml = renderIcons((ev.icons || []).concat(ev.free === true && (ev.icons || []).indexOf('free') === -1 ? ['free'] : []));
     var href = safeHref(ev.url);
     // ev.page is the server-rendered event page (/events/<slug>), added by
     // /events.json. Admin preview data doesn't carry it, so fall back to the
@@ -193,8 +194,6 @@
     else if (!addr || venue.toLowerCase().indexOf(addr.toLowerCase()) !== -1 ||
              addr.toLowerCase().indexOf(venue.toLowerCase()) !== -1) venuePart = venue;
     else venuePart = venue + ' · ' + addr;
-
-    var freeBadge = '';
 
     var descHtml = ev.description
       ? '<div class="event-desc">' + escHtml(ev.description) + '</div>'
@@ -218,7 +217,6 @@
         (ev.time ? '<span class="event-time">' + escHtml(formatTime(timeText(ev))) + '</span> ' : '') +
         '<span class="event-name">' + nameHtml + '</span>' +
         (venuePart ? '<span class="event-venue">' + escHtml(venuePart) + '</span>' : '') +
-        freeBadge +
         descHtml +
       '</div>' +
       shareHtml +
@@ -262,7 +260,9 @@
       '<span class="day-date"><span class="dd-long">' + monthDay + '</span>' +
       '<span class="dd-short" aria-hidden="true">' + shortDay + '</span></span>';
     var n = eventsForDay.length;
-    return '<section class="day-section day-section--fold' + (past ? ' day-section--past' : '') + '" id="day-' + idx + '">' +
+    // Color by weekday (dayClass in server/seo.js): day--d0 Monday … d6 Sunday.
+    var dow = (dayAt(dateStr).getUTCDay() + 6) % 7;
+    return '<section class="day-section day-section--fold' + (past ? ' day-section--past' : '') + ' day--d' + dow + '" id="day-' + idx + '">' +
       '<details' + (dateStr === openDate ? ' open' : '') + '>' +
       '<summary class="day-header">' + headHtml + '<span class="day-count">' +
         (n === 0 ? 'No events' : n === 1 ? '1 event' : n + ' events') + '</span></summary>' +

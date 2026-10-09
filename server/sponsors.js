@@ -49,7 +49,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import {
   AD_PACKAGES, SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, addDays, formatDay, layout,
-  renderEventItem, sponsorHtml
+  renderEventItem, sponsorHtml, dayClass
 } from './seo.js';
 import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
@@ -700,7 +700,7 @@ function dayCard(dateStr, items) {
   const head = dateStr
     ? `<h2 class="day-name">${escHtml(formatDay(dateStr, { weekday: 'long' }))}</h2><span class="day-date">${escHtml(formatDay(dateStr, { month: 'long', day: 'numeric' }))}</span>`
     : '<h2 class="day-name">Your event’s day</h2>';
-  return `<section class="day-section co-preview-day"><div class="day-header">${head}</div>` +
+  return `<section class="day-section co-preview-day${dateStr ? dayClass(dateStr) : ''}"><div class="day-header">${head}</div>` +
     `<ul class="event-list" role="list">${items.join('')}</ul></section>`;
 }
 

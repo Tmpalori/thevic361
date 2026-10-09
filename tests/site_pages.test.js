@@ -218,7 +218,7 @@ describe('homepage', () => {
   it('folds every day but today, which opens (and can fold too)', async () => {
     await startApp();
     const home = (await get('/')).text;
-    const days = [...home.matchAll(/<section class="day-section day-section--fold( day-section--past)?" id="day-(\d)"><details( open)?>/g)]
+    const days = [...home.matchAll(/<section class="day-section day-section--fold( day-section--past)? day--d\d" id="day-(\d)"><details( open)?>/g)]
       .map(m => ({ day: m[2], past: Boolean(m[1]), open: Boolean(m[3]) }));
     expect(days).toHaveLength(7);
     // Today is Wednesday (day-2): the only open one; Mon/Tue look past.

@@ -122,3 +122,72 @@ describe('layout', () => {
     expect(w).toContain('<tr><td style="padding:6px 0;"><table');
   });
 });
+
+describe('the same as the site', () => {
+  const MON = new Date('2026-10-05T12:30:00Z');
+  const weekly = { ...opts, edition: 'weekly', now: MON };
+
+  it('times are formatted like the site, and "Don’t miss" gets AM/PM from a shared range', async () => {
+    const { formatTime } = await import('../server/seo.js');
+    const evs = [
+      { date: '2026-10-09', name: 'Fair', time: '4-10 p.m.', venue: 'Grounds', appeal: 5 },
+      { date: '2026-10-09', name: 'Run', time: '07:30 AM', venue: 'Park', appeal: 5 },
+      { date: '2026-10-10', name: 'Jazz', time: '8:00PM', venue: 'Club', appeal: 5 },
+      ...['a', 'b', 'c'].map(n => ({ date: '2026-10-10', name: n, time: '1 PM', venue: 'V', appeal: 3 }))
+    ];
+    const issue = renderWeekly(withPages(evs), weekly);
+    expect(formatTime('4-10 p.m.')).toBe('4 – 10 PM');
+    expect(issue.html).toContain('>4 – 10 PM</span>');
+    expect(issue.html).toContain('>7:30 AM</span>');
+    expect(issue.html).not.toContain('07:30');
+    expect(issue.text).toContain('- 8:00 PM Jazz @ Club');
+    expect(issue.text).toMatch(/Fair \(Fri 4 PM, Grounds\)/);
+  });
+
+  it('free: true is the Free icon on the site and in the email, never left out of the three', async () => {
+    const { renderEventItem } = await import('../server/seo.js');
+    const ev = { date: '2026-10-09', name: 'Picnic', time: '1 PM', venue: 'Park', page: '/events/x', icons: ['food', 'music', 'family'], free: true };
+    expect(renderEventItem(ev)).toContain('#i-free');
+    const html = renderWeekly(withPages([ev]), weekly).html;
+    expect(html).toContain('/email/free.png');
+    expect(html).not.toContain('· Free');
+    expect(html.match(/\/email\/(food|music|family|drinks|arts|shopping|outdoors|community|free)\.png/g)).toEqual(['/email/food.png', '/email/music.png', '/email/free.png']);
+  });
+
+  it('place line and "Nearby" town like the site', () => {
+    const evs = [
+      { date: '2026-10-09', name: 'Turkeyfest', time: '10 AM', venue: 'Fairgrounds', address: '1 Main St', town: 'Cuero' },
+      { date: '2026-10-09', name: 'Yard Sale', time: '8 AM', address: '200 Oak St' }
+    ];
+    const issue = renderWeekly(withPages(evs), weekly);
+    expect(issue.html).toContain('Nearby · Cuero');
+    expect(issue.html).toContain('· Fairgrounds · 1 Main St');
+    expect(issue.html).toContain('· 200 Oak St');
+    expect(issue.text).toContain('Turkeyfest @ Fairgrounds · 1 Main St (Cuero)');
+  });
+
+  it('the weekly "+N more" opens that day on the homepage', () => {
+    const evs = Array.from({ length: 8 }, (_, i) => ({ date: '2026-10-09', name: `E${i}`, time: `${i + 8} AM`, venue: 'V', appeal: 4 }));
+    const html = renderWeekly(withPages(evs), weekly).html;
+    expect(html).toMatch(/href="https:\/\/www\.thevic361\.com\/\?utm_[^"]*#day-4"[^>]*>\+2 more on Friday/);
+  });
+
+  it('a hub page colors a day by its weekday, not its position', async () => {
+    const { renderGrouped } = await import('../server/seo.js');
+    const html = renderGrouped([{ date: '2026-10-09', name: 'A', page: '/events/a' }, { date: '2026-10-10', name: 'B', page: '/events/b' }], '2026-10-09');
+    expect(html).toContain('class="day-section day--d4" id="day-0"');
+    expect(html).toContain('class="day-section day--d5" id="day-1"');
+  });
+
+  it('the welcome email dates days past this Sunday', async () => {
+    const { renderWelcomeEmail } = await import('../server/newsletter.js');
+    const FRI = new Date('2026-10-09T15:00:00Z');
+    const w = renderWelcomeEmail(withPages([
+      { date: '2026-10-13', name: 'Tuesday Pick', time: '6 PM', venue: 'V', featured: true },
+      { date: '2026-10-09', name: 'Tonight', time: '7 PM', venue: 'V' }
+    ]), { siteUrl: 'https://www.thevic361.com', now: FRI, unsubscribeUrl: 'x', address: '1 Main' });
+    expect(w.text).toContain('- Today 7 PM: Tonight');
+    expect(w.text).toContain('- Tue, Oct 13 6 PM: Tuesday Pick');
+    expect(w.text.indexOf('Tonight')).toBeLessThan(w.text.indexOf('Tuesday Pick'));
+  });
+});
