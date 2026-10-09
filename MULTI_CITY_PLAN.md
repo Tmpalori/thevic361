@@ -60,11 +60,15 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
 
 ## Phase 1: town settings with Victoria as the default (no visible change)
 
-- [ ] **1.1 `server/town.js`**: `townConfig(env, overrides)` in the same
+- [x] **1.1 `server/town.js`**: `townConfig(env, overrides)` in the same
       shape as `newsletterConfig` / `slackConfig`. `TOWN` unset or
       `victoria` returns a `VICTORIA` object holding today's literals.
       Other towns load `towns/<slug>/town.json` over shared defaults.
       Passed through `createApp(opts.town)`.
+      (Done: the identity fields 1.2a uses, plus `city`, `state`,
+      `stateName` and `timezone`, required now so a town.json is complete
+      from the start and read from 1.2b/c. Each later 1.2 step adds the
+      fields for the literals it moves.)
   Fields:
   - Identity: `id`, `siteName`, `siteNameHtml`, `pickName` (and the
     straight-quote variant where used), `domain`, `siteUrl`, `emailFrom`,
@@ -86,7 +90,7 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
   - Data paths: candidates, metadata, events bundle, venues, asset overlay.
 - [ ] **1.2 Move server literals to `town`**, one area per PR, goldens
       unchanged each time:
-  - [ ] a. Brand and identity (`SITE_NAME`, header markup, from-address,
+  - [x] a. Brand and identity (`SITE_NAME`, header markup, from-address,
         GA snippet; keep the GA test in sync).
   - [ ] b. Time zone (`seo.js` `TZ`, `chicagoOffset`, `scheduler.js`,
         `guides.js` `ctz`).

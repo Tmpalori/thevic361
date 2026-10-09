@@ -9,7 +9,8 @@
  * a Slack outage doesn't lose it; if both fail it goes to the server log.
  */
 
-import { SITE_NAME, escHtml, layout } from './seo.js';
+import { town } from './town.js';
+import { escHtml, layout } from './seo.js';
 import { replyLink } from './inbound.js';
 import { normalizeEmail } from './newsletter.js';
 import { newId, nowIso } from './db.js';
@@ -46,8 +47,8 @@ export function renderContactPage({ siteUrl, values = {}, errors = {}, sent = fa
     </form>`;
   return layout({
     siteUrl, path: '/contact', noindex: sent,
-    title: `Contact | ${SITE_NAME}`,
-    description: 'Contact The Vic 361 about advertising, an event, or a listing in Victoria, TX.',
+    title: `Contact | ${town.siteName}`,
+    description: `Contact ${town.siteName} about advertising, an event, or a listing in Victoria, TX.`,
     body
   });
 }
@@ -96,7 +97,7 @@ export function registerContact(app, { siteUrl, slack, store = null, requireAdmi
         title: `✉️ Website message: ${topic}`,
         fields: [['From', values.name], ['Email', email], ['Business', values.business]],
         text: values.message,
-        link: replyLink(siteUrl, { to: email, subject: `Your message to The Vic 361` }), linkLabel: 'Reply as news@',
+        link: replyLink(siteUrl, { to: email, subject: `Your message to ${town.siteName}` }), linkLabel: 'Reply as news@',
         footer: 'Their answer comes back here',
         channel: 'inbox'
       });

@@ -13,6 +13,7 @@
  *   - Submitter email + IP never leave the admin scope.
  */
 
+import { town, townConfig, useTown } from './town.js';
 import express from 'express';
 import compression from 'compression';
 import path from 'node:path';
@@ -145,7 +146,9 @@ export async function createApp(opts = {}) {
   // Canonical host. www.thevic361.com is where Google already indexes the
   // site and where all real traffic lands; the bare domain 301s to it so
   // search engines see one site instead of two copies.
-  const siteUrl = (opts.siteUrl ?? process.env.SITE_URL ?? 'https://www.thevic361.com').replace(/\/+$/, '');
+  // The town (server/town.js): TOWN in Railway, unset = Victoria; opts.town for tests.
+  useTown(townConfig(process.env, opts));
+  const siteUrl = (opts.siteUrl ?? process.env.SITE_URL ?? town.siteUrl).replace(/\/+$/, '');
   // Owner pings in Slack (server/slack.js); a no-op until SLACK_WEBHOOK_URL is set.
   const slack = opts.slack || createSlack(slackConfig(process.env, opts));
   const canonicalHost = new URL(siteUrl).host;
@@ -2214,7 +2217,7 @@ export async function createApp(opts = {}) {
         fix: !newsletter.enabled ? 'Set RESEND_API_KEY in Railway first.'
           : 'NEWSLETTER_AUTOSEND=0 is set in Railway; remove it to send automatically. (Optional backup: NEWSLETTER_CRON_SECRET in Railway and GitHub lets GitHub retry later in the day.)' },
       { key: 'reply_to', label: 'Email replies reach you', ok: Boolean(newsletter.replyTo || newsletter.inbound), level: 'recommended',
-        fix: 'Replies to news@ go to Slack once Resend receives for thevic361.com: in Resend, turn on receiving for the domain and add its MX record; add a webhook (event email.received) to ' + siteUrl +
+        fix: `Replies to news@ go to Slack once Resend receives for ${town.domain}: in Resend, turn on receiving for the domain and add its MX record; add a webhook (event email.received) to ` + siteUrl +
           '/api/email/inbound and put its signing secret in Railway as RESEND_WEBHOOK_SECRET. (Or set NEWSLETTER_REPLY_TO to an inbox you read.)' },
       { key: 'scheduler', label: 'Social posts, event check, ads report and AI review start on time',
         ok: github.isConfigured() && !scheduler.state.dispatchBlocked, level: 'recommended',
@@ -2239,7 +2242,7 @@ export async function createApp(opts = {}) {
       { key: 'separate_secrets', label: 'Each automation has its own secret', ok: new Set(cronSecrets).size === cronSecrets.length, level: 'optional', link: ghSecrets,
         fix: 'NEWSLETTER_CRON_SECRET, EVENT_CHECK_SECRET and SUBMISSION_REVIEW_SECRET share a value (or one is unset and borrows another), so one leak could send the newsletter, hide events and publish submissions. Give each its own long random string, the same in Railway and GitHub.' },
       { key: 'spam', label: 'Spam protection on forms (Turnstile)', ok: Boolean(turnstileSecret && turnstileSiteKey), level: 'optional',
-        fix: 'In Cloudflare Turnstile, add a widget (or add www.thevic361.com to an existing one) in Managed mode, then set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY in Railway. Protects Submit, Contact, newsletter signup and sponsor checkout.' },
+        fix: `In Cloudflare Turnstile, add a widget (or add www.${town.domain} to an existing one) in Managed mode, then set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY in Railway. Protects Submit, Contact, newsletter signup and sponsor checkout.` },
       { key: 'social', label: 'Auto-post to Facebook + Instagram', ok: null, level: 'recommended', link: ghSecrets,
         fix: 'In GitHub: secrets META_PAGE_ID, META_PAGE_TOKEN and the repo variable SOCIAL_AUTOPOST = 1.' },
       { key: 'collector_keys', label: 'Event collector keys (OpenAI, Apify, Gemini)', ok: null, level: 'recommended', link: ghSecrets,

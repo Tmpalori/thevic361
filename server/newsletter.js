@@ -50,6 +50,7 @@
  *     (onCron, server/sponsors.js).
  */
 
+import { town } from './town.js';
 import crypto from 'node:crypto';
 import { emailKey } from './db.js';
 import { REFERRAL_TIERS, DRAWING_AMOUNT, referralFlags, createReferralRewards } from './referralRewards.js';
@@ -57,7 +58,7 @@ import { REFERRAL_TIERS, DRAWING_AMOUNT, referralFlags, createReferralRewards } 
 export { REFERRAL_TIERS, referralFlags };
 import { inboundConfig } from './inbound.js';
 import {
-  SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank, parseTimes,
+  escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank, parseTimes,
   sponsorLinkUrl, formatTime, placeText, iconKeys, isSponsorLogo, SAMPLE_LOGO
 } from './seo.js';
 
@@ -72,7 +73,7 @@ const PER_DAY = 6;               // events per day in the email
 export function newsletterConfig(env = process.env, overrides = {}) {
   const c = {
     apiKey: overrides.resendApiKey ?? env.RESEND_API_KEY ?? '',
-    from: overrides.newsletterFrom ?? env.NEWSLETTER_FROM ?? 'The Vic 361 <news@thevic361.com>',
+    from: overrides.newsletterFrom ?? env.NEWSLETTER_FROM ?? town.emailFrom,
     replyTo: overrides.newsletterReplyTo ?? env.NEWSLETTER_REPLY_TO ?? '',
     address: overrides.newsletterAddress ?? env.NEWSLETTER_ADDRESS ?? '',
     cronSecret: overrides.newsletterCronSecret ?? env.NEWSLETTER_CRON_SECRET ?? '',
@@ -256,9 +257,9 @@ function footer({ siteUrl, unsubscribeUrl, address, prefsUrl = '', edition = 'we
   const prefs = prefsUrl
     ? `<br><a href="${escHtml(prefsUrl)}" style="${a}">${edition === 'weekend' ? 'Just want Mondays? Skip the weekend email' : 'Email settings'}</a>` : '';
   return `Forwarded this? <a href="${siteUrl}/subscribe" style="${a}">Get it free ${SCHEDULE}</a>.<br>
-You're getting this because you subscribed at <a href="${siteUrl}" style="${a}">thevic361.com</a>.<br>
+You're getting this because you subscribed at <a href="${siteUrl}" style="${a}">${town.domain}</a>.<br>
 <a href="${escHtml(unsubscribeUrl)}" style="${a}">Unsubscribe</a> · <a href="${siteUrl}/advertise" style="${a}">Advertise</a> · <a href="${siteUrl}/submit" style="${a}">Submit an event</a>${prefs}<br>
-${escHtml(SITE_NAME)}${address ? ` · ${escHtml(address)}` : ' · Victoria, TX'}`;
+${escHtml(town.siteName)}${address ? ` · ${escHtml(address)}` : ' · Victoria, TX'}`;
 }
 
 // Up to three icons, the site's set (iconKeys: `free: true` is the Free
@@ -356,7 +357,7 @@ export function sampleEmailPreviews(siteUrl = '') {
     { name: 'Live Music', time: '9:00 PM', venue: 'Downtown' }
   ];
   return {
-    weekly: `<div style="font-family:Arial,Helvetica,sans-serif;color:${C.ink};">${sponsorHtml({ name: 'Your Business', text: 'One or two sentences about what you offer.', cta: 'Learn more', url: siteUrl || 'https://www.thevic361.com', logo: SAMPLE_LOGO }, siteUrl)}</div>`,
+    weekly: `<div style="font-family:Arial,Helvetica,sans-serif;color:${C.ink};">${sponsorHtml({ name: 'Your Business', text: 'One or two sentences about what you offer.', cta: 'Learn more', url: siteUrl || town.siteUrl, logo: SAMPLE_LOGO }, siteUrl)}</div>`,
     featured: `<div style="font-family:Arial,Helvetica,sans-serif;color:${C.ink};font-size:15px;">${day(evs.map((e, i) => eventRow({ ...e, page: null, url: '' }, siteUrl, evs[i + 1])).join(''))}</div>`
   };
 }
@@ -486,7 +487,7 @@ ${referral ? referralHtml({ siteUrl, ...referral }) : ''}`;
       ...shownOf(list).map(e => `- ${e.time ? formatTime(e.time) + ' ' : ''}${e.name}${placeText(e) ? ' @ ' + placeText(e) : ''}${e.town ? ' (' + e.town + ')' : ''}${e.also ? ' (also ' + e.also + ')' : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), '']),
     `Full list: ${siteUrl}${listPath}`, '', ...(replyAsk ? [replyAskText(false), ''] : []), ...(referral ? referralText({ siteUrl, ...referral }) : []),
     ...(prefsUrl ? [`${weekend ? 'Just want Mondays? Skip the weekend email' : 'Email settings'}: ${prefsUrl}`] : []),
-    `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
+    `Unsubscribe: ${unsubscribeUrl}`, `${town.siteName} · ${address || 'Victoria, TX'}`
   ].join('\n');
 
   // The paid Vic's Picks this issue actually stars (shown, not cut by
@@ -507,7 +508,7 @@ export const inboxKey = emailKey;
 
 export function renderConfirmEmail({ siteUrl, confirmUrl, address, reminder = false }) {
   const lead = reminder
-    ? `You asked for The Vic 361 yesterday but haven't confirmed yet. One tap and Victoria's best events land in your inbox ${SCHEDULE}.`
+    ? `You asked for ${town.siteName} yesterday but haven't confirmed yet. One tap and Victoria's best events land in your inbox ${SCHEDULE}.`
     : `Tap the button to confirm and start getting Victoria's events ${SCHEDULE}.`;
   const bodyHtml = `<p style="margin:18px 0;font-size:16px;">${escHtml(lead)}</p>
 <p style="text-align:center;">${btn(confirmUrl, 'Confirm my subscription')}</p>
@@ -516,10 +517,10 @@ export function renderConfirmEmail({ siteUrl, confirmUrl, address, reminder = fa
     subject: reminder ? 'Still want Victoria\'s events? Tap to confirm' : 'Confirm your Vic 361 subscription',
     html: emailShell({ title: reminder ? 'Just one tap left' : 'One tap to confirm',
       preheader: reminder ? 'Your Vic 361 signup is waiting on one tap' : `Confirm to get Victoria events ${SCHEDULE}`, bodyHtml, siteUrl,
-      footerHtml: `${escHtml(SITE_NAME)} · ${escHtml(address || 'Victoria, TX')}` }),
+      footerHtml: `${escHtml(town.siteName)} · ${escHtml(address || 'Victoria, TX')}` }),
     text: reminder
       ? `${lead}\n\nConfirm: ${confirmUrl}\n\nDidn't sign up? Ignore this email and you won't hear from us again.`
-      : `Confirm your subscription to The Vic 361: ${confirmUrl}\n\nDidn't sign up? Ignore this email.`
+      : `Confirm your subscription to ${town.siteName}: ${confirmUrl}\n\nDidn't sign up? Ignore this email.`
   };
 }
 
@@ -552,7 +553,7 @@ function referralHtml({ siteUrl, code, count = 0 }) {
   const tiers = REFERRAL_TIERS.map(t => `${t.n} ${t.n === 1 ? 'friend' : 'friends'}: ${escHtml(t.reward)}`).join('<br>');
   return `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0 0;border-collapse:separate;"><tr><td style="background:${C.sunLight};border:2px solid ${C.ink};border-radius:14px;padding:16px 18px;">
-<p style="margin:0 0 6px;font-family:${DISPLAY};font-size:19px;font-weight:bold;">Share The Vic 361, get local perks</p>
+<p style="margin:0 0 6px;font-family:${DISPLAY};font-size:19px;font-weight:bold;">Share ${town.siteName}, get local perks</p>
 <p style="margin:0 0 10px;font-size:14px;">Know someone who's always asking what there is to do in Victoria? Send them your link:</p>
 <p style="margin:0 0 10px;text-align:center;"><a href="${url}" style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:17px;color:${C.ink};background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:6px 16px;text-decoration:none;">${escHtml(url.replace(/^https?:\/\/(www\.)?/, ''))}</a></p>
 <p style="margin:0 0 8px;font-size:14px;font-weight:bold;">${escHtml(referralProgress(count))}</p>
@@ -563,12 +564,12 @@ export function renderReferralRules({ siteUrl }) {
   const cards = REFERRAL_TIERS.filter(t => t.amount);
   const li = (title, text) => `<li><strong>${title}</strong> ${text}</li>`;
   return layout({
-    siteUrl, path: '/referral-rules', nav: null, pixel: false, title: `Referral rewards: official rules | ${SITE_NAME}`,
-    description: 'How The Vic 361 newsletter referral rewards and monthly gift card drawing work.',
+    siteUrl, path: '/referral-rules', nav: null, pixel: false, title: `Referral rewards: official rules | ${town.siteName}`,
+    description: `How ${town.siteName} newsletter referral rewards and monthly gift card drawing work.`,
     body: `<h1 class="page-title">Referral rewards: official rules</h1>
-<p class="page-lead">Share The Vic 361 with friends and earn gift cards. No purchase is necessary: subscribing and sharing are free.</p>
+<p class="page-lead">Share ${town.siteName} with friends and earn gift cards. No purchase is necessary: subscribing and sharing are free.</p>
 <ul>
-${li('Who can take part.', 'Anyone subscribed to The Vic 361 newsletter who is 18 or older and lives in the United States. The Vic 361\'s owner and their household can\'t win. Void where prohibited.')}
+${li('Who can take part.', `Anyone subscribed to ${town.siteName} newsletter who is 18 or older and lives in the United States. ${town.siteName}'s owner and their household can't win. Void where prohibited.`)}
 ${li('Your link.', 'Every subscriber gets a personal share link in each newsletter. A friend counts for you when they sign up through your link, confirm their email address, and stay subscribed for at least 24 hours. Each email inbox counts once, and your own addresses don\'t count.')}
 ${li('Monthly drawing.', `Each friend who joins through your link during a calendar month is one entry in that month's drawing. In the first week of the next month, one entry is picked at random from all entries, and its owner gets a $${DRAWING_AMOUNT} digital gift card. Your odds depend on how many entries there are that month. Entries don't carry over to the next month.`)}
 ${cards.map(t => li(`${t.n} friends.`, `A $${t.amount} digital gift card, once per subscriber.`)).join('\n')}
@@ -628,18 +629,18 @@ ${soon.length > picks.length ? `<p style="margin:12px 0 4px;text-align:center;">
 ${replyAsk ? replyAskHtml(true) : ''}
 ${coming}${sponsorHtml(sponsor, siteUrl, 'welcome')}
 <p style="margin:26px 0 0;text-align:center;">${btn(`${siteUrl}/`, "See this week's events")}</p>
-${referral ? referralHtml({ siteUrl, ...referral }) : `<p style="margin:22px 0 0;font-size:14px;color:${C.muted};">Know someone who's always asking what there is to do in Victoria? Forward them this email or send them to <a href="${siteUrl}/" style="color:${C.accent};font-weight:bold;">thevic361.com</a>.</p>`}`;
+${referral ? referralHtml({ siteUrl, ...referral }) : `<p style="margin:22px 0 0;font-size:14px;color:${C.muted};">Know someone who's always asking what there is to do in Victoria? Forward them this email or send them to <a href="${siteUrl}/" style="color:${C.accent};font-weight:bold;">${town.domain}</a>.</p>`}`;
   const text = [
     "You're in! Every Monday morning you'll get the week's events in Victoria, TX, and every Thursday the weekend's best.", '',
     ...(replyAsk ? [replyAskText(true), ''] : []),
     ...(picks.length ? ['COMING UP THIS WEEK', ...picks.map(e =>
       `- ${dayLabel(e.date)}${e.time ? ' ' + formatTime(e.time) : ''}: ${e.name}${placeText(e) ? ' @ ' + placeText(e) : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
     `This week's events: ${siteUrl}/`, '', ...(referral ? referralText({ siteUrl, ...referral }) : []),
-    `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
+    `Unsubscribe: ${unsubscribeUrl}`, `${town.siteName} · ${address || 'Victoria, TX'}`
   ].join('\n');
   return {
-    subject: 'Welcome to The Vic 361',
-    html: utmTag(emailShell({ title: 'Welcome to The Vic 361', preheader: picks.length ? `Coming up: ${picks.slice(0, 3).map(e => e.name).join(' · ')}` : `Victoria's events, ${SCHEDULE}`,
+    subject: `Welcome to ${town.siteName}`,
+    html: utmTag(emailShell({ title: `Welcome to ${town.siteName}`, preheader: picks.length ? `Coming up: ${picks.slice(0, 3).map(e => e.name).join(' · ')}` : `Victoria's events, ${SCHEDULE}`,
       bodyHtml, siteUrl, footerHtml: footer({ siteUrl, unsubscribeUrl, address }) }), siteUrl, 'welcome'),
     text: utmTag(text, siteUrl, 'welcome', '&')
   };
@@ -699,7 +700,7 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0,
     <p class="sub-again"><a class="btn btn--primary" href="#signup-email">Get the full list ${SCHEDULE}</a> <a class="btn btn--outline" href="/">See this week's events</a></p>` : '';
   const body = `
     <section class="sub-hero">
-      ${invited ? '<p class="sub-invited">🎁 A friend invited you to The Vic 361</p>' : ''}
+      ${invited ? `<p class="sub-invited">🎁 A friend invited you to ${town.siteName}</p>` : ''}
       <p class="sub-kicker">Free · Mondays and Thursdays · Victoria, TX</p>
       <h1 class="page-title">Victoria's best events, in your inbox ${SCHEDULE}.</h1>
       ${signupFormHtml({ source: 'subscribe-page', button: 'Subscribe free' })}
@@ -723,7 +724,7 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0,
     </script>`;
   return layout({
     siteUrl, path: '/subscribe', nav: null,
-    title: `Free Events Newsletter for Victoria, TX | ${SITE_NAME}`,
+    title: `Free Events Newsletter for Victoria, TX | ${town.siteName}`,
     description: `Get Victoria, TX's best events in your inbox ${SCHEDULE}: live music, festivals, markets, family events, and new spots. Free, no spam.`,
     body
   });
@@ -781,7 +782,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
   }
 
   const page = (title, message) => layout({
-    siteUrl, path: '/subscribe', nav: null, noindex: true, pixel: false, title: `${title} | ${SITE_NAME}`, description: title,
+    siteUrl, path: '/subscribe', nav: null, noindex: true, pixel: false, title: `${title} | ${town.siteName}`, description: title,
     body: `<h1 class="page-title">${escHtml(title)}</h1><p class="page-lead">${message}</p><p><a class="btn btn--primary" href="/">See this week's events</a></p>`
   });
 
@@ -1123,7 +1124,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     try { return await store.getSubscriberByToken(token); } catch { return null; }
   };
   const buttonPage = (path, title, lead, token, label) => layout({
-    siteUrl, path, nav: null, noindex: true, pixel: false, title: `${title} | ${SITE_NAME}`, description: title,
+    siteUrl, path, nav: null, noindex: true, pixel: false, title: `${title} | ${town.siteName}`, description: title,
     body: `<h1 class="page-title">${escHtml(title)}</h1><p class="page-lead">${lead}</p>
 <form method="post" action="${path}?token=${encodeURIComponent(token)}"><button class="btn btn--primary" type="submit">${escHtml(label)}</button></form>`
   });
@@ -1161,7 +1162,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     const sub = await findByToken(token);
     const who = sub && sub.email ? ` for <strong>${escHtml(maskEmail(sub.email))}</strong>` : '';
     const forwarded = sub && sub.email ? ' <small>Not your address? This email was forwarded to you; <a href="/subscribe">sign up for your own</a> instead.</small>' : '';
-    res.type('html').send(buttonPage('/unsubscribe', 'Unsubscribe', `Stop The Vic 361 newsletter${who}?${forwarded}`, token, 'Unsubscribe'));
+    res.type('html').send(buttonPage('/unsubscribe', 'Unsubscribe', `Stop ${town.siteName} newsletter${who}?${forwarded}`, token, 'Unsubscribe'));
   });
 
   // Also the RFC 8058 one-click endpoint mail clients POST to.
@@ -1178,7 +1179,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     const off = Boolean(sub.weekend_optout);
     const action = `/email-prefs?token=${encodeURIComponent(token)}&weekend=${off ? '1' : '0'}`;
     return layout({
-      siteUrl, path: '/email-prefs', nav: null, noindex: true, pixel: false, title: `Email settings | ${SITE_NAME}`, description: 'Email settings',
+      siteUrl, path: '/email-prefs', nav: null, noindex: true, pixel: false, title: `Email settings | ${town.siteName}`, description: 'Email settings',
       body: `<h1 class="page-title">Email settings</h1>${note ? `<p class="page-lead"><strong>${escHtml(note)}</strong></p>` : ''}
 <p class="page-lead">For <strong>${escHtml(maskEmail(sub.email))}</strong>: the Monday issue (the whole week) ${off ? 'only' : 'and the Thursday weekend issue (Friday to Sunday)'}.</p>
 <form method="post" action="${action}"><button class="btn btn--primary" type="submit">${off ? 'Get the weekend issue too' : 'Just Mondays, skip the weekend issue'}</button></form>

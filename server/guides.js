@@ -12,8 +12,9 @@
  *   - /events/<slug>.ics: an add-to-calendar file for any event page.
  */
 
+import { town } from './town.js';
 import {
-  SITE_NAME, escHtml, safeUrl, slugify, layout, renderEventItem, renderGrouped,
+  escHtml, safeUrl, slugify, layout, renderEventItem, renderGrouped,
   eventJsonLd, breadcrumbLd, sponsorHtml, ctaHtml, localDateStr, formatDay,
   sortEvents, parseTimes, addDays, chicagoOffset, townOf, whereText
 } from './seo.js';
@@ -127,7 +128,7 @@ export function renderVenuePage(venue, live, archived, { siteUrl, now, sponsor, 
       ? `https://www.instagram.com/${encodeURIComponent(venue.instagrams[0])}/` : '')]
   ].filter(([, u]) => u);
   const lead = upcoming.length
-    ? `${venue.name} has ${upcoming.length === 1 ? '1 upcoming event' : `${upcoming.length} upcoming events`} listed on The Vic 361, starting ${formatDay(upcoming[0].date, { weekday: 'long', month: 'long', day: 'numeric' })}.`
+    ? `${venue.name} has ${upcoming.length === 1 ? '1 upcoming event' : `${upcoming.length} upcoming events`} listed on ${town.siteName}, starting ${formatDay(upcoming[0].date, { weekday: 'long', month: 'long', day: 'numeric' })}.`
     : `No upcoming events are listed for ${venue.name} right now.`;
   const body = `
     <p class="breadcrumbs"><a href="/venues">Venues</a> › ${escHtml(venue.name)}</p>
@@ -163,7 +164,7 @@ export function renderVenuePage(venue, live, archived, { siteUrl, now, sponsor, 
     siteUrl, path: venue.path, nav: null,
     // Thin pages (nothing listed, ever) stay out of the index.
     noindex: !upcoming.length && !past.length,
-    title: `${venue.name} Events in Victoria, TX | ${SITE_NAME}`,
+    title: `${venue.name} Events in Victoria, TX | ${town.siteName}`,
     description: `Upcoming events at ${venue.name} in Victoria, TX${venue.event_potential ? `: ${venue.event_potential}` : ''}.`.slice(0, 300),
     body,
     ld: [place, breadcrumbLd(siteUrl, [{ name: 'Venues', path: '/venues' }, { name: venue.name, path: venue.path }]),
@@ -186,10 +187,10 @@ export function renderVenueIndex(venues, live, archived, { siteUrl, now }) {
     ${ctaHtml()}`;
   return layout({
     siteUrl, path: '/venues',
-    title: `Event Venues in Victoria, TX | ${SITE_NAME}`,
+    title: `Event Venues in Victoria, TX | ${town.siteName}`,
     description: 'Bars, music venues, theaters, museums and event spaces in Victoria, TX, with their upcoming events.',
     body,
-    ld: [breadcrumbLd(siteUrl, [{ name: SITE_NAME, path: '/' }, { name: 'Venues', path: '/venues' }])]
+    ld: [breadcrumbLd(siteUrl, [{ name: town.siteName, path: '/' }, { name: 'Venues', path: '/venues' }])]
   });
 }
 
@@ -457,10 +458,10 @@ export function renderSeasonPage(season, live, archived, { siteUrl, now, sponsor
     // Old links keep working, but search engines only get the page while
     // it has something coming up.
     noindex: !upcoming.length,
-    title: `${season.title} | ${SITE_NAME}`,
+    title: `${season.title} | ${town.siteName}`,
     description: season.description,
     body,
-    ld: [breadcrumbLd(siteUrl, [{ name: SITE_NAME, path: '/' }, { name: season.nav, path: season.path }]),
+    ld: [breadcrumbLd(siteUrl, [{ name: town.siteName, path: '/' }, { name: season.nav, path: season.path }]),
       ...upcoming.slice(0, 30).map(ev => eventJsonLd(ev, siteUrl))]
   });
 }
@@ -515,9 +516,9 @@ export function renderIcs(ev, { siteUrl, now }) {
   const at = eventInstants(ev);
   const stamp = utcStamp(now);
   const lines = [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//The Vic 361//Events//EN', 'CALSCALE:GREGORIAN',
+    'BEGIN:VCALENDAR', 'VERSION:2.0', `PRODID:-//${town.siteName}//Events//EN`, 'CALSCALE:GREGORIAN',
     'BEGIN:VEVENT',
-    `UID:${compactDate(ev.date)}-${ev.page.split('/').pop()}@thevic361.com`,
+    `UID:${compactDate(ev.date)}-${ev.page.split('/').pop()}@${town.icalDomain}`,
     `DTSTAMP:${stamp}`
   ];
   if (at) {

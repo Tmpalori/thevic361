@@ -45,10 +45,11 @@
  * then /advertise keeps the email-us flow.
  */
 
+import { town } from './town.js';
 import crypto from 'node:crypto';
 import express from 'express';
 import {
-  AD_PACKAGES, SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, addDays, formatDay, layout,
+  AD_PACKAGES, escHtml, safeUrl, localDateStr, currentWeek, addDays, formatDay, layout,
   renderEventItem, sponsorHtml, dayClass, sortEvents, SAMPLE_LOGO
 } from './seo.js';
 import { normalizeUrl, validateSubmission } from './validate.js';
@@ -236,7 +237,7 @@ export function createStripe(secretKey, fetchImpl = globalThis.fetch) {
     let id = found && Array.isArray(found.data) && found.data[0] && found.data[0].id;
     if (!id) {
       const product = await call('POST', '/products', {
-        name: `${SITE_NAME}: ${pkg.name}`, metadata: { vic361_package: pkg.key }
+        name: `${town.siteName}: ${pkg.name}`, metadata: { vic361_package: pkg.key }
       }, `vic361-product-${pkg.key}`);
       const price = await call('POST', '/prices', {
         product: product.id, currency: 'usd', unit_amount: pkg.amount, lookup_key: lookupKey,
@@ -723,7 +724,7 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
       address: clean(v.address, 120),
       logo: v.sampleLogo ? SAMPLE_LOGO : ''
     });
-    return `<p class="co-preview-where">Shown on every page of thevic361.com for your week, and at the top of that week’s ${weekendIssueOn() ? 'newsletters (Monday’s and Thursday’s)' : 'Monday newsletter'}.</p>${block}`;
+    return `<p class="co-preview-where">Shown on every page of ${town.domain} for your week, and at the top of that week’s ${weekendIssueOn() ? 'newsletters (Monday’s and Thursday’s)' : 'Monday newsletter'}.</p>${block}`;
   }
   // Vic’s Pick: the event as it will look, highlighted on its day.
   const date = /^\d{4}-\d{2}-\d{2}$/.test(val('date')) ? val('date') : '';
@@ -884,7 +885,7 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
     </script>`;
   return layout({
     siteUrl, path: '/advertise/checkout', nav: '/advertise', noindex: true,
-    title: `${pkg.name} | ${SITE_NAME}`, description: `Buy ${pkg.name} on ${SITE_NAME}.`, body
+    title: `${pkg.name} | ${town.siteName}`, description: `Buy ${pkg.name} on ${town.siteName}.`, body
   });
 }
 
@@ -947,7 +948,7 @@ export function renderThanksPage(order, { siteUrl, now = new Date() }) {
     <p>Questions or something not right? <a href="/contact?topic=advertising">Contact us</a> and we’ll sort it out.</p>
     <p><a class="btn btn--primary" href="/">See this week's events</a></p>` +
     (refresh ? `<script>setTimeout(function () { location.reload(); }, 5000);</script>` : '');
-  return layout({ siteUrl, path: '/advertise/thanks', nav: '/advertise', noindex: true, title: `Thank you | ${SITE_NAME}`, description: 'Thank you.', body });
+  return layout({ siteUrl, path: '/advertise/thanks', nav: '/advertise', noindex: true, title: `Thank you | ${town.siteName}`, description: 'Thank you.', body });
 }
 
 // The checkout body went over its size limit (server/index.js error
@@ -957,7 +958,7 @@ export function renderLogoTooLargePage({ siteUrl }) {
     <p class="page-lead">Your form didn’t go through because the logo file was too big to send. Nothing was charged.</p>
     <p>Go back and pick a smaller image (under 300 KB), or continue without a logo.</p>
     <p><a class="btn btn--primary" href="/advertise/checkout?package=weekly" onclick="if (history.length > 1) { history.back(); return false; }">Back to the form</a></p>`;
-  return layout({ siteUrl, path: '/advertise/checkout', nav: '/advertise', noindex: true, title: `Logo too large | ${SITE_NAME}`, description: 'Logo too large.', body });
+  return layout({ siteUrl, path: '/advertise/checkout', nav: '/advertise', noindex: true, title: `Logo too large | ${town.siteName}`, description: 'Logo too large.', body });
 }
 
 // ─── Wiring ──────────────────────────────────────────────────────────────
@@ -1894,7 +1895,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           quantity: 1,
           price_data: {
             currency: 'usd', unit_amount: priced.amount,
-            product_data: { name: `${SITE_NAME}: ${priced.name}` },
+            product_data: { name: `${town.siteName}: ${priced.name}` },
             recurring: pkg.interval ? { interval: pkg.interval } : undefined
           }
         };

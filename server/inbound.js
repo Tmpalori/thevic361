@@ -14,6 +14,7 @@
  * Unset, the endpoint answers 503 and the reply ask stays off (newsletter.js).
  */
 
+import { town } from './town.js';
 import crypto from 'node:crypto';
 import express from 'express';
 
@@ -92,10 +93,10 @@ const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').repl
 // design, so it reads like a person wrote it), signed The Vic 361.
 export function renderReply(text, siteUrl) {
   const body = String(text).replace(/\r\n/g, '\n').trim();
-  const sig = `The Vic 361\n${siteUrl.replace(/^https?:\/\//, '')}`;
+  const sig = `${town.siteName}\n${siteUrl.replace(/^https?:\/\//, '')}`;
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#1F1A3D;">` +
     body.split(/\n{2,}/).map(par => `<p style="margin:0 0 12px;">${escHtml(par).replace(/\n/g, '<br>')}</p>`).join('') +
-    `<p style="margin:16px 0 0;color:#5B5675;">— The Vic 361<br><a href="${escHtml(siteUrl)}" style="color:#4B3FD1;">${escHtml(siteUrl.replace(/^https?:\/\//, ''))}</a></p></div>`;
+    `<p style="margin:16px 0 0;color:#5B5675;">— ${town.siteName}<br><a href="${escHtml(siteUrl)}" style="color:#4B3FD1;">${escHtml(siteUrl.replace(/^https?:\/\//, ''))}</a></p></div>`;
   return { html, text: `${body}\n\n— ${sig}` };
 }
 
