@@ -104,11 +104,21 @@ function venueEvents(venue, live, archived, today, venues) {
 }
 
 // Street part only: some sources store "203 E. Constitution St, Victoria,
-// TX" and the page adds ", Victoria, TX" itself.
+// TX" and the page adds ", Victoria, TX" (town.cityState) itself.
+const reEsc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+let cityTail = null;
+function cityTailRe() {
+  const key = `${town.city}|${town.state}|${town.stateName}`;
+  if (!cityTail || cityTail.key !== key) {
+    const c = reEsc(town.city), st = `(?:${reEsc(town.state)}|${reEsc(town.stateName)})`;
+    // ", Victoria[, TX]" or " Victoria TX", so "123 N Victoria" (a street) stays.
+    cityTail = { key, re: new RegExp(`(?:,\\s*${c}\\s*,?\\s*${st}?|\\s+${c}\\s*,?\\s*${st})\\.?\\s*(?:\\d{5}(?:-\\d{4})?)?\\s*$`, 'i') };
+  }
+  return cityTail.re;
+}
 export function streetAddress(addr) {
   return String(addr || '').trim()
-    // ", Victoria[, TX]" or " Victoria TX", so "123 N Victoria" (a street) stays.
-    .replace(/(?:,\s*Victoria\s*,?\s*(?:TX|Texas)?|\s+Victoria\s*,?\s*(?:TX|Texas))\.?\s*(?:\d{5}(?:-\d{4})?)?\s*$/i, '')
+    .replace(cityTailRe(), '')
     .replace(/,\s*$/, '').trim();
 }
 
@@ -136,7 +146,7 @@ export function renderVenuePage(venue, live, archived, { siteUrl, now, sponsor, 
     <p class="page-lead">${escHtml(lead)}</p>
     <dl class="event-facts">
       <dt>Type</dt><dd>${escHtml(venue.category)}</dd>
-      ${address ? `<dt>Address</dt><dd>${escHtml(address)}, Victoria, TX</dd>` : ''}
+      ${address ? `<dt>Address</dt><dd>${escHtml(address)}, ${town.cityState}</dd>` : ''}
       ${venue.event_potential ? `<dt>Known for</dt><dd>${escHtml(venue.event_potential)}</dd>` : ''}
     </dl>
     ${links.length ? `<p class="venue-links">${links.map(([l, u]) =>
@@ -156,7 +166,7 @@ export function renderVenuePage(venue, live, archived, { siteUrl, now, sponsor, 
     address: {
       '@type': 'PostalAddress',
       ...(address ? { streetAddress: address } : {}),
-      addressLocality: 'Victoria', addressRegion: 'TX', addressCountry: 'US'
+      addressLocality: town.city, addressRegion: town.state, addressCountry: 'US'
     },
     ...(links.length ? { sameAs: links.map(([, u]) => u) } : {})
   };
@@ -164,8 +174,8 @@ export function renderVenuePage(venue, live, archived, { siteUrl, now, sponsor, 
     siteUrl, path: venue.path, nav: null,
     // Thin pages (nothing listed, ever) stay out of the index.
     noindex: !upcoming.length && !past.length,
-    title: `${venue.name} Events in Victoria, TX | ${town.siteName}`,
-    description: `Upcoming events at ${venue.name} in Victoria, TX${venue.event_potential ? `: ${venue.event_potential}` : ''}.`.slice(0, 300),
+    title: `${venue.name} Events in ${town.cityState} | ${town.siteName}`,
+    description: `Upcoming events at ${venue.name} in ${town.cityState}${venue.event_potential ? `: ${venue.event_potential}` : ''}.`.slice(0, 300),
     body,
     ld: [place, breadcrumbLd(siteUrl, [{ name: 'Venues', path: '/venues' }, { name: venue.name, path: venue.path }]),
       ...upcoming.slice(0, 20).map(ev => eventJsonLd(ev, siteUrl))]
@@ -178,7 +188,7 @@ export function renderVenueIndex(venues, live, archived, { siteUrl, now }) {
   const rows = venues.map(v => ({ v, n: counts.get(v) || 0 }))
     .sort((a, b) => b.n - a.n || a.v.name.localeCompare(b.v.name));
   const body = `
-    <h1 class="page-title">Event venues in Victoria, TX</h1>
+    <h1 class="page-title">Event venues in ${town.cityState}</h1>
     <p class="page-lead">Bars, music venues, theaters, museums, markets, and event spaces around Victoria, with what's coming up at each.</p>
     <ul class="venue-index" role="list">
       ${rows.map(({ v, n }) => `<li><a href="${v.path}">${escHtml(v.name)}</a>
@@ -187,8 +197,8 @@ export function renderVenueIndex(venues, live, archived, { siteUrl, now }) {
     ${ctaHtml()}`;
   return layout({
     siteUrl, path: '/venues',
-    title: `Event Venues in Victoria, TX | ${town.siteName}`,
-    description: 'Bars, music venues, theaters, museums and event spaces in Victoria, TX, with their upcoming events.',
+    title: `Event Venues in ${town.cityState} | ${town.siteName}`,
+    description: `Bars, music venues, theaters, museums and event spaces in ${town.cityState}, with their upcoming events.`,
     body,
     ld: [breadcrumbLd(siteUrl, [{ name: town.siteName, path: '/' }, { name: 'Venues', path: '/venues' }])]
   });
@@ -530,7 +540,7 @@ export function renderIcs(ev, { siteUrl, now }) {
   }
   lines.push(
     `SUMMARY:${icsEscape(ev.name)}`,
-    `LOCATION:${icsEscape([whereText(ev), `${townOf(ev)}, TX`].filter(Boolean).join(', '))}`,
+    `LOCATION:${icsEscape([whereText(ev), `${townOf(ev)}, ${town.state}`].filter(Boolean).join(', '))}`,
     `DESCRIPTION:${icsEscape([ev.description, `${siteUrl}${ev.page}`].filter(Boolean).join('\n\n'))}`,
     `URL:${siteUrl}${ev.page}`,
     'END:VEVENT', 'END:VCALENDAR'
@@ -548,7 +558,7 @@ export function googleCalendarUrl(ev, siteUrl) {
   }
   const params = new URLSearchParams({
     action: 'TEMPLATE', text: ev.name, dates, ctz: town.timezone,
-    location: [whereText(ev), `${townOf(ev)}, TX`].filter(Boolean).join(', '),
+    location: [whereText(ev), `${townOf(ev)}, ${town.state}`].filter(Boolean).join(', '),
     details: `${ev.description ? ev.description + '\n\n' : ''}${siteUrl}${ev.page}`
   });
   return `https://calendar.google.com/calendar/render?${params}`;

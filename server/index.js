@@ -1915,7 +1915,7 @@ export async function createApp(opts = {}) {
   app.get('/llms.txt', pageHandler(async (req, res, payload, ctx) => {
     res.set('Cache-Control', 'public, max-age=300');
     const extraLinks = [
-      ['Event venues in Victoria, TX', '/venues', 'every venue we track, with its upcoming events'],
+      [`Event venues in ${town.cityState}`, '/venues', 'every venue we track, with its upcoming events'],
       ...activeSeasons(payload.events, ctx.archived, ctx.now).map(s => [s.title, s.path, s.description])
     ];
     res.type('text/plain; charset=utf-8').send(renderLlmsTxt(shown(payload.events), { ...ctx, extraLinks, sponsor: payload.sponsor || null }));

@@ -120,7 +120,7 @@ const box = html => `<table role="presentation" width="100%" cellpadding="0" cel
 function contactFooter(siteUrl, address) {
   const a = 'color:#FFC93C;';
   return `Questions or something not right? Just reply to this email, or reach us at <a href="${siteUrl}/contact" style="${a}">${town.domain}/contact</a>.<br>` +
-    `${escHtml(town.siteName)} · ${escHtml(address || 'Victoria, TX')}`;
+    `${escHtml(town.siteName)} · ${escHtml(address || town.cityState)}`;
 }
 const contactText = siteUrl => `Questions or something not right? Reply to this email or reach us at ${siteUrl}/contact`;
 
