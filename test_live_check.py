@@ -41,6 +41,12 @@ def test_discovers_hubs_events_and_a_venue():
     assert paths == ["/this-weekend", "/events/2026-10-09-a", "/events/2026-10-09-a.ics", "/venues/aero-crafters"]
 
 
+def test_keeps_event_times_with_their_offset():
+    # A timezone slip (-05:00 to -06:00) must show as a difference.
+    text = '"startDate":"2026-10-09T18:00:00-05:00","built":"2026-10-09T21:00:00.123Z","at":"2026-10-09T21:00:00Z"'
+    assert lc.normalize(text) == '"startDate":"2026-10-09T18:00:00-05:00","built":"TIMESTAMP","at":"TIMESTAMP"'
+
+
 def test_normalizes_hashes_and_timestamps():
     assert lc.normalize('a.css?v=0f3e9a1 "2026-10-09T12:00:00.123Z" <lastmod>2026-10-09</lastmod>\nDTSTAMP:20261009T210036Z') == \
         'a.css?v=HASH "TIMESTAMP" <lastmod>DATE</lastmod>\nDTSTAMP:TIMESTAMP'
