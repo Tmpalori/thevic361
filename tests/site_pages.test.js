@@ -215,14 +215,18 @@ describe('event pages', () => {
 });
 
 describe('homepage', () => {
-  it('folds days already over so the list opens on today', async () => {
+  it('folds every day but today, which opens (and can fold too)', async () => {
     await startApp();
     const home = (await get('/')).text;
-    const past = [...home.matchAll(/<section class="day-section day-section--past" id="day-(\d)"><details>/g)].map(m => m[1]);
-    expect(past).toEqual(['0', '1']); // Mon, Tue; today is Wednesday
-    expect(home).toContain('<section class="day-section" id="day-2">');
-    expect(home).toContain('Monday Market'); // still in the markup for crawlers
-    expect(home).toMatch(/<summary class="day-header">.*Monday.*<span class="past-count">1 event<\/span><\/summary>/);
+    const days = [...home.matchAll(/<section class="day-section day-section--fold( day-section--past)?" id="day-(\d)"><details( open)?>/g)]
+      .map(m => ({ day: m[2], past: Boolean(m[1]), open: Boolean(m[3]) }));
+    expect(days).toHaveLength(7);
+    // Today is Wednesday (day-2): the only open one; Mon/Tue look past.
+    expect(days.filter(d => d.open).map(d => d.day)).toEqual(['2']);
+    expect(days.filter(d => d.past).map(d => d.day)).toEqual(['0', '1']);
+    expect(home).toContain('Monday Market'); // folded days are still in the markup for crawlers
+    expect(home).toMatch(/<summary class="day-header">.*Monday.*<span class="day-count">1 event<\/span><\/summary>/);
+    expect(home).toMatch(/<summary class="day-header">.*Today.*<span class="day-count">/);
   });
 
   it('has a skip link, a phone-size submit button and the theme toggle on every page', async () => {

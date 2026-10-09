@@ -15,6 +15,13 @@
 
   // ─── STICKY HEADER SHADOW ───
   const header = document.getElementById('site-header');
+  // An open day's header bar sticks just under the site header
+  // (style.css .day-section--fold), whose height changes with the width.
+  function setHeaderHeight() {
+    if (header) document.documentElement.style.setProperty('--header-height', header.offsetHeight + 'px');
+  }
+  setHeaderHeight();
+  window.addEventListener('resize', setHeaderHeight, { passive: true });
   window.addEventListener('scroll', function () {
     if (window.scrollY > 10) {
       header.classList.add('scrolled');
@@ -204,14 +211,15 @@
   }
 
   // ─── RENDER DAY SECTION ───
-  function renderDaySection(dateStr, events, idx) {
+  function renderDaySection(dateStr, events, idx, openDate) {
     var today = isToday(dateStr);
     var dayName = formatDayName(dateStr);
     var monthDay = formatMonthDay(dateStr);
 
     var todayBadgeHtml = today ? ' <span class="today-badge">Today</span>' : '';
-    // A day that's already over is folded to its header so the list opens
-    // on today (same markup as renderDay in server/seo.js).
+    // Every day is folded to its header bar except openDate (today), so the
+    // list opens on today and any day is one tap away (same markup as
+    // renderDay in server/seo.js).
     var past = dateStr < victoriaToday();
 
     var eventsForDay = events.filter(function (e) { return e.date === dateStr; });
@@ -235,16 +243,12 @@
 
     var headHtml = '<h2 class="day-name">' + dayName + todayBadgeHtml + '</h2>' +
       '<span class="day-date">' + monthDay + '</span>';
-    if (past) {
-      return '<section class="day-section day-section--past" id="day-' + idx + '"><details>' +
-        '<summary class="day-header">' + headHtml + '<span class="past-count">' +
-          (eventsForDay.length === 1 ? '1 event' : eventsForDay.length + ' events') + '</span></summary>' +
-        bodyHtml + '</details></section>';
-    }
-    return '<section class="day-section" id="day-' + idx + '">' +
-      '<div class="day-header">' + headHtml + '</div>' +
-      bodyHtml +
-    '</section>';
+    var n = eventsForDay.length;
+    return '<section class="day-section day-section--fold' + (past ? ' day-section--past' : '') + '" id="day-' + idx + '">' +
+      '<details' + (dateStr === openDate ? ' open' : '') + '>' +
+      '<summary class="day-header">' + headHtml + '<span class="day-count">' +
+        (n === 0 ? 'No events' : n === 1 ? '1 event' : n + ' events') + '</span></summary>' +
+      bodyHtml + '</details></section>';
   }
 
   // ─── NEWSLETTER CARD ───
@@ -457,12 +461,17 @@
         var days = [];
         for (var i = 0; i < 7; i++) days.push(addDays(monday, i));
 
+        // The open day: today, else the week's first day still ahead
+        // (openDay in server/seo.js).
+        var openDate = days.indexOf(todayStr) !== -1 ? todayStr
+          : (days.filter(function (d) { return d >= todayStr; })[0] || null);
         var html = days.map(function (date, idx) {
-          return renderDaySection(date, data.events || [], idx);
+          return renderDaySection(date, data.events || [], idx, openDate);
         }).join('');
 
         container.innerHTML = html;
         applyFilter(currentFilter);
+        openHashDay();
 
         // ─── SKIP TO TODAY BUTTON ───
         var todayIdx = days.indexOf(todayStr);
@@ -477,6 +486,8 @@
             btn.addEventListener('click', function () {
               var sec = document.getElementById('day-' + todayIdx);
               if (sec) {
+                var fold = sec.querySelector('details');
+                if (fold) fold.open = true;
                 var stickyHeader = document.getElementById('site-header');
                 var stickyHeight = (stickyHeader ? stickyHeader.offsetHeight : 0) + 8;
                 var offset = sec.getBoundingClientRect().top + window.pageYOffset - stickyHeight;
@@ -567,6 +578,10 @@
       });
       var empty = sec.querySelector('.filter-empty');
       sec.hidden = dayHidden;
+      // A filter opens the folded days that have something to show and
+      // folds the rest; "All" leaves the days as they are.
+      var fold = sec.querySelector('details');
+      if (fold && currentFilter !== 'all' && !dayHidden) fold.open = shown > 0;
       if (!dayHidden && wanted && shown === 0 && sec.querySelector('.event-entry')) {
         if (!empty) {
           empty = document.createElement('div');
@@ -582,9 +597,28 @@
     });
   }
 
+  // A link to one day (#day-3) opens it.
+  function openHashDay() {
+    var m = /^#day-\d$/.test(location.hash) && document.querySelector(location.hash + ' details');
+    if (m) m.open = true;
+  }
+  window.addEventListener('hashchange', openHashDay);
+
+  // Folding a day from its stuck header bar, partway down the day, would
+  // leave you somewhere further down the page: bring its bar back into view.
+  document.addEventListener('toggle', function (e) {
+    var d = e.target;
+    if (d.open || !d.closest || !d.closest('.day-section--fold')) return;
+    var sec = d.closest('.day-section');
+    var top = sec.getBoundingClientRect().top;
+    var h = header ? header.offsetHeight : 0;
+    if (top < h) window.scrollTo({ top: top + window.pageYOffset - h - 8 });
+  }, true);
+
   // Server-rendered events are on the page before app.js re-renders them,
   // so the chips work immediately.
   renderFilterBar();
+  openHashDay();
   applyFilter(currentFilter);
 
   // Expose a small surface for tests.

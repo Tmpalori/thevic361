@@ -62,6 +62,37 @@ describe('docs/app.js matches the server renderer', () => {
     expect(summary(html)).toBe(summary(server));
   });
 
+  it('folds every day but today, the same as the server, and opens days on demand', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-07T17:00:00Z')); // Wednesday noon in Victoria
+    const events = withPages([
+      { date: '2026-10-05', name: 'Monday Market', time: '9 AM', icons: ['food'] },
+      { date: '2026-10-07', name: 'Trivia', time: '7 PM', icons: ['drinks'] },
+      { date: '2026-10-10', name: 'Saturday Concert', time: '8 PM', icons: ['music'] }
+    ]).map(({ page, ...ev }) => ev);
+    let done;
+    const ready = new Promise(r => { done = r; });
+    const app = boot('', () => Promise.resolve({ ok: true, json: () => { setTimeout(done, 0); return Promise.resolve({ events }); } }));
+    await ready;
+    await new Promise(r => setTimeout(r, 0));
+    const html = document.getElementById('events-container').innerHTML;
+    const server = renderDays(['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11'],
+      events, '2026-10-07');
+    const shape = h => [...h.matchAll(/<section class="([^"]+)" id="(day-\d)"><details( open(?:="")?)?>[\s\S]*?<span class="day-count">([^<]+)</g)]
+      .map(m => [m[2], m[1], Boolean(m[3]), m[4]]);
+    expect(shape(html)).toEqual(shape(server));
+    const open = () => [...document.querySelectorAll('.day-section details')].filter(d => d.open).map(d => d.closest('section').id);
+    expect(open()).toEqual(['day-2']);
+    expect(shape(html)[3]).toEqual(['day-3', 'day-section day-section--fold', false, 'No events']);
+    // A category filter opens the days that have a match and folds the rest.
+    app.applyFilter('music');
+    expect(open()).toEqual(['day-5']);
+    // A link to a day opens it.
+    window.location.hash = '#day-0';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    expect(open()).toEqual(['day-0', 'day-5']);
+  });
+
   it('builds the week and Today in Victoria time, whatever zone the browser is in', async () => {
     // Sunday Oct 11, 9 PM in Victoria; a browser on UTC already says Monday.
     const tz = process.env.TZ;

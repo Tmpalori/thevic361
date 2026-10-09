@@ -1813,14 +1813,25 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
   :root:not([data-theme]) .theme-icon--moon { display: none; }
 }
 
-/* Days already over (homepage): folded to their header bar. */
-.day-section--past { margin-bottom: var(--space-4); box-shadow: none; }
-.day-section--past summary.day-header { cursor: pointer; list-style: none; display: flex; border-bottom: 0; margin: 0; }
-.day-section--past summary.day-header::-webkit-details-marker { display: none; }
-.day-section--past details[open] summary.day-header { border-bottom: 3px solid var(--ink); }
-.past-count { margin-left: auto; font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
-.past-count::after { content: " ▾"; }
-.day-section--past details[open] .past-count::after { content: " ▴"; }
+/* Homepage days: each folded to its header bar (only today opens by
+   default; seo.js renderDay). Days already over are flatter. While a day
+   is open its header bar sticks under the site header as you scroll
+   through it: overflow: clip (not hidden) keeps the rounded corners
+   without making the card a scroll box, which would stop the sticking. */
+.day-section--fold { margin-bottom: var(--space-4); overflow: clip; }
+.day-section--past { box-shadow: none; }
+.day-section--fold summary.day-header { cursor: pointer; list-style: none; display: flex; border-bottom: 0; margin: 0; }
+.day-section--fold summary.day-header::-webkit-details-marker { display: none; }
+.day-section--fold details[open] summary.day-header {
+  border-bottom: 3px solid var(--ink);
+  position: sticky;
+  top: var(--header-height, 64px);
+  z-index: 5;
+}
+.day-section--fold details[open] { padding-bottom: var(--space-1); }
+.day-count { margin-left: auto; font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
+.day-count::after { content: " ▾"; }
+.day-section--fold details[open] .day-count::after { content: " ▴"; }
 
 /* Small phones: logo, "+ Event" and Subscribe on one row at 360px. The
    theme toggle moves to the footer only. */
