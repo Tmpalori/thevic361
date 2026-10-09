@@ -1,0 +1,262 @@
+200 text/html; charset=UTF-8
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js); same snippet as server/seo.js GA_SNIPPET -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-52YHD3X3C2"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());(function(){var k=new URLSearchParams();new URLSearchParams(location.search).forEach(function(v,n){if(/^(utm_[a-z]+|gclid)$/.test(n))k.append(n,v);});var q=k.toString();gtag('config','G-52YHD3X3C2',{page_location:location.origin+location.pathname+(q?'?'+q:'')});})();</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Submit an Event — The Vic 361</title>
+<meta name="description" content="Tell us about an event happening in Victoria, TX. We review every submission before it goes on the site.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://www.thevic361.com/submit">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Submit an Event — The Vic 361">
+<meta property="og:description" content="Tell us about an event happening in Victoria, TX. Listing a community event is free.">
+<meta property="og:url" content="https://www.thevic361.com/submit">
+<meta property="og:site_name" content="The Vic 361">
+<meta property="og:image" content="https://www.thevic361.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://www.thevic361.com/og-image.png">
+
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Fonts load without blocking first paint, like every other page. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400..700&family=Nunito:wght@400..900&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400..700&family=Nunito:wght@400..900&display=swap"></noscript>
+
+<link rel="stylesheet" href="./base.css">
+<link rel="stylesheet" href="./submit.css">
+</head>
+<body>
+  <header class="submit-header">
+    <a class="submit-back" href="./index.html" aria-label="Back to The Vic 361">
+      <span aria-hidden="true">←</span> The Vic 361
+    </a>
+  </header>
+
+  <main class="submit-main">
+    <section class="submit-card" id="form-card">
+      <h1>Submit an event</h1>
+      <p class="submit-lede">
+        Got something happening in Victoria? Send it our way. We review every
+        submission before it shows up on the site.
+      </p>
+      <p class="submit-promo">
+        Free submissions aren't guaranteed a spot on the list. Want it
+        <strong>guaranteed and highlighted on its day</strong>?
+        <a href="/advertise/checkout?package=featured">Make it a Vic&rsquo;s Pick</a>
+        ($49 Mon&ndash;Thu, $89 Fri&ndash;Sun; you'll see a preview before paying).
+      </p>
+
+      <form id="submit-form" class="submit-form" novalidate>
+
+        <div class="field">
+          <label for="f-name">Event name *</label>
+          <input id="f-name" name="name" type="text" required maxlength="200"
+                 autocomplete="off" placeholder="Saturday Night Live Music">
+          <p class="field-error" data-error-for="name"></p>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="f-date">Date *</label>
+            <input id="f-date" name="date" type="date" required>
+            <p class="field-error" data-error-for="date"></p>
+          </div>
+          <div class="field">
+            <label for="f-time">Start time *</label>
+            <select id="f-time" name="time" required>
+              <option value="" disabled selected>Select a start time…</option>
+            </select>
+            <p class="field-error" data-error-for="time"></p>
+          </div>
+          <div class="field">
+            <label for="f-end">End time</label>
+            <select id="f-end" name="end_time">
+              <option value="" selected>Select an end time…</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="f-venue">Venue *</label>
+          <input id="f-venue" name="venue" type="text" required maxlength="200"
+                 placeholder="The Hangar">
+          <p class="field-error" data-error-for="venue"></p>
+        </div>
+
+        <div class="field">
+          <label for="f-address">Address *</label>
+          <input id="f-address" name="address" type="text" required maxlength="300"
+                 placeholder="123 Main St, Victoria, TX">
+          <p class="field-error" data-error-for="address"></p>
+        </div>
+
+        <div class="field">
+          <label for="f-url">Link (Facebook event, Eventbrite, website)</label>
+          <input id="f-url" name="url" type="text" maxlength="500"
+                 placeholder="example.com or https://example.com/event">
+          <p class="field-error" data-error-for="url"></p>
+        </div>
+
+        <div class="field">
+          <label for="f-desc">Description *</label>
+          <textarea id="f-desc" name="description" rows="4" required maxlength="2000"
+                    placeholder="What is it? Who's playing? Any tickets info?"></textarea>
+          <p class="field-error" data-error-for="description"></p>
+        </div>
+
+        <fieldset class="field field-fieldset">
+          <legend>Categories</legend>
+          <div class="chip-row" id="f-icons">
+            <label class="chip"><input type="checkbox" name="icons" value="music"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-music"></use></svg>Music</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="food"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-food"></use></svg>Food</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="drinks"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-drinks"></use></svg>Drinks</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="family"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-family"></use></svg>Family</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="arts"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-arts"></use></svg>Arts</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="shopping"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-shopping"></use></svg>Shopping</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="outdoors"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-outdoors"></use></svg>Outdoors</span></label>
+            <label class="chip"><input type="checkbox" name="icons" value="community"><span><svg class="chip-ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-community"></use></svg>Community</span></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="field field-fieldset">
+          <legend>Cost</legend>
+          <div class="radio-row">
+            <label class="radio"><input type="radio" name="free" value="true" required><span>Free</span></label>
+            <label class="radio"><input type="radio" name="free" value="false"><span>Paid / ticketed</span></label>
+          </div>
+          <p class="field-error" data-error-for="free"></p>
+        </fieldset>
+
+        <!-- Live preview: how the event will look on the list (submit.js). -->
+        <section class="sub-preview" aria-labelledby="sub-preview-h">
+          <h2 id="sub-preview-h" class="sub-preview-h">Preview: how it’ll look on the list</h2>
+          <div class="sp-day">
+            <div class="sp-day__head"><span class="sp-day__name" id="sp-day">Your event’s day</span><span class="sp-day__date" id="sp-date"></span></div>
+            <div class="sp-event">
+              <div class="sp-icons" id="sp-icons"></div>
+              <div class="sp-body">
+                <span class="sp-time" id="sp-time" hidden></span>
+                <span class="sp-name" id="sp-name">Your event name</span>
+                <span class="sp-venue" id="sp-venue">Venue</span>
+                <span class="sp-free" id="sp-free" hidden>Free</span>
+                <div class="sp-desc" id="sp-desc">Your description shows here.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <fieldset class="field field-fieldset">
+          <legend>You are…</legend>
+          <div class="radio-row">
+            <label class="radio">
+              <input type="radio" name="submitter_kind" value="organizer" checked>
+              <span>The organizer</span>
+            </label>
+            <label class="radio">
+              <input type="radio" name="submitter_kind" value="found_online">
+              <span>I found it online</span>
+            </label>
+            <label class="radio">
+              <input type="radio" name="submitter_kind" value="other">
+              <span>Other</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="f-sub-first">First name *</label>
+            <input id="f-sub-first" name="submitter_first_name" type="text"
+                   required maxlength="60" autocomplete="given-name" placeholder="Jane">
+            <p class="field-error" data-error-for="submitter_first_name"></p>
+          </div>
+          <div class="field">
+            <label for="f-sub-last">Last name *</label>
+            <input id="f-sub-last" name="submitter_last_name" type="text"
+                   required maxlength="60" autocomplete="family-name" placeholder="Doe">
+            <p class="field-error" data-error-for="submitter_last_name"></p>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="f-sub-email">Your email *</label>
+            <input id="f-sub-email" name="submitter_email" type="email"
+                   required maxlength="254" autocomplete="email" placeholder="you@example.com">
+            <p class="field-error" data-error-for="submitter_email"></p>
+          </div>
+          <div class="field">
+            <label for="f-sub-phone">Phone number *</label>
+            <input id="f-sub-phone" name="submitter_phone" type="tel"
+                   required maxlength="40" autocomplete="tel" placeholder="(361) 555-0123">
+            <p class="field-error" data-error-for="submitter_phone"></p>
+          </div>
+        </div>
+
+        <!-- Honeypot field — real users won't see/fill it. -->
+        <div class="hp-field" aria-hidden="true">
+          <label for="f-company">Company (do not fill)</label>
+          <input id="f-company" name="company" type="text" tabindex="-1" autocomplete="off">
+        </div>
+
+        <!-- Cloudflare Turnstile mount point. The widget loads only if the
+             site key is configured (see submit.js). -->
+        <div id="f-turnstile" class="turnstile-mount"></div>
+
+        <p class="submit-error" id="form-error" role="alert" hidden></p>
+
+        <div class="submit-actions">
+          <button type="submit" class="btn btn--primary" id="submit-btn">
+            Submit for review
+          </button>
+        </div>
+
+        <p class="submit-foot">
+          Your event won't appear on the site until it's been reviewed and
+          approved. We won't share your email or use it for marketing.
+        </p>
+      </form>
+    </section>
+
+    <section class="submit-card" id="thanks-card" hidden>
+      <h1>Thanks!</h1>
+      <p class="submit-lede" id="thanks-message">
+        Your submission is in our review queue. If it fits and the details
+        check out, it goes live on The Vic 361, usually within the hour; some need a closer look and take a day or two.
+      </p>
+      <p class="submit-lede" id="thanks-email" hidden>
+        We'll email you a confirmation, and again when your event is live.
+      </p>
+      <p class="submit-lede">
+        Need to change something, or have a question?
+        <a href="/contact">Contact us</a>.
+      </p>
+      <p class="submit-promo" id="thanks-promo">
+        Want it guaranteed, highlighted on its day, and starred in the
+        newsletter? <a id="thanks-promo-link" href="/advertise/checkout?package=featured">Make it a Vic&rsquo;s Pick &rarr;</a>
+        Your details are already filled in, with a preview before you pay.
+      </p>
+      <div class="submit-actions">
+        <a class="btn btn--outline" href="./index.html">Back to home</a>
+        <button type="button" class="btn btn--primary" id="submit-another">
+          Submit another
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <script src="./submit.js"></script>
+  <script src="./pixel.js" defer></script>
+  <script src="./track.js" defer></script>
+</body>
+</html>

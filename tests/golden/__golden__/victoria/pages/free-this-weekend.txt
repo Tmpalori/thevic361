@@ -1,0 +1,126 @@
+200 text/html; charset=utf-8
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js); same property as docs/index.html -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-52YHD3X3C2"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());(function(){var k=new URLSearchParams();new URLSearchParams(location.search).forEach(function(v,n){if(/^(utm_[a-z]+|gclid)$/.test(n))k.append(n,v);});var q=k.toString();gtag('config','G-52YHD3X3C2',{page_location:location.origin+location.pathname+(q?'?'+q:'')});})();</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Free Things To Do in Victoria, TX This Weekend | The Vic 361</title>
+<meta name="description" content="Free events in Victoria, Texas this weekend: markets, library programs, festivals, outdoor fun, and community events.">
+<link rel="canonical" href="https://www.thevic361.com/free-this-weekend">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Free Things To Do in Victoria, TX This Weekend | The Vic 361">
+<meta property="og:description" content="Free events in Victoria, Texas this weekend: markets, library programs, festivals, outdoor fun, and community events.">
+<meta property="og:url" content="https://www.thevic361.com/free-this-weekend">
+<meta property="og:site_name" content="The Vic 361">
+<meta property="og:image" content="https://www.thevic361.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://www.thevic361.com/og-image.png">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Fonts load without blocking first paint; text shows in the fallback face until they arrive. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400..700&family=Nunito:ital,wght@0,400..900;1,400..900&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400..700&family=Nunito:ital,wght@0,400..900;1,400..900&display=swap"></noscript>
+<link rel="stylesheet" href="/base.css?v=HASH">
+<link rel="stylesheet" href="/style.css?v=HASH">
+<script>(function(){var d=document.documentElement,K='vic361-theme';try{var t=localStorage.getItem(K);if(t==='dark'||t==='light')d.setAttribute('data-theme',t);}catch(e){}function cur(){return d.getAttribute('data-theme')||(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}function label(){var l='Switch to '+(cur()==='dark'?'light':'dark')+' mode';document.querySelectorAll('[data-theme-toggle]').forEach(function(b){b.setAttribute('aria-label',l);});}document.addEventListener('click',function(e){var b=e.target&&e.target.closest&&e.target.closest('[data-theme-toggle]');if(!b)return;var n=cur()==='dark'?'light':'dark';d.setAttribute('data-theme',n);try{localStorage.setItem(K,n);}catch(e2){}label();});document.addEventListener('DOMContentLoaded',label);})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"The Vic 361","item":"https://www.thevic361.com/"},{"@type":"ListItem","position":2,"name":"Free This Weekend","item":"https://www.thevic361.com/free-this-weekend"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Event","name":"Cuero Turkeyfest Parade","startDate":"2026-10-09T18:00:00-05:00","eventStatus":"https://schema.org/EventScheduled","eventAttendanceMode":"https://schema.org/OfflineEventAttendanceMode","location":{"@type":"Place","name":"Downtown Cuero","address":{"@type":"PostalAddress","addressLocality":"Cuero","addressRegion":"TX","addressCountry":"US"}},"image":["https://www.thevic361.com/og-image.png"],"url":"https://www.thevic361.com/events/2026-10-09-cuero-turkeyfest-parade","endDate":"2026-10-09T18:00:00-05:00","description":"The kickoff parade for Turkeyfest.","organizer":{"@type":"Organization","name":"Downtown Cuero"},"performer":{"@type":"Organization","name":"Downtown Cuero"},"offers":{"@type":"Offer","price":0,"priceCurrency":"USD","availability":"https://schema.org/InStock","validFrom":"2026-10-09T00:00:00-05:00","url":"https://www.thevic361.com/events/2026-10-09-cuero-turkeyfest-parade"},"isAccessibleForFree":true}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Event","name":"Fall Festival at De Leon Plaza","startDate":"2026-10-10T10:00:00-05:00","eventStatus":"https://schema.org/EventScheduled","eventAttendanceMode":"https://schema.org/OfflineEventAttendanceMode","location":{"@type":"Place","name":"De Leon Plaza","address":{"@type":"PostalAddress","streetAddress":"101 N Main St","addressLocality":"Victoria","addressRegion":"TX","addressCountry":"US"}},"image":["https://www.thevic361.com/og-image.png"],"url":"https://www.thevic361.com/events/2026-10-10-fall-festival-at-de-leon-plaza","endDate":"2026-10-10T10:00:00-05:00","description":"Food, music, rides and a pumpkin patch.","organizer":{"@type":"Organization","name":"De Leon Plaza"},"performer":{"@type":"Organization","name":"De Leon Plaza"},"offers":{"@type":"Offer","price":0,"priceCurrency":"USD","availability":"https://schema.org/InStock","validFrom":"2026-10-09T00:00:00-05:00","url":"https://www.thevic361.com/events/2026-10-10-fall-festival-at-de-leon-plaza"},"isAccessibleForFree":true}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Event","name":"Riverside Park Run","startDate":"2026-10-11T07:30:00-05:00","eventStatus":"https://schema.org/EventScheduled","eventAttendanceMode":"https://schema.org/OfflineEventAttendanceMode","location":{"@type":"Place","name":"Riverside Park","address":{"@type":"PostalAddress","addressLocality":"Victoria","addressRegion":"TX","addressCountry":"US"}},"image":["https://www.thevic361.com/og-image.png"],"url":"https://www.thevic361.com/events/2026-10-11-riverside-park-run","endDate":"2026-10-11T07:30:00-05:00","description":"A 5K loop along the Guadalupe.","organizer":{"@type":"Organization","name":"Riverside Park"},"performer":{"@type":"Organization","name":"Riverside Park"},"offers":{"@type":"Offer","price":0,"priceCurrency":"USD","availability":"https://schema.org/InStock","validFrom":"2026-10-09T00:00:00-05:00","url":"https://www.thevic361.com/events/2026-10-11-riverside-park-run"},"isAccessibleForFree":true}</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header" id="site-header">
+    <div class="container header-inner">
+      <a class="logo-group" href="/">
+        <img src="/logo.png" width="48" height="48" alt="The Vic 361 logo" class="site-logo site-logo--light" />
+        <img src="/logo-dark.png" width="48" height="48" alt="" aria-hidden="true" class="site-logo site-logo--dark" />
+        <div>
+          <div class="site-title">The Vic <span>361</span></div>
+          <div class="tagline">Events &amp; Things To Do in <span class="tagline-accent">Victoria, TX</span></div>
+        </div>
+      </a>
+      <div class="header-actions">
+        <a href="/submit" class="btn btn--outline desktop-submit">Submit an Event</a>
+        <a href="/submit" class="btn btn--outline mobile-submit" aria-label="Submit an event">+ Event</a>
+        <button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch color theme" title="Toggle dark mode">
+          <svg class="theme-icon theme-icon--moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="theme-icon theme-icon--sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
+        <a href="/subscribe" class="btn btn--primary">Subscribe</a>
+      </div>
+    </div>
+  </header>
+<nav class="browse-nav" aria-label="Browse events"><div class="container browse-inner"><a href="/halloween-events">Halloween</a><a href="/today">Today</a><a href="/this-weekend">This Weekend</a><a href="/free-things-to-do">Free</a><a href="/kids-and-family">Kids &amp; Family</a><a href="/live-music">Live Music</a><a href="/food-and-drink">Food &amp; Drink</a></div></nav>
+<main class="main-content" id="main">
+  <div class="container container--narrow">
+
+    <h1 class="page-title">Free things to do in Victoria, TX this weekend</h1>
+    <p class="page-lead">There are 3 free events in Victoria, TX this weekend (Oct 9 to Oct 11), including Fall Festival at De Leon Plaza, Cuero Turkeyfest Parade, and Riverside Park Run.</p>
+    
+    <p class="share-row"><button type="button" class="share-btn share-btn--list" data-share-url="https://www.thevic361.com/free-this-weekend" data-share-text="Free things to do in Victoria, TX this weekend" data-track="share_list">Share this list</button></p>
+    <section class="day-section day--d4" id="day-0"><div class="day-header"><h2 class="day-name">Friday</h2><span class="day-date">October 9</span></div><ul class="event-list" role="list"><li class="event-entry" data-icons="community family free"><span class="event-icons" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-community"></use></svg><svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-family"></use></svg><svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-free"></use></svg></span><div class="event-details"><span class="badge badge--nearby">Nearby · Cuero</span> <span class="event-time">6:00 PM</span> <span class="event-name"><a href="/events/2026-10-09-cuero-turkeyfest-parade">Cuero Turkeyfest Parade</a></span><span class="event-venue">Downtown Cuero</span><div class="event-desc">The kickoff parade for Turkeyfest.</div></div><button type="button" class="event-share" data-share-url="/events/2026-10-09-cuero-turkeyfest-parade" data-share-text="Cuero Turkeyfest Parade" aria-label="Share Cuero Turkeyfest Parade" title="Share"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true" focusable="false"><path d="M17.5 4.5l10 8.6c.6.5.6 1.3 0 1.8l-10 8.6c-.7.6-1.7.1-1.7-.8v-4.4C10 18.4 6.6 21 4.3 26.2c-.3.7-1.3.5-1.3-.3C3.4 16.8 8.6 11 15.8 10.6V5.3c0-.9 1-1.4 1.7-.8z" fill="#FF8FC0" stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round"/></svg></button></li></ul></section><section class="day-section day--d5" id="day-1"><div class="day-header"><h2 class="day-name">Saturday</h2><span class="day-date">October 10</span></div><ul class="event-list" role="list"><li class="event-entry event-entry--featured" data-icons="family food free"><span class="event-icons" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-family"></use></svg><svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-food"></use></svg><svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-free"></use></svg></span><div class="event-details"><span class="badge badge--featured">Vic’s Pick</span> <span class="event-time">10:00 AM</span> <span class="event-name"><a href="/events/2026-10-10-fall-festival-at-de-leon-plaza">Fall Festival at De Leon Plaza</a></span><span class="event-venue">De Leon Plaza · 101 N Main St</span><div class="event-desc">Food, music, rides and a pumpkin patch.</div></div><button type="button" class="event-share" data-share-url="/events/2026-10-10-fall-festival-at-de-leon-plaza" data-share-text="Fall Festival at De Leon Plaza" aria-label="Share Fall Festival at De Leon Plaza" title="Share"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true" focusable="false"><path d="M17.5 4.5l10 8.6c.6.5.6 1.3 0 1.8l-10 8.6c-.7.6-1.7.1-1.7-.8v-4.4C10 18.4 6.6 21 4.3 26.2c-.3.7-1.3.5-1.3-.3C3.4 16.8 8.6 11 15.8 10.6V5.3c0-.9 1-1.4 1.7-.8z" fill="#FF8FC0" stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round"/></svg></button></li></ul></section><section class="day-section day--d6" id="day-2"><div class="day-header"><h2 class="day-name">Sunday</h2><span class="day-date">October 11</span></div><ul class="event-list" role="list"><li class="event-entry" data-icons="outdoors free"><span class="event-icons" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-outdoors"></use></svg><svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-free"></use></svg></span><div class="event-details"><span class="event-time">7:30 AM</span> <span class="event-name"><a href="/events/2026-10-11-riverside-park-run">Riverside Park Run</a></span><span class="event-venue">Riverside Park</span><div class="event-desc">A 5K loop along the Guadalupe.</div></div><button type="button" class="event-share" data-share-url="/events/2026-10-11-riverside-park-run" data-share-text="Riverside Park Run" aria-label="Share Riverside Park Run" title="Share"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true" focusable="false"><path d="M17.5 4.5l10 8.6c.6.5.6 1.3 0 1.8l-10 8.6c-.7.6-1.7.1-1.7-.8v-4.4C10 18.4 6.6 21 4.3 26.2c-.3.7-1.3.5-1.3-.3C3.4 16.8 8.6 11 15.8 10.6V5.3c0-.9 1-1.4 1.7-.8z" fill="#FF8FC0" stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round"/></svg></button></li></ul></section>
+    <section class="sponsor-section"><div class="sponsor-block"><div class="sponsor-label">This week's sponsor</div><div class="sponsor-name">Acme Tacos</div><div class="sponsor-text">Best tacos in town.</div><div class="sponsor-address">📍 123 Main St</div><a href="https://acme.example/?utm_source=thevic361&amp;utm_medium=sponsor&amp;utm_campaign=weekly-sponsor" class="btn btn--outline sponsor-cta" target="_blank" rel="sponsored noopener">Order now</a></div></section>
+    <p class="page-cta">Get the full list every Monday and Thursday: <a href="/subscribe">subscribe to The Vic 361 newsletter</a>. Know something we missed? <a href="/submit">Submit an event</a>.</p>
+  </div>
+</main>
+<footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-section">
+          <h2>Stay in the loop</h2>
+          <p>Get Victoria's best events in your inbox every Monday and Thursday.</p>
+          <a href="/subscribe" class="btn btn--primary">Subscribe free</a>
+        </div>
+        <div class="footer-section">
+          <h2>Browse</h2>
+          <ul class="footer-links" role="list">
+            <li><a href="/">This week</a></li>
+            <li><a href="/today">Today</a></li>
+            <li><a href="/this-weekend">This Weekend</a></li>
+            <li><a href="/free-things-to-do">Free</a></li>
+            <li><a href="/kids-and-family">Kids &amp; Family</a></li>
+            <li><a href="/live-music">Live Music</a></li>
+            <li><a href="/food-and-drink">Food &amp; Drink</a></li>
+            <li><a href="/tonight">Tonight</a></li>
+            <li><a href="/date-night">Date Night</a></li>
+            <li><a href="/next-week">Next Week</a></li>
+            <li><a href="/this-weekend-with-kids">Weekend with Kids</a></li>
+            <li><a href="/free-this-weekend">Free This Weekend</a></li>
+            <li><a href="/nightlife">Nightlife</a></li>
+            <li><a href="/arts-and-culture">Arts &amp; Culture</a></li>
+            <li><a href="/outdoor-events">Outdoors</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h2>About</h2>
+          <ul class="footer-links" role="list">
+            <li><a href="/about">About The Vic 361</a></li>
+            <li><a href="/submit">Submit an event</a></li>
+            <li><a href="/venues">Venues</a></li>
+            <li><a href="/advertise">Advertise</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="/privacy">Privacy</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom"><span>&copy; 2026 The Vic 361 · Victoria, TX</span><button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch color theme" title="Toggle dark mode">
+          <svg class="theme-icon theme-icon--moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="theme-icon theme-icon--sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button></div>
+    </div>
+  </footer>
+<script src="/pixel.js" defer></script>
+<script src="/track.js" defer></script>
+<script src="/turnstile.js" defer></script>
+<script src="/scrollfade.js" defer></script>
+</body>
+</html>

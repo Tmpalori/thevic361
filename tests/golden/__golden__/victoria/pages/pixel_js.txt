@@ -1,0 +1,3 @@
+200 application/javascript; charset=utf-8
+
+/* Meta Pixel off: set META_PIXEL_ID to turn it on. */

@@ -1,0 +1,18 @@
+200 text/calendar; charset=utf-8
+
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//The Vic 361//Events//EN
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:20261007-2026-10-07-wednesday-farmers-market@thevic361.com
+DTSTAMP:20261007T170000Z
+DTSTART:20261007T210000Z
+DTEND:20261008T000000Z
+SUMMARY:Wednesday Farmers Market
+LOCATION:Market Square\, Victoria\, TX
+DESCRIPTION:Local produce\, baked goods and crafts.\n\nhttps://www.thevic36
+ 1.com/events/2026-10-07-wednesday-farmers-market
+URL:https://www.thevic361.com/events/2026-10-07-wednesday-farmers-market
+END:VEVENT
+END:VCALENDAR
