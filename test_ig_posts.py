@@ -68,24 +68,12 @@ def reset_state(monkeypatch, tmp_path):
             "tier": "HIGH",
         },
     ]
-    repo_dir = os.path.dirname(ce.__file__)
-    originals = {}
-    for fname in ("venues.json", "facebook_venues.json"):
-        path = os.path.join(repo_dir, fname)
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                originals[fname] = f.read()
-    primary = os.path.join(repo_dir, "venues.json")
-    with open(primary, "w") as f:
+    # The collector reads venues.json from --local-dir (ce._VENUE_DIR)
+    # first, so the fixture goes in a temp dir and the repo's own
+    # venues.json is never touched.
+    monkeypatch.setattr(ce, "_VENUE_DIR", str(tmp_path))
+    with open(tmp_path / "venues.json", "w") as f:
         json.dump(venues, f)
-
-    yield
-
-    for fname, content in originals.items():
-        with open(os.path.join(repo_dir, fname), "w") as f:
-            f.write(content)
-    if "venues.json" not in originals and os.path.exists(primary):
-        os.remove(primary)
 
 
 # ─── Username normalization ─────────────────────────────────────────────────
@@ -373,8 +361,7 @@ def test_ig_posts_caps_total_venues_per_run(monkeypatch):
         venues.append({"name": f"M{i}", "tier": "MEDIUM",
                        "instagrams": [f"med{i}"]})
 
-    repo_dir = os.path.dirname(ce.__file__)
-    primary = os.path.join(repo_dir, "venues.json")
+    primary = os.path.join(ce._VENUE_DIR, "venues.json")
     with open(primary, "w") as f:
         json.dump(venues, f)
 
@@ -413,8 +400,7 @@ def test_ig_posts_env_var_overrides_default_cap(monkeypatch):
         {"name": f"H{i}", "tier": "HIGH", "instagrams": [f"high{i}"]}
         for i in range(5)
     ]
-    repo_dir = os.path.dirname(ce.__file__)
-    primary = os.path.join(repo_dir, "venues.json")
+    primary = os.path.join(ce._VENUE_DIR, "venues.json")
     with open(primary, "w") as f:
         json.dump(venues, f)
 
@@ -448,8 +434,7 @@ def test_ig_posts_invalid_env_falls_back_to_default(monkeypatch):
         {"name": f"H{i}", "tier": "HIGH", "instagrams": [f"high{i}"]}
         for i in range(5)
     ]
-    repo_dir = os.path.dirname(ce.__file__)
-    primary = os.path.join(repo_dir, "venues.json")
+    primary = os.path.join(ce._VENUE_DIR, "venues.json")
     with open(primary, "w") as f:
         json.dump(venues, f)
 
@@ -516,8 +501,7 @@ def test_ig_posts_no_tiered_ig_venues_short_circuits(monkeypatch, tmp_path):
     monkeypatch.setenv("APIFY_TOKEN", "fake")
     monkeypatch.setenv("OPENAI_API_KEY", "fake")
 
-    repo_dir = os.path.dirname(ce.__file__)
-    primary = os.path.join(repo_dir, "venues.json")
+    primary = os.path.join(ce._VENUE_DIR, "venues.json")
     with open(primary, "w") as f:
         json.dump([
             {"name": "Low Tier", "confidence": "low", "instagrams": ["foo"]},

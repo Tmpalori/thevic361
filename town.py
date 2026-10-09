@@ -61,6 +61,12 @@ VICTORIA = {
     "nearby_examples": "Cuero, Port Lavaca, Goliad, Edna, Yoakum, Corpus Christi, Houston",
     "city_tokens_extra": ["vtx"],       # local shorthand for the city
     "allevents_slug": "victoria-tx",
+    # Web sources the collector runs (collect_events.py WEB_SOURCES): all of
+    # them, its own city/library/venue scrapers included. Another town
+    # without a list gets every source but those local scrapers.
+    "enabled_sources": ["city_calendar", "chamber", "library", "moonshine", "vtx_artwalk", "jwelch",
+                        "theatre_victoria", "generals", "allevents", "gemini_search", "apify_facebook",
+                        "apify_eventbrite", "apify_facebook_posts", "apify_instagram_posts"],
     "google_sheet_id": "1S42hYlrPM516LDTcy3W_8afCkCqc-ZrUfN2J-SmP23I",
     "eventbrite_search": {"searchQuery": "events in Victoria, TX", "location": "Victoria, TX"},
     "fb_search_queries": {"primary": ["Victoria Texas"], "alt": ["Victoria, Texas"]},
@@ -93,7 +99,7 @@ _FROM_JSON = {
     "cityState": "city_state", "cityStateLong": "city_state_long", "areaCode": "area_code",
     "areaName": "area_name", "areaZips": "area_zips", "otherTowns": "other_towns", "nearbyExamples": "nearby_examples",
     "cityTokensExtra": "city_tokens_extra", "allEventsSlug": "allevents_slug", "googleSheetId": "google_sheet_id",
-    "eventbriteSearch": "eventbrite_search", "fbSearchQueries": "fb_search_queries", "geminiCategories": "gemini_categories",
+    "eventbriteSearch": "eventbrite_search", "enabledSources": "enabled_sources", "fbSearchQueries": "fb_search_queries", "geminiCategories": "gemini_categories",
 }
 
 
