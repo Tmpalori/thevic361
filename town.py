@@ -45,7 +45,42 @@ VICTORIA = {
     "timezone": "America/Chicago",
     # Social posts
     "hashtags": "#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361",
+    # Collector (collect_events.py): the area it lists, what it asks sources
+    # for, and the place names its checks and AI prompts use.
+    "area_name": "Victoria County",     # "anything outside Victoria County"
+    "area_zips": ["77901", "77902", "77903", "77904", "77905",
+                  "77968", "77976", "77951", "77977", "77988", "77960"],
+    # Towns near enough to show up in regional feeds but not ours.
+    "other_towns": [
+        "cuero", "port lavaca", "goliad", "edna", "yoakum", "hallettsville",
+        "shiner", "corpus christi", "houston", "san antonio", "austin",
+        "refugio", "ganado", "seadrift", "el campo", "wharton", "beeville",
+        "kenedy", "yorktown", "point comfort", "palacios", "rockport",
+        "port o'connor", "port oconnor", "gonzales", "bay city",
+    ],
+    "nearby_examples": "Cuero, Port Lavaca, Goliad, Edna, Yoakum, Corpus Christi, Houston",
+    "city_tokens_extra": ["vtx"],       # local shorthand for the city
+    "allevents_slug": "victoria-tx",
+    "google_sheet_id": "1S42hYlrPM516LDTcy3W_8afCkCqc-ZrUfN2J-SmP23I",
+    "eventbrite_search": {"searchQuery": "events in Victoria, TX", "location": "Victoria, TX"},
+    "fb_search_queries": {"primary": ["Victoria Texas"], "alt": ["Victoria, Texas"]},
+    "gemini_categories": [
+        "concerts, live music, open mics and karaoke",
+        "family and kids events (story times, zoo, museum, school and library programs)",
+        "festivals, markets, fairs and community events",
+        "arts, theatre, museums, galleries and film screenings",
+        "food and drink events, trivia nights, bar and brewery events",
+        "sports, runs, rodeos, outdoor and recreation events",
+        "Texas A&M University-Victoria and Victoria College events open to the general public "
+        "(concerts, plays, lectures, exhibits, games); not student-only, recruiting, orientation or club events",
+        "charity fundraisers, galas, benefit concerts and civic events open to the public "
+        "(not worship services or church meetings)",
+    ],
 }
+
+# Gemini search categories every town gets unless its town.json lists its
+# own (Victoria adds its university and college).
+SHARED_GEMINI_CATEGORIES = [c for c in VICTORIA["gemini_categories"] if "Victoria" not in c]
 
 REQUIRED = ("site_name", "domain", "city", "state", "state_name", "timezone")
 _SAFE = re.compile(r'^[^<>&"]+$')
@@ -56,6 +91,9 @@ _FROM_JSON = {
     "siteName": "site_name", "siteNameHtml": "site_name_html", "shortName": "short_name", "siteUrl": "site_url",
     "pickName": "pick_name", "pickNamePlain": "pick_name_plain", "stateName": "state_name",
     "cityState": "city_state", "cityStateLong": "city_state_long", "areaCode": "area_code",
+    "areaName": "area_name", "areaZips": "area_zips", "otherTowns": "other_towns", "nearbyExamples": "nearby_examples",
+    "cityTokensExtra": "city_tokens_extra", "allEventsSlug": "allevents_slug", "googleSheetId": "google_sheet_id",
+    "eventbriteSearch": "eventbrite_search", "fbSearchQueries": "fb_search_queries", "geminiCategories": "gemini_categories",
 }
 
 
@@ -66,7 +104,9 @@ def _complete(town_id, raw):
         raise ValueError(f"TOWN={town_id}: town.json is missing {', '.join(missing)}")
     name, domain, city = str(raw["site_name"]), str(raw["domain"]), str(raw["city"])
     pick = str(raw.get("pick_name") or "Local Pick")
+    others = raw.get("other_towns") or []
     town = {
+        "nearby_examples": ", ".join(t.title() for t in others[:7]),
         "site_name_html": name,
         "short_name": re.sub(r"^the\s+", "", name, flags=re.I),
         "site_url": f"https://www.{domain}",
@@ -76,6 +116,15 @@ def _complete(town_id, raw):
         "city_state_long": f"{city}, {raw['state_name']}",
         "county": "",
         "area_code": "",
+        "area_name": raw.get("county") or f"the {city} area",
+        "area_zips": [],
+        "other_towns": [],
+        "city_tokens_extra": [],
+        "allevents_slug": re.sub(r"[^a-z0-9]+", "-", f"{city} {raw['state']}".lower()).strip("-"),
+        "google_sheet_id": "",
+        "eventbrite_search": {"searchQuery": f"events in {city}, {raw['state']}", "location": f"{city}, {raw['state']}"},
+        "fb_search_queries": {"primary": [f"{city} {raw['state_name']}"], "alt": [f"{city}, {raw['state_name']}"]},
+        "gemini_categories": list(SHARED_GEMINI_CATEGORIES),
         # Two place tags plus the site's own name, e.g. "#BayCityTX #BayCityTexas #TheBay979".
         "hashtags": " ".join("#" + re.sub(r"[^A-Za-z0-9]", "", s) for s in (f"{city}{raw['state']}", f"{city}{raw['state_name']}", name)),
         **raw,
@@ -93,6 +142,8 @@ def _check(town):
         raise ValueError(f'TOWN={tid}: domain "{town["domain"]}" doesn\'t look like a domain')
     if not re.match(r"^https://[a-z0-9.-]+$", str(town["site_url"])):
         raise ValueError(f"TOWN={tid}: site_url must be https://host with no path")
+    if any(not re.match(r"^\d{5}$", str(z)) for z in town.get("area_zips") or []):
+        raise ValueError(f"TOWN={tid}: area_zips must be 5-digit ZIP codes")
     if town.get("area_code") and not re.match(r"^\d{3}$", str(town["area_code"])):
         raise ValueError(f"TOWN={tid}: area_code must be 3 digits or empty")
     if ZoneInfo:

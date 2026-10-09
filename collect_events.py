@@ -54,6 +54,25 @@ import requests
 from bs4 import BeautifulSoup
 import yaml
 
+# The town this collect is for (town.py; TOWN unset = Victoria). The place
+# pieces below build its location checks and prompts; for Victoria they are
+# exactly the old literals ("victoria", "tx|texas", ZIPs 77xxx…).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from town import TOWN  # noqa: E402
+def _re_words(text):
+    """re.escape, but spaces stay spaces (so patterns read like the old literals)."""
+    return re.escape(text.lower()).replace("\\ ", " ")
+
+
+_CITY_RE = _re_words(TOWN["city"])
+_STATE_RE = _re_words(TOWN["state"]) + "|" + _re_words(TOWN["state_name"])
+_COUNTY_ALT = ("|" + _re_words(TOWN["county"])) if TOWN["county"] else ""
+_CITY_WORDS = TOWN["city"].lower().split()
+_PLACE_WORDS = [*_CITY_WORDS, TOWN["state"].lower(), TOWN["state_name"].lower()]
+_ZIP_STATE_DIGIT = TOWN["area_zips"][0][0] if TOWN["area_zips"] else r"\d"
+_ZIP_AREA_PREFIX = os.path.commonprefix(TOWN["area_zips"])[:2] if TOWN["area_zips"] else r"\d\d"
+_PLACE_FULL = f"{TOWN['city_state_long']} ({TOWN['county']})" if TOWN["county"] else TOWN["city_state_long"]
+
 
 # ─── WARNINGS (silent failure observability) ────────────────────────────────
 # Two failure modes worth seeing: hard exceptions (network errors, parse
@@ -236,7 +255,7 @@ def now_central():
     run after ~7 PM Central on tomorrow's date."""
     try:
         from zoneinfo import ZoneInfo
-        return datetime.now(ZoneInfo("America/Chicago"))
+        return datetime.now(ZoneInfo(TOWN["timezone"]))
     except Exception:  # pragma: no cover - tzdata missing
         return datetime.now()
 
@@ -1303,23 +1322,12 @@ def fetch_moonshine_events(days_ahead=8):
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 _GEMINI_DEFAULT_MODEL = "gemini-2.5-flash"
-GEMINI_CATEGORIES = [
-    "concerts, live music, open mics and karaoke",
-    "family and kids events (story times, zoo, museum, school and library programs)",
-    "festivals, markets, fairs and community events",
-    "arts, theatre, museums, galleries and film screenings",
-    "food and drink events, trivia nights, bar and brewery events",
-    "sports, runs, rodeos, outdoor and recreation events",
-    "Texas A&M University-Victoria and Victoria College events open to the general public "
-    "(concerts, plays, lectures, exhibits, games); not student-only, recruiting, orientation or club events",
-    "charity fundraisers, galas, benefit concerts and civic events open to the public "
-    "(not worship services or church meetings)",
-]
+GEMINI_CATEGORIES = list(TOWN["gemini_categories"])
 
 
 def _gemini_prompt(category, start, end):
     return (
-        f"Use Google Search to find real, scheduled public events in Victoria, Texas (Victoria County) "
+        f"Use Google Search to find real, scheduled public events in {_PLACE_FULL} "
         f"happening between {start.isoformat()} and {end.isoformat()}. Focus on: {category}.\n\n"
         "Return ONLY a JSON array, no prose. Each item: "
         '{"name": str, "date": "YYYY-MM-DD", "time": "7:00 PM" or "", "venue": str, "address": str, '
@@ -1327,7 +1335,7 @@ def _gemini_prompt(category, start, end):
         'Facebook event, or official calendar entry; never a search or category page), "free": true/false/null}.\n'
         "Only include an event if a web page you found states that exact date. One item per date for "
         "repeating events. Exclude business hours, sales, job postings, online-only events, worship services, "
-        "members- or students-only events, and anything outside Victoria County. If you find none, return []."
+        f"members- or students-only events, and anything outside {TOWN['area_name']}. If you find none, return []."
     )
 
 
@@ -1381,7 +1389,7 @@ def _host_matches(host, grounded):
     return any(host == g or host.endswith("." + g) or g.endswith("." + host) for g in grounded)
 
 
-_PAGE_STOP = {"the", "and", "with", "for", "victoria", "texas", "event", "events", "night", "live", "annual", "2026", "2027"}
+_PAGE_STOP = {"the", "and", "with", "for", *_CITY_WORDS, TOWN["state_name"].lower(), "event", "events", "night", "live", "annual", "2026", "2027"}
 
 
 def _same_page(asked, final):
@@ -1592,7 +1600,7 @@ NOTABLE_MAX = 5
 
 def _notable_prompt(today):
     return (
-        "Use Google Search to find businesses and attractions in Victoria, Texas that opened in the last "
+        f"Use Google Search to find businesses and attractions in {TOWN['city_state_long']} that opened in the last "
         f"45 days or have announced they're opening soon, as of {today.isoformat()}: restaurants, cafes, "
         "bars, shops, entertainment, attractions, parks. Also major new local venues.\n\n"
         "Return ONLY a JSON array, no prose. Each item: "
@@ -1602,7 +1610,7 @@ def _notable_prompt(today):
         '"icon": one of food, drinks, shopping, arts, music, outdoors, family, community, '
         '"url": a news article or the business\'s own page about it (never a search page)}.\n'
         "Only include something if a page you found says it. Skip closings, chains' generic pages, "
-        "churches and religious organizations, anything outside Victoria County, and anything that "
+        f"churches and religious organizations, anything outside {TOWN['area_name']}, and anything that "
         "opened more than 45 days ago. At most 6 items. If you find none, return []."
     )
 
@@ -2025,13 +2033,13 @@ def enrich_thin_events(events, cache_path=None, post=None, get=None, today=None)
 VALID_ICONS = {"food", "music", "family", "drinks", "arts",
                "shopping", "outdoors", "community", "free"}
 
-_AI_REVIEW_SYSTEM_PROMPT = """You are an editor for The Vic 361, a weekly community events website for Victoria, TX. Your job is to polish event descriptions and assign icons so the site reads consistently and professionally.
+_AI_REVIEW_SYSTEM_PROMPT = """You are an editor for <<SITE>>, a weekly community events website for <<CITY_STATE>>. Your job is to polish event descriptions and assign icons so the site reads consistently and professionally.
 
 For each event you receive, return:
   - description: ≤160 characters, max 2 short sentences. Neutral, friendly local-newsletter tone. NO emojis. Do NOT repeat the event name, venue name, address, date, or time (the site already shows those). If the input description has no useful info beyond what's already in the name/venue, write a brief 1-line description of what attendees can expect based on the event type.
   - icons: 1–3 strings from this exact set: food, music, family, drinks, arts, shopping, outdoors, community, free. Order by relevance (most representative first). Use "free" only when the event is genuinely free to attend. Only use an icon the name or description actually supports: never add music unless it mentions music, a band, a DJ, a concert, karaoke or an open mic. When the input says little, use fewer icons rather than guessing.
   - free: boolean, true if the event is free to attend.
-  - appeal: integer 1–5. How many people in Victoria would want to hear about this, and how special it is. 5: a big one-time draw for the whole town (festival, parade, big concert, fair, holiday lighting, rodeo). 4: a notable one-time event with broad appeal (touring act, community celebration, big fundraiser, family carnival). 3: an ordinary good outing (live music at a bar, trivia, a market, a kids' event). 2: routine or narrow (weekly bingo, a club or group meeting, a class or workshop for a few people, a store's kids craft). 1: very niche or barely an event (a support group, an orientation, a promo or deal).
+  - appeal: integer 1–5. How many people in <<CITY>> would want to hear about this, and how special it is. 5: a big one-time draw for the whole town (festival, parade, big concert, fair, holiday lighting, rodeo). 4: a notable one-time event with broad appeal (touring act, community celebration, big fundraiser, family carnival). 3: an ordinary good outing (live music at a bar, trivia, a market, a kids' event). 2: routine or narrow (weekly bingo, a club or group meeting, a class or workshop for a few people, a store's kids craft). 1: very niche or barely an event (a support group, an orientation, a promo or deal).
   - keep: boolean. false when this is NOT a real event someone can attend at a set time and place, for example a job or internship posting, "now booking" field trips or parties, a menu or daily special with nothing happening, a "National ___ Day" post, a giveaway, a closure or holiday-hours notice, or registration for something that isn't on this date. When unsure, keep: true.
 
 Icon guidance:
@@ -2046,6 +2054,8 @@ Icon guidance:
   - free: zero cost to attend (also set free=true)
 
 Return ONLY a JSON array, one object per input event, each echoing that event's id: {"id": N, "description": "...", "icons": [...], "free": true|false, "appeal": 1-5, "keep": true|false}. No prose, no markdown fences."""
+_AI_REVIEW_SYSTEM_PROMPT = (_AI_REVIEW_SYSTEM_PROMPT.replace("<<SITE>>", TOWN["site_name"])
+                            .replace("<<CITY_STATE>>", TOWN["city_state"]).replace("<<CITY>>", TOWN["city"]))
 
 
 _EMOJI_RE = re.compile(
@@ -2374,7 +2384,7 @@ def fill_gaps(events, templates=True):
                     ev["description"] = DESC_TEMPLATES[icon].format(venue=venue)
                     break
             if not ev.get("description"):
-                ev["description"] = f"Event at {venue} in Victoria, TX."
+                ev["description"] = f"Event at {venue} in {TOWN['city_state']}."
 
     return events
 
@@ -2391,19 +2401,12 @@ def fill_gaps(events, templates=True):
 # Victoria County ZIP codes. Victoria proper is 77901/77904/77905; the rest
 # are county towns we're happy to list (Inez, Nursery, Bloomington,
 # Placedo, Telferner, McFaddin).
-VICTORIA_AREA_ZIPS = {"77901", "77902", "77903", "77904", "77905",
-                      "77968", "77976", "77951", "77977", "77988", "77960"}
+VICTORIA_AREA_ZIPS = set(TOWN["area_zips"])  # the town's ZIP codes (the name is historical)
 
 # Towns near enough to show up in regional feeds but not ours. Street names
 # like "Houston Hwy" or "Port Lavaca Dr" are real Victoria addresses, so a
 # match followed by a street suffix doesn't count.
-_OTHER_TOWNS = [
-    "cuero", "port lavaca", "goliad", "edna", "yoakum", "hallettsville",
-    "shiner", "corpus christi", "houston", "san antonio", "austin",
-    "refugio", "ganado", "seadrift", "el campo", "wharton", "beeville",
-    "kenedy", "yorktown", "point comfort", "palacios", "rockport",
-    "port o'connor", "port oconnor", "gonzales", "bay city",
-]
+_OTHER_TOWNS = list(TOWN["other_towns"])
 _STREET_SUFFIX = r"(?:hwy|highway|st|street|ave|avenue|rd|road|dr|drive|blvd|ln|lane|hwy\.|loop|pkwy)\b"
 _OTHER_TOWN_RE = re.compile(
     r"\b(" + "|".join(re.escape(t) for t in _OTHER_TOWNS) + r")\b(?!\s+" + _STREET_SUFFIX + r")",
@@ -2423,7 +2426,7 @@ def out_of_area_reason(ev):
         if z not in VICTORIA_AREA_ZIPS:
             return f"zip {z}"
     m = _OTHER_TOWN_RE.search(loc)
-    if m and not re.search(r"\bvictoria\b", loc, re.IGNORECASE):
+    if m and not re.search(r"\b" + _CITY_RE + r"\b", loc, re.IGNORECASE):
         return f"town {m.group(1).lower()}"
     m = re.search(r",\s*(" + "|".join(re.escape(t) for t in _OTHER_TOWNS) + r"),?\s*(?:tx|texas)\b",
                   str(ev.get("description") or ""), re.IGNORECASE)
@@ -2432,15 +2435,15 @@ def out_of_area_reason(ev):
     return None
 
 
-_ADDRESSY = re.compile(r"^\d+\s+\w|,\s*(?:victoria|tx|texas)\b|\b7\d{4}\b", re.IGNORECASE)
+_ADDRESSY = re.compile(r"^\d+\s+\w|,\s*(?:" + _CITY_RE + "|" + _STATE_RE + r")\b|\b" + _ZIP_STATE_DIGIT + r"\d{4}\b", re.IGNORECASE)
 
 
 # Not a place: the city itself, or a stand-in ("Restaurant of the Week"
 # on Eventbrite dinner meetups, "TBA"). The event page would read "at
 # Victoria".
 _PLACEHOLDER_PLACE_RE = re.compile(
-    r"^\s*(?:(?:city of )?victoria(?:,?\s*(?:tx|texas))?(?:,?\s*(?:usa|united states))?|victoria county"
-    r"|tx|texas|online|virtual|various(?: locations)?|multiple locations|location tbd|tba|tbd|to be announced"
+    r"^\s*(?:(?:city of )?" + _CITY_RE + r"(?:,?\s*(?:" + _STATE_RE + r"))?(?:,?\s*(?:usa|united states))?" + _COUNTY_ALT +
+    "|" + _STATE_RE + r"|online|virtual|various(?: locations)?|multiple locations|location tbd|tba|tbd|to be announced"
     r"|restaurant of the week|see description|see details|private residence|secret location)\s*\.?\s*$",
     re.IGNORECASE)
 _PLACEHOLDER_IN_RE = re.compile(r"restaurant of the week|\b(?:tba|tbd)\b|\bvarious\b", re.IGNORECASE)
@@ -2496,7 +2499,7 @@ def _street_key(addr):
     words = [w for w in a.split() if w not in {
         "n", "s", "e", "w", "north", "south", "east", "west",
         "st", "street", "ave", "avenue", "rd", "road", "dr", "drive", "blvd", "ln", "lane",
-        "suite", "ste", "victoria", "tx", "texas", "united", "states"}]
+        "suite", "ste", *_PLACE_WORDS, "united", "states"}]
     words = [w for w in words if not re.fullmatch(r"7\d{4}", w)]
     return " ".join(words[:2])
 
@@ -2544,7 +2547,7 @@ def _same_place(a, b):
     return bool(ka) and ka == kb
 
 
-_VENUE_STOP = {"the", "and", "of", "at", "victoria", "tx", "texas", "bar", "grill", "pub", "cafe",
+_VENUE_STOP = {"the", "and", "of", "at", *_PLACE_WORDS, "bar", "grill", "pub", "cafe",
                "park", "center", "centre", "church", "hall", "club", "house", "street", "st"}
 
 
@@ -2743,7 +2746,7 @@ def _same_festival(a, b):
     return _near_place(a, b)
 
 
-_CITY_TOKENS = {"victoria", "tx", "texas", "vtx"}
+_CITY_TOKENS = {*_PLACE_WORDS, *TOWN["city_tokens_extra"]}
 
 
 def _same_spot(a, b):
@@ -3329,12 +3332,15 @@ def load_extras(yaml_path):
 
 # ─── SOURCE: GOOGLE SHEET (manual submissions) ───────────────────────────────
 
-GOOGLE_SHEET_ID = "1S42hYlrPM516LDTcy3W_8afCkCqc-ZrUfN2J-SmP23I"
+GOOGLE_SHEET_ID = TOWN["google_sheet_id"]  # empty: the town has no sheet
 
 
 def fetch_google_sheet_events(days_ahead=7):
     """Fetch manually submitted events from the Google Sheet."""
     events = []
+    if not GOOGLE_SHEET_ID:
+        _note_source("google_sheet", "no sheet for this town")
+        return events
     today = _WINDOW_START
     end_date = _WINDOW_END
 
@@ -3722,15 +3728,8 @@ def fetch_generals_events(days_ahead=7):
 # not date order. Category pages surface different ones; a page that 404s or
 # changes layout just adds nothing.
 ALLEVENTS_PAGES = [
-    "https://allevents.in/victoria-tx/all",
-    "https://allevents.in/victoria-tx/this-weekend",
-    "https://allevents.in/victoria-tx/music",
-    "https://allevents.in/victoria-tx/festivals",
-    "https://allevents.in/victoria-tx/kids",
-    "https://allevents.in/victoria-tx/food-drinks",
-    "https://allevents.in/victoria-tx/performances",
-    "https://allevents.in/victoria-tx/arts",
-    "https://allevents.in/victoria-tx/sports",
+    f"https://allevents.in/{TOWN['allevents_slug']}/{page}"
+    for page in ("all", "this-weekend", "music", "festivals", "kids", "food-drinks", "performances", "arts", "sports")
 ]
 
 
@@ -3844,7 +3843,7 @@ def _parse_allevents_page(html_text, events, seen_urls):
                 elif isinstance(addr, str):
                     address = addr
             # Only Victoria-area events
-            if locality and locality.lower() not in ("victoria", ""):
+            if locality and locality.lower() not in (TOWN["city"].lower(), ""):
                 continue
 
             time_str = ""
@@ -3966,14 +3965,14 @@ def _to_central(dt):
         return dt
     try:
         from zoneinfo import ZoneInfo
-        return dt.astimezone(ZoneInfo("America/Chicago"))
+        return dt.astimezone(ZoneInfo(TOWN["timezone"]))
     except Exception:
         return dt
 
 
 # What the Eventbrite and Facebook search actors are asked for.
-EVENTBRITE_SEARCH = {"searchQuery": "events in Victoria, TX", "location": "Victoria, TX"}
-FB_SEARCH_QUERIES = {"primary": ["Victoria Texas"], "alt": ["Victoria, Texas"]}
+EVENTBRITE_SEARCH = dict(TOWN["eventbrite_search"])
+FB_SEARCH_QUERIES = {k: list(v) for k, v in TOWN["fb_search_queries"].items()}
 
 
 def fetch_apify_eventbrite_events(days_ahead=14):
@@ -4059,7 +4058,7 @@ def fetch_apify_eventbrite_events(days_ahead=14):
         city = (item.get("venueCity") or "").strip()
         region = (item.get("venueRegion") or item.get("venueState") or "").strip()
         loc_text = " ".join([venue, address, city, region, str(item.get("venueAddress") or "")]).lower()
-        if "victoria" not in loc_text:
+        if TOWN["city"].lower() not in loc_text:
             skipped["not_victoria"] += 1
             continue
 
@@ -4123,12 +4122,12 @@ def _fb_location_is_victoria_tx(loc, venue, address, city):
     let Victoria, BC's "1770 Fort St" through on its "77". A state or
     country field, when the actor sends one, has to be Texas / the US."""
     haystack = " ".join([venue, address, city]).lower()
-    if "victoria" not in haystack:
+    if TOWN["city"].lower() not in haystack:
         return False
-    if not (re.search(r"\b(?:tx|texas)\b", haystack) or re.search(r"\b77\d{3}\b", haystack)):
+    if not (re.search(r"\b(?:" + _STATE_RE + r")\b", haystack) or re.search(r"\b" + _ZIP_AREA_PREFIX + r"\d{3}\b", haystack)):
         return False
     state = str(loc.get("state") or loc.get("region") or "").strip().lower()
-    if state and state not in ("tx", "texas"):
+    if state and state not in (TOWN["state"].lower(), TOWN["state_name"].lower()):
         return False
     country = str(loc.get("countryCode") or loc.get("country") or "").strip().lower()
     if country and country not in _US_COUNTRIES:
@@ -4522,7 +4521,7 @@ def _flyers_for(posts, limit=FLYER_IMAGES_PER_ACCOUNT, fetch=None):
 def _post_events_prompt(venue_name, posts_blob, today_str, end_str):
     """The AI prompt for pulling events out of a venue's recent posts (pure, so
     the golden snapshots can pin it)."""
-    return f"""You are extracting future events from recent Facebook posts by {venue_name} in Victoria, TX.
+    return f"""You are extracting future events from recent Facebook posts by {venue_name} in {TOWN['city_state']}.
 
 Posts:
 {posts_blob}
@@ -4542,7 +4541,7 @@ Rules:
 - A post ending in "[post continues]" was cut short; use only what you can read and don't guess the rest.
 - Skip posts that are pure promo, photo dumps, customer thank-yous, or undated announcements.
 - Skip events that already happened (post-date BEFORE today's date with no recurring signal).
-- Only include events held in Victoria, TX or elsewhere in Victoria County. Skip events in other towns (Cuero, Port Lavaca, Goliad, Edna, Yoakum, Corpus Christi, Houston, etc.).
+- Only include events held in {TOWN['city_state']} or elsewhere in {TOWN['area_name']}. Skip events in other towns ({TOWN['nearby_examples']}, etc.).
 - Return [] if no events found. No prose, no markdown fences."""
 
 

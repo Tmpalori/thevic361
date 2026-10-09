@@ -130,9 +130,10 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
       Eventbrite queries, Gemini categories, Google Sheet ID, enabled
       sources, AI prompt place names, social slide text. `TOWN` unset =
       today's literals; Python goldens unchanged.
-      (In progress: `town.py` plus the social kit, slides, poster, event
-      check, submission review, digest and ops scripts are done; the
-      collector's fields come next, then a–c.)
+      (In progress: `town.py`, the scripts and the collector's town values
+      (timezone, area ZIPs, other towns, AllEvents, Sheet, Eventbrite and
+      Facebook searches, Gemini categories, prompts, place checks) are done;
+      a–c next.)
   - [ ] a. Turn the 11 Victoria-only scrapers into a registry selected by
         `enabled_sources` (Victoria enables all of them).
   - [ ] b. Make `_load_venue_list` honor `--local-dir`.
