@@ -150,7 +150,8 @@
   function repo() {
     const c = state.serverConfig || {};
     return { owner: c.github_owner || REPO_OWNER, name: c.github_repo || REPO_NAME, branch: c.github_branch || BRANCH,
-      eventsPath: c.github_events_path || EVENTS_PATH };
+      eventsPath: c.github_events_path || EVENTS_PATH,
+      candidatesPath: c.github_candidates_path || CANDIDATES_PATH };
   }
 
   // The few labels admin.html writes as Victoria's, set from the town once
@@ -541,7 +542,7 @@
         warning = json.warning || null;
         source = json.source || null;
       } else if (mode === 'pat') {
-        const got = await ghGetJsonFile(CANDIDATES_PATH);
+        const got = await ghGetJsonFile(repo().candidatesPath);
         data = got.data;
       } else {
         throw new Error('No publishing credentials configured.');

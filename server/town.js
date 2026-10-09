@@ -169,6 +169,26 @@ export function otherTownDomains(t = town, townsDir = path.join(ROOT, 'towns')) 
   });
 }
 
+// Where a town's data lives, relative to the repo root: Victoria's at the
+// root and in docs/ (where it always was), another town's under
+// towns/<slug>/ (its public files in towns/<slug>/public/, served before
+// docs/). The collector, the social kit, the admin's GitHub reads and writes
+// and the server all use these (town.py town_paths() is the Python twin).
+export function townPaths(t = town) {
+  const own = t.id === VICTORIA.id ? '' : `towns/${t.id}/`;
+  const pub = t.id === VICTORIA.id ? 'docs/' : `towns/${t.id}/public/`;
+  return {
+    candidates: `${own}candidates.json`,
+    collectionMetadata: `${own}collection_metadata.json`,
+    enrichmentCache: `${own}enrichment_cache.json`,
+    venues: `${own}venues.json`,
+    localEvents: `${own}local_events.yaml`,
+    extras: `${own}extras.yaml`,
+    events: `${pub}events.json`,
+    social: `${pub}social/latest/`
+  };
+}
+
 // The process's town. A live binding: modules that import it see useTown's
 // change, so read its fields when rendering, never copy them at load.
 export let town = townConfig();
