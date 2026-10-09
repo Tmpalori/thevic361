@@ -296,3 +296,20 @@ describe('the site with the daily limit', () => {
     expect(stored.some(e => e.featured)).toBe(false); // nothing pinned for good
   });
 });
+
+describe('"Also that day" on an event page', () => {
+  it('takes the earliest six (picks always in), in time order, whatever order they were stored in', async () => {
+    const { renderEventPage, withPages } = await import('../server/seo.js');
+    const times = ['11:00 PM', '10:00 PM', '9:00 PM', '8:00 PM', '7:00 PM', '6:00 PM', '5:00 PM', '4:00 PM', '8:00 AM'];
+    const evs = withPages([
+      { date: '2026-10-10', name: 'Main Event', time: '3:00 PM', venue: 'V' },
+      ...times.map((time, i) => ({ date: '2026-10-10', name: `Show ${i}`, time, venue: 'V', ...(i === 0 ? { featured: true } : {}) }))
+    ]);
+    const main = evs.find(e => e.name === 'Main Event');
+    const html = renderEventPage(main, evs, { siteUrl: 'https://x', now: new Date('2026-10-07T17:00:00Z') });
+    const shown = ['Show 8', 'Show 7', 'Show 6', 'Show 5', 'Show 4', 'Show 0'].map(n => html.indexOf(`>${n}<`));
+    expect(shown.every(i => i > 0)).toBe(true);
+    expect(shown).toEqual([...shown].sort((a, b) => a - b));
+    expect(html).not.toContain('>Show 1<');
+  });
+});

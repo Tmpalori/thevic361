@@ -966,9 +966,10 @@ export function ctaHtml() {
   return `<p class="page-cta">Get the full list every Monday and Thursday: <a href="/subscribe">subscribe to The Vic 361 newsletter</a>. Know something we missed? <a href="/submit">Submit an event</a>.</p>`;
 }
 
-// Short "including A, B, and C" clause from the first few names.
+// Short "including A, B, and C" clause from the first few names, Vic's
+// Picks first (the list itself is in time order; sort is stable).
 function including(list) {
-  const names = [...new Set(list.map(ev => ev.name))].slice(0, 3);
+  const names = [...new Set(list.slice().sort((a, b) => pickRank(a) - pickRank(b)).map(ev => ev.name))].slice(0, 3);
   if (!names.length) return '';
   if (names.length === 1) return `, including ${names[0]}`;
   return `, including ${names.slice(0, -1).join(', ')}${names.length > 2 ? ',' : ''} and ${names[names.length - 1]}`;
@@ -1021,7 +1022,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
     ? `${ev.name} at ${venue} · ${shortDate}` : '';
   const heading = withVenue && withVenue.length <= 60 ? withVenue : `${ev.name} · ${shortDate}`;
   // "Also that day": picks are always among the six, then shown in time order.
-  const sameDay = sortEvents(events.filter(o => o.date === ev.date && o.page !== ev.page)
+  const sameDay = sortEvents(sortEvents(events.filter(o => o.date === ev.date && o.page !== ev.page))
     .sort((a, b) => pickRank(a) - pickRank(b)).slice(0, 6));
   const description = (ev.description ? ev.description + ' ' : '') +
     `${when}${where ? ` at ${where}` : ''}, ${townOf(ev)}, TX.`;

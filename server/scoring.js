@@ -5,8 +5,9 @@
  * Fri–Sun); the rest are marked `overflow` and left out of the day lists
  * (homepage, /today, /this-weekend, /next-week, /events.json, newsletter,
  * social kit) but keep their own page and stay in the guides (Halloween,
- * kids, venues...), which have no daily limit. Lists stay in time order
- * (sortEvents), Vic's Picks included; the score only decides what's in.
+ * kids, venues...), which have no daily limit. Site lists stay in time order
+ * (sortEvents), Vic's Picks included (the social kit still leads with picks);
+ * the score only decides what's in.
  *
  * Always in, whatever the score: Vic's Picks / sponsored (`featured`) and
  * anything the admin chose to show anyway (`keep`, set from the admin).
