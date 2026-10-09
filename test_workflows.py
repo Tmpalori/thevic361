@@ -4,6 +4,7 @@ real against a fake curl."""
 import os
 import stat
 import subprocess
+import sys
 
 import pytest
 import yaml
@@ -120,6 +121,14 @@ def test_every_workflow_parses(name):
     assert load(name)["jobs"]
 
 
+def town_env(town=None):
+    """What the workflows' "Town paths" step puts in GITHUB_ENV (TOWN unset = Victoria)."""
+    env = {k: v for k, v in os.environ.items() if k not in ("TOWN", "TOWNS_DIR")}
+    out = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "town.py"), "paths"],
+                         env=env, capture_output=True, text=True, check=True).stdout
+    return dict(line.split("=", 1) for line in out.splitlines())
+
+
 def _git(cwd, *args):
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd, check=True,
                    capture_output=True, text=True)
@@ -146,7 +155,7 @@ def run_kit_commit(tmp_path, posting):
     bin_dir.mkdir()
     _exe(bin_dir / "sleep", "#!/bin/sh\nexit 0\n")
     env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", POSTING="true" if posting else "false",
-               GIT_CONFIG_GLOBAL=os.devnull)
+               GIT_CONFIG_GLOBAL=os.devnull, **town_env())
     r = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", script], cwd=mine, env=env,
                        capture_output=True, text=True, timeout=60)
     _git(other, "pull", "-q", "--rebase", "origin", "main")
@@ -278,9 +287,24 @@ def test_weekly_collect_keeps_its_files_when_main_changed_them(tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _exe(bin_dir / "sleep", "#!/bin/sh\nexit 0\n")
-    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", GIT_CONFIG_GLOBAL=os.devnull)
+    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", GIT_CONFIG_GLOBAL=os.devnull, **town_env())
     r = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", script], cwd=mine, env=env,
                        capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr
     _git(other, "pull", "-q", "--rebase", "origin", "main")
     assert '"this collect"' in (other / "candidates.json").read_text()
+
+
+@pytest.mark.parametrize("name", sorted(os.listdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".github", "workflows"))))
+def test_town_paths_are_set_before_use(name):
+    # A step that reads $TOWN_CANDIDATES etc. after no "Town paths" step
+    # would see an empty path (git add "" fails; --candidates "./" worse).
+    for job_name, job in load(name)["jobs"].items():
+        seen = False
+        for st in job.get("steps", []):
+            if st.get("name") == "Town paths":
+                assert st["run"].strip() == 'python3 town.py paths >> "$GITHUB_ENV"'
+                seen = True
+                continue
+            uses = "TOWN_" in yaml.safe_dump(st)
+            assert seen or not uses, f"{name} {job_name}: {st.get('name')} uses TOWN_* before the Town paths step"

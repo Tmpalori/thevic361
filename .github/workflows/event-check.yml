@@ -86,13 +86,18 @@ jobs:
       # approved or an admin publish during the deploy bumps it too. See
       # wait_for_publish in scripts/sweep_events.py. If they never go live,
       # it alerts Slack and the check runs on what's there.
+      - name: Town paths
+        # TOWN unset is Victoria: its files at the repo root and in docs/.
+        # Another town's live under towns/<slug>/ (town.py town_paths).
+        run: python3 town.py paths >> "$GITHUB_ENV"
+
       - name: Wait for the new events to go live
         if: github.event_name == 'workflow_run'
         env:
           SITE_URL: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
           # A timeout (no deploy) alerts the owner here; the check still runs.
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
-        run: python3 scripts/sweep_events.py --wait-for candidates.json
+        run: python3 scripts/sweep_events.py --wait-for "$TOWN_CANDIDATES"
 
       - name: Check the live events
         timeout-minutes: 5

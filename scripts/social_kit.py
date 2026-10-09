@@ -38,16 +38,16 @@ except ImportError:  # pragma: no cover
     ZoneInfo = None
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from town import TOWN, site_url  # noqa: E402  (repo root; TOWN unset = Victoria)
+from town import TOWN, site_url, town_paths  # noqa: E402  (repo root; TOWN unset = Victoria)
 
 SITE = site_url()
-OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "docs", "social", "latest")
+OUT_DIR = os.path.join(os.path.dirname(__file__), "..", *town_paths()["social"].strip("/").split("/"))
 # A sneak peek, not the whole list: two per day (Vic's Picks / sponsored
 # first; select_events sorts them to the top), then "+ N more" and the link.
 PER_DAY_CAPTION = 2
 
 HASHTAGS = TOWN["hashtags"]
-VENUES_FILE = os.path.join(os.path.dirname(__file__), "..", "venues.json")
+VENUES_FILE = os.path.join(os.path.dirname(__file__), "..", *town_paths()["venues"].split("/"))
 KINDS = ("week", "weekend", "today")
 TITLES = {
     "week": (f"This week in {TOWN['city_state']}", f"This Week in {TOWN['city']}", "/"),

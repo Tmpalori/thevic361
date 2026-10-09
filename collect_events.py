@@ -58,7 +58,7 @@ import yaml
 # pieces below build its location checks and prompts; for Victoria they are
 # exactly the old literals ("victoria", "tx|texas", ZIPs 77xxx…).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from town import TOWN  # noqa: E402
+from town import TOWN, town_paths  # noqa: E402
 def _re_words(text):
     """re.escape, but spaces stay spaces (so patterns read like the old literals)."""
     return re.escape(text.lower()).replace("\\ ", " ")
@@ -5367,9 +5367,9 @@ def enabled_web_sources(town=None):
 def main():
     parser = argparse.ArgumentParser(description="The Vic 361 — Event Collector")
     parser.add_argument("--output", default="./events.json", help="Output JSON path")
-    parser.add_argument("--candidates", default="./candidates.json", help="Candidates JSON path (all raw events for screening)")
+    parser.add_argument("--candidates", default="./" + town_paths()["candidates"], help="Candidates JSON path (all raw events for screening)")
     parser.add_argument("--days", type=int, default=14, help="Days ahead to collect (default 14)")
-    parser.add_argument("--local-dir", default=".", help="Dir with local_events.yaml + extras.yaml")
+    parser.add_argument("--local-dir", default=town_paths()["dir"], help="Dir with local_events.yaml + extras.yaml")
     parser.add_argument("--skip-web", action="store_true", help="Local YAML only")
     parser.add_argument("--skip-ai", action="store_true", help="Skip AI cleanup")
     parser.add_argument("--no-backfill", action="store_true",

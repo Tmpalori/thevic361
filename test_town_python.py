@@ -168,3 +168,27 @@ def test_venue_list_comes_from_local_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(ce, "_VENUE_DIR", None)
     venues, path = ce._load_venue_list()
     assert venues and os.path.abspath(os.path.dirname(path)) == os.path.dirname(os.path.abspath(ce.__file__))
+
+
+def test_paths_victoria_where_they_always_were():
+    assert town_mod.town_paths(town_mod.VICTORIA) == {
+        "dir": ".", "candidates": "candidates.json", "collection_metadata": "collection_metadata.json",
+        "enrichment_cache": "enrichment_cache.json", "venues": "venues.json", "local_events": "local_events.yaml",
+        "extras": "extras.yaml", "events": "docs/events.json", "social": "docs/social/latest/"}
+
+
+def test_paths_cli_for_the_workflows():
+    import subprocess
+    out = subprocess.run([sys.executable, os.path.join(HERE, "town.py"), "paths"], capture_output=True, text=True,
+                         env={k: v for k, v in os.environ.items() if k not in ("TOWN", "TOWNS_DIR")}, check=True).stdout
+    assert out.splitlines()[:3] == ["TOWN_DIR=.", "TOWN_CANDIDATES=candidates.json", "TOWN_COLLECTION_METADATA=collection_metadata.json"]
+    assert "TOWN_SOCIAL=docs/social/latest/" in out.splitlines()
+
+
+def test_paths_another_town(bay):
+    p = bay["town"].town_paths()
+    assert p["dir"] == "towns/bay" and p["candidates"] == "towns/bay/candidates.json"
+    assert p["events"] == "towns/bay/public/events.json" and p["social"] == "towns/bay/public/social/latest/"
+    kit = bay["social_kit"]
+    assert os.path.normpath(kit.OUT_DIR) == os.path.join(HERE, "towns", "bay", "public", "social", "latest")
+    assert os.path.normpath(kit.VENUES_FILE) == os.path.join(HERE, "towns", "bay", "venues.json")

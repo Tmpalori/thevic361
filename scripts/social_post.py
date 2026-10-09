@@ -32,7 +32,7 @@ import time
 import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from town import TOWN, site_url, tz  # noqa: E402  (repo root; TOWN unset = Victoria)
+from town import TOWN, site_url, tz, town_paths  # noqa: E402  (repo root; TOWN unset = Victoria)
 
 SITE = site_url()
 # One place for the Graph API version. The GRAPH_API_VERSION repo variable
@@ -48,7 +48,7 @@ GRAPH = f"https://graph.facebook.com/{GRAPH_VERSION}"
 # site's scheduler already ran the job.
 TRANSIENT_CODES = {1, 2, 4, 17, 341, 9004, 9007}
 RETRY_DELAYS = (5, 20)  # seconds; bounded so the post step stays well inside its timeout
-KIT_DIR = os.path.join(os.path.dirname(__file__), "..", "docs", "social", "latest")
+KIT_DIR = os.path.join(os.path.dirname(__file__), "..", *town_paths()["social"].strip("/").split("/"))
 MAX_CAROUSEL = 10  # Instagram's carousel limit (Facebook allows more, but keep them in sync)
 
 

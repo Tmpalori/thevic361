@@ -41,7 +41,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import requests  # noqa: E402
 
 import collect_events as ce  # noqa: E402
-from town import TOWN, site_url  # noqa: E402
+from town import TOWN, site_url, town_paths  # noqa: E402
 
 SITE = site_url()
 UA = {"User-Agent": "vic361-submission-review"}
@@ -149,7 +149,7 @@ def known_domains(live, venues=None):
     websites and social pages, and links already on live events."""
     if venues is None:
         try:
-            with open(os.path.join(os.path.dirname(__file__), "..", "venues.json"), encoding="utf-8") as f:
+            with open(os.path.join(os.path.dirname(__file__), "..", *town_paths()["venues"].split("/")), encoding="utf-8") as f:
                 venues = json.load(f)
         except (OSError, ValueError):
             venues = []

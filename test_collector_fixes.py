@@ -326,7 +326,7 @@ def test_workflow_passes_the_documented_knobs():
 def test_workflow_slack_step_reports_warnings():
     steps = _collect_workflow()["jobs"]["collect"]["steps"]
     run = next(s for s in steps if s.get("name") == "Tell Slack the candidates are ready")["run"]
-    assert "collection_metadata.json" in run and "warnings" in run
+    assert "TOWN_COLLECTION_METADATA" in run and "warnings" in run  # the town's collection_metadata.json
 
 
 @pytest.mark.parametrize("knob", ["FB_POSTS_MAX_VENUES", "EVENTBRITE_MAX"])
