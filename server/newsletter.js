@@ -901,7 +901,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       // these same people within Resend's 24 hours) means they got it.
       const who = crypto.createHash('sha256').update(chunk.map(s => s.email).join(',')).digest('hex').slice(0, 16);
       try {
-        const out = await resend.batch(msgs, `vic361-${key}-${who}${attempt}`);
+        const out = await resend.batch(msgs, `${town.keyPrefix}-${key}-${who}${attempt}`);
         // Permissive validation: refused addresses come back by index; the
         // rest of the chunk went out.
         const refused = new Map((out && Array.isArray(out.errors) ? out.errors : []).map(e => [Number(e.index), e.message]));
@@ -1065,7 +1065,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       // One key per confirmation: a comeback's welcome (new token, new
       // unsubscribe link) isn't a repeat of the first one, and reusing the
       // key would make Resend refuse it.
-      }, `vic361-welcome-${sub.id || sub.token}-${new Date(sub.confirmed_at || 0).getTime() || 0}`);
+      }, `${town.keyPrefix}-welcome-${sub.id || sub.token}-${new Date(sub.confirmed_at || 0).getTime() || 0}`);
     } catch (err) {
       console.warn('[newsletter] welcome email failed:', err.message);
       // The signup is saved either way, but with single opt-in this is the
@@ -1392,7 +1392,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       try {
         const confirmUrl = `${siteUrl}/subscribe/confirm?token=${encodeURIComponent(sub.token)}`;
         const mail = renderConfirmEmail({ siteUrl, confirmUrl, address: config.address, reminder: true });
-        await resend.send({ from: config.from, to: [sub.email], subject: mail.subject, html: mail.html, text: mail.text }, `vic361-remind-${sub.id}`);
+        await resend.send({ from: config.from, to: [sub.email], subject: mail.subject, html: mail.html, text: mail.text }, `${town.keyPrefix}-remind-${sub.id}`);
         sent++;
       } catch (err) {
         console.warn('[newsletter] confirm reminder failed:', err.message);

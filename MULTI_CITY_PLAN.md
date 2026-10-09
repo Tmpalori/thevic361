@@ -142,11 +142,12 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
 
 These matter the moment a second town exists. All keep Victoria's values.
 
-- [ ] **2.1 Key prefixes.** New towns use `<slug>` where Victoria uses
+- [x] **2.1 Key prefixes.** New towns use `<slug>` where Victoria uses
       `vic361`: Stripe lookup keys, product metadata and idempotency keys,
       Resend idempotency keys (the weekly batch key would otherwise collide
       across towns and silently drop the second town's issue), Tremendous
-      `external_id` (the monthly drawing would collide).
+      `external_id` (the monthly drawing would collide). Done as
+      `town.keyPrefix`.
 - [ ] **2.2 Stripe town filter.** Add `metadata.town` to checkout sessions,
       payment intents and subscriptions. Each town's webhook ignores events
       for another town (missing metadata = Victoria). Only alert on a fraud

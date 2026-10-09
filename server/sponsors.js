@@ -235,7 +235,7 @@ export function createStripe(secretKey, fetchImpl = globalThis.fetch) {
   // first time it's needed, so the Dashboard catalog and reports show
   // "Weekly sponsor" etc. instead of a throwaway product per checkout.
   const priceCache = new Map();
-  const lookupKeyOf = pkg => `vic361_${pkg.key}_${pkg.amount}${pkg.interval ? `_${pkg.interval}` : ''}`;
+  const lookupKeyOf = pkg => `${town.keyPrefix}_${pkg.key}_${pkg.amount}${pkg.interval ? `_${pkg.interval}` : ''}`;
   async function ensurePrice(pkg) {
     const lookupKey = lookupKeyOf(pkg);
     if (priceCache.has(lookupKey)) return priceCache.get(lookupKey);
@@ -243,12 +243,12 @@ export function createStripe(secretKey, fetchImpl = globalThis.fetch) {
     let id = found && Array.isArray(found.data) && found.data[0] && found.data[0].id;
     if (!id) {
       const product = await call('POST', '/products', {
-        name: `${town.siteName}: ${pkg.name}`, metadata: { vic361_package: pkg.key }
-      }, `vic361-product-${pkg.key}`);
+        name: `${town.siteName}: ${pkg.name}`, metadata: { [`${town.keyPrefix}_package`]: pkg.key }
+      }, `${town.keyPrefix}-product-${pkg.key}`);
       const price = await call('POST', '/prices', {
         product: product.id, currency: 'usd', unit_amount: pkg.amount, lookup_key: lookupKey,
         recurring: pkg.interval ? { interval: pkg.interval } : undefined
-      }, `vic361-price-${lookupKey}`);
+      }, `${town.keyPrefix}-price-${lookupKey}`);
       id = price.id;
     }
     priceCache.set(lookupKey, id);
@@ -1135,7 +1135,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     if (!owesConfirmation(order) || confirming.has(order.id)) return false;
     confirming.add(order.id);
     try {
-      const sent = await mailer.send(order.email, renderSponsorConfirmed(order, { siteUrl, address: mailAddress }), `vic361-sponsor-${order.id}`);
+      const sent = await mailer.send(order.email, renderSponsorConfirmed(order, { siteUrl, address: mailAddress }), `${town.keyPrefix}-sponsor-${order.id}`);
       const failures = await withBookingLock(async () => {
         const cur = (await freshOrders()).find(o => o.id === order.id);
         if (!cur || cur.confirmation_sent) return 0;
@@ -1227,7 +1227,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         out.skipped++;
         continue;
       }
-      const sent = await mailer.send(order.email, renderSponsorReport(order, stats, { siteUrl, address: mailAddress }), `vic361-sponsor-report-${order.id}`);
+      const sent = await mailer.send(order.email, renderSponsorReport(order, stats, { siteUrl, address: mailAddress }), `${town.keyPrefix}-sponsor-report-${order.id}`);
       if (!sent) {
         // Tried again on the next run; the owner hears once per order
         // (the 15-minute cron would repeat Slack's 15-minute dedupe).
@@ -1389,7 +1389,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         out.skipped++;
         continue;
       }
-      const sent = await mailer.send(order.email, renderPickReport(order, stats, { siteUrl, address: mailAddress }), `vic361-pick-report-${order.id}`);
+      const sent = await mailer.send(order.email, renderPickReport(order, stats, { siteUrl, address: mailAddress }), `${town.keyPrefix}-pick-report-${order.id}`);
       if (!sent) {
         out.failed++;
         if (slack && !order.report_failed) {
@@ -1571,7 +1571,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
               'https://dashboard.stripe.com/payments');
           }
           if (mailer && mailer.enabled) {
-            mail.push(() => mailer.send(order.email, renderSponsorTooLate(order, { siteUrl, address: mailAddress }), `vic361-sponsor-late-${order.id}`));
+            mail.push(() => mailer.send(order.email, renderSponsorTooLate(order, { siteUrl, address: mailAddress }), `${town.keyPrefix}-sponsor-late-${order.id}`));
           }
           return;
         }
@@ -1936,7 +1936,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         let session;
         try {
           try {
-            session = await stripe.createCheckoutSession(sessionParams(lineItem), `vic361-order-${order.id}`);
+            session = await stripe.createCheckoutSession(sessionParams(lineItem), `${town.keyPrefix}-order-${order.id}`);
           } catch (err) {
             // The cached catalog price was archived (or its product) in the
             // Dashboard: every checkout failed until a restart. Forget it,
@@ -1951,7 +1951,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
               const again = await stripe.ensurePrice(priced);
               if (again && again !== lineItem.price) retry = { quantity: 1, price: again };
             } catch (e) { console.warn('[sponsors] catalog price lookup failed, using inline price:', e.message); }
-            session = await stripe.createCheckoutSession(sessionParams(retry), `vic361-order-${order.id}-retry`);
+            session = await stripe.createCheckoutSession(sessionParams(retry), `${town.keyPrefix}-order-${order.id}-retry`);
           }
         } catch (err) {
           console.error('[sponsors] checkout session failed:', err.message);
