@@ -34,6 +34,8 @@ export const VICTORIA = Object.freeze({
   city: 'Victoria',
   state: 'TX',
   stateName: 'Texas',
+  cityState: 'Victoria, TX',          // place labels, footers, page text
+  cityStateLong: 'Victoria, Texas',   // schema.org areaServed, about text
   timezone: 'America/Chicago'
 });
 
@@ -52,6 +54,8 @@ function complete(id, raw) {
     emailFrom: `${raw.siteName} <news@${domain}>`,
     gaId: '',
     icalDomain: domain,
+    cityState: `${raw.city}, ${raw.state}`,
+    cityStateLong: `${raw.city}, ${raw.stateName}`,
     ...raw,
     id
   };
@@ -67,7 +71,7 @@ function fromFile(id, dir) {
 }
 
 function check(t) {
-  for (const k of ['siteName', 'city', 'state', 'stateName']) {
+  for (const k of ['siteName', 'city', 'state', 'stateName', 'cityState', 'cityStateLong']) {
     if (!SAFE_TEXT.test(String(t[k] || ''))) throw new Error(`TOWN=${t.id}: ${k} can't be empty or contain < > & "`);
   }
   for (const k of ['domain', 'icalDomain']) {

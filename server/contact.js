@@ -48,7 +48,7 @@ export function renderContactPage({ siteUrl, values = {}, errors = {}, sent = fa
   return layout({
     siteUrl, path: '/contact', noindex: sent,
     title: `Contact | ${town.siteName}`,
-    description: `Contact ${town.siteName} about advertising, an event, or a listing in Victoria, TX.`,
+    description: `Contact ${town.siteName} about advertising, an event, or a listing in ${town.cityState}.`,
     body
   });
 }

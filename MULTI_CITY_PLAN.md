@@ -94,7 +94,7 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
         GA snippet; keep the GA test in sync).
   - [ ] b. Time zone (`seo.js` `TZ`, `chicagoOffset`, `scheduler.js`,
         `guides.js` `ctz`).
-  - [ ] c. Geography in JSON-LD and venues (`townOf`, `addressRegion`,
+  - [x] c. Geography in JSON-LD and venues (`townOf`, `addressRegion`,
         `addressLocality`, `guides.js` venue cleanup).
   - [ ] d. Page copy (15 hub pages, about, privacy, advertise, llms, 24
         guides).

@@ -455,11 +455,12 @@ export function decodeEntities(str) {
   });
 }
 
-// Where an event is. Most are in Victoria; a few big nearby-town events
-// (Cuero Turkeyfest, Port Lavaca's Boo-Fest) carry `town` from
-// local_events.yaml so pages, calendar files and schema say the right town.
+// Where an event is. Most are in the site's town (town.city: Victoria); a
+// few big nearby-town events (Cuero Turkeyfest, Port Lavaca's Boo-Fest)
+// carry `town` from local_events.yaml so pages, calendar files and schema
+// say the right town.
 export function townOf(ev) {
-  return String((ev && ev.town) || '').trim() || 'Victoria';
+  return String((ev && ev.town) || '').trim() || town.city;
 }
 
 // "Nearby · Cuero" tag on list items for events outside Victoria. docs/app.js
@@ -667,12 +668,12 @@ export function eventJsonLd(ev, siteUrl) {
     eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
     location: {
       '@type': 'Place',
-      name: ev.venue || `${townOf(ev)}, TX`,
+      name: ev.venue || `${townOf(ev)}, ${town.state}`,
       address: {
         '@type': 'PostalAddress',
         ...(ev.address ? { streetAddress: ev.address } : {}),
         addressLocality: townOf(ev),
-        addressRegion: 'TX',
+        addressRegion: town.state,
         addressCountry: 'US'
       }
     },
@@ -848,7 +849,7 @@ function headerHtml() {
         <img src="/logo-dark.png" width="48" height="48" alt="" aria-hidden="true" class="site-logo site-logo--dark" />
         <div>
           <div class="site-title">${town.siteNameHtml}</div>
-          <div class="tagline">Events &amp; Things To Do in <span class="tagline-accent">Victoria, TX</span></div>
+          <div class="tagline">Events &amp; Things To Do in <span class="tagline-accent">${town.cityState}</span></div>
         </div>
       </a>
       <div class="header-actions">
@@ -891,7 +892,7 @@ function footerHtml() {
           </ul>
         </div>
       </div>
-      <div class="footer-bottom"><span>&copy; ${year} ${town.siteName} · Victoria, TX</span>${THEME_TOGGLE}</div>
+      <div class="footer-bottom"><span>&copy; ${year} ${town.siteName} · ${town.cityState}</span>${THEME_TOGGLE}</div>
     </div>
   </footer>`;
 }
@@ -1047,7 +1048,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   // "from 10:00 AM to 3:00 PM at The PumpHouse", not "at 10:00 AM – 3:00 PM at …".
   const timePart = !time ? '' : / – /.test(time) ? ` from ${time.replace(' – ', ' to ')}` : `, ${time},`;
   const lead = `${ev.name} ${ev.date < today ? 'was' : 'is'} on ${when}${timePart}` +
-    `${where ? ` at ${where}` : ''} in ${townOf(ev)}, TX.` + (ev.free === true ? ' Free to attend.' : '');
+    `${where ? ` at ${where}` : ''} in ${townOf(ev)}, ${town.state}.` + (ev.free === true ? ' Free to attend.' : '');
   // With no source link there are no "event details" to point at.
   const cost = ev.free === true ? 'Free'
     : src ? 'See event details'
@@ -1063,7 +1064,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   const sameDay = sortEvents(sortEvents(events.filter(o => o.date === ev.date && o.page !== ev.page))
     .sort((a, b) => pickRank(a) - pickRank(b)).slice(0, 6));
   const description = (ev.description ? ev.description + ' ' : '') +
-    `${when}${where ? ` at ${where}` : ''}, ${townOf(ev)}, TX.`;
+    `${when}${where ? ` at ${where}` : ''}, ${townOf(ev)}, ${town.state}.`;
   const body = `
     <p class="breadcrumbs"><a href="/">This week</a> › ${escHtml(ev.name)}</p>
     <h1 class="page-title">${escHtml(ev.name)}</h1>
@@ -1101,7 +1102,7 @@ export const PRIVACY_UPDATED = 'October 8, 2026';
 export function renderPrivacyPage({ siteUrl }) {
   const body = `
     <h1 class="page-title">Privacy</h1>
-    <p class="page-lead">${town.siteName} is a free events guide for Victoria, Texas. This page explains what we collect, why, and the choices you have. Last updated ${PRIVACY_UPDATED}.</p>
+    <p class="page-lead">${town.siteName} is a free events guide for ${town.cityStateLong}. This page explains what we collect, why, and the choices you have. Last updated ${PRIVACY_UPDATED}.</p>
     <h2 class="section-heading">What you give us</h2>
     <ul>
       <li><strong>Newsletter:</strong> your email address, so we can send the newsletter (Mondays and Thursdays). Every email has a one-click unsubscribe link. We don't sell or share your address.</li>
@@ -1135,7 +1136,7 @@ export function renderPrivacyPage({ siteUrl }) {
 export function renderAboutPage({ siteUrl }) {
   const body = `
     <h1 class="page-title">About ${town.siteName}</h1>
-    <p class="page-lead">${town.siteName} is a free weekly guide to events and things to do in Victoria, Texas. Every week we collect concerts, festivals, family activities, markets, and community events from across Victoria and publish them in one list, on this site and in our email newsletter.</p>
+    <p class="page-lead">${town.siteName} is a free weekly guide to events and things to do in ${town.cityStateLong}. Every week we collect concerts, festivals, family activities, markets, and community events from across Victoria and publish them in one list, on this site and in our email newsletter.</p>
     <h2 class="section-heading">How we build the list</h2>
     <p>${town.siteName} is put together right here in Victoria. We round up what's happening from the City of Victoria, the Victoria Public Library, the Chamber of Commerce, local venues and small businesses, and neighbors who send in their own events, and a local editor keeps an eye on the list so it stays accurate and worth your time. We especially love giving a spotlight to the small businesses and community groups that make Victoria feel like home. Spot a mistake? <a href="/contact">Let us know</a> and we'll fix it.</p>
     <h2 class="section-heading">Get it in your inbox</h2>
@@ -1148,13 +1149,13 @@ export function renderAboutPage({ siteUrl }) {
     name: town.siteName,
     url: siteUrl + '/',
     logo: siteUrl + '/logo-512.png',
-    description: 'Weekly guide to events and things to do in Victoria, Texas.',
-    areaServed: { '@type': 'City', name: 'Victoria, Texas' }
+    description: `Weekly guide to events and things to do in ${town.cityStateLong}.`,
+    areaServed: { '@type': 'City', name: `${town.cityStateLong}` }
   }];
   return layout({
     siteUrl, path: '/about',
     title: `About | ${town.siteName}`,
-    description: `${town.siteName} is a free weekly guide to events and things to do in Victoria, Texas.`,
+    description: `${town.siteName} is a free weekly guide to events and things to do in ${town.cityStateLong}.`,
     body, ld
   });
 }
@@ -1284,7 +1285,7 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
   ].filter(Boolean) : [];
   const body = `
     <h1 class="page-title">Advertise on ${town.siteName}</h1>
-    <p class="page-lead">Reach people in Victoria, TX who are actively looking for something to do this week. Here’s exactly what each option gets you and where it shows.</p>
+    <p class="page-lead">Reach people in ${town.cityState} who are actively looking for something to do this week. Here’s exactly what each option gets you and where it shows.</p>
     ${statItems.length ? `<ul class="ad-stats" role="list">${statItems.map(([n, l]) => `<li><strong>${escHtml(String(n))}</strong><span>${escHtml(l)}</span></li>`).join('')}</ul>` : ''}
     ${adFlowHtml()}
     <div class="ad-packages ad-packages--rows">
@@ -1316,7 +1317,7 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
   return layout({
     siteUrl, path: '/advertise', wide: true,
     title: `Advertise | ${town.siteName}`,
-    description: `Sponsor ${town.siteName} for a week or make your event a Vic’s Pick to reach people looking for things to do in Victoria, TX.`,
+    description: `Sponsor ${town.siteName} for a week or make your event a Vic’s Pick to reach people looking for things to do in ${town.cityState}.`,
     body
   });
 }
@@ -1427,7 +1428,7 @@ export function renderHome(template, events, { siteUrl, now, signupHtml = null }
       '@type': 'WebSite',
       name: town.siteName,
       url: siteUrl + '/',
-      description: 'Events and things to do in Victoria, TX, updated every week.'
+      description: `Events and things to do in ${town.cityState}, updated every week.`
     },
     ...sortEvents(weekEvents).map(ev => eventJsonLd(ev, siteUrl))
   ];
@@ -1482,11 +1483,11 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
   const lines = [
     `# ${town.siteName}`,
     '',
-    '> Free weekly guide to events and things to do in Victoria, Texas (the 361 area code). Concerts, festivals, family activities, farmers markets, art shows, and community events. Put together locally in Victoria, with a local editor keeping the list accurate and a spotlight on small businesses and community groups; updated twice a week.',
+    `> Free weekly guide to events and things to do in ${town.cityStateLong} (the 361 area code). Concerts, festivals, family activities, farmers markets, art shows, and community events. Put together locally in Victoria, with a local editor keeping the list accurate and a spotlight on small businesses and community groups; updated twice a week.`,
     '',
     '## Pages',
     '',
-    `- [This week in Victoria, TX](${siteUrl}/): every event Monday through Sunday`,
+    `- [This week in ${town.cityState}](${siteUrl}/): every event Monday through Sunday`,
     ...HUB_PAGES.map(p => `- [${p.title}](${siteUrl}${p.path}): ${p.description}`),
     ...extraLinks.map(([title, path, desc]) => `- [${title}](${siteUrl}${path})${desc ? `: ${desc}` : ''}`),
     `- [About](${siteUrl}/about): who runs ${town.siteName} and how events are chosen`,
