@@ -66,9 +66,11 @@ export const JOBS = [
   { name: 'event-check', dow: 1, at: '06:43', until: '12:00', workflow: 'event-check.yml' },
   // And before Thursday's weekend issue.
   { name: 'event-check-weekend', dow: 4, at: '06:00', until: '12:00', workflow: 'event-check.yml' },
-  { name: 'newsletter', dow: 1, at: '07:43', until: '23:59', retryMins: [5, 15, 30] },
+  // Until noon: a deploy or restart later in the day mustn't send an issue
+  // at night (the GitHub fallback still covers a missed morning).
+  { name: 'newsletter', dow: 1, at: '07:43', until: '12:00', retryMins: [5, 15, 30] },
   // The weekend issue (Friday–Sunday), Thursday mornings.
-  { name: 'newsletter-weekend', dow: 4, at: '07:00', until: '23:59', retryMins: [5, 15, 30] },
+  { name: 'newsletter-weekend', dow: 4, at: '07:00', until: '12:00', retryMins: [5, 15, 30] },
   { name: 'meta-ads', at: '08:37', until: '18:00', workflow: 'meta-ads.yml', inputs: { scheduled: 'true' } },
   { name: 'social-kit', at: '08:47', until: '18:00', workflow: 'social-kit.yml', inputs: { scheduled: 'true' } },
   { name: 'sponsor-reports', at: '09:00', until: '23:59' },
