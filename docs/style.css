@@ -1803,14 +1803,93 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
 /* /advertise: one row per package, details beside an example of the
    placement (rendered with the site's own markup). */
 .ad-packages--rows { grid-template-columns: 1fr; }
-.ad-package--row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: var(--space-5); align-items: start; }
-@media (max-width: 720px) { .ad-package--row { grid-template-columns: 1fr; } }
+/* Even border all round (no thick colored top bar); the package's color
+   moves to a pill behind its name. */
+.ad-package--row { border-top: 3px solid var(--ink); }
+.ad-package--row h2 { display: inline-block; background: var(--sun); color: var(--ink); border: 3px solid var(--ink); border-radius: 999px;
+  box-shadow: 3px 3px 0 var(--ink); padding: 2px 16px; margin-bottom: var(--space-2); }
+.ad-package--row:nth-child(2) h2 { background: var(--sky); }
+.ad-package--row { display: grid; grid-template-columns: 1fr; gap: var(--space-5); align-items: start; }
+/* The page is wide (layout wide: true): details on top, price beside the
+   bullet list, then the site and newsletter examples side by side. */
+.ad-package__info { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
+.ad-package__head .ad-where { max-width: 70ch; }
+/* "Where your ad goes": the ad card, a fan of cartoon arrows, and the four
+   channel tiles (68px tall, 16px apart, matching the fan's arrow ends). */
+.ad-flow { margin: 0 0 var(--space-6); }
+.ad-flow__grid { display: grid; grid-template-columns: minmax(0, 1fr) 140px minmax(0, 1.2fr); align-items: center; }
+.ad-flow__ad { background: var(--sun-light); color: var(--ink); border: 3px solid var(--ink); border-radius: 20px; box-shadow: 5px 5px 0 var(--ink);
+  padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; transform: rotate(-2deg); }
+.ad-flow__ad img { width: 176px; height: auto; }
+.ad-flow__ad strong { font-family: var(--font-display); font-size: var(--text-xl); line-height: 1.1; }
+.ad-flow__ad > span:last-child { font-size: var(--text-sm); font-weight: 700; color: #4A4466; }
+.ad-flow__tag { background: var(--sunset); border: 2px solid var(--ink); border-radius: 999px; padding: 2px 12px; font-family: var(--font-display); font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: .04em; }
+.ad-flow__fan { display: block; }
+.ad-flow__down { display: none; margin: var(--space-2) auto; }
+.ad-flow__channels { list-style: none; margin: 0; padding: 0; display: grid; grid-template-rows: repeat(4, 68px); gap: 16px; }
+.ad-flow__ch { display: flex; align-items: center; gap: var(--space-3); background: var(--card); color: var(--color-text); border: 3px solid var(--ink); border-radius: 16px;
+  box-shadow: 3px 3px 0 var(--ink); padding: 0 var(--space-4); }
+.ad-flow__ch:nth-child(odd) { transform: rotate(-.6deg); }
+.ad-flow__ch:nth-child(even) { transform: rotate(.6deg); }
+.ad-flow__icon svg { width: 38px; height: 38px; display: block; }
+.ad-flow__ch strong { display: block; font-family: var(--font-display); font-size: var(--text-base); line-height: 1.1; }
+.ad-flow__ch small { display: block; font-size: var(--text-sm); color: var(--color-text-muted); font-weight: 600; }
+@media (max-width: 760px) {
+  .ad-flow__grid { grid-template-columns: 1fr; justify-items: center; }
+  .ad-flow__fan { display: none; }
+  .ad-flow__down { display: block; }
+  .ad-flow__channels { grid-template-rows: none; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); width: 100%; }
+  .ad-flow__ch { flex-direction: column; text-align: center; padding: var(--space-3) var(--space-2); }
+}
+
+/* "What you get": a checklist of perks, each with a chunky green check
+   sticker, on a sunny card so it reads like a prize list. */
+.ad-checklist-wrap { background: var(--sun-light); color: var(--ink); border: 3px solid var(--ink); border-radius: 18px; box-shadow: 4px 4px 0 var(--ink); padding: var(--space-4); }
+.ad-checklist-title { font-family: var(--font-display); font-weight: 700; font-size: var(--text-lg); margin: 0 0 var(--space-3); }
+.ad-checklist { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3) var(--space-5); }
+@media (max-width: 760px) { .ad-checklist { grid-template-columns: 1fr; gap: var(--space-2); } }
+.ad-checklist li { display: flex; gap: var(--space-3); align-items: flex-start; line-height: 1.35; }
+.ad-check { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--cactus); color: #fff; border: 2.5px solid var(--ink); box-shadow: 2px 2px 0 var(--ink);
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: 15px; transform: rotate(-6deg); }
+.ad-checklist li:nth-child(even) .ad-check { transform: rotate(5deg); }
+.ad-check-rest { color: #4A4466; font-weight: 500; }
+.ad-package__preview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); align-items: start;
+  margin-top: var(--space-4); padding-top: var(--space-5); border-top: 2px dashed rgba(31, 26, 61, .22); }
+/* On /advertise the "where it shows" and price lines above the site example
+   repeat the package details, so only the placement itself shows. */
+.ad-preview .co-preview-where, .ad-preview .co-preview-price { display: none; }
+@media (max-width: 760px) {
+  .ad-package__preview { grid-template-columns: 1fr; }
+}
 .ad-where, .ad-limit { font-size: var(--text-sm); margin: 0 0 var(--space-3); }
 .ad-limit { font-weight: 800; color: var(--color-text-muted); margin-top: var(--space-3); }
-.ad-package .ad-buy { margin-top: var(--space-2); }
+/* The book button: big, sunset orange, chunky shadow, a little bounce. */
+.ad-cta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.ad-package .ad-buy { background: var(--sunset); color: var(--ink); border: 3px solid var(--ink); border-radius: 999px; box-shadow: 5px 5px 0 var(--ink);
+  font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; padding: 0.75em 1.6em; text-decoration: none;
+  transition: transform .12s ease, box-shadow .12s ease; }
+.ad-package .ad-buy:hover, .ad-package .ad-buy:focus-visible { transform: translate(-2px, -2px) rotate(-1deg); box-shadow: 7px 7px 0 var(--ink); }
+.ad-package .ad-buy:active { transform: translate(3px, 3px); box-shadow: 2px 2px 0 var(--ink); }
+.ad-cta-note { font-size: var(--text-sm); font-weight: 700; color: var(--color-text-muted); }
+@media (max-width: 760px) { .ad-package .ad-buy { width: 100%; text-align: center; font-size: 1.15rem; } }
+@media (prefers-reduced-motion: reduce) { .ad-package .ad-buy { transition: none; } }
 .ad-preview-label, .co-preview-h { font-family: var(--font-display); font-weight: 700; font-size: var(--text-sm); text-transform: uppercase; letter-spacing: .04em; color: var(--color-text-muted); margin: 0 0 var(--space-2); }
 .ad-package__preview .sponsor-section, .co-preview .sponsor-section { margin: 0; }
 .ad-package__preview .day-section, .co-preview .day-section { margin: 0; }
+/* Live numbers under the lead: chunky sticker tiles. */
+.ad-stats { list-style: none; padding: 0; margin: var(--space-4) 0 var(--space-6); display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: var(--space-3); }
+@media (max-width: 480px) { .ad-stats { gap: var(--space-2); } .ad-stats li { padding: var(--space-2); } .ad-stats strong { font-size: 1.4rem; } .ad-stats span { font-size: 0.8rem; } }
+.ad-stats li { background: var(--sun-light); color: var(--ink); border: 3px solid var(--ink); border-radius: 16px; box-shadow: 3px 3px 0 var(--ink); padding: var(--space-3); display: flex; flex-direction: column; gap: 2px; }
+.ad-stats strong { font-family: var(--font-display); font-size: 1.8rem; line-height: 1; }
+.ad-stats span { font-size: var(--text-sm); font-weight: 700; }
+/* Each package shows "On the site" and "In the newsletter". The email
+   sample keeps the email's own light colors, so it sits on a light card
+   in dark mode too, and its links don't go anywhere. */
+.ad-email-sample { background: #FFF6DC; border-radius: 16px; padding: 4px 12px 12px; pointer-events: none; }
+/* FAQ */
+.ad-faq details { border: 3px solid var(--ink); border-radius: 14px; background: var(--card); margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); }
+.ad-faq summary { cursor: pointer; font-family: var(--font-display); font-weight: 700; }
+.ad-faq details p { margin: var(--space-2) 0 0; }
 
 /* Checkout preview */
 .co-preview { border: 2px dashed var(--color-divider); border-radius: 16px; padding: var(--space-4); background: var(--color-bg); }

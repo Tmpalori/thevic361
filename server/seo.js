@@ -893,7 +893,7 @@ export function breadcrumbLd(siteUrl, trail) {
 // carrying a subscriber's token (confirm, unsubscribe) use it: both tools
 // report the page URL to a third party, and no third party should see the
 // token. GA_SNIPPET strips query strings anyway; this is belt and braces.
-export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = OG_IMAGE, imageSize = image === OG_IMAGE ? [1200, 630] : null, pixel = true, analytics = pixel }) {
+export function layout({ siteUrl, path, title, description, body, ld = [], noindex = false, nav = path, image = OG_IMAGE, imageSize = image === OG_IMAGE ? [1200, 630] : null, pixel = true, analytics = pixel, wide = false }) {
   const url = siteUrl + path;
   return `<!DOCTYPE html>
 <html lang="en">
@@ -928,7 +928,7 @@ ${ld.map(jsonLd).join('\n')}
 ${headerHtml()}
 ${navHtml(nav)}
 <main class="main-content" id="main">
-  <div class="container container--narrow">
+  <div class="container${wide ? '' : ' container--narrow'}">
 ${body}
   </div>
 </main>
@@ -960,6 +960,10 @@ export function sponsorLinkUrl(url, medium = 'sponsor') {
 
 // Mirrors renderSponsor() in docs/app.js so the paid sponsor slot shows on
 // every page, not just the homepage.
+// The placeholder logo in /advertise and checkout examples (docs/sample-logo.svg).
+export const SAMPLE_LOGO = '/sample-logo.svg';
+export const isSponsorLogo = l => /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(l || '') || l === SAMPLE_LOGO;
+
 export function sponsorHtml(sponsor) {
   if (!sponsor || !sponsor.name) return '';
   const href = sponsorLinkUrl(sponsor.url);
@@ -968,7 +972,7 @@ export function sponsorHtml(sponsor) {
       ? `<a href="${escHtml(href)}" class="btn btn--outline sponsor-cta" target="_blank" rel="sponsored noopener">${escHtml(sponsor.cta)}</a>`
       : `<span class="btn btn--outline" style="cursor:default; opacity:0.6">${escHtml(sponsor.cta)}</span>`)
     : '';
-  const logo = /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(sponsor.logo || '') ? sponsor.logo : '';
+  const logo = isSponsorLogo(sponsor.logo) ? sponsor.logo : '';
   return `<section class="sponsor-section"><div class="sponsor-block"${adAttr(sponsor.order)}>` +
     '<div class="sponsor-label">This week\'s sponsor</div>' +
     (logo ? `<img class="sponsor-logo" src="${escHtml(logo)}" alt="${escHtml(sponsor.name)} logo" loading="lazy">` : '') +
@@ -1143,59 +1147,151 @@ export const AD_PACKAGES = [
   {
     key: 'weekly',
     name: 'Weekly sponsor',
+    cta: 'Book your sponsor week',
     price: '$300 / week',
     amount: 30000,
     blurb: 'Pick a week and write your message; it goes live on its own that Monday.',
-    where: 'Every page of thevic361.com for a whole week, plus the top of that week’s two newsletters (Monday and Thursday).',
     limit: 'One sponsor a week, so you’re the only one.',
+    // The "what you get" checklist: [bold, rest]. Every line must be true
+    // (newsletter.js sponsorHtml, seo.js sponsorHtml, social_kit.py
+    // sponsor_lines, sponsors.js sponsorStats).
     points: [
-      'Your name, message and button on every page of the site, all week',
-      'The sponsor spot at the top of both newsletters that week: Monday’s and Thursday’s weekend issue',
-      'A report the Monday after: how often your block was seen, where, and how many clicked'
+      ['Top of the newsletter', 'in both issues that week, Monday and Thursday'],
+      ['Every page of thevic361.com', 'all week long'],
+      ['Shout-out on Facebook', 'in our posts that week, with your link'],
+      ['Shout-out on Instagram', 'in our posts that week'],
+      ['Your logo, message and button', 'written by you'],
+      ['No competitors', 'one sponsor a week, so it’s all yours'],
+      ['Your results report', 'views, clicks and where you were seen, the Monday after']
     ]
   },
   {
     key: 'featured',
     name: 'Vic’s Pick',
+    cta: 'Make my event a Vic’s Pick',
     price: '$49 Mon–Thu · $89 Fri–Sun',
     amount: 4900,
     blurb: 'Tell us about your event. Once it\'s listed, it\'s highlighted on its day with the Vic’s Pick badge.',
-    where: 'Your event highlighted on its day with the Vic’s Pick badge, on the site, its event page and our social posts, and in the newsletter when you book before the issue goes out (Monday’s covers the week, Thursday’s the weekend).',
     limit: 'Only 3 a day Mon–Thu and 4 a day Fri–Sun, so book early.',
     points: [
-      'Guaranteed listing, highlighted on its day on the site',
-      'Featured first in our social posts, and starred in the newsletter when booked before the issue goes out',
-      'A report the day after: times seen, page views, clicks, calendar adds and shares',
-      'Best for concerts, fundraisers, openings, and festivals'
+      ['Vic’s Pick badge', 'your event stands out on its day'],
+      ['Guaranteed listing', 'free listings aren’t'],
+      ['Starred in the newsletter', 'when you book before the issue goes out'],
+      ['Featured first on Facebook', 'in our posts for your day'],
+      ['Featured first on Instagram', 'in our posts for your day'],
+      ['Highlighted on its event page', 'tagged Featured on The Vic 361'],
+      ['Your results report', 'views, clicks, calendar adds and shares, the day after']
     ]
   }
 ];
 
+// Live, true-today numbers for /advertise: this week's listed events, the
+// venues and nearby towns they cover, and subscribers once there's a real
+// crowd (the same 100 the subscribe page waits for).
+export const SHOW_SUBSCRIBERS_FROM = 100;
+export function advertiseStats(events, now, subscriberCount = 0) {
+  const week = currentWeek(localDateStr(now));
+  const list = (events || []).filter(ev => ev.date >= week[0] && ev.date <= week[6]);
+  const venues = new Set(list.map(ev => String(ev.venue || '').trim().toLowerCase()).filter(Boolean));
+  const towns = new Set(list.map(ev => String(ev.town || '').trim()).filter(Boolean));
+  return {
+    events: list.length, venues: venues.size, towns: towns.size,
+    subscribers: subscriberCount >= SHOW_SUBSCRIBERS_FROM ? Math.floor(subscriberCount / 10) * 10 : null
+  };
+}
+
+// "Where your ad goes": your ad, with cartoon arrows fanning out to the four
+// places it shows (both packages show in all four: the site, the newsletter,
+// and the Facebook and Instagram posts; see AD_PACKAGES points). Arrows fan
+// out beside the tiles on desktop and point down at a 2x2 grid on phones.
+const FLOW_ICONS = {
+  web: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="3" fill="#8FD3FF" stroke="#1F1A3D" stroke-width="2"/><path d="M2.5 8.5h19" stroke="#1F1A3D" stroke-width="2"/><circle cx="5.5" cy="6.3" r=".9" fill="#1F1A3D"/><circle cx="8.2" cy="6.3" r=".9" fill="#1F1A3D"/><rect x="5.5" y="11" width="13" height="2.2" rx="1.1" fill="#fff"/><rect x="5.5" y="15" width="8" height="2.2" rx="1.1" fill="#fff"/></svg>',
+  email: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="3" fill="#FFC93C" stroke="#1F1A3D" stroke-width="2"/><path d="M3.5 7l8.5 6.5L20.5 7" fill="none" stroke="#1F1A3D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#1877F2" stroke="#1F1A3D" stroke-width="2"/><path d="M13.3 21v-6.6h2.2l.35-2.6H13.3v-1.7c0-.75.21-1.27 1.3-1.27h1.38V6.5a18 18 0 0 0-2-.1c-2 0-3.35 1.2-3.35 3.43v1.97H8.4v2.6h2.23V21" fill="#fff"/></svg>',
+  instagram: '<svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".35" stop-color="#FA7E1E"/><stop offset=".65" stop-color="#D62976"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="url(#ig-g)" stroke="#1F1A3D" stroke-width="2"/><rect x="6.5" y="6.5" width="11" height="11" rx="3.5" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="16.4" cy="7.6" r="1" fill="#fff"/></svg>'
+};
+const FLOW_CHANNELS = [
+  ['web', 'thevic361.com', 'on the site, all week'],
+  ['email', 'The newsletter', 'Monday and Thursday issues'],
+  ['facebook', 'Facebook', 'in our posts'],
+  ['instagram', 'Instagram', 'in our posts']
+];
+// Four arrows from the ad card's edge to the middle of each tile (68px tiles,
+// 16px apart: centers at 34, 118, 202, 286 in a 320px-tall column).
+const FLOW_FAN = '<svg class="ad-flow__fan" viewBox="0 0 140 320" width="140" height="320" aria-hidden="true">' +
+  [34, 118, 202, 286].map((y, i) => `<path d="M6 160 C 70 160, 58 ${y}, 120 ${y}" fill="none" stroke="#1F1A3D" stroke-width="4" stroke-linecap="round" stroke-dasharray="${i % 2 ? '0' : '1 9'}"/>` +
+    `<path d="M112 ${y - 8} L 128 ${y} L 112 ${y + 8}" fill="none" stroke="#1F1A3D" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`).join('') +
+  '</svg>';
+const FLOW_DOWN = '<svg class="ad-flow__down" viewBox="0 0 40 56" width="40" height="56" aria-hidden="true"><path d="M20 4 C 30 18, 10 32, 20 46" fill="none" stroke="#1F1A3D" stroke-width="4" stroke-linecap="round"/><path d="M11 39 L 20 50 L 29 39" fill="none" stroke="#1F1A3D" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+export function adFlowHtml() {
+  return `<section class="ad-flow" aria-label="Where your ad goes">
+      <h2 class="section-heading">Where your ad goes</h2>
+      <div class="ad-flow__grid">
+        <div class="ad-flow__ad"><span class="ad-flow__tag">Your ad</span><img src="${SAMPLE_LOGO}" alt="" width="176" height="51"><strong>Your Business</strong><span>Your message and button</span></div>
+        ${FLOW_FAN}${FLOW_DOWN}
+        <ul class="ad-flow__channels" role="list">${FLOW_CHANNELS.map(([k, name, sub]) =>
+          `<li class="ad-flow__ch ad-flow__ch--${k}"><span class="ad-flow__icon">${FLOW_ICONS[k]}</span><span><strong>${escHtml(name)}</strong><small>${escHtml(sub)}</small></span></li>`).join('')}</ul>
+      </div>
+    </section>`;
+}
+
+// Questions a business asks before buying. Keep every answer true to what
+// the site does (server/sponsors.js, server/newsletter.js).
+const AD_FAQ = [
+  ['Who reads The Vic 361?', 'People in Victoria and the towns around it who are planning what to do: families looking for weekend plans, couples planning a night out, newcomers finding their way around. They come to the site and open the newsletter to decide where to go.'],
+  ['How fast does it go live?', 'A weekly sponsorship goes live on its own the Monday of the week you book. A Vic’s Pick is checked by our editors and highlighted as soon as your event is listed, usually the same day.'],
+  ['When does it make the newsletter?', 'Monday’s issue covers the whole week and Thursday’s covers the weekend. Book a Vic’s Pick before the issue goes out and it’s starred in it; a weekly sponsor is at the top of both issues of its week.'],
+  ['Can I change something after I pay?', 'Yes. Reply to your confirmation email with the change and we’ll update it.'],
+  ['What’s in the report?', 'Weekly sponsors get one the Monday after: how often your block was seen, where, and how many people clicked. A Vic’s Pick gets one the day after your event: times seen, page views, clicks, calendar adds and shares.'],
+  ['What if my day is sold out?', 'Vic’s Picks are limited each day so they stand out. Pick another day, or book a weekly sponsorship to be on every page all week.']
+];
+
 // previews: { [package key]: html } sample placements from
-// server/sponsors.js samplePreviews(), the same renderer the checkout uses.
-export function renderAdvertisePage({ siteUrl, checkout = false, previews = {} }) {
+// server/sponsors.js samplePreviews(), the same renderer the checkout uses;
+// emailPreviews the same packages inside the newsletter
+// (server/newsletter.js sampleEmailPreviews). stats from advertiseStats.
+export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, emailPreviews = {}, stats = null }) {
+  const statItems = stats ? [
+    stats.events ? [stats.events, 'events listed this week'] : null,
+    stats.venues ? [stats.venues, 'venues this week'] : null,
+    ['2', 'newsletters a week (Mon & Thu)'],
+    // Victoria plus at least two nearby towns, or it undersells.
+    stats.towns >= 2 ? [stats.towns + 1, 'towns: Victoria and nearby'] : null,
+    stats.subscribers ? [`${stats.subscribers}+`, 'local subscribers'] : null
+  ].filter(Boolean) : [];
   const body = `
     <h1 class="page-title">Advertise on The Vic 361</h1>
     <p class="page-lead">Reach people in Victoria, TX who are actively looking for something to do this week. Here’s exactly what each option gets you and where it shows.</p>
+    ${statItems.length ? `<ul class="ad-stats" role="list">${statItems.map(([n, l]) => `<li><strong>${escHtml(String(n))}</strong><span>${escHtml(l)}</span></li>`).join('')}</ul>` : ''}
+    ${adFlowHtml()}
     <div class="ad-packages ad-packages--rows">
       ${AD_PACKAGES.map(p => `
       <section class="ad-package ad-package--row" id="${escHtml(p.key)}">
         <div class="ad-package__info">
-          <h2>${escHtml(p.name)}</h2>
-          <p class="ad-price">${escHtml(p.price)}</p>
-          <p class="ad-where"><strong>Where it shows:</strong> ${escHtml(p.where)}</p>
-          <ul>${p.points.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul>
-          <p class="ad-limit">${escHtml(p.limit)}</p>
-          ${checkout ? `<a class="btn btn--primary ad-buy" href="/advertise/checkout?package=${escHtml(p.key)}">Preview yours and book →</a>` : ''}
+          <div class="ad-package__head">
+            <h2>${escHtml(p.name)}</h2>
+            <p class="ad-price">${escHtml(p.price)}</p>
+            <p class="ad-limit">${escHtml(p.limit)}</p>
+          </div>
+          <div class="ad-checklist-wrap">
+            <p class="ad-checklist-title">What you get</p>
+            <ul class="ad-checklist" role="list">${p.points.map(([b, rest]) => `<li><span class="ad-check" aria-hidden="true">✓</span><span><strong>${escHtml(b)}</strong>${rest ? ` <span class="ad-check-rest">${escHtml(rest)}</span>` : ''}</span></li>`).join('')}</ul>
+          </div>
+          ${checkout ? `<div class="ad-cta"><a class="btn ad-buy" href="/advertise/checkout?package=${escHtml(p.key)}">${escHtml(p.cta)} →</a><span class="ad-cta-note">See a live preview before you pay · takes 2 minutes</span></div>` : ''}
         </div>
-        ${previews[p.key] ? `<div class="ad-package__preview" aria-label="Example of a ${escHtml(p.name)}"><p class="ad-preview-label">Example</p>${previews[p.key]}</div>` : ''}
+        ${previews[p.key] || emailPreviews[p.key] ? `<div class="ad-package__preview" aria-label="Example of a ${escHtml(p.name)}">` +
+          (previews[p.key] ? `<div class="ad-preview"><p class="ad-preview-label">On the site</p>${previews[p.key]}</div>` : '') +
+          (emailPreviews[p.key] ? `<div class="ad-preview"><p class="ad-preview-label">In the newsletter</p><div class="ad-email-sample">${emailPreviews[p.key]}</div></div>` : '') +
+          '</div>' : ''}
       </section>`).join('')}
     </div>
-    <h2 class="section-heading">${checkout ? 'Questions?' : 'Get started'}</h2>
+    <h2 class="section-heading">Common questions</h2>
+    <div class="ad-faq">${AD_FAQ.map(([q, a]) => `<details><summary>${escHtml(q)}</summary><p>${escHtml(a)}</p></details>`).join('')}</div>
+    <h2 class="section-heading">${checkout ? 'Something else?' : 'Get started'}</h2>
     <p>${checkout ? 'Pick a package above to book and pay online in a couple of minutes. Questions or a custom package?' : 'Tell us your business name and what you\'d like to promote, and we\'ll reply with open dates and our latest audience numbers.'} <a href="/contact?topic=advertising">Send us a message</a>.</p>
     <p>Listing a community event is always free: <a href="/submit">submit it here</a>.</p>`;
   return layout({
-    siteUrl, path: '/advertise',
+    siteUrl, path: '/advertise', wide: true,
     title: `Advertise | ${SITE_NAME}`,
     description: 'Sponsor The Vic 361 for a week or make your event a Vic’s Pick to reach people looking for things to do in Victoria, TX.',
     body

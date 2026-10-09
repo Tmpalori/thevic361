@@ -354,12 +354,13 @@ export function renderSponsorReport(order, stats, { siteUrl, address }) {
   const business = order.business || 'there';
   const short = { month: 'short', day: 'numeric' };
   const range = `${formatDay(stats.week_start, short)} – ${formatDay(stats.week_end, short)}`;
-  const total = stats.site_people + stats.email_people;
+  const total = stats.site_people + stats.email_people + (Number(stats.social_people) || 0);
   const views = Number(stats.views) || 0;
   const rows = [
     ...(views ? [['Your block was seen on thevic361.com', plural(views, 'time', 'times')]] : []),
     ['Clicked your button on thevic361.com', people(stats.site_people)],
     ['Clicked your button in our emails', people(stats.email_people)],
+    ...(stats.social_people ? [['Clicked your link in our Facebook and Instagram posts', people(stats.social_people)]] : []),
     ...(stats.newsletter_recipients ? [[stats.newsletter_issues > 1 ? 'Newsletter copies with your block (Monday and Thursday issues)' : 'Newsletter copies with your block',
       String(stats.newsletter_recipients)]] : []),
     ...(stats.site_visitors ? [['Visits to thevic361.com that week', String(stats.site_visitors)]] : [])

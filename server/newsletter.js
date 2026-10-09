@@ -58,7 +58,7 @@ export { REFERRAL_TIERS, referralFlags };
 import { inboundConfig } from './inbound.js';
 import {
   SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank, parseTimes,
-  sponsorLinkUrl, formatTime, placeText, iconKeys
+  sponsorLinkUrl, formatTime, placeText, iconKeys, isSponsorLogo, SAMPLE_LOGO
 } from './seo.js';
 
 const RESEND_API = 'https://api.resend.com';
@@ -332,7 +332,7 @@ export function sponsorHref(sponsor, siteUrl, src = 'newsletter') {
 
 function sponsorHtml(sponsor, siteUrl = '', src = 'newsletter') {
   // Logo: absolute URL (email clients can't resolve a path), only our own.
-  const logo = sponsor && /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(sponsor.logo || '') ? `${siteUrl}${sponsor.logo}` : '';
+  const logo = sponsor && isSponsorLogo(sponsor.logo) ? `${siteUrl}${sponsor.logo}` : '';
   return sponsor && sponsor.name ? `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;background:${C.sunLight};border:3px dashed ${C.ink};border-radius:16px;"><tr><td style="padding:14px 16px;">
 <span style="display:inline-block;font-family:${DISPLAY};font-size:11px;font-weight:bold;letter-spacing:.5px;background:${C.sunset};color:${C.ink};border:2px solid ${C.ink};border-radius:999px;padding:1px 10px;">THIS WEEK'S SPONSOR</span>
@@ -341,6 +341,24 @@ ${logo ? `<div style="margin:8px 0 2px;"><img src="${escHtml(logo)}" alt="${escH
 ${sponsor.text ? `<div style="font-size:14px;">${escHtml(sponsor.text)}</div>` : ''}
 ${safeUrl(sponsor.url) && sponsor.cta ? `<a href="${escHtml(sponsorHref(sponsor, siteUrl, src))}" style="display:inline-block;margin-top:10px;background:#fff;color:${C.ink};font-family:${DISPLAY};font-weight:bold;padding:6px 14px;border:2px solid ${C.ink};border-radius:999px;text-decoration:none;">${escHtml(sponsor.cta)} →</a>` : ''}
 </td></tr></table>` : '';
+}
+
+// What each package looks like inside the newsletter, for /advertise: the
+// real sponsor block, and a Saturday with a starred Vic's Pick among its
+// neighbors (same renderers as the issue).
+export function sampleEmailPreviews(siteUrl = '') {
+  const day = (rows) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;border:3px solid ${C.ink};border-radius:16px;overflow:hidden;border-collapse:separate;background:#fff;">
+<tr><td style="background:${DAY_COLORS[5]};padding:10px 14px;border-bottom:3px solid ${C.ink};font-family:${DISPLAY};color:${C.ink};"><span style="font-size:20px;font-weight:bold;">Saturday</span></td></tr>
+<tr><td style="padding:6px 12px 10px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${rows}</table></td></tr></table>`;
+  const evs = [
+    { name: 'Farmers Market', time: '8:00 AM', venue: 'Market Square' },
+    { name: 'Your Event Name', time: '7:00 PM', venue: 'Your Venue', description: 'A line or two about your event.', featured: true },
+    { name: 'Live Music', time: '9:00 PM', venue: 'Downtown' }
+  ];
+  return {
+    weekly: `<div style="font-family:Arial,Helvetica,sans-serif;color:${C.ink};">${sponsorHtml({ name: 'Your Business', text: 'One or two sentences about what you offer.', cta: 'Learn more', url: siteUrl || 'https://www.thevic361.com', logo: SAMPLE_LOGO }, siteUrl)}</div>`,
+    featured: `<div style="font-family:Arial,Helvetica,sans-serif;color:${C.ink};font-size:15px;">${day(evs.map((e, i) => eventRow({ ...e, page: null, url: '' }, siteUrl, evs[i + 1])).join(''))}</div>`
+  };
 }
 
 // ─── Choosing what an issue shows ─────────────────────────────────────

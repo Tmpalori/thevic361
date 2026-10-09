@@ -250,7 +250,23 @@ def _body(groups, kind, limit=None, keep=None):
     return body
 
 
-def captions(groups, start, end, kind, handles=None):
+def sponsor_lines(sponsor, start, platform):
+    """The paid weekly sponsor's shout-out in a caption, only in kits for its
+    own week (sponsor['week'] is that Monday). Facebook gets the click-counted
+    /go/s/<week>?src=social link (the sponsor's report counts it); Instagram
+    captions can't link, so it's the name and message."""
+    if not sponsor or not sponsor.get("name"):
+        return []
+    week = sponsor.get("week") or ""
+    if week != (start - timedelta(days=start.weekday())).isoformat():
+        return []
+    text = f"🙌 This week is brought to you by {sponsor['name']}" + (f": {sponsor['text']}" if sponsor.get("text") else "")
+    if platform == "facebook":
+        return [text, f"👉 {SITE}/go/s/{week}?src=social", ""]
+    return [text, ""]
+
+
+def captions(groups, start, end, kind, handles=None, sponsor=None):
     """Return {'facebook': str, 'instagram': str} for a kit."""
     title, _, path = TITLES[kind]
     total = sum(len(v) for v in groups.values())
@@ -259,11 +275,11 @@ def captions(groups, start, end, kind, handles=None):
     # Same call to action as the ad, the slides and the site: the newsletter.
     see_all = "👉 Full list: " if not total else "👉 Details: " if total == 1 else f"👉 See all {total}: "
     body = _body(groups, kind)
-    fb = "\n".join([head, ""] + body + [f"{see_all}{SITE}{path}",
+    fb = "\n".join([head, ""] + sponsor_lines(sponsor, start, "facebook") + body + [f"{see_all}{SITE}{path}",
                                           f"Don't miss a thing: get every event free in your inbox every Monday and Thursday 👉 {SITE}/subscribe", "", HASHTAGS])
 
     def ig_caption(body, tags):
-        return "\n".join([head, ""] + body + [f"{see_all}link in bio (thevic361.com)",
+        return "\n".join([head, ""] + sponsor_lines(sponsor, start, "instagram") + body + [f"{see_all}link in bio (thevic361.com)",
                                                 "Don't miss a thing: get every event free in your inbox every Monday and Thursday (subscribe at the link in bio)", ""]
                          + ([" ".join(tags), ""] if tags else []) + [HASHTAGS]).strip() + "\n"
 
@@ -554,6 +570,11 @@ def _transient(err):
 
 
 def fetch_events(url, sleep=time.sleep):
+    return fetch_payload(url, sleep)["events"]
+
+
+def fetch_payload(url, sleep=time.sleep):
+    """/events.json as {'events': [...], 'sponsor': {...} or None}."""
     req = urllib.request.Request(url, headers={"User-Agent": "TheVic361-SocialKit/1.0"})
     for i, wait in enumerate((*FETCH_BACKOFF, None)):
         try:
@@ -571,7 +592,8 @@ def fetch_events(url, sleep=time.sleep):
         for k in ("name", "venue"):
             if isinstance(ev.get(k), str):
                 ev[k] = html.unescape(ev[k])
-    return events
+    sponsor = data.get("sponsor") if isinstance(data, dict) and isinstance(data.get("sponsor"), dict) else None
+    return {"events": events, "sponsor": sponsor}
 
 
 def main(argv=None):
@@ -587,9 +609,11 @@ def main(argv=None):
 
     if args.events_file:
         with open(args.events_file) as f:
-            events = json.load(f).get("events", [])
+            data = json.load(f)
+        events, sponsor = data.get("events", []), data.get("sponsor")
     else:
-        events = fetch_events(args.events_url)
+        payload = fetch_payload(args.events_url)
+        events, sponsor = payload["events"], payload["sponsor"]
     today = date.fromisoformat(args.today) if args.today else today_central()
     os.makedirs(args.out, exist_ok=True)
     for old in os.listdir(args.out):
@@ -616,7 +640,7 @@ def main(argv=None):
         # featured: Vic's Picks in the kit (the Thursday run posts "today"
         # too when it has one; see social-kit.yml).
         kit = {"slides": slides, "slides_jpg": jpeg_copies(args.out, slides),
-               "captions": captions(groups, start, end, kind, handles),
+               "captions": captions(groups, start, end, kind, handles, sponsor),
                "events": sum(len(v) for v in groups.values()),
                # Paid picks only: the Thursday "today" post exists so a paid
                # pick that day is always posted, not for editor's picks.

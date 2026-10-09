@@ -49,7 +49,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import {
   AD_PACKAGES, SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, addDays, formatDay, layout,
-  renderEventItem, sponsorHtml, dayClass
+  renderEventItem, sponsorHtml, dayClass, sortEvents, SAMPLE_LOGO
 } from './seo.js';
 import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
@@ -425,6 +425,7 @@ export function sponsorStats(order, rows, { recipients = 0, issues = recipients 
   const inWeek = (rows || []).filter(r => r.day >= start && r.day <= end);
   const clicks = inWeek.filter(r => r.kind === 'click' && r.click_type === 'sponsor_click');
   const email = clicks.filter(r => r.path === `/go/s/${start}`);
+  const social = clicks.filter(r => r.path === `/go/s/${start}/social`);
   const site = clicks.filter(r => !String(r.path || '').startsWith('/go/') &&
     (r.ad === order.id || sameLink(r.click_url, order.sponsor && order.sponsor.url)));
   // Seen: the block was at least half on screen for a second (docs/track.js).
@@ -434,6 +435,7 @@ export function sponsorStats(order, rows, { recipients = 0, issues = recipients 
     views: rowCount(seen), view_people: peopleIn(seen), where: whereItRan(seen),
     site_clicks: rowCount(site), site_people: peopleIn(site),
     email_clicks: rowCount(email), email_people: peopleIn(email),
+    social_clicks: rowCount(social), social_people: peopleIn(social),
     site_visitors: peopleIn(inWeek.filter(r => r.kind === 'view')),
     newsletter_recipients: Number(recipients) || 0,
     newsletter_issues: Number(recipients) ? Number(issues) || 1 : 0
@@ -691,8 +693,10 @@ function selectField({ name, label, options, value, error }) {
 // page and refreshed from POST /advertise/preview as they type, so there's
 // one renderer and the preview can't drift from the real thing.
 
+// The rest of the day around a pick in the preview: picks sit in time order
+// with everything else (sortEvents), so the sample does too.
 const SAMPLE_OTHERS = [
-  { name: 'Other events that day', time: '6:00 PM', venue: 'Listed below yours' },
+  { name: 'Other events that day', time: '6:00 PM', venue: 'In time order, around yours' },
   { name: '…and the rest of the day’s list', time: '8:00 PM', venue: '' }
 ];
 
@@ -716,7 +720,8 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
       text: clean(v.text, 160) || 'Your one or two sentences about your business go here.',
       cta: clean(v.cta, 24) || 'Learn more',
       url: safeUrl(normalizeUrl(clean(v.url, 300))) || '#',
-      address: clean(v.address, 120)
+      address: clean(v.address, 120),
+      logo: v.sampleLogo ? SAMPLE_LOGO : ''
     });
     return `<p class="co-preview-where">Shown on every page of thevic361.com for your week, and at the top of that week’s ${weekendIssueOn() ? 'newsletters (Monday’s and Thursday’s)' : 'Monday newsletter'}.</p>${block}`;
   }
@@ -731,7 +736,8 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
     description: clean(v.description, 300) || 'Your description shows here.',
     featured: true
   };
-  const others = SAMPLE_OTHERS.map(o => previewItem(o).replace('class="event-entry"', 'class="event-entry co-preview-dim"'));
+  const items = sortEvents([ev, ...SAMPLE_OTHERS].map(x => ({ ...x, date: date || '2000-01-01' })))
+    .map(x => x.featured ? previewItem(x) : previewItem(x).replace('class="event-entry"', 'class="event-entry co-preview-dim"'));
   let price = `<strong>$${VICS_PICK.weekdayAmount / 100}</strong> Mon–Thu · <strong>$${VICS_PICK.weekendAmount / 100}</strong> Fri–Sun. Pick a date to see open spots.`;
   if (date && now) {
     const a = pickAvailability(date, orders, now);
@@ -742,13 +748,13 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
   }
   return `<p class="co-preview-price">${price}</p>` +
     `<p class="co-preview-where">Highlighted on its day on the site and its event page, ${escHtml(pickWhere(date, now))}:</p>` +
-    dayCard(date, [previewItem(ev), ...others]);
+    dayCard(date, items);
 }
 
 // Example placements for the /advertise page.
 export function samplePreviews() {
   return {
-    weekly: renderPreview('weekly', { business: 'Your Business', text: 'One or two sentences about what you offer, shown all week.', cta: 'Learn more' }),
+    weekly: renderPreview('weekly', { business: 'Your Business', text: 'One or two sentences about what you offer, shown all week.', cta: 'Learn more', sampleLogo: true }),
     featured: renderPreview('featured', { event_name: 'Your Event Name', time: '7:00 PM', venue: 'Your Venue', description: 'A line or two about your event.' })
   };
 }
@@ -1739,8 +1745,10 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       try {
         const week = /^\d{4}-\d{2}-\d{2}$/.test(req.params.week) ? req.params.week : '';
         const order = week ? (await orders()).find(o => o.kind === 'weekly' && o.week_start === week && LIVE.has(o.status)) : null;
-        const src = req.query.src === 'welcome' ? 'welcome' : 'newsletter';
-        const target = order ? sponsorLandingUrl(order.sponsor && order.sponsor.url, { medium: 'email', campaign: src }) : '';
+        // src=social: the Facebook/Instagram captions (scripts/social_kit.py);
+        // counted apart from email clicks (path /go/s/<week>/social).
+        const src = ['welcome', 'social'].includes(req.query.src) ? req.query.src : 'newsletter';
+        const target = order ? sponsorLandingUrl(order.sponsor && order.sponsor.url, { medium: src === 'social' ? 'social' : 'email', campaign: src }) : '';
         res.set('Cache-Control', 'no-store');
         if (!target) return res.redirect(302, siteUrl);
         const ip = req.ip || req.socket.remoteAddress || '';
@@ -1748,7 +1756,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         if (req.method === 'GET' && !botName(ua) && typeof store.recordTraffic === 'function' && goLimiter.check(ip).ok) {
           const day = localDateStr(nowFn());
           store.recordTraffic({
-            day, kind: 'click', path: `/go/s/${week}`, visitor: visitorHash(ip, ua, day, analyticsSecret),
+            day, kind: 'click', path: `/go/s/${week}${src === 'social' ? '/social' : ''}`, visitor: visitorHash(ip, ua, day, analyticsSecret),
             click_type: 'sponsor_click', click_url: String(order.sponsor.url || '').slice(0, 300)
           }).catch(err => console.warn('[sponsors] click record failed:', err.message));
         }

@@ -505,9 +505,11 @@ describe('Vic’s Pick: price by day, daily limits, preview', () => {
     const html = await (await fetch(baseUrl + '/advertise')).text();
     expect(html).toContain('$49 Mon–Thu · $89 Fri–Sun');
     expect(html).toContain('Only 3 a day Mon–Thu and 4 a day Fri–Sun');
-    expect(html).toContain('Where it shows:');
+    expect(html).not.toContain('Where it shows:'); // the checklist and the "Where your ad goes" diagram say it
     expect((html.match(/ad-package__preview/g) || []).length).toBe(2);
-    expect(html).toContain('Preview yours and book');
+    expect(html).toContain('Book your sponsor week →');
+    expect(html).toContain('Make my event a Vic’s Pick →');
+    expect(html).toContain('See a live preview before you pay');
   });
 });
 
@@ -1090,5 +1092,82 @@ describe('sponsor promises (review fixes)', () => {
     store.listSponsorOrders = async () => { throw new Error('db down'); };
     expect((await fetch(baseUrl + '/api/admin/sponsors', { headers: h })).status).toBe(500);
     expect((await post('/api/admin/sponsors/x', { action: 'hide' }, h)).status).toBe(500);
+  });
+});
+
+describe('selling it on /advertise', () => {
+  it('live numbers, both previews per package (site and newsletter), and the FAQ', async () => {
+    await startApp();
+    const html = await (await fetch(baseUrl + '/advertise')).text();
+    expect(html).toContain('class="ad-stats"');
+    expect(html).toContain('newsletters a week (Mon &amp; Thu)');
+    expect(html.match(/<p class="ad-preview-label">On the site<\/p>/g)).toHaveLength(2);
+    expect(html.match(/<p class="ad-preview-label">In the newsletter<\/p>/g)).toHaveLength(2);
+    expect(html).toContain('THIS WEEK\'S SPONSOR');
+    expect(html.match(/src="\/sample-logo.svg"/g)).toHaveLength(3); // the example logo: the diagram, the site and the email
+    expect(html).toContain('★ VIC’S PICK');
+    expect(html).toContain('<summary>How fast does it go live?</summary>');
+    expect(html).not.toMatch(/\bAI\b|automat/i);
+  });
+
+  it('the Vic’s Pick example sits in time order, not on top', async () => {
+    const { samplePreviews } = await import('../server/sponsors.js');
+    const times = samplePreviews().featured.match(/event-time">[^<]+/g).map(t => t.split('>')[1]);
+    expect(times).toEqual(['6:00 PM', '7:00 PM', '8:00 PM']);
+    expect(samplePreviews().featured).not.toContain('below yours');
+  });
+
+  it('counts this week’s events, venues and nearby towns; subscribers only from 100', async () => {
+    const { advertiseStats } = await import('../server/seo.js');
+    const now = new Date('2026-10-09T17:00:00Z');
+    const evs = [
+      { date: '2026-10-09', venue: 'Club' }, { date: '2026-10-10', venue: 'club ' }, { date: '2026-10-11', venue: 'Park', town: 'Cuero' },
+      { date: '2026-10-12', venue: 'Next Week' }, { date: '2026-10-04', venue: 'Last Week' }
+    ];
+    expect(advertiseStats(evs, now, 99)).toEqual({ events: 3, venues: 2, towns: 1, subscribers: null });
+    expect(advertiseStats(evs, now, 247).subscribers).toBe(240);
+  });
+});
+
+describe('weekly sponsor on Facebook and Instagram', () => {
+  const weeklyOrder = (extra = {}) => ({
+    id: 'wk1', kind: 'weekly', status: 'paid', amount: 30000, week_start: '2026-09-28', created_at: '2026-09-20T00:00:00Z',
+    business: 'Acme Tacos', email: 'acme@example.com',
+    sponsor: { name: 'Acme Tacos', text: 'Best tacos.', cta: 'Order', url: 'https://acme.example', address: '' }, ...extra
+  });
+  it('the social link counts apart from email clicks, tagged utm_medium=social, and shows in the report', async () => {
+    await startApp();
+    await store.saveSponsorOrder(weeklyOrder({ week_start: '2026-10-05' }));
+    const r = await fetch(`${baseUrl}/go/s/2026-10-05?src=social`, { redirect: 'manual', headers: { 'User-Agent': 'Mozilla/5.0 (iPhone)' } });
+    expect(r.headers.get('location')).toBe('https://acme.example/?utm_source=thevic361&utm_medium=social&utm_campaign=social');
+    const rows = async () => (await store.listTraffic('2026-01-01')).filter(x => String(x.path).startsWith('/go/s/2026-10-05'));
+    for (let i = 0; i < 100 && !(await rows()).length; i++) await new Promise(res => setTimeout(res, 20));
+    expect((await rows()).map(x => x.path)).toEqual(['/go/s/2026-10-05/social']);
+    const stats = sponsorStats(weeklyOrder({ week_start: '2026-10-05' }), await rows());
+    expect(stats).toMatchObject({ social_clicks: 1, social_people: 1, email_clicks: 0 });
+    const { renderSponsorReport } = await import('../server/notify.js');
+    const report = renderSponsorReport(weeklyOrder({ week_start: '2026-10-05' }), { ...stats, site_people: 0, email_people: 0 }, { siteUrl: 'https://www.thevic361.com', address: '1 Main' });
+    expect(report.text).toContain('- Clicked your link in our Facebook and Instagram posts: 1 person');
+    expect(report.subject).toBe('Your Vic 361 sponsor week: 1 person clicked');
+  });
+
+  it('/advertise sells it as a checklist of perks', async () => {
+    await startApp();
+    const html = await (await fetch(baseUrl + '/advertise')).text();
+    expect(html.match(/<p class="ad-checklist-title">What you get<\/p>/g)).toHaveLength(2);
+    for (const perk of ['Top of the newsletter', 'Every page of thevic361.com', 'Shout-out on Facebook', 'Shout-out on Instagram',
+      'Your results report', 'Featured first on Facebook', 'Featured first on Instagram', 'Starred in the newsletter']) {
+      expect(html).toContain(`<strong>${perk}</strong>`);
+    }
+  });
+});
+
+describe('where your ad goes', () => {
+  it('shows the ad with arrows to the site, newsletter, Facebook and Instagram', async () => {
+    const { adFlowHtml } = await import('../server/seo.js');
+    const html = adFlowHtml();
+    for (const name of ['thevic361.com', 'The newsletter', 'Facebook', 'Instagram']) expect(html).toContain(`<strong>${name}</strong>`);
+    expect(html.match(/<path d="M6 160 C/g)).toHaveLength(4); // one arrow per channel
+    expect(html).toContain('class="ad-flow__down"');            // phones: one arrow down
   });
 });

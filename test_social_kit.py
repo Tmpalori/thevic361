@@ -374,3 +374,18 @@ def test_fetch_events_gives_up_on_a_4xx_and_after_its_tries():
         with pytest.raises(urllib.error.URLError):
             sk.fetch_events("https://example.test/x", sleep=sleeps.append)
     assert sleeps == list(sk.FETCH_BACKOFF)
+
+
+def test_weekly_sponsor_gets_a_shout_out_in_its_own_week_only():
+    from datetime import date
+    sponsor = {"name": "Acme Tacos", "text": "Best tacos in town.", "url": "https://acme.example", "week": "2026-10-05"}
+    mon, sat_next = date(2026, 10, 5), date(2026, 10, 17)
+    fb = sk.sponsor_lines(sponsor, mon, "facebook")
+    assert fb[0] == "🙌 This week is brought to you by Acme Tacos: Best tacos in town."
+    assert fb[1] == "👉 https://www.thevic361.com/go/s/2026-10-05?src=social"
+    assert sk.sponsor_lines(sponsor, date(2026, 10, 9), "instagram") == [fb[0], ""]  # weekend kit, same week
+    assert sk.sponsor_lines(sponsor, sat_next, "facebook") == []  # another week's kit
+    assert sk.sponsor_lines(None, mon, "facebook") == []
+    caps = sk.captions({}, mon, date(2026, 10, 11), "week", {}, sponsor)
+    assert "brought to you by Acme Tacos" in caps["facebook"] and "brought to you by Acme Tacos" in caps["instagram"]
+    assert "/go/s/" not in caps["instagram"]  # Instagram captions can't link
