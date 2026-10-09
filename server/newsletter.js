@@ -634,9 +634,9 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0,
       ${invited ? '<p class="sub-invited">🎁 A friend invited you to The Vic 361</p>' : ''}
       <p class="sub-kicker">Free · Mondays and Thursdays · Victoria, TX</p>
       <h1 class="page-title">Victoria's best events, in your inbox ${SCHEDULE}.</h1>
-      <p class="page-lead">The whole week on Monday, the weekend on Thursday: live music, festivals, markets, family days, and new spots opening.</p>
       ${signupFormHtml({ source: 'subscribe-page', button: 'Subscribe free' })}
       <p class="sub-fine">No spam, ever. Unsubscribe with one click.</p>
+      <p class="page-lead">The whole week on Monday, the weekend on Thursday: live music, festivals, markets, family days, and new spots opening.</p>
       ${crowd}
     </section>
     <ul class="sub-perks" role="list">
@@ -645,7 +645,14 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0,
       <li><strong>Free things to do</strong> marked, so you can find them fast.</li>
       <li><strong>New &amp; notable:</strong> places that just opened and things you haven't heard about yet.</li>
     </ul>
-    ${proof}`;
+    ${proof}
+    <script>
+    // Already on the signup page: the header's Subscribe button (and "Get
+    // the full list") take you to the email box instead of reloading the
+    // page, which looked like the button didn't work.
+    document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href="/subscribe"],a[href="#signup-email"]');var i=document.getElementById('signup-email');
+    if(!a||!i)return;e.preventDefault();i.scrollIntoView({behavior:'smooth',block:'center'});i.focus({preventScroll:true});});
+    </script>`;
   return layout({
     siteUrl, path: '/subscribe', nav: null,
     title: `Free Events Newsletter for Victoria, TX | ${SITE_NAME}`,

@@ -454,6 +454,22 @@ describe('signup page', () => {
     expect(page(137)).toContain('Join 130+ Victoria locals');
   });
 
+  it('on the signup page the form is up top and Subscribe jumps to it instead of reloading', async () => {
+    const html = renderSubscribePage([], { siteUrl: 'https://x', now: NOW });
+    // Above the fold on a phone: right under the headline.
+    expect(html.indexOf('id="signup-email"')).toBeLessThan(html.indexOf('class="page-lead"'));
+    const { JSDOM } = await import('jsdom');
+    const dom = new JSDOM(`<header><a href="/subscribe">Subscribe</a></header>${html}`, { runScripts: 'dangerously' });
+    const { document } = dom.window;
+    const input = document.getElementById('signup-email');
+    input.scrollIntoView = () => {};
+    const link = document.querySelector('header a[href="/subscribe"]');
+    const click = new dom.window.MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(input);
+  });
+
   it('every Subscribe button on the site points at /subscribe', async () => {
     await startApp();
     for (const p of ['/', '/this-weekend', '/about']) {
