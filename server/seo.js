@@ -1151,7 +1151,6 @@ export const AD_PACKAGES = [
     price: '$300 / week',
     amount: 30000,
     blurb: 'Pick a week and write your message; it goes live on its own that Monday.',
-    where: 'Every page of thevic361.com for a whole week, the top of that week’s two newsletters (Monday and Thursday), and a shout-out in our Facebook and Instagram posts that week.',
     limit: 'One sponsor a week, so you’re the only one.',
     // The "what you get" checklist: [bold, rest]. Every line must be true
     // (newsletter.js sponsorHtml, seo.js sponsorHtml, social_kit.py
@@ -1173,7 +1172,6 @@ export const AD_PACKAGES = [
     price: '$49 Mon–Thu · $89 Fri–Sun',
     amount: 4900,
     blurb: 'Tell us about your event. Once it\'s listed, it\'s highlighted on its day with the Vic’s Pick badge.',
-    where: 'Your event highlighted on its day with the Vic’s Pick badge, on the site, its event page and our social posts, and in the newsletter when you book before the issue goes out (Monday’s covers the week, Thursday’s the weekend).',
     limit: 'Only 3 a day Mon–Thu and 4 a day Fri–Sun, so book early.',
     points: [
       ['Vic’s Pick badge', 'your event stands out on its day'],
@@ -1273,7 +1271,6 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
           <div class="ad-package__head">
             <h2>${escHtml(p.name)}</h2>
             <p class="ad-price">${escHtml(p.price)}</p>
-            <p class="ad-where"><strong>Where it shows:</strong> ${escHtml(p.where)}</p>
             <p class="ad-limit">${escHtml(p.limit)}</p>
           </div>
           <div class="ad-checklist-wrap">

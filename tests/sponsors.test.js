@@ -505,7 +505,7 @@ describe('Vic’s Pick: price by day, daily limits, preview', () => {
     const html = await (await fetch(baseUrl + '/advertise')).text();
     expect(html).toContain('$49 Mon–Thu · $89 Fri–Sun');
     expect(html).toContain('Only 3 a day Mon–Thu and 4 a day Fri–Sun');
-    expect(html).toContain('Where it shows:');
+    expect(html).not.toContain('Where it shows:'); // the checklist and the "Where your ad goes" diagram say it
     expect((html.match(/ad-package__preview/g) || []).length).toBe(2);
     expect(html).toContain('Book your sponsor week →');
     expect(html).toContain('Make my event a Vic’s Pick →');
