@@ -181,11 +181,13 @@ These matter the moment a second town exists. All keep Victoria's values.
 
 ## Phase 3: workflows per town
 
-- [ ] **3.1 `town` input** on every workflow, defaulting to `victoria`.
+- [x] **3.1 `town` input** on every workflow, defaulting to `victoria`.
       Victoria's crons and repo-level secrets stay exactly as they are.
-- [ ] **3.2 Per-town concurrency groups and cache keys**: suffix with the
+- [x] **3.2 Per-town concurrency groups and cache keys**: suffix with the
       town (`weekly-collect`, `meta-ads`, `submission-review`, `uptime`,
-      `social-kit-*`; `review-state-`, `uptime-state-`).
+      `social-kit-*`; `review-state-`, `uptime-state-`). (Done: a `-<slug>`
+      suffix on groups and a `<slug>-` prefix on cache keys, both empty for
+      Victoria.)
 - [ ] **3.3 GitHub Environments for new towns only.** Each holds that
       town's `SITE_URL`, Meta page and IG tokens and ids, ad account, cron
       secrets, `NTFY_TOPIC`, `SOCIAL_AUTOPOST`, source toggles and digest

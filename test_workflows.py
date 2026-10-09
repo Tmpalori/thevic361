@@ -308,3 +308,39 @@ def test_town_paths_are_set_before_use(name):
                 continue
             uses = "TOWN_" in yaml.safe_dump(st)
             assert seen or not uses, f"{name} {job_name}: {st.get('name')} uses TOWN_* before the Town paths step"
+
+
+TOWN_WORKFLOWS = ["event-check.yml", "meta-ads.yml", "newsletter.yml", "social-kit.yml", "submission-review.yml",
+                  "uptime.yml", "weekly-collect.yml", "weekly-digest.yml"]
+VIC_EMPTY_SUFFIX = "${{ inputs.town && inputs.town != 'victoria' && format('-{0}', inputs.town) || '' }}"
+VIC_EMPTY_PREFIX = "${{ inputs.town && inputs.town != 'victoria' && format('{0}-', inputs.town) || '' }}"
+
+
+@pytest.mark.parametrize("name", TOWN_WORKFLOWS)
+def test_town_input_defaults_to_victoria(name):
+    # MULTI_CITY_PLAN.md 3.1: a dispatch can name a town; scheduled runs and
+    # dispatches without it stay Victoria's.
+    wf = load(name)
+    on = wf.get("on", wf.get(True))
+    assert on["workflow_dispatch"]["inputs"]["town"]["default"] == "victoria"
+    assert wf["env"]["TOWN"] == "${{ inputs.town || 'victoria' }}"
+
+
+def test_town_groups_and_cache_keys_keep_victorias_names():
+    # 3.2: another town's concurrency groups and cache keys get its slug;
+    # Victoria's (no input, or "victoria") come out exactly as before.
+    groups = {
+        "meta-ads.yml": "meta-ads" + VIC_EMPTY_SUFFIX,
+        "submission-review.yml": "submission-review" + VIC_EMPTY_SUFFIX,
+        "weekly-collect.yml": "weekly-collect" + VIC_EMPTY_SUFFIX,
+        "social-kit.yml": "social-kit-${{ (github.event_name == 'schedule' || inputs.post || inputs.scheduled) && 'post' || 'build' }}" + VIC_EMPTY_SUFFIX,
+    }
+    for name, group in groups.items():
+        assert load(name)["concurrency"]["group"] == group
+    assert load("uptime.yml")["jobs"]["check"]["concurrency"]["group"] == "uptime" + VIC_EMPTY_SUFFIX
+    for name, stem in (("submission-review.yml", "review-state-"), ("uptime.yml", "uptime-state-")):
+        text = open(os.path.join(WF, name)).read()
+        # A town's prefix goes in front, so Victoria's "review-state-" restore
+        # prefix can never pick up another town's state.
+        assert text.count(f"key: {VIC_EMPTY_PREFIX}{stem}${{{{ github.run_id }}}}") == 2
+        assert text.count(f"restore-keys: {VIC_EMPTY_PREFIX}{stem}\n") == 1

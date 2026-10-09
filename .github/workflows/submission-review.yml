@@ -24,13 +24,23 @@ on:
   schedule:
     - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
+    inputs:
+      town:
+        description: 'Town slug (towns/<slug>/town.json); victoria is The Vic 361'
+        required: false
+        default: victoria
 
 permissions:
   contents: read
 
 concurrency:
-  group: submission-review
+  group: submission-review${{ inputs.town && inputs.town != 'victoria' && format('-{0}', inputs.town) || '' }}
   cancel-in-progress: false
+
+# The town this run is for (MULTI_CITY_PLAN.md 3.1). Scheduled runs and a
+# dispatch without the input are Victoria's; town.py reads TOWN.
+env:
+  TOWN: ${{ inputs.town || 'victoria' }}
 
 jobs:
   review:
@@ -54,8 +64,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .review-state
-          key: review-state-${{ github.run_id }}
-          restore-keys: review-state-
+          key: ${{ inputs.town && inputs.town != 'victoria' && format('{0}-', inputs.town) || '' }}review-state-${{ github.run_id }}
+          restore-keys: ${{ inputs.town && inputs.town != 'victoria' && format('{0}-', inputs.town) || '' }}review-state-
 
       - name: Review new submissions
         env:
@@ -71,7 +81,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .review-state
-          key: review-state-${{ github.run_id }}
+          key: ${{ inputs.town && inputs.town != 'victoria' && format('{0}-', inputs.town) || '' }}review-state-${{ github.run_id }}
 
       - name: Tell Slack it failed
         if: failure()
