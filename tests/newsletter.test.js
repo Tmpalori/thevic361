@@ -1626,3 +1626,44 @@ describe('review fixes: email limits', () => {
     await vi.waitFor(async () => expect(await store.countEmailOpens(['2025-01-06', '2027-01-04', '2026-10-05'])).toEqual({ '2026-10-05': 1 }), { timeout: 2000 });
   });
 });
+
+describe('reply ask and open counting', () => {
+  it('asks readers to reply (welcome and issues) only when replies reach an inbox', async () => {
+    await startApp({ newsletterReplyTo: 'hello@thevic361.com' });
+    const h = await auth();
+    await post('/api/subscribe', { email: 'reader@example.com' });
+    await vi.waitFor(() => expect(sent.single.some(m => m.subject === 'Welcome to The Vic 361')).toBe(true), { timeout: 2000 });
+    const w = sent.single.find(m => m.subject === 'Welcome to The Vic 361');
+    expect(w.reply_to).toBe('hello@thevic361.com');
+    expect(w.html).toContain('One quick favor: hit reply');
+    expect(w.text).toContain('ONE QUICK FAVOR: hit reply and tell us what you');
+    expect((await post('/api/admin/newsletter/send', {}, h)).status).toBe(200);
+    const issue = sent.batches[0].msgs[0];
+    expect(issue.reply_to).toBe('hello@thevic361.com');
+    expect(issue.html).toContain('Just hit reply');
+    expect(issue.text).toContain('What do you want more of? Just hit reply');
+  });
+
+  it('no reply-to set: no ask, so nobody replies into a bounce', async () => {
+    await startApp();
+    await post('/api/subscribe', { email: 'reader@example.com' });
+    await vi.waitFor(() => expect(sent.single.some(m => m.subject === 'Welcome to The Vic 361')).toBe(true), { timeout: 2000 });
+    const w = sent.single.find(m => m.subject === 'Welcome to The Vic 361');
+    expect(w.reply_to).toBeUndefined();
+    expect(w.html).not.toContain('hit reply');
+  });
+
+  it('counts every reader’s open even when they all come through one image proxy', async () => {
+    await startApp();
+    const h = await auth();
+    const emails = Array.from({ length: 150 }, (_, i) => `r${i}@example.com`).join(', ');
+    await post('/api/admin/newsletter/import', { emails }, h);
+    expect((await post('/api/admin/newsletter/send', {}, h)).status).toBe(200);
+    const pixels = sent.batches.flatMap(b => b.msgs).map(m => m.html.match(/<img src="https:\/\/www\.thevic361\.com(\/email\/o\/[^"]+)"/)[1]);
+    expect(pixels).toHaveLength(150);
+    for (const p of pixels) await fetch(baseUrl + p); // all from 127.0.0.1, like Gmail's proxy
+    await vi.waitFor(async () => {
+      expect(await store.countEmailOpens(['2026-10-05'])).toEqual({ '2026-10-05': 150 });
+    }, { timeout: 3000 });
+  });
+});
