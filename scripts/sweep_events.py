@@ -39,9 +39,10 @@ sys.path.insert(0, HERE)
 import requests  # noqa: E402
 
 import collect_events as ce  # noqa: E402
+from town import TOWN, site_url  # noqa: E402
 import slack_notify  # noqa: E402
 
-SITE = os.environ.get("SITE_URL", "").strip().rstrip("/") or "https://www.thevic361.com"
+SITE = site_url()
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 AI_KINDS = {"duplicate", "wrong_date", "not_an_event", "out_of_area", "religious", "odd_time", "other"}
 MAX_LINES = 12  # in Slack; the job summary lists everything
@@ -139,14 +140,14 @@ def _line(i, e):
             f"{e.get('name')} | {e.get('venue') or 'no venue'} | {desc}")
 
 
-PROMPT = """You check the published event list for The Vic 361, a community events site for Victoria, Texas (Victoria County).
+PROMPT = """You check the published event list for <<SITE>>, a community events site for <<PLACE>>.
 Each line is: index | date (weekday) | time | name | venue | description.
 
 Flag only clear problems a careful editor would fix before the list goes out:
 - duplicate: the same real event listed more than once (same day, same event, even if the venue or wording differs). Set "dup_of" to the other index.
 - wrong_date: the name or description says a different day or date than the one listed.
 - not_an_event: not something the public can attend (job posts, ads, closures, sales, awareness days, private events).
-- out_of_area: clearly not in or near Victoria, Texas.
+- out_of_area: clearly not in or near <<CITY_LONG>>.
 - religious: worship, church services or church-hosted events (the owner doesn't list these).
 - odd_time: a time that can't be right for this kind of event.
 - other: anything else clearly wrong (garbled name, wrong venue for the event, etc.).
@@ -154,6 +155,9 @@ Flag only clear problems a careful editor would fix before the list goes out:
 Do not flag the same recurring event on different days (weekly karaoke, story time). Do not flag generic names at different venues ("Live Music" at two bars is two events). When unsure, leave it out.
 Refer to other events by their name, never by their index number (the reader never sees the numbers).
 Answer with only a JSON array, at most 20 items: [{"i": <index>, "kind": "<kind>", "why": "<under 15 words>", "dup_of": <index or null>}]. Answer [] if nothing is off."""
+PROMPT = (PROMPT.replace("<<SITE>>", TOWN["site_name"])
+          .replace("<<PLACE>>", f"{TOWN['city_state_long']} ({TOWN['county']})" if TOWN["county"] else TOWN["city_state_long"])
+          .replace("<<CITY_LONG>>", TOWN["city_state_long"]))
 
 
 def _named(why, events):
@@ -229,7 +233,7 @@ def combine(rule, ai):
 
 
 LABEL = {"duplicate": "possible duplicate", "wrong_date": "wrong day?", "not_an_event": "not an event?",
-         "out_of_area": "outside Victoria?", "religious": "religious / church event", "odd_time": "odd time",
+         "out_of_area": f"outside {TOWN['city']}?", "religious": "religious / church event", "odd_time": "odd time",
          "cut_off": "name cut off", "other": "check"}
 
 

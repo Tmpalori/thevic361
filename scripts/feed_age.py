@@ -11,11 +11,15 @@ without it fall back to `last_updated`.
 """
 import datetime as dt
 import json
+import os
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from town import TOWN  # noqa: E402
 
 try:
     from zoneinfo import ZoneInfo
-    CENTRAL = ZoneInfo("America/Chicago")
+    CENTRAL = ZoneInfo(TOWN["timezone"])  # the town's zone (Central for Victoria)
 except Exception:  # noqa: BLE001 - no tz database: close enough
     CENTRAL = dt.timezone(dt.timedelta(hours=-6))
 

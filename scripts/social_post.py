@@ -31,7 +31,10 @@ import time
 
 import requests
 
-SITE = os.environ.get("SITE_URL", "https://www.thevic361.com").rstrip("/")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from town import TOWN, site_url, tz  # noqa: E402  (repo root; TOWN unset = Victoria)
+
+SITE = site_url()
 # One place for the Graph API version. The GRAPH_API_VERSION repo variable
 # (passed in social-kit.yml) overrides it, so moving off a version Meta
 # retires needs no code change; empty (variable unset) means the default.

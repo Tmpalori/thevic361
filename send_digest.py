@@ -26,12 +26,13 @@ import sys
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from town import TOWN, site_url  # TOWN unset = Victoria
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 DEFAULT_TO = "tristen.m.palori@gmail.com"
 DEFAULT_FROM = "tristen.m.palori@gmail.com"
-DEFAULT_FROM_NAME = "The Vic 361"
+DEFAULT_FROM_NAME = TOWN["site_name"]
 
 ICON_MAP = {
     "food": "\U0001f354",
@@ -62,7 +63,7 @@ def load_candidates(path, all_days=False):
     # The review covers the collector's 14-day window. Hand-added events
     # now run 90 days ahead (local_events.yaml) and would swamp the email.
     from zoneinfo import ZoneInfo
-    last = (datetime.now(ZoneInfo("America/Chicago")).date() + timedelta(days=REVIEW_DAYS)).isoformat()
+    last = (datetime.now(ZoneInfo(TOWN["timezone"])).date() + timedelta(days=REVIEW_DAYS)).isoformat()
     events = [ev for ev in events if ev.get("date", "") <= last]
 
     if not all_days:
@@ -87,15 +88,15 @@ def build_email_body(events, by_date):
     today = datetime.now()
     # Subject line preserved (including digest tag) so existing inbox filters keep working.
     digest_tag = f"[VIC361-DIGEST {today.strftime('%Y-%m-%d')}]"
-    subject = f"The Vic 361 — Events to Screen ({today.strftime('%a %b %d')}) {digest_tag}"
+    subject = f"{TOWN['site_name']} — Events to Screen ({today.strftime('%a %b %d')}) {digest_tag}"
 
     # www, not the bare domain: Squarespace forwards thevic361.com/<path> to
     # www.thevic361.com//<path>, which 404s.
-    admin_url = (os.environ.get("SITE_URL") or "https://www.thevic361.com").rstrip("/") + "/admin.html"
+    admin_url = site_url() + "/admin.html"
 
     # ── Plain text version ──
     text_lines = [
-        f"THE VIC 361 — WEEKLY EVENT DIGEST",
+        f"{TOWN['site_name'].upper()} — WEEKLY EVENT DIGEST",
         f"Collected {today.strftime('%A, %B %d at %I:%M %p')}",
         f"{len(events)} events found across {len(by_date)} days",
         "",
@@ -112,7 +113,7 @@ def build_email_body(events, by_date):
     html_parts = [
         "<html><body style='font-family: -apple-system, system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #28251D;'>",
         "<div style='text-align: center; margin-bottom: 20px;'>",
-        "<h1 style='color: #1A7A7E; font-size: 24px; margin: 0;'>The Vic 361</h1>",
+        f"<h1 style='color: #1A7A7E; font-size: 24px; margin: 0;'>{TOWN['site_name']}</h1>",
         f"<p style='color: #666; margin: 5px 0;'>Weekly Digest &mdash; {today.strftime('%A, %B %d')}</p>",
         f"<p style='color: #666; margin: 5px 0;'>{len(events)} events collected across {len(by_date)} days</p>",
         "</div>",
@@ -231,7 +232,7 @@ def send_email(subject, text_body, html_body, to_addr, dry_run=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="The Vic 361 — Send Event Digest")
+    parser = argparse.ArgumentParser(description=f"{TOWN['site_name']} — Send Event Digest")
     parser.add_argument("--candidates", default="./candidates.json", help="Path to candidates.json")
     parser.add_argument("--to", default=DEFAULT_TO, help="Recipient email")
     parser.add_argument("--dry-run", action="store_true", help="Print email without sending")

@@ -16,6 +16,9 @@ import re
 import shutil
 import subprocess
 import tempfile
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from town import TOWN, site_url, tz  # noqa: E402  (repo root; TOWN unset = Victoria)
 
 W, H = 1080, 1350
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
@@ -63,10 +66,18 @@ def _range(start, end):
     return f"{start.strftime('%a %b ')}{start.day} – {end.strftime('%a %b ')}{end.day}"
 
 
+def _wordmark():
+    """The town's two-tone name: "The Vic" plus the 361 badge (site_name_html)."""
+    m = re.match(r"^(.*?)\s*<span>(.*)</span>\s*$", TOWN["site_name_html"])
+    if not m:
+        return esc(TOWN["site_name_html"])
+    return f'{esc(m.group(1))} <b class="pill361" style="color:{INK}">{esc(m.group(2))}</b>'
+
+
 def _brand(small=False, color=INK):
     size = 64 if small else 84
     return (f'<div class="brand" style="color:{color}"><img src="file://{DOCS}/logo-512.png" width="{size}" height="{size}">'
-            f'<span>The Vic <b class="pill361" style="color:{INK}">361</b></span></div>')
+            f'<span>{_wordmark()}</span></div>')
 
 
 CSS = f"""
@@ -108,7 +119,7 @@ def cover_html(groups, start, end, kind):
 <div style="position:absolute;left:64px;right:64px;top:56px">
   {_brand()}
   <div class="pill" style="background:#FF8FC0;font-size:34px;margin-top:40px;transform:rotate(-2deg)">{esc(KICKER[kind].upper())}</div>
-  <div class="disp" style="font-size:96px;margin-top:20px">{esc(HEADLINE[kind])}<br><span class="hl">Victoria, TX</span></div>
+  <div class="disp" style="font-size:96px;margin-top:20px">{esc(HEADLINE[kind])}<br><span class="hl">{esc(TOWN["city_state"])}</span></div>
   <div style="display:flex;gap:20px;align-items:center;margin-top:30px">
     <div class="pill" style="font-size:34px">{esc(_range(start, end))}</div>
     <div class="disp" style="font-size:46px;color:{PURPLE}">{esc(count)}</div>
@@ -181,11 +192,11 @@ def cta_html(total=0):
 <div style="position:absolute;left:72px;right:72px;top:80px;color:#fff">
   {_brand(color="#fff")}
   <div class="disp" style="font-size:112px;margin-top:60px">Don’t miss<br>a thing.</div>
-  <div style="font-size:46px;font-weight:800;margin-top:26px;opacity:.95">Every event in Victoria, <span style="color:{SUN}">free</span> in your inbox every Monday &amp; Thursday.</div>
+  <div style="font-size:46px;font-weight:800;margin-top:26px;opacity:.95">Every event in {esc(TOWN["city"])}, <span style="color:{SUN}">free</span> in your inbox every Monday &amp; Thursday.</div>
   <div class="pill" style="margin-top:44px;font-size:62px;padding:10px 40px;background:{SUN};color:{INK};box-shadow:10px 10px 0 {INK}">Subscribe free →</div>
-  <div class="disp" style="font-size:46px;margin-top:22px;color:{SUN}">thevic361.com/subscribe</div>
-  <div style="font-size:40px;font-weight:800;margin-top:52px">{esc(see_all)} at <span style="color:{SUN}">thevic361.com</span></div>
-  <div style="font-size:30px;font-weight:800;margin-top:26px;opacity:.85">Hosting something? Submit it free at thevic361.com/submit</div>
+  <div class="disp" style="font-size:46px;margin-top:22px;color:{SUN}">{TOWN["domain"]}/subscribe</div>
+  <div style="font-size:40px;font-weight:800;margin-top:52px">{esc(see_all)} at <span style="color:{SUN}">{TOWN["domain"]}</span></div>
+  <div style="font-size:30px;font-weight:800;margin-top:26px;opacity:.85">Hosting something? Submit it free at {TOWN["domain"]}/submit</div>
 </div>
 </section>"""
 
