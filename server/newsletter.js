@@ -343,6 +343,24 @@ ${safeUrl(sponsor.url) && sponsor.cta ? `<a href="${escHtml(sponsorHref(sponsor,
 </td></tr></table>` : '';
 }
 
+// What each package looks like inside the newsletter, for /advertise: the
+// real sponsor block, and a Saturday with a starred Vic's Pick among its
+// neighbors (same renderers as the issue).
+export function sampleEmailPreviews(siteUrl = '') {
+  const day = (rows) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;border:3px solid ${C.ink};border-radius:16px;overflow:hidden;border-collapse:separate;background:#fff;">
+<tr><td style="background:${DAY_COLORS[5]};padding:10px 14px;border-bottom:3px solid ${C.ink};font-family:${DISPLAY};color:${C.ink};"><span style="font-size:20px;font-weight:bold;">Saturday</span></td></tr>
+<tr><td style="padding:6px 12px 10px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${rows}</table></td></tr></table>`;
+  const evs = [
+    { name: 'Farmers Market', time: '8:00 AM', venue: 'Market Square' },
+    { name: 'Your Event Name', time: '7:00 PM', venue: 'Your Venue', description: 'A line or two about your event.', featured: true },
+    { name: 'Live Music', time: '9:00 PM', venue: 'Downtown' }
+  ];
+  return {
+    weekly: `<div style="font-family:Arial,Helvetica,sans-serif;color:${C.ink};">${sponsorHtml({ name: 'Your Business', text: 'One or two sentences about what you offer.', cta: 'Learn more', url: siteUrl || 'https://www.thevic361.com' }, siteUrl)}</div>`,
+    featured: `<div style="font-family:Arial,Helvetica,sans-serif;color:${C.ink};font-size:15px;">${day(evs.map((e, i) => eventRow({ ...e, page: null, url: '' }, siteUrl, evs[i + 1])).join(''))}</div>`
+  };
+}
+
 // ─── Choosing what an issue shows ─────────────────────────────────────
 // Each day shows PER_DAY events: paid Vic's Picks always, then editor's
 // picks, then the best-rated (`appeal`, 1–5, from the collector), then

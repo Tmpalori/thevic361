@@ -1171,12 +1171,49 @@ export const AD_PACKAGES = [
   }
 ];
 
+// Live, true-today numbers for /advertise: this week's listed events, the
+// venues and nearby towns they cover, and subscribers once there's a real
+// crowd (the same 100 the subscribe page waits for).
+export const SHOW_SUBSCRIBERS_FROM = 100;
+export function advertiseStats(events, now, subscriberCount = 0) {
+  const week = currentWeek(localDateStr(now));
+  const list = (events || []).filter(ev => ev.date >= week[0] && ev.date <= week[6]);
+  const venues = new Set(list.map(ev => String(ev.venue || '').trim().toLowerCase()).filter(Boolean));
+  const towns = new Set(list.map(ev => String(ev.town || '').trim()).filter(Boolean));
+  return {
+    events: list.length, venues: venues.size, towns: towns.size,
+    subscribers: subscriberCount >= SHOW_SUBSCRIBERS_FROM ? Math.floor(subscriberCount / 10) * 10 : null
+  };
+}
+
+// Questions a business asks before buying. Keep every answer true to what
+// the site does (server/sponsors.js, server/newsletter.js).
+const AD_FAQ = [
+  ['Who reads The Vic 361?', 'People in Victoria and the towns around it who are planning what to do: families looking for weekend plans, couples planning a night out, newcomers finding their way around. They come to the site and open the newsletter to decide where to go.'],
+  ['How fast does it go live?', 'A weekly sponsorship goes live on its own the Monday of the week you book. A Vic’s Pick is checked by our editors and highlighted as soon as your event is listed, usually the same day.'],
+  ['When does it make the newsletter?', 'Monday’s issue covers the whole week and Thursday’s covers the weekend. Book a Vic’s Pick before the issue goes out and it’s starred in it; a weekly sponsor is at the top of both issues of its week.'],
+  ['Can I change something after I pay?', 'Yes. Reply to your confirmation email with the change and we’ll update it.'],
+  ['What’s in the report?', 'Weekly sponsors get one the Monday after: how often your block was seen, where, and how many people clicked. A Vic’s Pick gets one the day after your event: times seen, page views, clicks, calendar adds and shares.'],
+  ['What if my day is sold out?', 'Vic’s Picks are limited each day so they stand out. Pick another day, or book a weekly sponsorship to be on every page all week.']
+];
+
 // previews: { [package key]: html } sample placements from
-// server/sponsors.js samplePreviews(), the same renderer the checkout uses.
-export function renderAdvertisePage({ siteUrl, checkout = false, previews = {} }) {
+// server/sponsors.js samplePreviews(), the same renderer the checkout uses;
+// emailPreviews the same packages inside the newsletter
+// (server/newsletter.js sampleEmailPreviews). stats from advertiseStats.
+export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, emailPreviews = {}, stats = null }) {
+  const statItems = stats ? [
+    stats.events ? [stats.events, 'events listed this week'] : null,
+    stats.venues ? [stats.venues, 'venues this week'] : null,
+    ['2', 'newsletters a week, Monday and Thursday'],
+    // Victoria plus at least two nearby towns, or it undersells.
+    stats.towns >= 2 ? [stats.towns + 1, 'towns: Victoria and nearby'] : null,
+    stats.subscribers ? [`${stats.subscribers}+`, 'local subscribers'] : null
+  ].filter(Boolean) : [];
   const body = `
     <h1 class="page-title">Advertise on The Vic 361</h1>
     <p class="page-lead">Reach people in Victoria, TX who are actively looking for something to do this week. Here’s exactly what each option gets you and where it shows.</p>
+    ${statItems.length ? `<ul class="ad-stats" role="list">${statItems.map(([n, l]) => `<li><strong>${escHtml(String(n))}</strong><span>${escHtml(l)}</span></li>`).join('')}</ul>` : ''}
     <div class="ad-packages ad-packages--rows">
       ${AD_PACKAGES.map(p => `
       <section class="ad-package ad-package--row" id="${escHtml(p.key)}">
@@ -1188,10 +1225,15 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {} }
           <p class="ad-limit">${escHtml(p.limit)}</p>
           ${checkout ? `<a class="btn btn--primary ad-buy" href="/advertise/checkout?package=${escHtml(p.key)}">Preview yours and book →</a>` : ''}
         </div>
-        ${previews[p.key] ? `<div class="ad-package__preview" aria-label="Example of a ${escHtml(p.name)}"><p class="ad-preview-label">Example</p>${previews[p.key]}</div>` : ''}
+        ${previews[p.key] || emailPreviews[p.key] ? `<div class="ad-package__preview" aria-label="Example of a ${escHtml(p.name)}">` +
+          (previews[p.key] ? `<p class="ad-preview-label">On the site</p>${previews[p.key]}` : '') +
+          (emailPreviews[p.key] ? `<p class="ad-preview-label">In the newsletter</p><div class="ad-email-sample">${emailPreviews[p.key]}</div>` : '') +
+          '</div>' : ''}
       </section>`).join('')}
     </div>
-    <h2 class="section-heading">${checkout ? 'Questions?' : 'Get started'}</h2>
+    <h2 class="section-heading">Common questions</h2>
+    <div class="ad-faq">${AD_FAQ.map(([q, a]) => `<details><summary>${escHtml(q)}</summary><p>${escHtml(a)}</p></details>`).join('')}</div>
+    <h2 class="section-heading">${checkout ? 'Something else?' : 'Get started'}</h2>
     <p>${checkout ? 'Pick a package above to book and pay online in a couple of minutes. Questions or a custom package?' : 'Tell us your business name and what you\'d like to promote, and we\'ll reply with open dates and our latest audience numbers.'} <a href="/contact?topic=advertising">Send us a message</a>.</p>
     <p>Listing a community event is always free: <a href="/submit">submit it here</a>.</p>`;
   return layout({

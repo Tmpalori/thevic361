@@ -49,7 +49,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import {
   AD_PACKAGES, SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, addDays, formatDay, layout,
-  renderEventItem, sponsorHtml, dayClass
+  renderEventItem, sponsorHtml, dayClass, sortEvents
 } from './seo.js';
 import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
@@ -691,8 +691,10 @@ function selectField({ name, label, options, value, error }) {
 // page and refreshed from POST /advertise/preview as they type, so there's
 // one renderer and the preview can't drift from the real thing.
 
+// The rest of the day around a pick in the preview: picks sit in time order
+// with everything else (sortEvents), so the sample does too.
 const SAMPLE_OTHERS = [
-  { name: 'Other events that day', time: '6:00 PM', venue: 'Listed below yours' },
+  { name: 'Other events that day', time: '6:00 PM', venue: 'In time order, around yours' },
   { name: '…and the rest of the day’s list', time: '8:00 PM', venue: '' }
 ];
 
@@ -731,7 +733,8 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
     description: clean(v.description, 300) || 'Your description shows here.',
     featured: true
   };
-  const others = SAMPLE_OTHERS.map(o => previewItem(o).replace('class="event-entry"', 'class="event-entry co-preview-dim"'));
+  const items = sortEvents([ev, ...SAMPLE_OTHERS].map(x => ({ ...x, date: date || '2000-01-01' })))
+    .map(x => x.featured ? previewItem(x) : previewItem(x).replace('class="event-entry"', 'class="event-entry co-preview-dim"'));
   let price = `<strong>$${VICS_PICK.weekdayAmount / 100}</strong> Mon–Thu · <strong>$${VICS_PICK.weekendAmount / 100}</strong> Fri–Sun. Pick a date to see open spots.`;
   if (date && now) {
     const a = pickAvailability(date, orders, now);
@@ -742,7 +745,7 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
   }
   return `<p class="co-preview-price">${price}</p>` +
     `<p class="co-preview-where">Highlighted on its day on the site and its event page, ${escHtml(pickWhere(date, now))}:</p>` +
-    dayCard(date, [previewItem(ev), ...others]);
+    dayCard(date, items);
 }
 
 // Example placements for the /advertise page.

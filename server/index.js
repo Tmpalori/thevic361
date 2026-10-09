@@ -30,7 +30,7 @@ import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys, keyedEvents } from './eventcheck.js';
 import { registerGrowth } from './growth.js';
-import { newsletterConfig, createResend, registerNewsletter, signupFormHtml, normalizeEmail } from './newsletter.js';
+import { newsletterConfig, createResend, registerNewsletter, signupFormHtml, normalizeEmail, sampleEmailPreviews } from './newsletter.js';
 import { createTremendous, tremendousConfig } from './referralRewards.js';
 import { createMailer, renderSubmissionReceived, renderSubmissionLive, setWeekendIssue } from './notify.js';
 import { registerSubmissionReview, isPaidPick } from './submissionReview.js';
@@ -47,7 +47,7 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import {
   HUB_PAGES, localDateStr, renderHome, renderHubPage, renderEventPage,
-  renderAboutPage, renderPrivacyPage, renderAdvertisePage, renderNotFoundPage, renderSitemap, renderLlmsTxt
+  renderAboutPage, renderPrivacyPage, renderAdvertisePage, advertiseStats, renderNotFoundPage, renderSitemap, renderLlmsTxt
   , fillSeasonalNav, currentWeek, addDays, shiftToWeek
 } from './seo.js';
 import {
@@ -1879,7 +1879,10 @@ export async function createApp(opts = {}) {
   }
 
   app.get('/advertise', pageHandler(async (req, res, payload, ctx) => {
-    sendHtml(res, renderAdvertisePage({ ...ctx, checkout: stripeCfg.enabled, previews: samplePreviews() }));
+    let subscribers = 0;
+    try { subscribers = typeof store.countSubscribers === 'function' ? (await store.countSubscribers()).active || 0 : 0; } catch (_) { /* numbers are a bonus */ }
+    sendHtml(res, renderAdvertisePage({ ...ctx, checkout: stripeCfg.enabled, previews: samplePreviews(),
+      emailPreviews: sampleEmailPreviews(siteUrl), stats: advertiseStats(payload.events, ctx.now, subscribers) }));
   }));
 
   // Contact form → Slack; replaces publishing an email address.

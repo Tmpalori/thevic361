@@ -1092,3 +1092,36 @@ describe('sponsor promises (review fixes)', () => {
     expect((await post('/api/admin/sponsors/x', { action: 'hide' }, h)).status).toBe(500);
   });
 });
+
+describe('selling it on /advertise', () => {
+  it('live numbers, both previews per package (site and newsletter), and the FAQ', async () => {
+    await startApp();
+    const html = await (await fetch(baseUrl + '/advertise')).text();
+    expect(html).toContain('class="ad-stats"');
+    expect(html).toContain('newsletters a week, Monday and Thursday');
+    expect(html.match(/<p class="ad-preview-label">On the site<\/p>/g)).toHaveLength(2);
+    expect(html.match(/<p class="ad-preview-label">In the newsletter<\/p>/g)).toHaveLength(2);
+    expect(html).toContain('THIS WEEK\'S SPONSOR');
+    expect(html).toContain('★ VIC’S PICK');
+    expect(html).toContain('<summary>How fast does it go live?</summary>');
+    expect(html).not.toMatch(/\bAI\b|automat/i);
+  });
+
+  it('the Vic’s Pick example sits in time order, not on top', async () => {
+    const { samplePreviews } = await import('../server/sponsors.js');
+    const times = samplePreviews().featured.match(/event-time">[^<]+/g).map(t => t.split('>')[1]);
+    expect(times).toEqual(['6:00 PM', '7:00 PM', '8:00 PM']);
+    expect(samplePreviews().featured).not.toContain('below yours');
+  });
+
+  it('counts this week’s events, venues and nearby towns; subscribers only from 100', async () => {
+    const { advertiseStats } = await import('../server/seo.js');
+    const now = new Date('2026-10-09T17:00:00Z');
+    const evs = [
+      { date: '2026-10-09', venue: 'Club' }, { date: '2026-10-10', venue: 'club ' }, { date: '2026-10-11', venue: 'Park', town: 'Cuero' },
+      { date: '2026-10-12', venue: 'Next Week' }, { date: '2026-10-04', venue: 'Last Week' }
+    ];
+    expect(advertiseStats(evs, now, 99)).toEqual({ events: 3, venues: 2, towns: 1, subscribers: null });
+    expect(advertiseStats(evs, now, 247).subscribers).toBe(240);
+  });
+});
