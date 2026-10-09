@@ -148,10 +148,12 @@ These matter the moment a second town exists. All keep Victoria's values.
       across towns and silently drop the second town's issue), Tremendous
       `external_id` (the monthly drawing would collide). Done as
       `town.keyPrefix`.
-- [ ] **2.2 Stripe town filter.** Add `metadata.town` to checkout sessions,
+- [x] **2.2 Stripe town filter.** Add `metadata.town` to checkout sessions,
       payment intents and subscriptions. Each town's webhook ignores events
       for another town (missing metadata = Victoria). Only alert on a fraud
-      warning when an order matches.
+      warning when an order matches. (Done; Victoria's requests stay
+      untagged, since untagged means Victoria, and it still alerts on
+      unmatched warnings.)
 - [ ] **2.3 Inbound email filter.** Ignore `email.received` unless a `to`
       address is on the town's own domain (Victoria keeps `thevic361.com`).
 - [ ] **2.4 Per-town data paths.** New towns read and write

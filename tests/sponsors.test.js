@@ -15,6 +15,7 @@ import { sponsorLinkUrl } from '../server/seo.js';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import { townConfig, useTown, VICTORIA } from '../server/town.js';
 
 const NOW = new Date('2026-10-07T15:00:00Z'); // Wed Oct 7; this week starts Mon Oct 5
 const WHSEC = 'whsec_test';
@@ -1169,5 +1170,60 @@ describe('where your ad goes', () => {
     for (const name of ['thevic361.com', 'The newsletter', 'Facebook', 'Instagram']) expect(html).toContain(`<strong>${name}</strong>`);
     expect(html.match(/<path d="M6 160 C/g)).toHaveLength(4); // one arrow per channel
     expect(html).toContain('class="ad-flow__down"');            // phones: one arrow down
+  });
+});
+
+describe('towns sharing one Stripe account (MULTI_CITY_PLAN.md 2.2)', () => {
+  const BAY = { id: 'bay', siteName: 'The Bay 979', domain: 'thebay979.com', city: 'Bay City', state: 'TX', stateName: 'Texas', timezone: 'America/Chicago' };
+  const weekly = () => form({ package: 'weekly', week: '2026-10-12', business: 'Acme', text: 'Hi.', url: 'acme.example', email: 'a@acme.example' });
+  const status = async () => (await store.listSponsorOrders())[0].status;
+  const fraud = () => webhook({ type: 'radar.early_fraud_warning.created', data: { object: { id: 'issfr_1', payment_intent: 'pi_elsewhere' } } });
+  const slackFake = alerts => ({ enabled: true, notify: async () => true, alert: async (...a) => { alerts.push(a); } });
+  afterEach(() => useTown(VICTORIA));
+
+  it("Victoria's sessions stay untagged; it skips events tagged for another town", async () => {
+    const alerts = [];
+    await startApp({ slack: slackFake(alerts) });
+    await weekly();
+    const s = sessions[0];
+    const id = s.params.client_reference_id;
+    expect(s.params.metadata).toEqual({ order_id: id, package: 'weekly' });
+    expect(s.params.payment_intent_data).toBeUndefined();
+    await completed(s, { metadata: { town: 'bay' } });
+    expect(await status()).toBe('pending');
+    await completed(s); // untagged: from before towns, so Victoria's
+    expect(await status()).toBe('paid');
+    await fraud(); // no order matches: Victoria still hears about it
+    expect(alerts).toHaveLength(1);
+  });
+
+  it("another town handles only its own tagged events and its own orders' warnings", async () => {
+    const alerts = [];
+    await startApp({ town: BAY, siteUrl: 'https://www.thebay979.com', slack: slackFake(alerts) });
+    await weekly();
+    const s = sessions[0];
+    const id = s.params.client_reference_id;
+    expect(s.params.metadata).toEqual({ order_id: id, package: 'weekly', town: 'bay' });
+    expect(s.params.payment_intent_data).toEqual({ metadata: { order_id: id, town: 'bay' } });
+    expect(s.key).toBe(`bay-order-${id}`);
+    await completed(s); // untagged = Victoria's
+    await completed(s, { metadata: { town: 'victoria' } });
+    expect(await status()).toBe('pending');
+    await completed(s, { metadata: { town: 'bay' } });
+    expect(await status()).toBe('paid');
+    await fraud();
+    expect(alerts).toEqual([]);
+  });
+
+  it("skips another town's subscription events", async () => {
+    await startApp();
+    await store.saveSponsorOrder({ id: 'old-partner', kind: 'partner', status: 'active', venue_slug: 'aero-crafters',
+      venue_name: 'Aero Crafters', business: 'Aero Crafters', email: 'aero@example.com', amount: 15000,
+      subscription_id: 'sub_123', created_at: '2026-09-01T00:00:00Z' });
+    const cancel = metadata => webhook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_123', status: 'canceled', metadata } } });
+    await cancel({ town: 'bay' });
+    expect(await status()).toBe('active');
+    await cancel({});
+    expect(await status()).toBe('cancelled');
   });
 });
