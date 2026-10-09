@@ -572,7 +572,7 @@ describe('confirmation emails', () => {
     expect(mine[0].subject).toBe("Your Vic's Pick is confirmed: Pumpkin Patch");
     expect(mine[0].reply_to).toBe('hello@thevic361.com');
     expect(mine[0].key).toMatch(/^vic361-sponsor-/);
-    expect(mine[0].text).toContain('pinned to the top of Saturday, October 10');
+    expect(mine[0].text).toContain('highlighted on Saturday, October 10');
     expect(mine[0].html).toContain('thevic361.com/contact');
     expect((await store.listSponsorOrders())[0].confirmation_sent).toBeTruthy();
   });

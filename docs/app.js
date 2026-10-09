@@ -238,13 +238,13 @@
     var past = dateStr < victoriaToday();
 
     var eventsForDay = events.filter(function (e) { return e.date === dateStr; });
-    // Sort by time ascending (events without time go last)
+    // Sort by time ascending (events without time go last); at the same
+    // time, paid Vic's Picks then editor's picks (sortEvents in server/seo.js).
     eventsForDay.sort(function(a, b) {
-      // Paid Vic's Picks pin to the top of their day, then editor's picks
-      // (pickRank in server/seo.js).
+      var ta = timeMins(a.time), tb = timeMins(b.time);
+      if (ta !== tb) return ta - tb;
       var ra = a.featured ? (a.editor_pick ? 1 : 0) : 2, rb = b.featured ? (b.editor_pick ? 1 : 0) : 2;
-      if (ra !== rb) return ra - rb;
-      return timeMins(a.time) - timeMins(b.time);
+      return ra - rb;
     });
 
     var bodyHtml;
