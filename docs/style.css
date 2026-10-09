@@ -1861,23 +1861,16 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
   border-radius: 20px 20px 0 0;
   pointer-events: none;
 }
-/* Stuck: the box also covers the card's 6px drop shadow beside the bar. */
-.day-section--fold details[open] summary.day-header.is-stuck { margin-right: -9px; padding-right: calc(var(--space-5) + 9px); }
-/* ...and the bar carries the card's 6px drop shadow down its right side
-   (starting 6px below its top, like the card), so the card's edge runs
-   flush up along the stuck bar. The clip keeps the shadow off the list
-   below the bar. */
-.day-section--fold details[open] summary.day-header.is-stuck::before {
-  right: 6px;
-  box-shadow: 6px 6px 0 var(--ink);
-  clip-path: inset(0 -6px 0 0);
-}
+/* An open day's card has no offset drop shadow (folded days keep theirs):
+   every edge is the same 3px border, so the stuck bar lines up flush with
+   the card in every browser (Safari draws the shadow around the bar
+   differently from Chrome). */
+.day-section--fold:has(> details[open]) { box-shadow: none; }
 /* The bar stops at the last event, while the card's sides are still
    straight, so it never runs into the card's rounded bottom. */
 .day-section--fold:has(> details[open]) { padding-bottom: 24px; }
 @media (max-width: 639px) {
   .day-section--fold details[open] summary.day-header { padding-inline: calc(var(--space-3) + 3px); }
-  .day-section--fold details[open] summary.day-header.is-stuck { padding-right: calc(var(--space-3) + 9px); }
 }
 .day-count { margin-left: auto; font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
 .day-count::after { content: " ▾"; }
