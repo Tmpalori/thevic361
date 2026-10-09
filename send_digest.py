@@ -26,7 +26,7 @@ import sys
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from town import TOWN, site_url  # TOWN unset = Victoria
+from town import TOWN, site_url, town_paths  # TOWN unset = Victoria
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
@@ -233,7 +233,7 @@ def send_email(subject, text_body, html_body, to_addr, dry_run=False):
 
 def main():
     parser = argparse.ArgumentParser(description=f"{TOWN['site_name']} — Send Event Digest")
-    parser.add_argument("--candidates", default="./candidates.json", help="Path to candidates.json")
+    parser.add_argument("--candidates", default="./" + town_paths()["candidates"], help="Path to candidates.json")
     parser.add_argument("--to", default=DEFAULT_TO, help="Recipient email")
     parser.add_argument("--dry-run", action="store_true", help="Print email without sending")
     parser.add_argument("--all-days", action="store_true", help="Include all 7 days instead of just day 7")

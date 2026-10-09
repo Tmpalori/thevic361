@@ -96,6 +96,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Town paths
+        # TOWN unset is Victoria: its files at the repo root and in docs/.
+        # Another town's live under towns/<slug>/ (town.py town_paths).
+        run: python3 town.py paths >> "$GITHUB_ENV"
+
       - name: Run event collector
         # Step-level timeout: collector chains several scrapers (city
         # calendar, library, theatre victoria, allevents, Apify FB events,
@@ -148,9 +153,9 @@ jobs:
           # job env — leaves no room for a buffered-stdout regression to
           # hide a future stall.
           python -u collect_events.py \
-            --output ./docs/events.json \
-            --candidates ./candidates.json \
-            --local-dir . \
+            --output "./$TOWN_EVENTS" \
+            --candidates "./$TOWN_CANDIDATES" \
+            --local-dir "$TOWN_DIR" \
             --days 14 \
             --candidates-only
 
@@ -167,7 +172,7 @@ jobs:
           # (see header comment) and the collector only reads venue files.
           # enrichment_cache.json: gap-filling lookups (collect_events.py
           # enrich_thin_events), kept so each event is searched once.
-          if git diff --quiet candidates.json collection_metadata.json enrichment_cache.json 2>/dev/null; then
+          if git diff --quiet "$TOWN_CANDIDATES" "$TOWN_COLLECTION_METADATA" "$TOWN_ENRICHMENT_CACHE" 2>/dev/null; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -181,11 +186,11 @@ jobs:
           # docs/events.json is deliberately omitted: it's the curated
           # fallback and only the admin Save & Publish flow (running with
           # GITHUB_TOKEN) is allowed to commit to it.
-          git add candidates.json
+          git add "$TOWN_CANDIDATES"
           # collection_metadata.json is the admin Sources-tab feed (per-source
           # counts + timestamps). Add it only if the collector wrote one.
-          [ -f collection_metadata.json ] && git add collection_metadata.json
-          git add enrichment_cache.json
+          [ -f "$TOWN_COLLECTION_METADATA" ] && git add "$TOWN_COLLECTION_METADATA"
+          git add "$TOWN_ENRICHMENT_CACHE"
           git commit -m "🏙️ Update candidates $(date +'%Y-%m-%d')"
           # main can move during the ~25 min collect (a merge, the social
           # kit's commit). Rebase and retry instead of losing this run.
@@ -208,11 +213,11 @@ jobs:
           SLACK_ALERTS_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |
           # Next 14 days only: hand-added events run 90 days ahead.
-          n=$(python3 -c "import json,datetime as d;e=json.load(open('candidates.json'));e=e.get('events',e) if isinstance(e,dict) else e;end=(d.date.today()+d.timedelta(days=14)).isoformat();print(sum(1 for x in e if x.get('date','')<=end))" 2>/dev/null || echo "?")
+          n=$(python3 -c "import json,os,datetime as d;e=json.load(open(os.environ['TOWN_CANDIDATES']));e=e.get('events',e) if isinstance(e,dict) else e;end=(d.date.today()+d.timedelta(days=14)).isoformat();print(sum(1 for x in e if x.get('date','')<=end))" 2>/dev/null || echo "?")
           # The collector's warnings (a source that crashed or came back
           # empty, an expired token): count + first few, so a broken source
           # doesn't go unnoticed on a green run. Escaped for Slack.
-          w=$(python3 -c "import json;m=json.load(open('collection_metadata.json'));print((m.get('warnings') or {}).get('summary','').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;'))" 2>/dev/null || true)
+          w=$(python3 -c "import json,os;m=json.load(open(os.environ['TOWN_COLLECTION_METADATA']));print((m.get('warnings') or {}).get('summary','').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;'))" 2>/dev/null || true)
           run_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           python3 scripts/slack_notify.py "🗓️ Collect done: $n events in the next two weeks. They'll publish automatically in a minute; edit or remove any in admin.${w:+ ⚠️ $w}" --link "${{ vars.SITE_URL || 'https://www.thevic361.com' }}/admin.html"
           if [ -n "$w" ] && [ "$SLACK_ALERTS_URL" != "$SLACK_WEBHOOK_URL" ]; then

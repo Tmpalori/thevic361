@@ -33,6 +33,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Town paths
+        # TOWN unset is Victoria: its files at the repo root and in docs/.
+        # Another town's live under towns/<slug>/ (town.py town_paths).
+        run: python3 town.py paths >> "$GITHUB_ENV"
+
       - name: Send digest email
         env:
           SMTP_EMAIL:    ${{ secrets.SMTP_EMAIL }}
@@ -41,7 +46,7 @@ jobs:
           SMTP_PORT:     '587'
         run: |
           python send_digest.py \
-            --candidates ./candidates.json \
+            --candidates "./$TOWN_CANDIDATES" \
             --to tristen.m.palori@gmail.com \
             --all-days
 

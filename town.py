@@ -191,5 +191,40 @@ def tz(town=None):
     return ZoneInfo((town or TOWN)["timezone"]) if ZoneInfo else None
 
 
+def town_paths(town=None):
+    """Where the town's data lives, relative to the repo root (server/town.js
+    townPaths() is the twin): Victoria's at the root and in docs/, another
+    town's under towns/<slug>/ with its public files in towns/<slug>/public/."""
+    t = town or TOWN
+    own = "" if t["id"] == "victoria" else f"towns/{t['id']}/"
+    pub = "docs/" if t["id"] == "victoria" else f"towns/{t['id']}/public/"
+    return {
+        "dir": own.rstrip("/") or ".",
+        "candidates": f"{own}candidates.json",
+        "collection_metadata": f"{own}collection_metadata.json",
+        "enrichment_cache": f"{own}enrichment_cache.json",
+        "venues": f"{own}venues.json",
+        "local_events": f"{own}local_events.yaml",
+        "extras": f"{own}extras.yaml",
+        "events": f"{pub}events.json",
+        "social": f"{pub}social/latest/",
+    }
+
+
+def repo_path(key, town=None):
+    """An absolute path to one of the town's files (town_paths key)."""
+    return os.path.join(ROOT, town_paths(town)[key])
+
+
 # The process's town.
 TOWN = town_config()
+
+
+if __name__ == "__main__":
+    # `python3 town.py paths >> "$GITHUB_ENV"`: the workflows' file paths for
+    # TOWN (TOWN_DIR, TOWN_CANDIDATES, TOWN_EVENTS, TOWN_SOCIAL…).
+    import sys
+    if sys.argv[1:] != ["paths"]:
+        sys.exit("usage: python3 town.py paths")
+    for k, v in town_paths().items():
+        print(f"TOWN_{k.upper()}={v}")

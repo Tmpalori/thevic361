@@ -135,6 +135,10 @@ jobs:
         timeout-minutes: 4
         continue-on-error: true
         run: command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+      - name: Town paths
+        # TOWN unset is Victoria: its kit in docs/social/latest/. Another
+        # town's is in towns/<slug>/public/social/latest/ (town.py town_paths).
+        run: python3 town.py paths >> "$GITHUB_ENV"
       - name: Build kit
         id: build
         env:
@@ -147,7 +151,7 @@ jobs:
         run: |
           git config user.name "The Vic 361 Bot"
           git config user.email "bot@thevic361.com"
-          git add docs/social/latest
+          git add "$TOWN_SOCIAL"
           if git diff --cached --quiet; then
             echo "No changes"
             exit 0
@@ -210,11 +214,11 @@ jobs:
       # it right after each post), so re-running the job doesn't post to the
       # other one twice.
       - name: Save posted ids
-        if: always() && steps.post.outcome != 'skipped' && hashFiles('docs/social/latest/posted.json') != ''
+        if: always() && steps.post.outcome != 'skipped' && hashFiles(format('{0}posted.json', env.TOWN_SOCIAL)) != ''
         run: |
           git config user.name "The Vic 361 Bot"
           git config user.email "bot@thevic361.com"
-          git add docs/social/latest/posted.json
+          git add "${TOWN_SOCIAL}posted.json"
           git diff --cached --quiet && exit 0
           git commit -m "📣 Social posts $(date +'%Y-%m-%d')"
           for i in 1 2 3; do
@@ -226,15 +230,15 @@ jobs:
 
       - name: Send Slack this week's venues to tag
         # Only after this run's build: otherwise the file is last week's list.
-        if: always() && steps.build.outcome == 'success' && (github.event_name == 'schedule' || inputs.scheduled) && hashFiles('docs/social/latest/outreach-slack.txt') != ''
+        if: always() && steps.build.outcome == 'success' && (github.event_name == 'schedule' || inputs.scheduled) && hashFiles(format('{0}outreach-slack.txt', env.TOWN_SOCIAL)) != ''
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_ACTIVITY_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |
           [ "$(TZ=America/Chicago date +%u)" = "1" ] || exit 0
-          [ -s docs/social/latest/outreach-slack.txt ] || exit 0
+          [ -s "${TOWN_SOCIAL}outreach-slack.txt" ] || exit 0
           # Short version (scripts/social_kit.py outreach_slack); the full
           # list stays in outreach.txt, linked from the message.
-          python3 scripts/slack_notify.py "$(cat docs/social/latest/outreach-slack.txt)"
+          python3 scripts/slack_notify.py "$(cat "${TOWN_SOCIAL}outreach-slack.txt")"
 
       # cancelled() too: a run cut off by its timeout may have posted to
       # one platform and not the other.
