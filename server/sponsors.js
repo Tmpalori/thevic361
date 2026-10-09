@@ -45,7 +45,7 @@
  * then /advertise keeps the email-us flow.
  */
 
-import { town, dollars } from './town.js';
+import { town, dollars, VICTORIA } from './town.js';
 import crypto from 'node:crypto';
 import express from 'express';
 import {
@@ -202,6 +202,14 @@ export function formEncode(obj, prefix = '', out = new URLSearchParams()) {
 export const STRIPE_API_VERSION = '2026-09-30.endive';
 // Tags our Checkout Sessions in the Dashboard (Stripe asks for an 8-letter suffix).
 export const INTEGRATION_ID = 'vic361_sponsor_checkout_qvbkmxtr';
+
+// Events whose object carries our metadata.town (sessions and
+// subscriptions). Untagged ones are Victoria's: they predate towns.
+// Invoices, charges and fraud warnings carry none; they only ever match
+// this town's own orders.
+const TOWN_TAGGED = /^(checkout\.session|customer\.subscription)\./;
+const eventTown = obj => (obj && obj.metadata && obj.metadata.town) || VICTORIA.id;
+const townTag = () => (town.id === VICTORIA.id ? {} : { town: town.id });
 
 // Stripe's refusal of a catalog price that was archived ("The price
 // specified is inactive"), or whose product was ("... is not active"), or
@@ -1519,6 +1527,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
   async function handleEvent(event, mail = []) {
     const obj = (event && event.data && event.data.object) || {};
     if (!supported) return;
+    if (TOWN_TAGGED.test(String(event && event.type)) && eventTown(obj) !== town.id) return;
     const list = await freshOrders();
     switch (event.type) {
       case 'checkout.session.completed':
@@ -1659,7 +1668,9 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       case 'radar.early_fraud_warning.created': {
         const pi = typeof obj.payment_intent === 'string' ? obj.payment_intent : null;
         const order = findBy(list, 'payment_intent', pi);
-        if (slack) {
+        // A warning names only a payment: another town alerts on its own
+        // orders; Victoria, the account's first town, on the rest too.
+        if (slack && (order || town.id === VICTORIA.id)) {
           slack.alert(`fraud-warning:${obj.id || pi}`, 'Stripe early fraud warning on a sponsor payment',
             `${order ? `${order.business} (${order.email}), ${order.kind}` : `Payment ${pi || 'unknown'}`}. Review it in Stripe and refund if it looks fraudulent.`,
             'https://dashboard.stripe.com/radar/early-fraud-warnings');
@@ -1927,8 +1938,13 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           customer_email: order.email,
           client_reference_id: order.id,
           line_items: [item],
-          metadata: { order_id: order.id, package: pkg.key },
-          subscription_data: pkg.interval ? { metadata: { order_id: order.id } } : undefined,
+          // metadata.town: one Stripe account can serve several towns, and
+          // each town's webhook skips the others' sessions and subscriptions.
+          // Victoria's carry none (untagged means Victoria), so its requests
+          // are what they were before towns.
+          metadata: { order_id: order.id, package: pkg.key, ...townTag() },
+          subscription_data: pkg.interval ? { metadata: { order_id: order.id, ...townTag() } } : undefined,
+          payment_intent_data: pkg.interval || town.id === VICTORIA.id ? undefined : { metadata: { order_id: order.id, ...townTag() } },
           expires_at: Math.floor(Date.now() / 1000) + CHECKOUT_TTL_S,
           success_url: `${siteUrl}/advertise/thanks?order=${order.id}`,
           cancel_url: `${siteUrl}/advertise/checkout?package=${pkg.key}&cancelled=${order.id}`
