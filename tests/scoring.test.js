@@ -177,13 +177,15 @@ describe('editor’s picks (pickDays)', () => {
 });
 
 describe('order within a day', () => {
-  it('paid Vic’s Picks first, then editor’s picks, then the rest by time', () => {
+  it('time order, Vic’s Picks included; at the same time paid, then editor’s, then the rest', () => {
     const day = [
       { date: '2026-10-10', name: 'Plain', time: '9:00 AM' },
       { date: '2026-10-10', name: 'Editor Pick', time: '1:00 PM', featured: true, editor_pick: true },
-      { date: '2026-10-10', name: 'Paid Pick', time: '7:00 PM', featured: true }
+      { date: '2026-10-10', name: 'Paid Pick', time: '7:00 PM', featured: true },
+      { date: '2026-10-10', name: 'Same Time Plain', time: '1:00 PM' },
+      { date: '2026-10-10', name: 'Same Time Paid', time: '1:00 PM', featured: true }
     ];
-    expect(sortEvents(day).map(e => e.name)).toEqual(['Paid Pick', 'Editor Pick', 'Plain']);
+    expect(sortEvents(day).map(e => e.name)).toEqual(['Plain', 'Same Time Paid', 'Editor Pick', 'Same Time Plain', 'Paid Pick']);
   });
 });
 
@@ -292,5 +294,22 @@ describe('the site with the daily limit', () => {
     const stored = (await store.getPublished()).events;
     expect(stored.some(e => 'score' in e || 'overflow' in e || 'keep' in e || 'editor_pick' in e)).toBe(false);
     expect(stored.some(e => e.featured)).toBe(false); // nothing pinned for good
+  });
+});
+
+describe('"Also that day" on an event page', () => {
+  it('takes the earliest six (picks always in), in time order, whatever order they were stored in', async () => {
+    const { renderEventPage, withPages } = await import('../server/seo.js');
+    const times = ['11:00 PM', '10:00 PM', '9:00 PM', '8:00 PM', '7:00 PM', '6:00 PM', '5:00 PM', '4:00 PM', '8:00 AM'];
+    const evs = withPages([
+      { date: '2026-10-10', name: 'Main Event', time: '3:00 PM', venue: 'V' },
+      ...times.map((time, i) => ({ date: '2026-10-10', name: `Show ${i}`, time, venue: 'V', ...(i === 0 ? { featured: true } : {}) }))
+    ]);
+    const main = evs.find(e => e.name === 'Main Event');
+    const html = renderEventPage(main, evs, { siteUrl: 'https://x', now: new Date('2026-10-07T17:00:00Z') });
+    const shown = ['Show 8', 'Show 7', 'Show 6', 'Show 5', 'Show 4', 'Show 0'].map(n => html.indexOf(`>${n}<`));
+    expect(shown.every(i => i > 0)).toBe(true);
+    expect(shown).toEqual([...shown].sort((a, b) => a - b));
+    expect(html).not.toContain('>Show 1<');
   });
 });

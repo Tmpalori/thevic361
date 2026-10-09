@@ -720,7 +720,7 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
     });
     return `<p class="co-preview-where">Shown on every page of thevic361.com for your week, and at the top of that week’s ${weekendIssueOn() ? 'newsletters (Monday’s and Thursday’s)' : 'Monday newsletter'}.</p>${block}`;
   }
-  // Vic’s Pick: the event as it will look, pinned above the rest of its day.
+  // Vic’s Pick: the event as it will look, highlighted on its day.
   const date = /^\d{4}-\d{2}-\d{2}$/.test(val('date')) ? val('date') : '';
   const start = clean(v.time, 60) || '7:00 PM';
   const end = clean(v.end_time, 60);
@@ -741,7 +741,7 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
       : `<strong class="co-error">${escHtml(day)} is sold out</strong> (${a.cap} Vic’s Picks a day). Pick another day.`;
   }
   return `<p class="co-preview-price">${price}</p>` +
-    `<p class="co-preview-where">Pinned at the top of its day on the site and its event page, ${escHtml(pickWhere(date, now))}:</p>` +
+    `<p class="co-preview-where">Highlighted on its day on the site and its event page, ${escHtml(pickWhere(date, now))}:</p>` +
     dayCard(date, [previewItem(ev), ...others]);
 }
 
@@ -915,7 +915,7 @@ export function renderThanksPage(order, { siteUrl, now = new Date() }) {
       const day = order.event ? formatDay(order.event.date, { weekday: 'long', month: 'long', day: 'numeric' }) : 'its day';
       msg = `Thanks! ${escHtml(order.event ? order.event.name : 'Your event')} is a Vic’s Pick.`;
       next = ['We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
-        `Then it’s pinned to the top of ${escHtml(day)} with the Vic’s Pick badge, and ${escHtml(pickWhere(order.event && order.event.date, order.paid_at || order.created_at))}.`,
+        `Then it’s highlighted on ${escHtml(day)} with the Vic’s Pick badge, and ${escHtml(pickWhere(order.event && order.event.date, order.paid_at || order.created_at))}.`,
         `${emailed ? 'We’ve emailed you' : 'We’ll email you'} a confirmation. Stripe sends your receipt separately.`];
     }
   } else if (order && order.status === 'processing') {

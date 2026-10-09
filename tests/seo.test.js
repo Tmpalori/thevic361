@@ -327,14 +327,14 @@ describe('site hardening', () => {
 });
 
 describe('paid placements', () => {
-  it('featured events pin to the top of their day with a badge', async () => {
+  it('featured events keep their time slot in the day, with a badge', async () => {
     const events = [
       { date: '2026-10-09', name: 'Early Show', time: '6:00 PM', venue: 'A', icons: ['music'] },
       { date: '2026-10-09', name: 'Paid Late Show', time: '9:00 PM', venue: 'B', icons: ['music'], featured: true }
     ];
     await startApp(events);
     const r = await get('/this-weekend');
-    expect(r.text.indexOf('Paid Late Show')).toBeLessThan(r.text.indexOf('Early Show'));
+    expect(r.text.indexOf('Early Show')).toBeLessThan(r.text.indexOf('Paid Late Show'));
     expect(r.text).toContain('<span class="badge badge--featured">Vic’s Pick</span>');
   });
 

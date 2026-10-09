@@ -2215,7 +2215,7 @@
     const nl = parts.length ? ' ' + parts.join(', ') + '.' : '';
     return 'Hi ' + (ev.venue || 'there') + '!\n\n' +
       'We featured ' + ev.name + ' on The Vic 361, Victoria\'s free events guide, and it got ' + list + '.' + nl + '\n\n' +
-      'Want your next event front and center? A Vic\'s Pick pins it to the top of its day on the site (booked in time, it\'s starred in the newsletter too): ' +
+      'Want your next event front and center? A Vic\'s Pick highlights it on its day on the site (booked in time, it\'s starred in the newsletter too): ' +
       location.origin + '/advertise\n\nThanks!\nThe Vic 361';
   }
 

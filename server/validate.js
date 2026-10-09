@@ -249,7 +249,7 @@ export function validateEventEdit(input, { timeOptional = false } = {}) {
   const free = Boolean(input.free);
   if (free && !icons.includes('free')) icons.push('free');
 
-  // Paid featured listing: pinned to the top of its day on the public site.
+  // Paid featured listing: highlighted on its day on the public site.
   const featured = Boolean(input.featured);
 
   if (Object.keys(errors).length) return { ok: false, errors };
