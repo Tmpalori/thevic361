@@ -25,6 +25,10 @@ on:
     - cron: '37 14 * * *'   # CST slot
   workflow_dispatch:
     inputs:
+      town:
+        description: 'Town slug (towns/<slug>/town.json); victoria is The Vic 361'
+        required: false
+        default: victoria
       command:
         description: 'What to do'
         type: choice
@@ -51,8 +55,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: meta-ads
+  group: meta-ads${{ inputs.town && inputs.town != 'victoria' && format('-{0}', inputs.town) || '' }}
   cancel-in-progress: false
+
+# The town this run is for (MULTI_CITY_PLAN.md 3.1). Scheduled runs and a
+# dispatch without the input are Victoria's; town.py reads TOWN.
+env:
+  TOWN: ${{ inputs.town || 'victoria' }}
 
 jobs:
   # A late GitHub cron run is skipped when the site's scheduler already

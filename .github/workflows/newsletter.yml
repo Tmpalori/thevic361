@@ -25,6 +25,10 @@ on:
     - cron: '13 13 * * 4'   # Thu 7:13 AM CST
   workflow_dispatch:
     inputs:
+      town:
+        description: 'Town slug (towns/<slug>/town.json); victoria is The Vic 361'
+        required: false
+        default: victoria
       edition:
         description: 'Which issue'
         type: choice
@@ -33,6 +37,11 @@ on:
 
 permissions:
   contents: read
+
+# The town this run is for (MULTI_CITY_PLAN.md 3.1). Scheduled runs and a
+# dispatch without the input are Victoria's; town.py reads TOWN.
+env:
+  TOWN: ${{ inputs.town || 'victoria' }}
 
 jobs:
   # A cron at the other DST's time is skipped (pinned to CDT alone, the

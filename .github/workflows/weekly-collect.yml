@@ -61,14 +61,24 @@ on:
     # which auto-publishes them (server/autopublish.js).
     - cron: '23 20 * * 3'
   workflow_dispatch:       # Manual trigger from GitHub UI
+    inputs:
+      town:
+        description: 'Town slug (towns/<slug>/town.json); victoria is The Vic 361'
+        required: false
+        default: victoria
 
 permissions:
   contents: write          # Needed to push updated candidates.json
 
 # A manual run and the schedule must not collect (and push) at once.
 concurrency:
-  group: weekly-collect
+  group: weekly-collect${{ inputs.town && inputs.town != 'victoria' && format('-{0}', inputs.town) || '' }}
   cancel-in-progress: false
+
+# The town this run is for (MULTI_CITY_PLAN.md 3.1). Scheduled runs and a
+# dispatch without the input are Victoria's; town.py reads TOWN.
+env:
+  TOWN: ${{ inputs.town || 'victoria' }}
 
 jobs:
   collect:

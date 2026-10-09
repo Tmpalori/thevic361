@@ -21,15 +21,25 @@ on:
     - cron: '*/5 * * * *'
     - cron: '17 15 * * *'   # stale-feed check, ~10 AM Central
   workflow_dispatch:
+    inputs:
+      town:
+        description: 'Town slug (towns/<slug>/town.json); victoria is The Vic 361'
+        required: false
+        default: victoria
 
 permissions:
   contents: read
+
+# The town this run is for (MULTI_CITY_PLAN.md 3.1). Scheduled runs and a
+# dispatch without the input are Victoria's; town.py reads TOWN.
+env:
+  TOWN: ${{ inputs.town || 'victoria' }}
 
 jobs:
   check:
     if: github.event.schedule != '17 15 * * *'
     concurrency:
-      group: uptime
+      group: uptime${{ inputs.town && inputs.town != 'victoria' && format('-{0}', inputs.town) || '' }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -43,8 +53,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .uptime
-          key: uptime-state-${{ github.run_id }}
-          restore-keys: uptime-state-
+          key: ${{ inputs.town && inputs.town != 'victoria' && format('{0}-', inputs.town) || '' }}uptime-state-${{ github.run_id }}
+          restore-keys: ${{ inputs.town && inputs.town != 'victoria' && format('{0}-', inputs.town) || '' }}uptime-state-
       - name: Check the live site
         env:
           SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
@@ -58,7 +68,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .uptime
-          key: uptime-state-${{ github.run_id }}
+          key: ${{ inputs.town && inputs.town != 'victoria' && format('{0}-', inputs.town) || '' }}uptime-state-${{ github.run_id }}
 
   stale-feed:
     if: github.event.schedule == '17 15 * * *'

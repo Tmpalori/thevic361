@@ -28,9 +28,19 @@ on:
     - cron: '43 11 * * 1'   # CDT slot (fallback; the gate keeps the one matching DST)
     - cron: '43 12 * * 1'   # CST slot
   workflow_dispatch:
+    inputs:
+      town:
+        description: 'Town slug (towns/<slug>/town.json); victoria is The Vic 361'
+        required: false
+        default: victoria
 
 permissions:
   contents: read
+
+# The town this run is for (MULTI_CITY_PLAN.md 3.1). Scheduled runs and a
+# dispatch without the input are Victoria's; town.py reads TOWN.
+env:
+  TOWN: ${{ inputs.town || 'victoria' }}
 
 jobs:
   gate:
