@@ -149,7 +149,7 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
       `If it's a fit, it goes on <a href="${siteUrl}" style="color:${C.accent};">${town.domain}</a> and can show up in our Monday and Thursday newsletters and our social posts.`,
       'Free listings aren’t guaranteed a spot, and we may tidy up the wording.'
     ]) +
-    box(`<strong>Want it guaranteed and highlighted on its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`) +
+    box(`<strong>Want it guaranteed and highlighted on its day?</strong> Make it a ${town.pickName} ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, `Make it a ${town.pickName}`)}`) +
     p('Need to change a detail? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
   return {
     subject: 'We got your event submission',
@@ -162,7 +162,7 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
       '1. We review every submission, usually within the hour, and we’ll email you when it’s live; some need a closer look and take a day or two.',
       `2. If it's a fit, it goes on ${siteUrl} and can show up in our Monday and Thursday newsletters and our social posts.`,
       '3. Free listings aren’t guaranteed a spot, and we may tidy up the wording.', '',
-      `Want it guaranteed and highlighted on its day? Make it a Vic's Pick: ${upgradeUrl}`, '',
+      `Want it guaranteed and highlighted on its day? Make it a ${town.pickNamePlain}: ${upgradeUrl}`, '',
       'Need to change a detail? Reply to this email with the fix.',
       contactText(siteUrl)
     ].join('\n')
@@ -183,7 +183,7 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
   const pickShare = `Share that link anywhere you promote the event. It’s ${pickWhere(ev.date, at)}.`;
   const offer = !pick && Boolean(upgradeUrl);
   const lead = pick
-    ? `Good news: <strong>${escHtml(name)}</strong> is live on ${town.siteName} as a Vic’s Pick, highlighted on its day.`
+    ? `Good news: <strong>${escHtml(name)}</strong> is live on ${town.siteName} as a ${town.pickName}, highlighted on its day.`
     : `Good news: <strong>${escHtml(name)}</strong> is now on ${town.siteName}.`;
   const bodyHtml =
     p(lead) +
@@ -191,20 +191,20 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
     `<div style="margin:16px 0;">${btn(link, 'See it on the site')}</div>` +
     p(pick ? escHtml(pickShare)
       : 'Share that link anywhere you promote the event. It can also show up in our Monday and Thursday newsletters and our social posts.') +
-    (!offer ? '' : box(`<strong>Want it to stand out on its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`)) +
+    (!offer ? '' : box(`<strong>Want it to stand out on its day?</strong> Make it a ${town.pickName} ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, `Make it a ${town.pickName}`)}`)) +
     p(pick ? 'Something wrong? Reply to this email with the fix.'
       : 'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
   return {
-    subject: pick ? `Your Vic's Pick is live: ${name}` : `You're live: ${name}`,
-    html: emailShell({ title: pick ? 'Your Vic’s Pick is live!' : 'Your event is live!', preheader: `${name} is now on ${town.domain}.`, bodyHtml, siteUrl,
+    subject: pick ? `Your ${town.pickNamePlain} is live: ${name}` : `You're live: ${name}`,
+    html: emailShell({ title: pick ? `Your ${town.pickName} is live!` : 'Your event is live!', preheader: `${name} is now on ${town.domain}.`, bodyHtml, siteUrl,
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
-      pick ? `Good news: "${name}" is live on ${town.siteName} as a Vic's Pick, highlighted on its day.` : `Good news: "${name}" is now on ${town.siteName}.`, '',
+      pick ? `Good news: "${name}" is live on ${town.siteName} as a ${town.pickNamePlain}, highlighted on its day.` : `Good news: "${name}" is now on ${town.siteName}.`, '',
       eventLine(ev), '',
       `See it: ${link}`,
       pick ? pickShare
         : 'Share that link anywhere you promote the event. It can also show up in our Monday and Thursday newsletters and our social posts.', '',
-      ...(!offer ? [] : [`Want it to stand out on its day? Make it a Vic's Pick: ${upgradeUrl}`, '']),
+      ...(!offer ? [] : [`Want it to stand out on its day? Make it a ${town.pickNamePlain}: ${upgradeUrl}`, '']),
       pick ? 'Something wrong? Reply to this email with the fix.' : 'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.',
       contactText(siteUrl)
     ].join('\n')
@@ -268,26 +268,26 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
   // newsletter went out isn't promised one.
   const where = pickWhere(ev.date, order.paid_at || order.created_at);
   const bodyHtml =
-    p(`Thanks, ${escHtml(business)}! Your payment went through and <strong>${escHtml(ev.name || 'your event')}</strong> is a Vic’s Pick.`) +
+    p(`Thanks, ${escHtml(business)}! Your payment went through and <strong>${escHtml(ev.name || 'your event')}</strong> is a ${town.pickName}.`) +
     eventTable({ ...ev, featured: true }, siteUrl) +
     `<h2 style="font-size:18px;margin:20px 0 4px;">What happens next</h2>` +
     steps([
       'We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
-      `Then it’s <strong>highlighted on ${escHtml(day)}</strong> on ${town.domain} and its event page, with the Vic’s Pick badge.`,
+      `Then it’s <strong>highlighted on ${escHtml(day)}</strong> on ${town.domain} and its event page, with the ${town.pickName} badge.`,
       `It’s ${escHtml(where)}.`,
       'The day after your event, we’ll email you how it did: how many times it was seen, page views, clicks to your link, calendar adds and shares.'
     ]) +
     p(`Need to change a detail? Reply to this email. ${receipt}`, `color:${C.muted};font-size:14px;`);
   return {
-    subject: `Your Vic's Pick is confirmed: ${ev.name || 'your event'}`,
-    html: emailShell({ title: 'You’re a Vic’s Pick!', preheader: `${ev.name || 'Your event'} will be highlighted on ${day}.`, bodyHtml, siteUrl,
+    subject: `Your ${town.pickNamePlain} is confirmed: ${ev.name || 'your event'}`,
+    html: emailShell({ title: `You’re a ${town.pickName}!`, preheader: `${ev.name || 'Your event'} will be highlighted on ${day}.`, bodyHtml, siteUrl,
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
-      `Thanks, ${business}! Your payment went through and "${ev.name || 'your event'}" is a Vic's Pick.`, '',
+      `Thanks, ${business}! Your payment went through and "${ev.name || 'your event'}" is a ${town.pickNamePlain}.`, '',
       eventLine(ev), '',
       'What happens next:',
       '1. We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
-      `2. Then it's highlighted on ${day} on ${town.domain} and its event page, with the Vic's Pick badge.`,
+      `2. Then it's highlighted on ${day} on ${town.domain} and its event page, with the ${town.pickNamePlain} badge.`,
       `3. It's ${where}.`,
       '4. The day after your event, we’ll email you how it did: how many times it was seen, page views, clicks to your link, calendar adds and shares.', '',
       `Need to change a detail? Reply to this email. ${receipt}`,
@@ -305,7 +305,7 @@ export function renderSponsorTooLate(order, { siteUrl, address }) {
   const business = order.business || 'there';
   const what = order.kind === 'weekly'
     ? `the sponsor week of ${formatDay(order.week_start, { month: 'long', day: 'numeric' })}`
-    : `${(order.event && order.event.name) || 'your event'} as a Vic’s Pick on ${order.event && order.event.date ? formatDay(order.event.date, { weekday: 'long', month: 'long', day: 'numeric' }) : 'its day'}`;
+    : `${(order.event && order.event.name) || 'your event'} as a ${town.pickName} on ${order.event && order.event.date ? formatDay(order.event.date, { weekday: 'long', month: 'long', day: 'numeric' }) : 'its day'}`;
   const lines = [
     `Thanks, ${business}. Your bank payment for ${what} only cleared after that date had passed, so we couldn't run it.`,
     'We’re refunding you in full. You’ll see it from Stripe within a few business days; nothing else is needed from you.',
@@ -394,7 +394,7 @@ export function renderPickReport(order, stats, { siteUrl, address }) {
   const name = (order.event && order.event.name) || 'your event';
   const shown = Number(stats.shown) || 0;
   const rows = [
-    ['Shown in our event lists as a Vic’s Pick', plural(shown, 'time', 'times')],
+    [`Shown in our event lists as a ${town.pickName}`, plural(shown, 'time', 'times')],
     ['Views of its event page', String(stats.page_views || 0)],
     ['Clicked through to your link', people(stats.link_people || 0)],
     ['Added it to their calendar', String(stats.calendar_adds || 0)],
@@ -403,23 +403,23 @@ export function renderPickReport(order, stats, { siteUrl, address }) {
     ...(stats.newsletter_starred ? [[stats.newsletter_issues > 1 ? 'Starred in both newsletters (Monday and Thursday), copies sent' : 'Starred in the newsletter, sent to',
       stats.newsletter_issues > 1 ? String(stats.newsletter_recipients) : `${stats.newsletter_recipients} subscribers`]] : [])
   ];
-  const headline = `${name} was seen ${plural(shown, 'time', 'times')} as a Vic’s Pick.`;
+  const headline = `${name} was seen ${plural(shown, 'time', 'times')} as a ${town.pickName}.`;
   const bodyHtml =
-    p(`Thanks for making <strong>${escHtml(name)}</strong> a Vic’s Pick, ${escHtml(business)}! Here’s how it did on ${town.siteName}.`) +
+    p(`Thanks for making <strong>${escHtml(name)}</strong> a ${town.pickName}, ${escHtml(business)}! Here’s how it did on ${town.siteName}.`) +
     statsTable(rows) +
     whereHtml(stats.where) +
     p(escHtml(COUNTER_NOTE), `color:${C.muted};font-size:13px;`) +
-    box(`<strong>Got another event coming up?</strong> Make it stand out on its day too.<br><br>${btn(`${siteUrl}/advertise/checkout?package=featured`, 'Make it a Vic’s Pick')}`);
+    box(`<strong>Got another event coming up?</strong> Make it stand out on its day too.<br><br>${btn(`${siteUrl}/advertise/checkout?package=featured`, `Make it a ${town.pickName}`)}`);
   return {
-    subject: `Your Vic's Pick report: ${name}`,
-    html: emailShell({ title: 'Your Vic’s Pick report', preheader: headline, bodyHtml, siteUrl,
+    subject: `Your ${town.pickNamePlain} report: ${name}`,
+    html: emailShell({ title: `Your ${town.pickName} report`, preheader: headline, bodyHtml, siteUrl,
       footerHtml: contactFooter(siteUrl, address) }),
     text: [
-      `Thanks for making "${name}" a Vic's Pick, ${business}! Here's how it did on ${town.siteName}.`, '',
+      `Thanks for making "${name}" a ${town.pickNamePlain}, ${business}! Here's how it did on ${town.siteName}.`, '',
       ...rows.map(([k, v]) => `- ${k}: ${v}`), '',
       ...whereText(stats.where),
       COUNTER_NOTE, '',
-      `Got another event coming up? Make it a Vic's Pick: ${siteUrl}/advertise/checkout?package=featured`,
+      `Got another event coming up? Make it a ${town.pickNamePlain}: ${siteUrl}/advertise/checkout?package=featured`,
       contactText(siteUrl)
     ].join('\n')
   };

@@ -626,7 +626,7 @@ export function validateOrder(kind, input, { now, orders, venues }) {
       else if (ev.date > addDays(today, FEATURE_DAYS_AHEAD)) errors.date = `Pick a date in the next ${FEATURE_DAYS_AHEAD} days.`;
       else if (!pickAvailability(ev.date, orders, now, email).left) {
         const a = pickAvailability(ev.date, orders, now, email);
-        errors.date = `Vic’s Picks for ${formatDay(ev.date, { weekday: 'long', month: 'short', day: 'numeric' })} are sold out (${a.cap} a day). Pick another day, or submit the event free.`;
+        errors.date = `${town.pickName}s for ${formatDay(ev.date, { weekday: 'long', month: 'short', day: 'numeric' })} are sold out (${a.cap} a day). Pick another day, or submit the event free.`;
       }
     }
     order.event = ev;
@@ -744,8 +744,8 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
     const a = pickAvailability(date, orders, now);
     const day = formatDay(date, { weekday: 'long', month: 'short', day: 'numeric' });
     price = a.left
-      ? `<strong>${escHtml(day)}: ${a.price}</strong> · ${a.left} of ${a.cap} Vic’s Pick spots left`
-      : `<strong class="co-error">${escHtml(day)} is sold out</strong> (${a.cap} Vic’s Picks a day). Pick another day.`;
+      ? `<strong>${escHtml(day)}: ${a.price}</strong> · ${a.left} of ${a.cap} ${town.pickName} spots left`
+      : `<strong class="co-error">${escHtml(day)} is sold out</strong> (${a.cap} ${town.pickName}s a day). Pick another day.`;
   }
   return `<p class="co-preview-price">${price}</p>` +
     `<p class="co-preview-where">Highlighted on its day on the site and its event page, ${escHtml(pickWhere(date, now))}:</p>` +
@@ -917,12 +917,12 @@ export function renderThanksPage(order, { siteUrl, now = new Date() }) {
         `${emailed ? 'We’ve emailed you' : 'We’ll email you'} a confirmation with a copy of your block. Stripe sends your receipt separately.`,
         'Want to change the wording or link before it goes live? Reply to that email.'];
     } else if (order.kind === 'partner') {
-      msg = `You're a venue partner. Every event at ${escHtml(order.venue_name)} is now a Vic’s Pick.`;
+      msg = `You're a venue partner. Every event at ${escHtml(order.venue_name)} is now a ${town.pickName}.`;
     } else {
       const day = order.event ? formatDay(order.event.date, { weekday: 'long', month: 'long', day: 'numeric' }) : 'its day';
-      msg = `Thanks! ${escHtml(order.event ? order.event.name : 'Your event')} is a Vic’s Pick.`;
+      msg = `Thanks! ${escHtml(order.event ? order.event.name : 'Your event')} is a ${town.pickName}.`;
       next = ['We check the details and publish it, usually within the hour, and email you when it’s live. If anything needs fixing, we’ll email you.',
-        `Then it’s highlighted on ${escHtml(day)} with the Vic’s Pick badge, and ${escHtml(pickWhere(order.event && order.event.date, order.paid_at || order.created_at))}.`,
+        `Then it’s highlighted on ${escHtml(day)} with the ${town.pickName} badge, and ${escHtml(pickWhere(order.event && order.event.date, order.paid_at || order.created_at))}.`,
         `${emailed ? 'We’ve emailed you' : 'We’ll email you'} a confirmation. Stripe sends your receipt separately.`];
     }
   } else if (order && order.status === 'processing') {
@@ -933,7 +933,7 @@ export function renderThanksPage(order, { siteUrl, now = new Date() }) {
     // A Vic's Pick day can end up the same way (webhook day-cap check).
     const unit = order.kind === 'featured' ? 'day' : 'week';
     msg = order.kind === 'featured'
-      ? 'Your payment went through, but that day’s Vic’s Pick spots filled up moments before you. Sorry about that.'
+      ? `Your payment went through, but that day’s ${town.pickName} spots filled up moments before you. Sorry about that.`
       : 'Your payment went through, but someone else booked that week moments before you. Sorry about that.';
     next = [`We’ll get in touch within 1 business day to move you to another open ${unit} or refund you in full, whichever you prefer.`,
       'Nothing else is needed from you. If you already know which you’d like, contact us below.'];
@@ -1089,7 +1089,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         id: newId(), created_at: now, updated_at: now, status: 'pending', source: 'paid-feature',
         submitter_kind: 'organizer', submitter_name: order.business, submitter_email: order.email,
         submitter_ip: null, user_agent: '', payload: normalizePayload(order.event),
-        admin_notes: `Paid featured listing (order ${order.id}). The AI review publishes it when it's clean and flags it here otherwise; it's pinned as a Vic’s Pick automatically.`,
+        admin_notes: `Paid featured listing (order ${order.id}). The AI review publishes it when it's clean and flags it here otherwise; it's pinned as a ${town.pickName} automatically.`,
         review_history: [{ at: now, action: 'submitted', note: 'Paid featured listing' }]
       };
       await store.insert(row);
@@ -1363,7 +1363,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         await recordReport(order, { report_skipped: nowIso() });
         out.skipped++;
         if (slack) {
-          slack.alert(`pick-report-skipped:${order.id}`, `No Vic's Pick report for ${order.business}: it never went live`,
+          slack.alert(`pick-report-skipped:${order.id}`, `No ${town.pickNamePlain} report for ${order.business}: it never went live`,
             `${name} (${order.event.date}) was paid for but never matched a listed event, so there are no numbers to send. Check whether they need a refund.`,
             `${siteUrl}/admin.html`);
         }
@@ -1375,7 +1375,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         ['Newsletter', stats.newsletter_starred ? `Starred, ${stats.newsletter_recipients} copies${stats.newsletter_issues > 1 ? ' (Mon + Thu)' : ''}` : 'Not in it']];
       if (!mailer || !mailer.enabled) {
         if (!order.report_slack_sent && slack) {
-          slack.alert(`pick-report:${order.id}`, `Send ${order.business} their Vic's Pick report (email is off)`,
+          slack.alert(`pick-report:${order.id}`, `Send ${order.business} their ${town.pickNamePlain} report (email is off)`,
             `${summary.map(([k, v]) => `${k}: ${v}`).join('\n')}\nEmail it to ${order.email}. Set RESEND_API_KEY so these go out on their own.`,
             `${siteUrl}/admin.html`);
           await recordReport(order, { report: stats, report_slack_sent: nowIso() });
@@ -1387,14 +1387,14 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       if (!sent) {
         out.failed++;
         if (slack && !order.report_failed) {
-          slack.alert(`pick-report-failed:${order.id}`, `Vic's Pick report to ${order.business} didn't send`, 'It will be retried on the next run.', `${siteUrl}/admin.html`);
+          slack.alert(`pick-report-failed:${order.id}`, `${town.pickNamePlain} report to ${order.business} didn't send`, 'It will be retried on the next run.', `${siteUrl}/admin.html`);
           await recordReport(order, { report_failed: nowIso() });
         }
         continue;
       }
       await recordReport(order, { report: stats, report_sent: nowIso() });
       out.sent++;
-      if (slack) slack.notify({ channel: 'sales', title: `📊 Vic's Pick report sent: ${order.business}`, fields: [...summary, ['To', order.email]] });
+      if (slack) slack.notify({ channel: 'sales', title: `📊 ${town.pickNamePlain} report sent: ${order.business}`, fields: [...summary, ['To', order.email]] });
     }
     return out;
   }
@@ -1418,7 +1418,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
     const others = list.filter(o => o.id !== order.id);
     if (order.kind === 'featured' && order.event) {
       const a = pickAvailability(order.event.date, others, now);
-      if (!a.left) return `${formatDay(order.event.date, { weekday: 'long', month: 'short', day: 'numeric' })} already has its ${a.cap} Vic’s Picks (one was sold while this was hidden). Refund this one in Stripe, or hide another first.`;
+      if (!a.left) return `${formatDay(order.event.date, { weekday: 'long', month: 'short', day: 'numeric' })} already has its ${a.cap} ${town.pickName}s (one was sold while this was hidden). Refund this one in Stripe, or hide another first.`;
     }
     if (order.kind === 'weekly') {
       const nowMs = now.getTime();
@@ -1594,8 +1594,8 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
             order.status = 'conflict';
             await save(order);
             if (slack) {
-              slack.alert(`sponsor-conflict:${order.id}`, `Vic’s Pick day ${order.event.date} is over its cap`,
-                `${order.business} (${order.email}) paid for a Vic’s Pick on ${order.event.date} (${order.event.name}), but its ${a.cap} spots were already taken. Nothing went live: move them to an open day or refund them in Stripe.`,
+              slack.alert(`sponsor-conflict:${order.id}`, `${town.pickName} day ${order.event.date} is over its cap`,
+                `${order.business} (${order.email}) paid for a ${town.pickName} on ${order.event.date} (${order.event.name}), but its ${a.cap} spots were already taken. Nothing went live: move them to an open day or refund them in Stripe.`,
                 `${siteUrl}/admin.html`);
             }
             return;
@@ -1685,7 +1685,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
             slack.notify({ channel: 'sales',
               title: status === 'cancelled' ? `👋 Venue partner cancelled: ${order.business}` : `⚠️ Venue partner payment issue: ${order.business}`,
               fields: [['Venue', order.venue_name], ['Contact', order.email]],
-              text: status === 'cancelled' ? 'Their events are no longer marked Vic’s Pick.' : 'Stripe couldn’t charge them, so their Vic’s Pick badges are paused until it does.'
+              text: status === 'cancelled' ? `Their events are no longer marked ${town.pickName}.` : `Stripe couldn’t charge them, so their ${town.pickName} badges are paused until it does.`
             });
           }
         }
@@ -2035,7 +2035,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         const order = list.find(o => o.id === req.params.id);
         if (!order) return res.status(404).json({ ok: false, error: 'not-found' });
         const report = await orderReport(order, list);
-        if (!report) return res.status(400).json({ ok: false, error: 'no-report', message: 'Reports are for weekly sponsors and Vic’s Picks.' });
+        if (!report) return res.status(400).json({ ok: false, error: 'no-report', message: `Reports are for weekly sponsors and ${town.pickName}s.` });
         res.json({ ok: true, ...report, report_sent: order.report_sent || null });
       } catch (err) { next(err); }
     });

@@ -26,6 +26,8 @@ export const VICTORIA = Object.freeze({
   siteName: 'The Vic 361',
   siteNameHtml: 'The Vic <span>361</span>',   // the header's two-tone title
   shortName: 'Vic 361',                        // "Confirm your Vic 361 subscription"
+  pickName: 'Vic’s Pick',                      // the paid pick; pickNamePlain is the plain-text twin
+  pickNamePlain: "Vic's Pick",
   domain: 'thevic361.com',
   siteUrl: 'https://www.thevic361.com',
   emailFrom: 'The Vic 361 <news@thevic361.com>',
@@ -50,12 +52,15 @@ const SAFE_TEXT = /^[^<>&"]+$/;
 // A town from its own settings plus what follows from them (never from
 // Victoria's: a forgotten field must not show Victoria's domain or GA ID).
 function complete(id, raw) {
+  raw = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined));
   const missing = REQUIRED.filter(k => !raw[k]);
   if (missing.length) throw new Error(`TOWN=${id}: town.json is missing ${missing.join(', ')}`);
   const domain = String(raw.domain);
   return {
     siteNameHtml: raw.siteName,
     shortName: String(raw.siteName).replace(/^the\s+/i, ''),
+    pickName: 'Local Pick',
+    pickNamePlain: String(raw.pickName || 'Local Pick').replace(/[’‘]/g, "'"),
     localSources: 'the city, the library, the chamber of commerce',
     areaCode: '',
     siteUrl: `https://www.${domain}`,
@@ -79,7 +84,7 @@ function fromFile(id, dir) {
 }
 
 function check(t) {
-  for (const k of ['siteName', 'shortName', 'city', 'state', 'stateName', 'cityState', 'cityStateLong', 'localSources']) {
+  for (const k of ['siteName', 'shortName', 'pickName', 'pickNamePlain', 'city', 'state', 'stateName', 'cityState', 'cityStateLong', 'localSources']) {
     if (!SAFE_TEXT.test(String(t[k] || ''))) throw new Error(`TOWN=${t.id}: ${k} can't be empty or contain < > & "`);
   }
   for (const k of ['domain', 'icalDomain']) {

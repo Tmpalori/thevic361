@@ -695,7 +695,7 @@ export async function createApp(opts = {}) {
     }
     // Someone paid for this one: turning it away needs a refund or a fix.
     if (isPaidPick(row) && (patch.status === 'rejected' || patch.status === 'duplicate') && patch.status !== row.status) {
-      slack.notify({ channel: 'sales', title: `⚠️ Paid Vic’s Pick marked ${patch.status}: ${(row.payload || {}).name}`,
+      slack.notify({ channel: 'sales', title: `⚠️ Paid ${town.pickName} marked ${patch.status}: ${(row.payload || {}).name}`,
         text: `${row.submitter_name || 'The buyer'} (${row.submitter_email || 'no email'}) paid for this pick. ` +
           (patch.status === 'duplicate'
             ? 'Check the Sponsors tab shows it on the site (the pin has to find the listed event); if not, refund it in Stripe.'

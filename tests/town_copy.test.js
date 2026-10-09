@@ -15,6 +15,7 @@ import { townConfig, useTown, VICTORIA } from '../server/town.js';
 import { HUB_PAGES, renderHubPage, withPages } from '../server/seo.js';
 import { SEASONS, townSeasons, activeSeasons, renderSeasonPage } from '../server/guides.js';
 import { createApp } from '../server/index.js';
+import { createInbound } from '../server/inbound.js';
 import { FileStore } from '../server/db.js';
 import { renderWeekly, renderWelcomeEmail, renderConfirmEmail, renderReferralRules } from '../server/newsletter.js';
 import {
@@ -25,7 +26,7 @@ const FIXTURE = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(imp
 
 const SITE = 'https://www.thebay979.com';
 const NOW = new Date('2026-10-07T17:00:00Z');
-const BAY = { id: 'bay', siteName: 'The Bay 979', domain: 'thebay979.com', city: 'Bay City', state: 'TX', stateName: 'Texas', timezone: 'America/Chicago' };
+const BAY = { id: 'bay', siteName: 'The Bay 979', siteNameHtml: 'The Bay <span>979</span>', pickName: 'Bay’s Best', domain: 'thebay979.com', city: 'Bay City', state: 'TX', stateName: 'Texas', timezone: 'America/Chicago' };
 const events = withPages([
   { date: '2026-10-09', name: 'Tejas Fest Day 1', venue: 'Downtown', time: '6:00 PM' },
   { date: '2026-10-10', name: 'Fall Fest Hayride', venue: 'Farm', time: '7:00 PM', free: true },
@@ -49,7 +50,10 @@ describe('another town', () => {
     expect(townConfig({}, { town: BAY })).toMatchObject({ shortName: 'Bay 979', areaCode: '', localSources: 'the city, the library, the chamber of commerce' });
     expect(townConfig({}, { town: { ...BAY, areaCode: '979' } }).areaCode).toBe('979');
     expect(() => townConfig({}, { town: { ...BAY, areaCode: '97' } })).toThrow(/areaCode/);
-    expect(VICTORIA).toMatchObject({ shortName: 'Vic 361', areaCode: '361' });
+    expect(VICTORIA).toMatchObject({ shortName: 'Vic 361', areaCode: '361', pickName: 'Vic’s Pick', pickNamePlain: "Vic's Pick" });
+    expect(townConfig({}, { town: BAY })).toMatchObject({ pickName: 'Bay’s Best', pickNamePlain: "Bay's Best" });
+    expect(townConfig({}, { town: { ...BAY, pickName: undefined } })).toMatchObject({ pickName: 'Local Pick', pickNamePlain: 'Local Pick' });
+    expect(() => townConfig({}, { town: { ...BAY, pickName: 'Bay <Pick>' } })).toThrow(/pickName/);
   });
 
   it('hub pages name it, in titles, headings, descriptions and leads', () => {
@@ -118,7 +122,7 @@ describe('a whole second-town site', () => {
       ...pages, ...pages.map(p => p + '.ics'), ...HUB_PAGES.map(p => p.path), ...townSeasons().map(s => s.path)];
     for (const p of paths) {
       const text = await (await fetch(base + p)).text();
-      expect(text.match(/.{0,50}Victoria.{0,30}/g), p).toBe(null);
+      expect(text.match(/.{0,50}(Victoria|Vic[’']s Pick|The Vic\b).{0,30}/g), p).toBe(null);
     }
     expect((await fetch(base + '/tejas-fest')).status).toBe(404);
     expect((await fetch(base + '/bach-festival')).status).toBe(404);
@@ -150,9 +154,36 @@ describe('a whole second-town site', () => {
     ];
     for (const m of mails) {
       const all = `${m.subject}\n${m.preheader || ''}\n${m.text}\n${m.html}`;
-      expect(all.match(/.{0,50}(Victoria|Vic 361).{0,30}/g), m.subject).toBe(null);
+      expect(all.match(/.{0,50}(Victoria|Vic 361|Vic[’']s Pick|The Vic\b).{0,30}/g), m.subject).toBe(null);
     }
     expect(mails[4].subject).toBe('Confirm your Bay 979 subscription');
+    // The header wordmark: the town's name and its badge.
+    expect(mails[0].html).toContain('<div><span style="font-size:22px;font-weight:bold;">The Bay</span> <span ');
+    expect(mails[0].html).toMatch(/padding:0 6px;[^>]*">979<\/span><\/div>/);
+    // The pick's own name, in HTML and in plain text.
+    expect(mails[9].html).toContain('Bay’s Best');
+    expect(mails[9].text).toContain("Bay's Best");
     expect(renderReferralRules({ siteUrl: site })).not.toMatch(/Victoria/);
+  });
+});
+
+describe('email replies about the town’s pick', () => {
+  it('get the 💰, by the town’s own pick name', async () => {
+    const pings = [];
+    const slack = { notify: async m => { pings.push(m); return true; } };
+    const mail = subject => ({ from: 'a@b.example', subject, text: 'hi', headers: {} });
+    const run = async (subject, i) => {
+      const inbound = createInbound({ config: { enabled: true }, apiKey: 'k', slack, siteUrl: SITE, fetchImpl: async () => ({ ok: true, json: async () => mail(subject) }) });
+      await inbound.handle({ type: 'email.received', data: { email_id: 'e' + i } });
+      return pings.at(-1).title.startsWith('💰');
+    };
+    useTown(VICTORIA);
+    expect(await run('Re: You’re a Vic’s Pick!', 1)).toBe(true);
+    expect(await run('Re: hello', 2)).toBe(false);
+    useTown(townConfig({}, { town: BAY }));
+    expect(await run('Re: Your Bay’s Best is live', 3)).toBe(true);
+    expect(await run("Re: bay's best", 4)).toBe(true);
+    expect(await run('Re: hello', 5)).toBe(false);
+    useTown(VICTORIA);
   });
 });
