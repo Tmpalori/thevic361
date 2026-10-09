@@ -114,7 +114,7 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
         before `docs/` only for non-Victoria towns), used by
         `express.static`, `ogImage.js` and the email header. Victoria has
         no overlay, so its bytes and URLs don't change.
-  - [ ] b. `docs/index.html` and `docs/submit.html`: town text through the
+  - [x] b. `docs/index.html` and `docs/submit.html`: town text through the
         existing server template (`/submit` gets a route); canonicals,
         `og:url`, GA ID and prices from `town`. For Victoria the output must
         be byte-identical.

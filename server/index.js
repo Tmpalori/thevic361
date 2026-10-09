@@ -13,7 +13,8 @@
  *   - Submitter email + IP never leave the admin scope.
  */
 
-import { town, townConfig, useTown } from './town.js';
+import { town, townConfig, useTown, VICTORIA } from './town.js';
+import { localizeHtml } from './localize.js';
 import express from 'express';
 import compression from 'compression';
 import path from 'node:path';
@@ -1741,10 +1742,13 @@ export async function createApp(opts = {}) {
     // Admin preview loads the homepage with ?preview / ?previewKey and
     // renders its own unpublished picks client-side; serve it untouched.
     if (req.query.preview || req.query.previewKey) {
-      return res.sendFile(path.join(DOCS_DIR, 'index.html'));
+      if (town.id === VICTORIA.id) return res.sendFile(path.join(DOCS_DIR, 'index.html'));
+      return res.type('html').send(localizeHtml(await fsp.readFile(path.join(DOCS_DIR, 'index.html'), 'utf8')));
     }
     if (!indexTemplate || opts.reloadTemplates) {
-      indexTemplate = await fsp.readFile(path.join(DOCS_DIR, 'index.html'), 'utf8');
+      // Victoria's template as is; another town's with its own name, domain,
+      // GA ID, place and prices (server/localize.js).
+      indexTemplate = localizeHtml(await fsp.readFile(path.join(DOCS_DIR, 'index.html'), 'utf8'));
     }
     sendHtml(res, renderHome(indexTemplate, shown(payload.events), {
       ...ctx, signupHtml: signupFormHtml()
@@ -2276,6 +2280,17 @@ export async function createApp(opts = {}) {
   // ~10 revalidations per page. CSS/JS have no cache-busting ?v=, so keep
   // theirs short enough that a deploy shows up quickly. Social-kit files
   // are rebuilt daily under the same names. HTML and JSON stay revalidated.
+  // docs/submit.html is Victoria's form, served as a static file. Another
+  // town gets it rewritten for it (server/localize.js), ahead of the static
+  // handler; Victoria's keeps the static path untouched.
+  if (town.id !== VICTORIA.id) {
+    let submitPage = null;
+    app.get(['/submit', '/submit.html'], wrap(async (req, res) => {
+      if (!submitPage || opts.reloadTemplates) submitPage = localizeHtml(await fsp.readFile(path.join(DOCS_DIR, 'submit.html'), 'utf8'));
+      sendHtml(res, submitPage);
+    }));
+  }
+
   app.use(express.static(DOCS_DIR, {
     extensions: ['html'],
     index: false,
