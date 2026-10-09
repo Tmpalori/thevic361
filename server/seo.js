@@ -960,6 +960,10 @@ export function sponsorLinkUrl(url, medium = 'sponsor') {
 
 // Mirrors renderSponsor() in docs/app.js so the paid sponsor slot shows on
 // every page, not just the homepage.
+// The placeholder logo in /advertise and checkout examples (docs/sample-logo.svg).
+export const SAMPLE_LOGO = '/sample-logo.svg';
+export const isSponsorLogo = l => /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(l || '') || l === SAMPLE_LOGO;
+
 export function sponsorHtml(sponsor) {
   if (!sponsor || !sponsor.name) return '';
   const href = sponsorLinkUrl(sponsor.url);
@@ -968,7 +972,7 @@ export function sponsorHtml(sponsor) {
       ? `<a href="${escHtml(href)}" class="btn btn--outline sponsor-cta" target="_blank" rel="sponsored noopener">${escHtml(sponsor.cta)}</a>`
       : `<span class="btn btn--outline" style="cursor:default; opacity:0.6">${escHtml(sponsor.cta)}</span>`)
     : '';
-  const logo = /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(sponsor.logo || '') ? sponsor.logo : '';
+  const logo = isSponsorLogo(sponsor.logo) ? sponsor.logo : '';
   return `<section class="sponsor-section"><div class="sponsor-block"${adAttr(sponsor.order)}>` +
     '<div class="sponsor-label">This week\'s sponsor</div>' +
     (logo ? `<img class="sponsor-logo" src="${escHtml(logo)}" alt="${escHtml(sponsor.name)} logo" loading="lazy">` : '') +

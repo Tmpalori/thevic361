@@ -49,7 +49,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import {
   AD_PACKAGES, SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, addDays, formatDay, layout,
-  renderEventItem, sponsorHtml, dayClass, sortEvents
+  renderEventItem, sponsorHtml, dayClass, sortEvents, SAMPLE_LOGO
 } from './seo.js';
 import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
@@ -718,7 +718,8 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
       text: clean(v.text, 160) || 'Your one or two sentences about your business go here.',
       cta: clean(v.cta, 24) || 'Learn more',
       url: safeUrl(normalizeUrl(clean(v.url, 300))) || '#',
-      address: clean(v.address, 120)
+      address: clean(v.address, 120),
+      logo: v.sampleLogo ? SAMPLE_LOGO : ''
     });
     return `<p class="co-preview-where">Shown on every page of thevic361.com for your week, and at the top of that week’s ${weekendIssueOn() ? 'newsletters (Monday’s and Thursday’s)' : 'Monday newsletter'}.</p>${block}`;
   }
@@ -751,7 +752,7 @@ export function renderPreview(pkgKey, v = {}, { now, orders = [], venues = [] } 
 // Example placements for the /advertise page.
 export function samplePreviews() {
   return {
-    weekly: renderPreview('weekly', { business: 'Your Business', text: 'One or two sentences about what you offer, shown all week.', cta: 'Learn more' }),
+    weekly: renderPreview('weekly', { business: 'Your Business', text: 'One or two sentences about what you offer, shown all week.', cta: 'Learn more', sampleLogo: true }),
     featured: renderPreview('featured', { event_name: 'Your Event Name', time: '7:00 PM', venue: 'Your Venue', description: 'A line or two about your event.' })
   };
 }

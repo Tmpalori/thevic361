@@ -1882,7 +1882,7 @@ export async function createApp(opts = {}) {
     let subscribers = 0;
     try { subscribers = typeof store.countSubscribers === 'function' ? (await store.countSubscribers()).active || 0 : 0; } catch (_) { /* numbers are a bonus */ }
     sendHtml(res, renderAdvertisePage({ ...ctx, checkout: stripeCfg.enabled, previews: samplePreviews(),
-      emailPreviews: sampleEmailPreviews(siteUrl), stats: advertiseStats(payload.events, ctx.now, subscribers) }));
+      emailPreviews: sampleEmailPreviews(''), stats: advertiseStats(payload.events, ctx.now, subscribers) }));
   }));
 
   // Contact form → Slack; replaces publishing an email address.

@@ -58,7 +58,7 @@ export { REFERRAL_TIERS, referralFlags };
 import { inboundConfig } from './inbound.js';
 import {
   SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank, parseTimes,
-  sponsorLinkUrl, formatTime, placeText, iconKeys
+  sponsorLinkUrl, formatTime, placeText, iconKeys, isSponsorLogo, SAMPLE_LOGO
 } from './seo.js';
 
 const RESEND_API = 'https://api.resend.com';
@@ -332,7 +332,7 @@ export function sponsorHref(sponsor, siteUrl, src = 'newsletter') {
 
 function sponsorHtml(sponsor, siteUrl = '', src = 'newsletter') {
   // Logo: absolute URL (email clients can't resolve a path), only our own.
-  const logo = sponsor && /^\/sponsor-logo\/[A-Za-z0-9-]{8,64}$/.test(sponsor.logo || '') ? `${siteUrl}${sponsor.logo}` : '';
+  const logo = sponsor && isSponsorLogo(sponsor.logo) ? `${siteUrl}${sponsor.logo}` : '';
   return sponsor && sponsor.name ? `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;background:${C.sunLight};border:3px dashed ${C.ink};border-radius:16px;"><tr><td style="padding:14px 16px;">
 <span style="display:inline-block;font-family:${DISPLAY};font-size:11px;font-weight:bold;letter-spacing:.5px;background:${C.sunset};color:${C.ink};border:2px solid ${C.ink};border-radius:999px;padding:1px 10px;">THIS WEEK'S SPONSOR</span>
@@ -356,7 +356,7 @@ export function sampleEmailPreviews(siteUrl = '') {
     { name: 'Live Music', time: '9:00 PM', venue: 'Downtown' }
   ];
   return {
-    weekly: `<div style="font-family:Arial,Helvetica,sans-serif;color:${C.ink};">${sponsorHtml({ name: 'Your Business', text: 'One or two sentences about what you offer.', cta: 'Learn more', url: siteUrl || 'https://www.thevic361.com' }, siteUrl)}</div>`,
+    weekly: `<div style="font-family:Arial,Helvetica,sans-serif;color:${C.ink};">${sponsorHtml({ name: 'Your Business', text: 'One or two sentences about what you offer.', cta: 'Learn more', url: siteUrl || 'https://www.thevic361.com', logo: SAMPLE_LOGO }, siteUrl)}</div>`,
     featured: `<div style="font-family:Arial,Helvetica,sans-serif;color:${C.ink};font-size:15px;">${day(evs.map((e, i) => eventRow({ ...e, page: null, url: '' }, siteUrl, evs[i + 1])).join(''))}</div>`
   };
 }
