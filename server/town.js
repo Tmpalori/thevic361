@@ -33,6 +33,7 @@ export const VICTORIA = Object.freeze({
   emailFrom: 'The Vic 361 <news@thevic361.com>',
   gaId: 'G-52YHD3X3C2',
   icalDomain: 'thevic361.com',
+  utmSource: 'thevic361',                       // utm_source on links we send people out through
   // Geography
   city: 'Victoria',
   state: 'TX',
@@ -86,6 +87,7 @@ function complete(id, raw) {
     emailFrom: `${raw.siteName} <news@${domain}>`,
     gaId: '',
     icalDomain: domain,
+    utmSource: domain.replace(/\.[a-z]+$/, '').replace(/[^a-z0-9]/g, ''),
     cityState: `${raw.city}, ${raw.state}`,
     cityStateLong: `${raw.city}, ${raw.stateName}`,
     ...raw,
@@ -113,6 +115,7 @@ function check(t) {
   }
   if (!/^[^<>&"]+ <[^<>&"\s@]+@[a-z0-9.-]+>$/.test(String(t.emailFrom))) throw new Error(`TOWN=${t.id}: emailFrom must look like Name <news@domain>`);
   if (!/^https:\/\/[a-z0-9.-]+$/.test(t.siteUrl)) throw new Error(`TOWN=${t.id}: siteUrl must be https://host with no path`);
+  if (!/^[a-z0-9_-]+$/.test(String(t.utmSource))) throw new Error(`TOWN=${t.id}: utmSource must be lowercase letters, digits, - or _`);
   if (t.areaCode && !/^\d{3}$/.test(t.areaCode)) throw new Error(`TOWN=${t.id}: areaCode must be 3 digits or empty`);
   if (t.gaId && !/^G-[A-Z0-9]+$/.test(t.gaId)) throw new Error(`TOWN=${t.id}: gaId must look like G-XXXXXXX`);
   const b = t.business || {};

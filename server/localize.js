@@ -7,7 +7,9 @@
  * through one table of Victoria's literals and the town's values, specific
  * before general. For Victoria it returns the page untouched, so its bytes
  * can't change. tests/town_static.test.js checks a second town's homepage
- * and submit form carry none of Victoria's literals.
+ * and submit form carry none of Victoria's literals. Pages that load
+ * docs/app.js also get window.__TOWN__ (timezone, city, pick name,
+ * utm_source), which app.js reads instead of Victoria's defaults.
  */
 
 import { town as currentTown, VICTORIA, dollars } from './town.js';
@@ -34,9 +36,16 @@ function table(t) {
   ];
 }
 
+// What docs/app.js needs to know about the town (it defaults to Victoria's).
+export function townScript(t = currentTown) {
+  const data = { timezone: t.timezone, city: t.city, pickName: t.pickName, utmSource: t.utmSource };
+  return `<script>window.__TOWN__=${JSON.stringify(data).replace(/</g, '\\u003c')};</script>`;
+}
+
 export function localizeHtml(page, t = currentTown) {
   if (t.id === VICTORIA.id) return page;
   let out = String(page);
+  out = out.replace(/<script src="\.\/app\.js"><\/script>/, m => townScript(t) + '\n  ' + m);
   if (!t.gaId) out = out.replace(GA_SNIPPET_RE, '');
   for (const [from, to] of table(t)) {
     out = typeof from === 'string' ? out.split(from).join(to) : out.replace(from, () => to);

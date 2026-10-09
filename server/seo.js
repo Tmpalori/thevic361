@@ -969,7 +969,7 @@ export function sponsorLinkUrl(url, medium = 'sponsor') {
   if (!href || /[?&]utm_/i.test(href)) return href;
   try {
     const u = new URL(href);
-    u.searchParams.set('utm_source', 'thevic361');
+    u.searchParams.set('utm_source', town.utmSource);
     u.searchParams.set('utm_medium', medium);
     u.searchParams.set('utm_campaign', 'weekly-sponsor');
     return safeUrl(u.toString()) || href;

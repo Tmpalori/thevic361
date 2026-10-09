@@ -539,7 +539,7 @@ export function sponsorLandingUrl(url, { medium = 'email', campaign = 'newslette
   try {
     const u = new URL(safe);
     if (!u.searchParams.has('utm_source')) {
-      u.searchParams.set('utm_source', 'thevic361');
+      u.searchParams.set('utm_source', town.utmSource);
       u.searchParams.set('utm_medium', medium);
       u.searchParams.set('utm_campaign', campaign);
     }

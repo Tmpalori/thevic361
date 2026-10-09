@@ -32,6 +32,12 @@ describe('localizeHtml', () => {
   const index = readFileSync(path.join(DOCS, 'index.html'), 'utf8');
   const submit = readFileSync(path.join(DOCS, 'submit.html'), 'utf8');
 
+  it('derives utm_source from the domain, and checks it', () => {
+    expect(VICTORIA.utmSource).toBe('thevic361');
+    expect(townConfig({}, { town: BAY }).utmSource).toBe('thebay979');
+    expect(() => townConfig({}, { town: { ...BAY, utmSource: 'Bay City' } })).toThrow(/utmSource/);
+  });
+
   it('leaves Victoria’s pages exactly as they are', () => {
     expect(localizeHtml(index, VICTORIA)).toBe(index);
     expect(localizeHtml(submit, VICTORIA)).toBe(submit);
@@ -87,6 +93,14 @@ describe('a second town’s homepage and submit form, served', () => {
     useTown(VICTORIA);
     if (server) await new Promise(r => server.close(r));
     if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  });
+
+  it('tells docs/app.js which town it is', async () => {
+    const home = await (await fetch(base + '/')).text();
+    expect(home).toContain('<script>window.__TOWN__={"timezone":"America/Chicago","city":"Bay City","pickName":"Bay’s Best","utmSource":"thebay979"};</script>');
+    expect(home.indexOf('window.__TOWN__')).toBeLessThan(home.search(/<script src="[^"]*app\.js/));
+    expect(home.search(/<script src="[^"]*app\.js/)).toBeGreaterThan(0);
+    expect(home).not.toContain('utm_source=thevic361');
   });
 
   it('says nothing of Victoria', async () => {
