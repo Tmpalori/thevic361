@@ -228,7 +228,9 @@ describe('Vic’s Pick report', () => {
     const stats = pickStats(pickOrder(), [], opts);
     const mail = renderPickReport(pickOrder(), stats, { siteUrl: 'https://www.thevic361.com', address: '1 Main St' });
     expect(mail.subject).toBe('Your Vic\'s Pick report: Fall Festival at De Leon Plaza');
-    expect(mail.text).toContain('Starred in the Monday newsletter, sent to: 300 subscribers');
+    expect(mail.text).toContain('Starred in the newsletter, sent to: 300 subscribers');
+    const both = renderPickReport(pickOrder(), { ...stats, newsletter_issues: 2, newsletter_recipients: 590 }, { siteUrl: 'https://x' });
+    expect(both.text).toContain('Starred in both newsletters (Monday and Thursday), copies sent: 590');
     expect(mail.text).toContain('some browsers block');
     expect(mail.text + mail.html).not.toMatch(/—|opened|opens/);
     const unstarred = renderPickReport(pickOrder(), { ...stats, newsletter_starred: false }, { siteUrl: 'https://x' });

@@ -359,12 +359,24 @@ describe('paid Vic\'s Picks in the review', () => {
   });
 
   it('the live email only promises the newsletter star when that week\'s issue was still ahead at purchase', async () => {
-    // Bought Monday Oct 5 for Saturday Oct 10: that week's issue already went out.
+    // Bought Monday Oct 5 for Saturday Oct 10: Monday's issue already went
+    // out, but Thursday's weekend issue (Oct 8) is still ahead.
     await startPaid();
     await store.saveSponsorOrder(ORDER());
     await store.insert(paidRow());
     await review([{ id: 'p1', decision: 'approve', cleaned: CLEAN }]);
     expect(sent).toHaveLength(1);
+    expect(sent[0].text).toMatch(/starred in Thursday’s weekend newsletter \(October 8\)/);
+    expect(sent[0].text).not.toMatch(/Monday newsletter/);
+  });
+
+  it('a pick bought too late for both issues isn\'t promised the newsletter', async () => {
+    // Bought Wednesday Oct 7 for Saturday: no day left to review before Thursday's issue.
+    await startPaid();
+    const late = '2026-10-07T15:00:00Z';
+    await store.saveSponsorOrder(ORDER({ created_at: late, paid_at: late }));
+    await store.insert(paidRow({ created_at: late }));
+    await review([{ id: 'p1', decision: 'approve', cleaned: CLEAN }]);
     expect(sent[0].text).not.toMatch(/starred in/i);
     expect(sent[0].html).not.toMatch(/starred in/i);
     expect(sent[0].text).toMatch(/newsletter goes out before we could add it/);

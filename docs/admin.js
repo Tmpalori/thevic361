@@ -972,33 +972,30 @@
       escapeHtml(label) + '</span><span class="sources-summary__value">' + escapeHtml(String(value)) + '</span></div>';
     if (st) st.innerHTML = item('Subscribers', d.counts.active) + item('Awaiting confirmation', d.counts.pending) +
       item('Unsubscribed', d.counts.unsubscribed) +
-      item('This week', d.this_week_failed ? ('Partly sent (' + d.this_week_failed + ' failed)')
+      item('Monday issue', d.this_week_failed ? ('Partly sent (' + d.this_week_failed + ' failed)')
         : d.this_week_sent ? 'Sent' : (d.next.events + ' events ready')) +
-      // The server only sees its own copy of the secret; GitHub needs the same one.
-      item('Auto-send Mondays', d.autosend ? 'On (if the GitHub secret matches)' : 'Off');
+      (d.weekend ? item('Thursday weekend issue', !d.weekend.enabled ? 'Off (NEWSLETTER_WEEKEND=0)'
+        : d.weekend.failed ? ('Partly sent (' + d.weekend.failed + ' failed)')
+        : d.weekend.sent ? 'Sent' : (d.weekend.next.events + ' events ready')) +
+        item('Skip Thursdays', d.weekend.opted_out || 0) : '') +
+      item('Auto-send', d.autosend ? (d.weekend && d.weekend.enabled === false ? 'On, Mondays' : 'On, Mondays and Thursdays') : 'Off');
     const warn = document.getElementById('email-nl-warning');
     const issues = [];
     if (!d.configured) issues.push('Add RESEND_API_KEY in Railway to turn on sending. Signups are being saved in the meantime.');
     if (!d.address_set) issues.push('Set NEWSLETTER_ADDRESS (a mailing address) in Railway; US law requires one in every newsletter.');
     if (warn) { warn.hidden = !issues.length; warn.textContent = issues.join(' '); }
-    const send = document.getElementById('email-nl-send');
-    if (send) {
-      send.disabled = !d.configured || !d.counts.active;
-      // A partly failed send is retried for just the people who missed it.
-      send.textContent = d.this_week_failed ? ('Retry ' + d.this_week_failed + ' failed')
-        : d.this_week_sent ? 'Already sent this week' : ('Send to ' + d.counts.active + ' subscribers');
-      if (d.this_week_sent) send.disabled = true;
-    }
+    syncEmailNlSend(d);
     const sends = document.getElementById('email-nl-sends');
     if (sends) {
       sends.innerHTML = (d.sends || []).length
         ? '<tr><th class="traffic-label"></th><th class="traffic-num">Sent</th><th class="traffic-num">Opened</th></tr>' +
           d.sends.map(s => {
             const n = Number(s.recipients) || 0;
+            const kind = s.edition === 'weekend' ? 'Thu weekend' : 'Mon';
             // Opens: unique per subscriber, from the tracking image.
             const opened = typeof s.opens === 'number'
               ? s.opens + (n ? ' (' + Math.round(100 * s.opens / n) + '%)' : '') : '—';
-            return '<tr><td class="traffic-label">' + escapeHtml(s.subject || s.week_key) + '</td><td class="traffic-num">' +
+            return '<tr><td class="traffic-label"><small>' + kind + '</small> ' + escapeHtml(s.subject || s.week_key) + '</td><td class="traffic-num">' +
               n + (s.failed ? ' (' + Number(s.failed) + ' failed)' : '') + '</td><td class="traffic-num">' + escapeHtml(opened) + '</td></tr>';
           }).join('') +
           '<tr><td class="traffic-empty" colspan="3"><small>Opens read high: Apple Mail loads every email\u2019s images for its users, and some work mail scanners do too.</small></td></tr>'
@@ -1014,7 +1011,7 @@
           d.referrers.map(r => '<tr><td class="traffic-label">' + escapeHtml(r.email) + '</td><td class="traffic-num">' +
             Number(r.referrals) + '</td><td class="traffic-num">' + Number(r.pending) + '</td></tr>').join('') +
           '<tr><td class="traffic-empty" colspan="3"><small>Rewards: ' + escapeHtml(tiers) + '</small></td></tr>'
-        : '<tr><td class="traffic-empty">No referrals yet. Every subscriber gets a share link in the welcome and Monday emails.</td></tr>';
+        : '<tr><td class="traffic-empty">No referrals yet. Every subscriber gets a share link in the welcome email and every issue.</td></tr>';
     }
     // Gift cards the Monday send created (server/referralRewards.js). Held
     // ones (friends that look made up), failed ones and, without Tremendous,
@@ -1038,6 +1035,23 @@
     }
   }
 
+  // The issue picked next to the buttons (Monday's or Thursday's).
+  const nlEdition = () => ((document.getElementById('email-nl-edition') || {}).value === 'weekend' ? 'weekend' : 'weekly');
+  // The send button for the picked issue: sent, partly sent (retry just the
+  // people who missed it), or ready.
+  function syncEmailNlSend(d) {
+    const send = document.getElementById('email-nl-send');
+    if (!send || !d || !d.counts) return;
+    const wk = nlEdition() === 'weekend';
+    const w = d.weekend || {};
+    const failed = wk ? w.failed : d.this_week_failed;
+    const sent = wk ? w.sent : d.this_week_sent;
+    const n = wk ? Math.max(0, d.counts.active - (w.opted_out || 0)) : d.counts.active;
+    send.disabled = !d.configured || !n || Boolean(sent) || (wk && !w.enabled);
+    send.textContent = failed ? ('Retry ' + failed + ' failed') : sent ? (wk ? 'Weekend issue already sent' : 'Already sent this week')
+      : ('Send to ' + n + ' subscribers');
+  }
+
   async function loadEmailNewsletter() {
     if (publishMode() !== 'server') return;
     try {
@@ -1053,7 +1067,7 @@
   async function previewEmailNewsletter() {
     const frame = document.getElementById('email-nl-frame');
     try {
-      const res = await fetch(apiBaseUrl() + '/api/admin/newsletter/preview',
+      const res = await fetch(apiBaseUrl() + '/api/admin/newsletter/preview?edition=' + nlEdition(),
         { headers: state.session ? { Authorization: 'Bearer ' + state.session } : {} });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       frame.srcdoc = await res.text();
@@ -1722,8 +1736,8 @@
     if (issues) {
       const pct = v => (v == null ? '—' : v + '%');
       issues.innerHTML = (g.issues || []).length
-        ? '<thead><tr><th>Issue</th><th class="num">Sent</th><th class="num">Opened</th><th class="num">Clicked that day</th><th class="num">Reader visits that week</th><th>Top events from the email</th><th class="num">Left</th></tr></thead><tbody>' +
-          g.issues.map(x => '<tr><td>' + escapeHtml(fmtDay(x.week)) + '</td><td class="num">' + x.sent + '</td><td class="num">' + x.opens + ' (' + pct(x.open_rate) + ')' +
+        ? '<thead><tr><th>Issue</th><th class="num">Sent</th><th class="num">Opened</th><th class="num">Clicked that day</th><th class="num">Reader visits until the next issue</th><th>Top events from the email</th><th class="num">Left</th></tr></thead><tbody>' +
+          g.issues.map(x => '<tr><td>' + escapeHtml((x.edition === 'weekend' ? 'Thu ' : 'Mon ') + fmtDay(x.week)) + (x.edition === 'weekend' ? ' <span class="muted">weekend</span>' : '') + '</td><td class="num">' + x.sent + '</td><td class="num">' + x.opens + ' (' + pct(x.open_rate) + ')' +
             '</td><td class="num">' + x.clickers + ' (' + pct(x.click_rate) + ')</td><td class="num">' + (x.reader_days || 0) + '</td><td class="muted">' +
             escapeHtml(x.top_events.map(e => e.name + ' (' + e.views + ')').join(', ') || '—') + '</td><td class="num">' + (x.unsubscribed || '') + '</td></tr>').join('') + '</tbody>'
         : '<tbody><tr><td class="traffic-empty">No issues sent yet.</td></tr></tbody>';
@@ -2019,13 +2033,13 @@
       ? [['Week', s.week_start + ' to ' + s.week_end], ['Block seen', n(s.views) + ' times (' + n(s.view_people) + ' people)'],
         ['Clicked on the site', n(s.site_people) + ' people (' + n(s.site_clicks) + ' clicks)'],
         ['Clicked in emails', n(s.email_people) + ' people (' + n(s.email_clicks) + ' clicks)'],
-        ['Newsletter sent to', n(s.newsletter_recipients) + ' subscribers'], ['Site visitors that week', n(s.site_visitors)]]
+        ['Newsletter copies with the block' + (s.newsletter_issues > 1 ? ' (Mon + Thu)' : ''), n(s.newsletter_recipients)], ['Site visitors that week', n(s.site_visitors)]]
       : [['Counting', s.start + ' to ' + s.end], ['Shown in lists as a Vic’s Pick', n(s.shown) + ' times (' + n(s.shown_people) + ' people)'],
         ['Event page views', n(s.page_views) + ' (' + n(s.page_people) + ' people)'],
         ['Clicked their link', n(s.link_people) + ' people (' + n(s.link_clicks) + ' clicks)'],
         ['Added to calendar', n(s.calendar_adds)], ['Shares', n(s.shares)],
         ['Visits from shares', n(s.share_visits) + ' (' + n(s.share_people) + ' people)'],
-        ['Newsletter', s.newsletter_starred ? 'Starred, sent to ' + n(s.newsletter_recipients) + ' subscribers' : 'Not starred'],
+        ['Newsletter', s.newsletter_starred ? 'Starred, ' + n(s.newsletter_recipients) + ' copies' + (s.newsletter_issues > 1 ? ' (Mon + Thu)' : '') : 'Not starred'],
         ...(r.on_site === false ? [['On the site', 'Never matched a listed event']] : [])];
     (s.where || []).forEach(w => rows.push(['Seen on ' + w.type, n(w.views)]));
     rows.push(['Report email', r.report_sent ? 'Sent ' + String(r.report_sent).slice(0, 10) : 'Not sent yet']);
@@ -2189,12 +2203,17 @@
     const list = bits.length > 1 ? bits.slice(0, -1).join(', ') + ' and ' + bits[bits.length - 1] : bits[0];
     // The newsletter's reach that week, not a claim this event was in it
     // (an issue shows a few events a day, from the day it's sent).
-    const nl = d.newsletter && d.newsletter.recipients
-      ? ' Our Monday newsletter that week went to ' + d.newsletter.recipients + ' Victoria locals' + (d.newsletter.opens ? ' (' + d.newsletter.opens + ' opened it)' : '') + '.'
-      : '';
+    const mon = d.newsletter || {};
+    const wk = mon.weekend || {};
+    const parts = [
+      mon.recipients ? 'Our Monday newsletter that week went to ' + mon.recipients + ' Victoria locals' + (mon.opens ? ' (' + mon.opens + ' opened it)' : '') : '',
+      wk.recipients ? (mon.recipients ? 'and Thursday\'s weekend issue to ' : 'Our Thursday weekend newsletter that week went to ') + wk.recipients +
+        (mon.recipients ? '' : ' Victoria locals') + (wk.opens ? ' (' + wk.opens + ' opened it)' : '') : ''
+    ].filter(Boolean);
+    const nl = parts.length ? ' ' + parts.join(', ') + '.' : '';
     return 'Hi ' + (ev.venue || 'there') + '!\n\n' +
       'We featured ' + ev.name + ' on The Vic 361, Victoria\'s free events guide, and it got ' + list + '.' + nl + '\n\n' +
-      'Want your next event front and center? A Vic\'s Pick pins it to the top of its day on the site (booked before Monday, it\'s in the newsletter too): ' +
+      'Want your next event front and center? A Vic\'s Pick pins it to the top of its day on the site (booked in time, it\'s starred in the newsletter too): ' +
       location.origin + '/advertise\n\nThanks!\nThe Vic 361';
   }
 
@@ -2205,8 +2224,12 @@
     if (label) label.textContent = '(' + d.week_start + ' to ' + d.week_end + (d.this_week ? ', so far' : '') + ')';
     if (next) next.disabled = Boolean(d.this_week);
     const msg = document.getElementById('event-stats-msg');
-    if (msg) msg.textContent = d.newsletter && d.newsletter.recipients
-      ? 'Newsletter that week: sent to ' + d.newsletter.recipients + ', opened by ' + d.newsletter.opens + '.' : '';
+    const nlw = (d.newsletter && d.newsletter.weekend) || {};
+    const nlLines = [
+      d.newsletter && d.newsletter.recipients ? 'Monday sent to ' + d.newsletter.recipients + ', opened by ' + d.newsletter.opens : '',
+      nlw.recipients ? 'Thursday sent to ' + nlw.recipients + ', opened by ' + nlw.opens : ''
+    ].filter(Boolean);
+    if (msg) msg.textContent = nlLines.length ? 'Newsletter that week: ' + nlLines.join('; ') + '.' : '';
     if (!table) return;
     const n = v => Number(v) || 0;
     table.innerHTML = (d.events || []).length
@@ -2632,14 +2655,23 @@
     const nlImport = document.getElementById('email-nl-import');
     if (nlPreview) nlPreview.addEventListener('click', previewEmailNewsletter);
     if (nlTest) nlTest.addEventListener('click', () => emailNlPost('/api/admin/newsletter/test',
-      { email: (document.getElementById('email-nl-test-to') || {}).value }, j => 'Test sent to ' + j.to + '.'));
+      { email: (document.getElementById('email-nl-test-to') || {}).value, edition: nlEdition() }, j => 'Test sent to ' + j.to + '.'));
+    const nlEditionSel = document.getElementById('email-nl-edition');
+    if (nlEditionSel) nlEditionSel.addEventListener('change', () => {
+      syncEmailNlSend(state.emailNewsletter);
+      const frame = document.getElementById('email-nl-frame');
+      if (frame && !frame.hidden) previewEmailNewsletter();
+    });
     if (nlSend) nlSend.addEventListener('click', () => {
       const nl = state.emailNewsletter || {};
-      const retry = nl.this_week_failed || 0;
-      const n = nl.counts ? nl.counts.active : 0;
-      if (!window.confirm(retry ? 'Retry this week\'s newsletter for the ' + retry + ' subscribers who didn\'t get it?'
-        : 'Send this week\'s newsletter to ' + n + ' subscribers?')) return;
-      emailNlPost('/api/admin/newsletter/send', {}, j => 'Sent to ' + j.recipients + ' subscribers.');
+      const wk = nlEdition() === 'weekend';
+      const w = nl.weekend || {};
+      const retry = (wk ? w.failed : nl.this_week_failed) || 0;
+      const n = nl.counts ? (wk ? nl.counts.active - (w.opted_out || 0) : nl.counts.active) : 0;
+      const what = wk ? 'this weekend\'s issue' : 'this week\'s newsletter';
+      if (!window.confirm(retry ? 'Retry ' + what + ' for the ' + retry + ' subscribers who didn\'t get it?'
+        : 'Send ' + what + ' to ' + n + ' subscribers?')) return;
+      emailNlPost('/api/admin/newsletter/send', { edition: nlEdition() }, j => 'Sent to ' + j.recipients + ' subscribers.');
     });
     const nlRewards = document.getElementById('email-nl-rewards');
     if (nlRewards) nlRewards.addEventListener('click', (e) => {

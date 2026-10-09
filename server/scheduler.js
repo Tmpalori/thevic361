@@ -6,7 +6,9 @@
  * (Intl does the DST switch):
  *
  *   event-check        Mon 6:43 AM   dispatch event-check.yml (before the send)
+ *   event-check-weekend Thu 6:00 AM  the same, before the weekend issue
  *   newsletter         Mon 7:43 AM   sendWeekly() in-process; retried on failure
+ *   newsletter-weekend Thu 7:00 AM   the weekend issue (Friday–Sunday), same way
  *   meta-ads           daily 8:37 AM dispatch meta-ads.yml (scheduled=true)
  *   social-kit         daily 8:47 AM dispatch social-kit.yml (scheduled=true)
  *   sponsor-reports    daily 9:00 AM sponsors.sendSponsorReports(now), if it exists
@@ -62,7 +64,11 @@ const dowOf = ymd => new Date(ymd + 'T12:00:00Z').getUTCDay();
 
 export const JOBS = [
   { name: 'event-check', dow: 1, at: '06:43', until: '12:00', workflow: 'event-check.yml' },
+  // And before Thursday's weekend issue.
+  { name: 'event-check-weekend', dow: 4, at: '06:00', until: '12:00', workflow: 'event-check.yml' },
   { name: 'newsletter', dow: 1, at: '07:43', until: '23:59', retryMins: [5, 15, 30] },
+  // The weekend issue (Friday–Sunday), Thursday mornings.
+  { name: 'newsletter-weekend', dow: 4, at: '07:00', until: '23:59', retryMins: [5, 15, 30] },
   { name: 'meta-ads', at: '08:37', until: '18:00', workflow: 'meta-ads.yml', inputs: { scheduled: 'true' } },
   { name: 'social-kit', at: '08:47', until: '18:00', workflow: 'social-kit.yml', inputs: { scheduled: 'true' } },
   { name: 'sponsor-reports', at: '09:00', until: '23:59' },
@@ -147,7 +153,7 @@ export function createScheduler({ store, github, slack = null, nowFn = () => new
   // Run one job's body. → { ok, final?, message? }
   async function runJob(job, now) {
     if (job.workflow) return dispatch(job, now);
-    const fn = { newsletter: handlers.newsletter, 'sponsor-reports': handlers.sponsorReports, health: handlers.health }[job.name];
+    const fn = { newsletter: handlers.newsletter, 'newsletter-weekend': handlers.newsletterWeekend, 'sponsor-reports': handlers.sponsorReports, health: handlers.health }[job.name];
     try {
       const out = await fn(now);
       return out && typeof out === 'object' && 'ok' in out ? out : { ok: true };
@@ -161,6 +167,7 @@ export function createScheduler({ store, github, slack = null, nowFn = () => new
   function available(job) {
     if (job.workflow) return Boolean(github && github.isConfigured());
     if (job.name === 'newsletter') return typeof handlers.newsletter === 'function' && (!handlers.newsletterReady || handlers.newsletterReady());
+    if (job.name === 'newsletter-weekend') return typeof handlers.newsletterWeekend === 'function' && (!handlers.newsletterWeekendReady || handlers.newsletterWeekendReady());
     if (job.name === 'sponsor-reports') return typeof handlers.sponsorReports === 'function';
     if (job.name === 'health') return typeof handlers.health === 'function';
     return false;
@@ -180,8 +187,8 @@ export function createScheduler({ store, github, slack = null, nowFn = () => new
     }
     await store.finishJobRun(job.name, slot, { status, retry_at: retryAt, detail: String(out.message || out.error || '').slice(0, 500) });
     if (status === 'failed' && !out.final && slack) {
-      slack.alert(`scheduler-${job.name}-${slot}`, job.name === 'newsletter'
-        ? `Monday newsletter send failed after ${attempts} tries` : `Scheduled ${job.name} couldn't start`,
+      slack.alert(`scheduler-${job.name}-${slot}`, job.name === 'newsletter' ? `Monday newsletter send failed after ${attempts} tries`
+        : job.name === 'newsletter-weekend' ? `Thursday weekend newsletter send failed after ${attempts} tries` : `Scheduled ${job.name} couldn't start`,
       String(out.message || out.error || 'unknown error'), `${siteUrl}/admin.html`);
     }
     if (status !== 'done') log.warn(`[scheduler] ${job.name} ${slot}: ${status}`, out.message || out.error || '');

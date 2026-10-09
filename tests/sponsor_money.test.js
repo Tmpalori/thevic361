@@ -156,6 +156,30 @@ describe('bank debits close to the date', () => {
     expect(alerts.some(a => a.key === 'sponsor-newsletter-missed:o1')).toBe(true);
     expect(sent[0].text).not.toMatch(/top of that Monday’s newsletter/);
     expect(sent[0].text).toMatch(/wasn’t in it/);
+    // Thursday's weekend issue hasn't gone out: they're told it carries them.
+    expect(saved.newsletter_missed_both).toBe(false);
+    expect(sent[0].text).toMatch(/top of Thursday’s weekend issue/);
+  });
+
+  it('a weekly debit that clears after both of its week’s issues is told it missed them', async () => {
+    const store = await newStore();
+    const sent = [];
+    const mailer = { enabled: true, send: async (to, mail) => { sent.push(mail); return true; } };
+    const { slack } = recorder();
+    const sp = setup(store, { mailer, slack, now: () => new Date('2026-10-22T18:00:00Z') }); // Thursday afternoon
+    await store.saveSponsorOrder(order({ status: 'processing' }));
+    await store.recordNewsletterSend({ week_key: '2026-10-19', recipients: 500, subject: 'x' });
+    await store.recordNewsletterSend({ week_key: '2026-10-22', recipients: 480, subject: 'y' });
+    await sp.processEvent(paidEvent(order(), 'checkout.session.async_payment_succeeded'));
+    expect((await store.listSponsorOrders())[0].newsletter_missed_both).toBe(true);
+    expect(sent[0].text).toMatch(/wasn’t in them/);
+    expect(sent[0].text).not.toMatch(/Thursday’s weekend issue/);
+    // Their report the Monday after doesn't credit them with those issues' copies.
+    const later = setup(store, { mailer, slack, now: () => new Date('2026-10-26T18:00:00Z') });
+    await later.sendSponsorReports(new Date('2026-10-26T18:00:00Z'));
+    const report = sent.find(m => /sponsor week/i.test(m.subject || ''));
+    expect(report).toBeTruthy();
+    expect(report.text).not.toMatch(/Newsletter copies/);
   });
 });
 

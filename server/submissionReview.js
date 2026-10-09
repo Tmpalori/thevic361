@@ -39,7 +39,7 @@ import crypto from 'node:crypto';
 import { validateSubmission } from './validate.js';
 import { normalizePayload, eventKeyOf } from './db.js';
 import { localDateStr, currentWeek } from './seo.js';
-import { newsletterCovers } from './notify.js';
+import { newsletterCovers, weekendCovers } from './notify.js';
 
 export const MAX_PER_RUN = 20;
 const DECISIONS = new Set(['approve', 'flag', 'reject', 'duplicate']);
@@ -90,9 +90,9 @@ export function awaitingReview(row) {
 // Paid picks this close to their date (days) that still aren't live get a
 // Slack reminder, at most every REMIND_EVERY_MS, once they've had
 // REMIND_GRACE_MS for the review to publish them. So do picks promised a
-// star in the Monday newsletter (newsletterCovers) from REMIND_NEWSLETTER_DAYS
-// before that Monday: the issue goes out early Monday, before the 2-day
-// window would open for a pick later in the week.
+// star in an issue (Monday's, newsletterCovers; Thursday's weekend one,
+// weekendCovers) from REMIND_NEWSLETTER_DAYS before it: the issue goes out
+// early that morning, before the 2-day window would open for a later pick.
 const REMIND_DAYS = 2;
 const REMIND_NEWSLETTER_DAYS = 1;
 const REMIND_EVERY_MS = 6 * 3600 * 1000;
@@ -119,8 +119,9 @@ export async function remindPaidPicks({ store, slack, nowFn, siteUrl = '', rows:
     const date = r.payload.date;
     if (date < today) return false;
     if (date <= until) return true;
-    const monday = currentWeek(date)[0];
-    return newsletterCovers(date, r.created_at) && monday >= today && monday <= addDaysStr(today, REMIND_NEWSLETTER_DAYS);
+    const week = currentWeek(date);
+    const ahead = d => d >= today && d <= addDaysStr(today, REMIND_NEWSLETTER_DAYS);
+    return (newsletterCovers(date, r.created_at) && ahead(week[0])) || (weekendCovers(date, r.created_at) && ahead(week[3]));
   };
   const candidates = given || [...await store.list({ status: 'pending' }), ...await store.list({ status: 'approved', fromDate: today })];
   const rows = candidates.filter(r => notLive(r) && isPaidPick(r, paidOrders) && r.payload && soon(r) &&

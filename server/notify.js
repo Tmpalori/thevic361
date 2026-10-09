@@ -12,27 +12,53 @@ import { SITE_NAME, escHtml, formatDay, safeUrl, currentWeek, addDays, localDate
 import { C, btn, emailShell, eventRow } from './newsletter.js';
 
 // ─── Vic’s Pick and the newsletter ──────────────────────────────────────
-// The newsletter goes out once a week, Monday morning, and covers that
-// week. A pick is only promised a newsletter star when its week's issue is
-// still ahead with a day to spare for the review (we approve paid picks
-// "usually within a day"): bought on Tuesday for Saturday, that week's issue
-// has already gone out, so it isn't promised.
-export function newsletterCovers(dateStr, at) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '') || !at) return false;
+// The newsletter goes out twice a week: Monday morning with the whole week,
+// Thursday morning with Friday to Sunday. A pick is only promised a star in
+// an issue that is still ahead with a day to spare for the review (we
+// approve paid picks "usually within a day"): bought on Tuesday for
+// Saturday, Monday's issue has gone out but Thursday's hasn't.
+// Whether Thursday's weekend issue goes out (NEWSLETTER_WEEKEND, set by
+// createApp): with it off, nothing promises it.
+let weekendIssue = true;
+export function setWeekendIssue(on) { weekendIssue = Boolean(on); }
+export function weekendIssueOn() { return weekendIssue; }
+
+const boughtOn = at => {
+  if (!at) return null;
   const when = at instanceof Date ? at : new Date(at);
-  if (Number.isNaN(when.getTime())) return false;
-  return currentWeek(dateStr)[0] > addDays(localDateStr(when), 1);
+  return Number.isNaN(when.getTime()) ? null : localDateStr(when);
+};
+export function newsletterCovers(dateStr, at) {
+  const day = boughtOn(at);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '') || !day) return false;
+  return currentWeek(dateStr)[0] > addDays(day, 1);
+}
+// Thursday's weekend issue: Friday to Sunday events, booked by Tuesday.
+export function weekendCovers(dateStr, at) {
+  if (!weekendIssue) return false;
+  const day = boughtOn(at);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '') || !day) return false;
+  const week = currentWeek(dateStr);
+  return week.indexOf(dateStr) >= 4 && week[3] > addDays(day, 1);
 }
 
 // Where else a Vic’s Pick shows, worded for what's actually still possible
 // (the checkout preview, the thank-you page and the confirmation email).
 export function pickWhere(dateStr, at) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '')) {
-    return 'starred in the Monday newsletter when it’s booked before its week’s issue, and featured first in our social posts';
+    return weekendIssue
+      ? 'starred in the newsletter when it’s booked before the issue goes out (Monday’s covers the week, Thursday’s the weekend), and featured first in our social posts'
+      : 'starred in the Monday newsletter when it’s booked before its week’s issue, and featured first in our social posts';
   }
-  return newsletterCovers(dateStr, at)
-    ? `starred in the Monday newsletter for the week of ${formatDay(currentWeek(dateStr)[0], { month: 'long', day: 'numeric' })} and featured first in our social posts`
-    : 'featured first in our social posts (that week’s newsletter goes out before we could add it)';
+  const long = d => formatDay(d, { month: 'long', day: 'numeric' });
+  const week = currentWeek(dateStr);
+  const issues = [
+    newsletterCovers(dateStr, at) && `the Monday newsletter for the week of ${long(week[0])}`,
+    weekendCovers(dateStr, at) && `Thursday’s weekend newsletter (${long(week[3])})`
+  ].filter(Boolean);
+  return issues.length
+    ? `starred in ${issues.join(' and ')} and featured first in our social posts`
+    : 'featured first in our social posts (its newsletter goes out before we could add it)';
 }
 
 // Resend's answer for a request it will never accept, whatever we retry:
@@ -112,7 +138,7 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
     `<h2 style="font-size:18px;margin:20px 0 4px;">What happens next</h2>` +
     steps([
       'We review every submission, usually within the hour, and we’ll email you when it’s live; some need a closer look and take a day or two.',
-      `If it's a fit, it goes on <a href="${siteUrl}" style="color:${C.accent};">thevic361.com</a> and can show up in the Monday newsletter and our social posts.`,
+      `If it's a fit, it goes on <a href="${siteUrl}" style="color:${C.accent};">thevic361.com</a> and can show up in our Monday and Thursday newsletters and our social posts.`,
       'Free listings aren’t guaranteed a spot, and we may tidy up the wording.'
     ]) +
     box(`<strong>Want it guaranteed and pinned to the top of its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`) +
@@ -126,7 +152,7 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
       `${ev.date || ''} ${ev.time || ''} · ${ev.venue || ''}`.trim(), '',
       'What happens next:',
       '1. We review every submission, usually within the hour, and we’ll email you when it’s live; some need a closer look and take a day or two.',
-      `2. If it's a fit, it goes on ${siteUrl} and can show up in the Monday newsletter and our social posts.`,
+      `2. If it's a fit, it goes on ${siteUrl} and can show up in our Monday and Thursday newsletters and our social posts.`,
       '3. Free listings aren’t guaranteed a spot, and we may tidy up the wording.', '',
       `Want it guaranteed and pinned to the top of its day? Make it a Vic's Pick: ${upgradeUrl}`, '',
       'Need to change a detail? Reply to this email with the fix.',
@@ -156,7 +182,7 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
     eventTable(ev, siteUrl) +
     `<div style="margin:16px 0;">${btn(link, 'See it on the site')}</div>` +
     p(pick ? escHtml(pickShare)
-      : 'Share that link anywhere you promote the event. It can also show up in the Monday newsletter and our social posts.') +
+      : 'Share that link anywhere you promote the event. It can also show up in our Monday and Thursday newsletters and our social posts.') +
     (!offer ? '' : box(`<strong>Want it pinned to the top of its day?</strong> Make it a Vic’s Pick ($49 Mon–Thu, $89 Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, 'Make it a Vic’s Pick')}`)) +
     p(pick ? 'Something wrong? Reply to this email with the fix.'
       : 'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
@@ -169,7 +195,7 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
       `${ev.date || ''} ${ev.time || ''} · ${ev.venue || ''}`.trim(), '',
       `See it: ${link}`,
       pick ? pickShare
-        : 'Share that link anywhere you promote the event. It can also show up in the Monday newsletter and our social posts.', '',
+        : 'Share that link anywhere you promote the event. It can also show up in our Monday and Thursday newsletters and our social posts.', '',
       ...(!offer ? [] : [`Want it pinned to the top of its day? Make it a Vic's Pick: ${upgradeUrl}`, '']),
       pick ? 'Something wrong? Reply to this email with the fix.' : 'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.',
       contactText(siteUrl)
@@ -196,8 +222,11 @@ export function renderSponsorConfirmed(order, { siteUrl, address }) {
     // A bank payment that cleared after that Monday's issue went out
     // (sponsors.js sets newsletter_missed) can't be promised the issue.
     const newsletterLine = order.newsletter_missed
-      ? 'Your payment cleared after that Monday’s newsletter went out, so your block wasn’t in it. We’ll be in touch to make that up to you.'
-      : 'It’s also the sponsor spot at the top of that Monday’s newsletter.';
+      ? (order.newsletter_missed_both
+        ? 'Your payment cleared after that week’s newsletters went out, so your block wasn’t in them. We’ll be in touch to make that up to you.'
+        : 'Your payment cleared after that Monday’s newsletter went out, so your block wasn’t in it; it will be at the top of Thursday’s weekend issue. We’ll be in touch to make up for Monday’s.')
+      : weekendIssue ? 'It’s also the sponsor spot at the top of that week’s newsletters: Monday’s, and Thursday’s weekend issue.'
+        : 'It’s also the sponsor spot at the top of that Monday’s newsletter.';
     const bodyHtml =
       p(`Thanks, ${escHtml(business)}! Your payment went through and <strong>the week of ${escHtml(week)}</strong> is yours.`) +
       `<h2 style="font-size:18px;margin:20px 0 4px;">What happens next</h2>` +
@@ -324,7 +353,8 @@ export function renderSponsorReport(order, stats, { siteUrl, address }) {
     ...(views ? [['Your block was seen on thevic361.com', plural(views, 'time', 'times')]] : []),
     ['Clicked your button on thevic361.com', people(stats.site_people)],
     ['Clicked your button in our emails', people(stats.email_people)],
-    ...(stats.newsletter_recipients ? [['Monday newsletter sent to', `${stats.newsletter_recipients} subscribers`]] : []),
+    ...(stats.newsletter_recipients ? [[stats.newsletter_issues > 1 ? 'Newsletter copies with your block (Monday and Thursday issues)' : 'Newsletter copies with your block',
+      String(stats.newsletter_recipients)]] : []),
     ...(stats.site_visitors ? [['Visits to thevic361.com that week', String(stats.site_visitors)]] : [])
   ];
   const bodyHtml =
@@ -361,7 +391,8 @@ export function renderPickReport(order, stats, { siteUrl, address }) {
     ['Added it to their calendar', String(stats.calendar_adds || 0)],
     ['Shared it', String(stats.shares || 0)],
     ['Opened it from a shared link', people(stats.share_people || 0)],
-    ...(stats.newsletter_starred ? [['Starred in the Monday newsletter, sent to', `${stats.newsletter_recipients} subscribers`]] : [])
+    ...(stats.newsletter_starred ? [[stats.newsletter_issues > 1 ? 'Starred in both newsletters (Monday and Thursday), copies sent' : 'Starred in the newsletter, sent to',
+      stats.newsletter_issues > 1 ? String(stats.newsletter_recipients) : `${stats.newsletter_recipients} subscribers`]] : [])
   ];
   const headline = `${name} was seen ${plural(shown, 'time', 'times')} as a Vic’s Pick.`;
   const bodyHtml =

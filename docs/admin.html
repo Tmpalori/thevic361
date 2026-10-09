@@ -114,7 +114,7 @@
 
     <!-- ─── HOME TAB ─── -->
     <section id="tab-home" class="tab-panel is-active" role="tabpanel">
-      <p class="tab-intro">The site runs itself: events are collected Sunday and Wednesday afternoons and go live automatically, social posts go out every morning around 8:45, and the newsletter goes out Monday at 7:43 AM (Central). Check here for anything that needs you.</p>
+      <p class="tab-intro">The site runs itself: events are collected Sunday and Wednesday afternoons and go live automatically, social posts go out every morning around 8:45, and the newsletter goes out Monday at 7:43 AM (the week) and Thursday at 7:00 AM (the weekend), Central. Check here for anything that needs you.</p>
       <div id="home-error" class="empty-state empty-state--error" hidden></div>
       <div id="home-body" hidden>
         <div id="home-goals" class="goal-strip" hidden></div>
@@ -154,9 +154,9 @@
         <p class="traffic-note" id="growth-spend-note"></p>
         <h3 class="traffic-h">Day by day</h3>
         <div class="table-scroll"><table class="growth-table" id="growth-daily"></table></div>
-        <h3 class="traffic-h">Each Monday issue</h3>
+        <h3 class="traffic-h">Each issue</h3>
         <div class="table-scroll"><table class="growth-table" id="growth-issues"></table></div>
-        <p class="traffic-note">Opened: unique readers whose email loaded its images (Apple Mail opens some on its own, so it runs high). Clicked that day: readers who came to the site from the email the day it went out, the click rate to give sponsors (it runs a little low: visitors are counted per day, so later clicks can't be told from repeat ones). Reader visits that week: each reader once per day they came from it.</p>
+        <p class="traffic-note">Opened: unique readers whose email loaded its images (Apple Mail opens some on its own, so it runs high). Clicked that day: readers who came to the site from the email the day it went out, the click rate to give sponsors (it runs a little low: visitors are counted per day, so later clicks can't be told from repeat ones). Reader visits until the next issue: each reader once per day they came from it, until the next issue went out.</p>
         <div class="traffic-grid">
           <div>
             <h3 class="traffic-h">Signup weeks</h3>
@@ -288,12 +288,17 @@
     <section id="tab-newsletter" class="tab-panel" role="tabpanel" hidden>
 
       <div class="email-nl" id="email-nl">
-        <p class="tab-intro">The weekly email goes out on its own Mondays at 7:43 AM Central once set up. Preview it or send yourself a test here.</p>
+        <p class="tab-intro">Two issues go out on their own once set up: the week on Mondays at 7:43 AM and the weekend (Friday to Sunday) on Thursdays at 7:00 AM Central. Readers can skip the Thursday one from the link in its footer. Preview either or send yourself a test here.</p>
         <h3 class="traffic-h">Email newsletter</h3>
         <div id="email-nl-status" class="sources-summary"></div>
         <p id="email-nl-warning" class="email-nl-warning" hidden></p>
         <div class="newsletter-actions">
-          <button id="email-nl-preview" type="button" class="btn btn--outline">Preview this week's email</button>
+          <label for="email-nl-edition" class="visually-hidden">Issue</label>
+          <select id="email-nl-edition">
+            <option value="weekly">Monday: the week</option>
+            <option value="weekend">Thursday: the weekend</option>
+          </select>
+          <button id="email-nl-preview" type="button" class="btn btn--outline">Preview</button>
           <input id="email-nl-test-to" type="email" placeholder="Test address" aria-label="Test address">
           <button id="email-nl-test" type="button" class="btn btn--outline">Send test</button>
           <button id="email-nl-send" type="button" class="btn btn--primary">Send to subscribers</button>

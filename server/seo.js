@@ -803,7 +803,7 @@ function footerHtml() {
       <div class="footer-grid">
         <div class="footer-section">
           <h2>Stay in the loop</h2>
-          <p>Get Victoria's best events in your inbox every week.</p>
+          <p>Get Victoria's best events in your inbox every Monday and Thursday.</p>
           <a href="/subscribe" class="btn btn--primary">Subscribe free</a>
         </div>
         <div class="footer-section">
@@ -930,7 +930,7 @@ export function sponsorHtml(sponsor) {
 }
 
 export function ctaHtml() {
-  return `<p class="page-cta">Get the full list every week: <a href="/subscribe">subscribe to The Vic 361 newsletter</a>. Know something we missed? <a href="/submit">Submit an event</a>.</p>`;
+  return `<p class="page-cta">Get the full list every Monday and Thursday: <a href="/subscribe">subscribe to The Vic 361 newsletter</a>. Know something we missed? <a href="/submit">Submit an event</a>.</p>`;
 }
 
 // Short "including A, B, and C" clause from the first few names.
@@ -1030,7 +1030,7 @@ export function renderPrivacyPage({ siteUrl }) {
     <p class="page-lead">The Vic 361 is a free events guide for Victoria, Texas. This page explains what we collect, why, and the choices you have. Last updated ${PRIVACY_UPDATED}.</p>
     <h2 class="section-heading">What you give us</h2>
     <ul>
-      <li><strong>Newsletter:</strong> your email address, so we can send the weekly list. Every email has a one-click unsubscribe link. We don't sell or share your address.</li>
+      <li><strong>Newsletter:</strong> your email address, so we can send the newsletter (Mondays and Thursdays). Every email has a one-click unsubscribe link. We don't sell or share your address.</li>
       <li><strong>Event submissions and contact messages:</strong> what you type into those forms, used to review your event or answer you.</li>
       <li><strong>Sponsor purchases:</strong> payments are handled by Stripe; we never see your card number. We keep your name, email, business and order details.</li>
     </ul>
@@ -1038,7 +1038,7 @@ export function renderPrivacyPage({ siteUrl }) {
     <ul>
       <li><strong>Our own visit counts:</strong> which pages are viewed and which links are clicked, so we know what's useful. We don't use cookies for this and don't store IP addresses; a visitor is a one-way code that changes every day.</li>
       <li><strong>Referrals:</strong> every subscriber gets a share link. When someone signs up through it, we note who shared it so we can count referrals and send rewards; we don't tell the person who shared it who signed up. Gift card rewards are sent by our rewards partner, <a href="https://www.tremendous.com/privacy" rel="noopener">Tremendous</a>, which gets the winner's email address to deliver them (see the <a href="/referral-rules">rules</a>).</li>
-      <li><strong>Newsletter opens:</strong> each weekly newsletter has a tiny invisible image, so we can tell whether you opened that issue (we count each person once per issue). Turning off images in your email app stops it.</li>
+      <li><strong>Newsletter opens:</strong> each newsletter has a tiny invisible image, so we can tell whether you opened that issue (we count each person once per issue). Turning off images in your email app stops it.</li>
       <li><strong>Google Analytics</strong> measures visits to the site and uses cookies. See <a href="https://policies.google.com/technologies/partner-sites" rel="noopener">how Google uses this data</a>.</li>
       <li><strong>Meta Pixel:</strong> when we advertise on Facebook and Instagram, the Meta Pixel tells Meta that someone visited from an ad or signed up for the newsletter, so we can see whether our ads work and show them to people likely to be interested. Meta may combine this with what it knows about your Meta account. It's never loaded on the newsletter confirm or unsubscribe pages. You can control this in your <a href="https://www.facebook.com/adpreferences/ad_settings" rel="noopener">Meta ad settings</a>.</li>
     </ul>
@@ -1064,8 +1064,8 @@ export function renderAboutPage({ siteUrl }) {
     <p class="page-lead">The Vic 361 is a free weekly guide to events and things to do in Victoria, Texas. Every week we collect concerts, festivals, family activities, markets, and community events from across Victoria and publish them in one list, on this site and in our email newsletter.</p>
     <h2 class="section-heading">How we build the list</h2>
     <p>We gather events automatically from the City of Victoria, the Victoria Public Library, the Chamber of Commerce, local venues' calendars and social pages, and community submissions. Every event is checked by automated rules and AI for duplicates, wrong dates, and things that aren't really events, and a local editor reviews anything they flag. Spot a mistake? <a href="/contact">Let us know</a> and we'll fix it.</p>
-    <h2 class="section-heading">Get it every week</h2>
-    <p><a href="/subscribe">Subscribe to the newsletter</a> for the week's best events, every Monday.</p>
+    <h2 class="section-heading">Get it in your inbox</h2>
+    <p><a href="/subscribe">Subscribe to the newsletter</a> for the week's best events every Monday, and the weekend's every Thursday.</p>
     <h2 class="section-heading">List your event or business</h2>
     <p>Anyone can <a href="/submit">submit an event</a> for free. Venues and businesses can <a href="/advertise">sponsor the newsletter or feature an event</a>.</p>`;
   const ld = [{
@@ -1094,11 +1094,11 @@ export const AD_PACKAGES = [
     price: '$300 / week',
     amount: 30000,
     blurb: 'Pick a week and write your message; it goes live on its own that Monday.',
-    where: 'Every page of thevic361.com for a whole week, plus the top of that Monday’s newsletter.',
+    where: 'Every page of thevic361.com for a whole week, plus the top of that week’s two newsletters (Monday and Thursday).',
     limit: 'One sponsor a week, so you’re the only one.',
     points: [
       'Your name, message and button on every page of the site, all week',
-      'The sponsor spot at the top of the Monday newsletter',
+      'The sponsor spot at the top of both newsletters that week: Monday’s and Thursday’s weekend issue',
       'A report the Monday after: how often your block was seen, where, and how many clicked'
     ]
   },
@@ -1108,11 +1108,11 @@ export const AD_PACKAGES = [
     price: '$49 Mon–Thu · $89 Fri–Sun',
     amount: 4900,
     blurb: 'Tell us about your event. Once it\'s listed, it\'s pinned to the top of its day.',
-    where: 'Your event at the top of its day with the Vic’s Pick badge, on the site, its event page and our social posts, and in the Monday newsletter when you book before its week’s issue.',
+    where: 'Your event at the top of its day with the Vic’s Pick badge, on the site, its event page and our social posts, and in the newsletter when you book before the issue goes out (Monday’s covers the week, Thursday’s the weekend).',
     limit: 'Only 3 a day Mon–Thu and 4 a day Fri–Sun, so book early.',
     points: [
       'Guaranteed listing, pinned at the top of its day on the site',
-      'Featured first in our social posts, and starred in the Monday newsletter when booked before its week’s issue',
+      'Featured first in our social posts, and starred in the newsletter when booked before the issue goes out',
       'A report the day after: times seen, page views, clicks, calendar adds and shares',
       'Best for concerts, fundraisers, openings, and festivals'
     ]

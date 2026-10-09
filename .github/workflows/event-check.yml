@@ -11,7 +11,8 @@
 #     new events on the site (the collect commit redeploys Railway, which
 #     publishes on boot, so we wait for /events.json to change)
 #   - Monday 6:43 AM Central, an hour before the newsletter, to catch
-#     anything from Sunday-night edits. The site's scheduler
+#     anything from Sunday-night edits (and Thursday 6:00 AM, before the
+#     weekend issue, dispatched by the site only). The site's scheduler
 #     (server/scheduler.js) dispatches it on time, because GitHub's own
 #     cron runs hours late; the 11:43 (CDT) / 12:43 (CST) UTC crons are a fallback that
 #     skips itself when the site already ran it
