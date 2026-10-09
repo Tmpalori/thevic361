@@ -6,7 +6,7 @@
 // (Victoria's own output is pinned by tests/golden/.)
 //
 // Only what Phase 1 has moved so far is checked for leaks: the site name,
-// the domain and the GA ID. "Victoria, TX", "Vic's Pick" and the static
+// the domain and the GA ID; dates follow the town's timezone. "Victoria, TX", "Vic's Pick" and the static
 // homepage follow in later steps (MULTI_CITY_PLAN.md 1.2c–1.3b).
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -18,8 +18,9 @@ import { fileURLToPath } from 'node:url';
 import { townConfig, useTown, VICTORIA, town } from '../server/town.js';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
-import { HUB_PAGES, withPages, gaSnippet } from '../server/seo.js';
-import { SEASONS } from '../server/guides.js';
+import { HUB_PAGES, withPages, gaSnippet, localDateStr, utcOffset, eventJsonLd } from '../server/seo.js';
+import { SEASONS, renderIcs, googleCalendarUrl } from '../server/guides.js';
+import { localParts } from '../server/scheduler.js';
 import { renderWeekly, renderWelcomeEmail, renderConfirmEmail, renderReferralRules, newsletterConfig } from '../server/newsletter.js';
 import { renderSubmissionLive, renderSponsorConfirmed, renderSponsorReport } from '../server/notify.js';
 import { renderReply } from '../server/inbound.js';
@@ -158,5 +159,34 @@ describe('a second town', () => {
     }
     expect(leaks(renderReferralRules({ siteUrl: site }))).toEqual([]);
     expect(renderReply('Thanks!', site).text).toBe('Thanks!\n\n— The Bay 979\nwww.thebay979.com');
+  });
+});
+
+describe('a town in another timezone', () => {
+  afterAll(() => useTown(VICTORIA));
+  const ev = { date: '2026-10-09', name: 'Late Show', venue: 'Hall', time: '11:30 PM', page: '/events/2026-10-09-late-show' };
+
+  it('Victoria is Central time', () => {
+    useTown(VICTORIA);
+    expect(utcOffset('2026-01-15')).toBe('-06:00');
+    expect(utcOffset('2026-07-15')).toBe('-05:00');
+    expect(localDateStr(new Date('2026-10-10T04:30:00Z'))).toBe('2026-10-09'); // 11:30 PM Friday in Victoria
+    expect(eventJsonLd(ev, 'https://x').startDate).toBe('2026-10-09T23:30:00-05:00');
+  });
+
+  it('dates, offsets, calendar files and job times follow the town', () => {
+    useTown(townConfig({}, { town: { ...OTHER, timezone: 'America/Los_Angeles' } }));
+    expect(utcOffset('2026-01-15')).toBe('-08:00');
+    expect(utcOffset('2026-07-15')).toBe('-07:00');
+    // 4:30 AM UTC Saturday is still Friday evening on the West Coast.
+    expect(localDateStr(new Date('2026-10-10T04:30:00Z'))).toBe('2026-10-09');
+    expect(localDateStr(new Date('2026-10-10T07:30:00Z'))).toBe('2026-10-10');
+    expect(localParts(new Date('2026-10-10T04:30:00Z'))).toMatchObject({ date: '2026-10-09', dow: 5, minutes: 21 * 60 + 30 });
+    expect(eventJsonLd(ev, 'https://x').startDate).toBe('2026-10-09T23:30:00-07:00');
+    expect(renderIcs(ev, { siteUrl: 'https://www.thebay979.com', now: NOW })).toContain('DTSTART:20261010T063000Z');
+    expect(googleCalendarUrl(ev, 'https://www.thebay979.com')).toContain('ctz=America%2FLos_Angeles');
+    // Half-hour zones keep their minutes.
+    useTown(townConfig({}, { town: { ...OTHER, timezone: 'Asia/Kolkata' } }));
+    expect(utcOffset('2026-01-15')).toBe('+05:30');
   });
 });

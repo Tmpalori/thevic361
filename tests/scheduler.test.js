@@ -6,7 +6,7 @@
 // GitHub, Slack and email are fakes.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { createScheduler, dueSlot, lastSlot, centralParts, JOBS, schedulerEnabled } from '../server/scheduler.js';
+import { createScheduler, dueSlot, lastSlot, localParts, JOBS, schedulerEnabled } from '../server/scheduler.js';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
 import { promises as fs } from 'node:fs';
@@ -60,7 +60,7 @@ describe('Central-time slots', () => {
     expect(dueSlot(job('newsletter'), new Date('2026-10-05T22:00:00Z'))).toBeNull(); // 5 PM CDT
     expect(dueSlot(job('newsletter-weekend'), new Date('2026-10-09T03:30:00Z'))).toBeNull(); // Thu 10:30 PM CDT
     expect(dueSlot(job('newsletter-weekend'), new Date('2026-10-08T16:59:00Z'))).toBe('2026-10-08'); // Thu 11:59 AM
-    expect(centralParts(new Date('2026-10-06T04:30:00Z'))).toMatchObject({ date: '2026-10-05', dow: 1 });
+    expect(localParts(new Date('2026-10-06T04:30:00Z'))).toMatchObject({ date: '2026-10-05', dow: 1 });
   });
 
   it('runs the event check before the newsletter and the social kit daily', () => {

@@ -92,7 +92,7 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
       unchanged each time:
   - [x] a. Brand and identity (`SITE_NAME`, header markup, from-address,
         GA snippet; keep the GA test in sync).
-  - [ ] b. Time zone (`seo.js` `TZ`, `chicagoOffset`, `scheduler.js`,
+  - [x] b. Time zone (`seo.js` `TZ`, `chicagoOffset`, `scheduler.js`,
         `guides.js` `ctz`).
   - [x] c. Geography in JSON-LD and venues (`townOf`, `addressRegion`,
         `addressLocality`, `guides.js` venue cleanup).

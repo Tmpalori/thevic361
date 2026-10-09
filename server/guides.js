@@ -16,7 +16,7 @@ import { town } from './town.js';
 import {
   escHtml, safeUrl, slugify, layout, renderEventItem, renderGrouped,
   eventJsonLd, breadcrumbLd, sponsorHtml, ctaHtml, localDateStr, formatDay,
-  sortEvents, parseTimes, addDays, chicagoOffset, townOf, whereText
+  sortEvents, parseTimes, addDays, utcOffset, townOf, whereText
 } from './seo.js';
 
 // ─── Venues ──────────────────────────────────────────────────────────────
@@ -506,7 +506,7 @@ function compactDate(dateStr) { return dateStr.replace(/-/g, ''); }
 function eventInstants(ev) {
   const times = parseTimes(ev.time);
   if (!times[0]) return null;
-  const start = new Date(`${ev.date}T${times[0]}:00${chicagoOffset(ev.date)}`);
+  const start = new Date(`${ev.date}T${times[0]}:00${utcOffset(ev.date)}`);
   // A malformed date would make toISOString throw on every view.
   if (Number.isNaN(start.getTime())) return null;
   if (!times[1]) return { start, end: new Date(start.getTime() + 2 * 3600 * 1000) };
@@ -514,7 +514,7 @@ function eventInstants(ev) {
   // offset: start-day offset + 24 h was an hour off on a DST night (a
   // Halloween party to 2 AM on Nov 1). Same as eventJsonLd in seo.js.
   const endDay = times[1] <= times[0] ? addDays(ev.date, 1) : ev.date;
-  const end = new Date(`${endDay}T${times[1]}:00${chicagoOffset(endDay)}`);
+  const end = new Date(`${endDay}T${times[1]}:00${utcOffset(endDay)}`);
   return { start, end };
 }
 
@@ -557,7 +557,7 @@ export function googleCalendarUrl(ev, siteUrl) {
     dates = `${compactDate(ev.date)}/${compactDate(addDays(ev.date, 1))}`;
   }
   const params = new URLSearchParams({
-    action: 'TEMPLATE', text: ev.name, dates, ctz: 'America/Chicago',
+    action: 'TEMPLATE', text: ev.name, dates, ctz: town.timezone,
     location: [whereText(ev), `${townOf(ev)}, ${town.state}`].filter(Boolean).join(', '),
     details: `${ev.description ? ev.description + '\n\n' : ''}${siteUrl}${ev.page}`
   });
