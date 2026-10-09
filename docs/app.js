@@ -25,16 +25,12 @@
   // Mark an open day's header bar while it's stuck, so it can look like
   // its own card (style.css .is-stuck).
   function markStuck() {
-    var top = (header ? header.offsetHeight : 0) + 8;
+    var top = header ? header.offsetHeight : 0;
     document.querySelectorAll('.day-section--fold details[open] > summary').forEach(function (s) {
       var r = s.getBoundingClientRect();
       var sec = s.closest('.day-section').getBoundingClientRect();
-      var stuck = r.top <= top + 1 && sec.top < top - 1 && sec.bottom > r.bottom + 2;
-      s.classList.toggle('is-stuck', stuck);
-      // Reaching the card's rounded bottom: round the bar's bottom corners
-      // to follow it (0 → 20px over the last 20px, style.css --end-r).
-      var endR = stuck ? Math.max(0, Math.min(20, 23 - (sec.bottom - r.bottom))) : 0;
-      s.style.setProperty('--end-r', endR + 'px');
+      // Stuck once the card has moved up past the bar's resting place.
+      s.classList.toggle('is-stuck', r.top <= top + 1 && sec.top < r.top + 6 && sec.bottom > r.bottom + 2);
     });
   }
   // Run right away (a handful of open days at most) so the bar never lags
