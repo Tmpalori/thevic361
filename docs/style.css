@@ -1832,27 +1832,46 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
   /* A gap under the site header so the stuck bar still reads as a card. */
   top: calc(var(--header-height, 64px) + var(--space-2));
   z-index: 5;
-  transition: border-radius 150ms ease, box-shadow 150ms ease;
 }
-/* While stuck (docs/app.js sets .is-stuck): a rounded floating bar, and
-   the gap above it is filled with the page background so the list
-   scrolling up disappears under the bar instead of showing through. The
-   clip margin lets that fill cover the card's side borders too. */
+/* While stuck (docs/app.js sets .is-stuck) the bar looks exactly like the
+   top of its card (rounded top corners, flat bottom) and the list
+   scrolling up simply disappears under it: the bar's own box is filled
+   with the page background (covering what's behind the rounded corners
+   and the gap above), and the colored, rounded bar is drawn on top of
+   that by ::before, behind the text. The clip margin lets it sit over
+   the card's side borders. */
 .day-section--fold { overflow-clip-margin: 12px; }
 .day-section--fold summary.day-header.is-stuck {
-  border: 3px solid var(--ink);
-  border-radius: 16px;
-  box-shadow: var(--shadow-sm);
+  background: var(--color-bg);
+  margin-inline: -3px;
+  padding-inline: calc(var(--space-5) + 3px);
+  border-bottom-color: transparent;
 }
 .day-section--fold summary.day-header.is-stuck::before {
   content: "";
   position: absolute;
-  left: -14px;
-  right: -14px;
-  bottom: 100%;
+  inset: 0 0 -3px;
+  z-index: -1;
+  background: var(--day);
+  border: 3px solid var(--ink);
+  border-radius: 20px 20px 0 0;
+  pointer-events: none;
+}
+.day-section--fold summary.day-header.is-stuck::after {
+  content: "";
+  position: absolute;
+  left: -12px;
+  right: -12px;
+  /* Overlaps the bar's top by 2px (under its border) so no sliver of the
+     list shows at a fractional scroll position. */
+  bottom: calc(100% - 2px);
   height: calc(var(--space-2) + 6px);
+  z-index: -2;
   background: var(--color-bg);
   pointer-events: none;
+}
+@media (max-width: 639px) {
+  .day-section--fold summary.day-header.is-stuck { padding-inline: calc(var(--space-3) + 3px); }
 }
 .day-section--fold details[open] { padding-bottom: var(--space-1); }
 .day-count { margin-left: auto; font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
