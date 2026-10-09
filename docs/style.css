@@ -1858,7 +1858,9 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
   z-index: -1;
   background: var(--day);
   border: 3px solid var(--ink);
-  border-radius: 20px 20px 0 0;
+  /* --end-r (docs/app.js): at the end of the day the bar lands on the
+     card's bottom edge and its bottom corners follow the card's curve. */
+  border-radius: 20px 20px var(--end-r, 0px) var(--end-r, 0px);
   pointer-events: none;
 }
 .day-section--fold summary.day-header.is-stuck::after {
@@ -1866,10 +1868,12 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
   position: absolute;
   left: -12px;
   right: -12px;
-  /* Overlaps the bar's top by 2px (under its border) so no sliver of the
-     list shows at a fractional scroll position. */
-  bottom: calc(100% - 2px);
-  height: calc(var(--space-2) + 6px);
+  /* Reaches 6px down beside the bar (under it, z-index -2): the card's
+     6px drop shadow then starts 6px below the bar's top like it does at
+     the card's real top, instead of poking up beside the rounded corner,
+     and no sliver of the list shows at a fractional scroll position. */
+  bottom: calc(100% - 6px);
+  height: calc(var(--space-2) + 10px);
   z-index: -2;
   background: var(--color-bg);
   pointer-events: none;
@@ -1877,7 +1881,6 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
 @media (max-width: 639px) {
   .day-section--fold details[open] summary.day-header.is-stuck { padding-inline: calc(var(--space-3) + 3px); }
 }
-.day-section--fold details[open] { padding-bottom: var(--space-1); }
 .day-count { margin-left: auto; font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
 .day-count::after { content: " ▾"; }
 .day-section--fold details[open] .day-count::after { content: " ▴"; }

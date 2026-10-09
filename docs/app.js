@@ -24,19 +24,23 @@
   window.addEventListener('resize', setHeaderHeight, { passive: true });
   // Mark an open day's header bar while it's stuck, so it can look like
   // its own card (style.css .is-stuck).
-  var stuckQueued = false;
   function markStuck() {
-    stuckQueued = false;
     var top = (header ? header.offsetHeight : 0) + 8;
     document.querySelectorAll('.day-section--fold details[open] > summary').forEach(function (s) {
       var r = s.getBoundingClientRect();
       var sec = s.closest('.day-section').getBoundingClientRect();
-      s.classList.toggle('is-stuck', r.top <= top + 1 && sec.top < top - 1 && sec.bottom > r.bottom + 4);
+      var stuck = r.top <= top + 1 && sec.top < top - 1 && sec.bottom > r.bottom + 2;
+      s.classList.toggle('is-stuck', stuck);
+      // Reaching the card's rounded bottom: round the bar's bottom corners
+      // to follow it (0 → 20px over the last 20px, style.css --end-r).
+      var endR = stuck ? Math.max(0, Math.min(20, 23 - (sec.bottom - r.bottom))) : 0;
+      s.style.setProperty('--end-r', endR + 'px');
     });
   }
-  window.addEventListener('scroll', function () {
-    if (!stuckQueued) { stuckQueued = true; window.requestAnimationFrame(markStuck); }
-  }, { passive: true });
+  // Run right away (a handful of open days at most) so the bar never lags
+  // a frame behind the scroll; also on resize and once the list renders.
+  window.addEventListener('scroll', markStuck, { passive: true });
+  window.addEventListener('resize', markStuck, { passive: true });
   window.addEventListener('scroll', function () {
     if (window.scrollY > 10) {
       header.classList.add('scrolled');
@@ -490,6 +494,7 @@
         container.innerHTML = html;
         applyFilter(currentFilter);
         openHashDay();
+        markStuck();
 
         // ─── SKIP TO TODAY BUTTON ───
         var todayIdx = days.indexOf(todayStr);
