@@ -1,0 +1,21 @@
+{
+  "HASHTAGS": "#VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361",
+  "SITE": "https://www.thevic361.com",
+  "TITLES": {
+    "today": [
+      "Today in Victoria, TX",
+      "Today in Victoria",
+      "/today"
+    ],
+    "week": [
+      "This week in Victoria, TX",
+      "This Week in Victoria",
+      "/"
+    ],
+    "weekend": [
+      "This weekend in Victoria, TX",
+      "This Weekend in Victoria",
+      "/this-weekend"
+    ]
+  }
+}

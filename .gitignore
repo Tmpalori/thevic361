@@ -7,3 +7,6 @@ venv/
 node_modules/
 # Local fallback storage when DATABASE_URL is not set.
 data/
+
+# scripts/live_check.py runs
+.live-check/

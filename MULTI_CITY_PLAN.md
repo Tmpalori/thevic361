@@ -48,10 +48,10 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
     Stripe product, price and session bodies plus idempotency keys and
     metadata, Resend batch body and key, Tremendous body and `external_id`,
     GitHub dispatch body.
-- [ ] **0.3 Golden snapshots, Python.** Social-kit captions and `kit.json`,
+- [x] **0.3 Golden snapshots, Python.** Social-kit captions and `kit.json`,
       `slack_notify.py` payloads, sweep report text, AI prompt strings, and
       the collector's area filter results on a fixture.
-- [ ] **0.4 Live check script** (`scripts/live_check.py`): fetch ~40
+- [x] **0.4 Live check script** (`scripts/live_check.py`): fetch ~40
       production URLs and `/api/config` + `/api/health?deep=1`, normalize
       date-driven parts, and diff against the last run. Run before and after
       each deploy in this plan.

@@ -207,6 +207,10 @@ pytest -q
 
 `tests/golden/victoria.test.js` renders every public page and feed (home, hub and intent pages, seasonal guides, event pages and their `.ics`, a venue page, about, privacy, advertise and both checkout forms, subscribe, referral rules, contact, submit, 404, `/events.json`, sitemap, `llms.txt`, robots, pixel), every email (issues, welcome, confirm, submission and sponsor emails, reports, a reply) and what we send to Slack, Stripe and Resend, from `tests/golden/fixture.json` at a fixed clock, and compares them byte for byte with `tests/golden/__golden__/victoria/`. Normalized first: the CSS/JS `?v=` hash, UUIDs, tokens and Stripe's real-clock `expires_at`. It's the safety net for the multi-city work (`MULTI_CITY_PLAN.md`): a refactor must leave it untouched. When an output change is intended (new copy, a design change), regenerate on purpose with `npx vitest run tests/golden -u` and review the snapshot diff in the PR like code.
 
+`test_golden_victoria.py` does the same for the Python side (social-kit captions for the week, weekend and today at fixed dates, with the weekly sponsor; the social constants; the `slack_notify.py` payload; the event-check report; the collector's area filter and its constants; every AI prompt), stored in `tests/golden/__golden__/victoria/python/`. Regenerate on purpose with `GOLDEN_UPDATE=1 pytest -q test_golden_victoria.py`; in CI a missing snapshot fails instead of being written.
+
+`scripts/live_check.py` checks the real site: run it right before and right after a deploy in the multi-city work (`python3 scripts/live_check.py`, default `https://www.thevic361.com`). It fetches about 45 public pages (the fixed list, the hubs and guides in the sitemap, 4 event pages and their `.ics`, a venue, `/api/config`, `/api/health?deep=1`; GET only, no keys), normalizes asset hashes, timestamps, sitemap dates and the `.ics` DTSTAMP, saves them under `.live-check/<UTC time>/` (gitignored) and diffs them against the previous run. Exit 1 means something changed or didn't answer. Event pages follow the calendar, so compare runs from the same day.
+
 There is no linter configured. Match the existing style (4-space Python, 2-space JS, ES modules in `server/` and `tests/`).
 
 ---
@@ -450,7 +454,7 @@ Before you open a PR:
 - [ ] If you changed `server/`: no change to the `ADMIN_TOKEN` legacy fallback or the `auth.js` token format unless explicitly intended
 - [ ] If you changed `docs/`: no new `innerHTML` write of an unescaped value, no third-party script added without thinking about CSP
 - [ ] If you changed a workflow: timeouts and the `--candidates-only` flag are intact
-- [ ] Golden snapshots (`tests/golden/`) unchanged, or the PR says which Victoria output changes on purpose and the snapshot diff shows exactly that
+- [ ] Golden snapshots (`tests/golden/`, `test_golden_victoria.py`) unchanged, or the PR says which Victoria output changes on purpose and the snapshot diff shows exactly that
 - [ ] PR description explains *why*, not just *what*
 
 PR previews: only `docs/**` changes auto-deploy a static preview. Server / collector changes need a Railway PR Environment to test (auto-created on PR open).
