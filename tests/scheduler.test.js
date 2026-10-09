@@ -54,8 +54,12 @@ describe('Central-time slots', () => {
     expect(dueSlot(job('newsletter'), new Date('2026-11-09T12:43:00Z'))).toBeNull(); // 6:43 CST
     expect(dueSlot(job('newsletter'), new Date('2026-11-09T13:43:00Z'))).toBe('2026-11-09');
     expect(dueSlot(job('newsletter'), new Date('2026-10-06T13:00:00Z'))).toBeNull(); // Tuesday
-    // A late start the same day still sends; the next morning doesn't.
-    expect(dueSlot(job('newsletter'), new Date('2026-10-05T22:00:00Z'))).toBe('2026-10-05');
+    // A late start the same morning still sends; one after noon (or the
+    // next day) doesn't, so a deploy can't send an issue at night.
+    expect(dueSlot(job('newsletter'), new Date('2026-10-05T16:30:00Z'))).toBe('2026-10-05'); // 11:30 CDT
+    expect(dueSlot(job('newsletter'), new Date('2026-10-05T22:00:00Z'))).toBeNull(); // 5 PM CDT
+    expect(dueSlot(job('newsletter-weekend'), new Date('2026-10-09T03:30:00Z'))).toBeNull(); // Thu 10:30 PM CDT
+    expect(dueSlot(job('newsletter-weekend'), new Date('2026-10-08T16:59:00Z'))).toBe('2026-10-08'); // Thu 11:59 AM
     expect(centralParts(new Date('2026-10-06T04:30:00Z'))).toMatchObject({ date: '2026-10-05', dow: 1 });
   });
 

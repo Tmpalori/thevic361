@@ -56,7 +56,7 @@ import { REFERRAL_TIERS, DRAWING_AMOUNT, referralFlags, createReferralRewards } 
 
 export { REFERRAL_TIERS, referralFlags };
 import {
-  SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank,
+  SITE_NAME, escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank, parseTimes,
   sponsorLinkUrl
 } from './seo.js';
 
@@ -271,7 +271,7 @@ export function eventRow(ev, siteUrl) {
 ${ev.featured ? `<span style="display:inline-block;background:${C.sunset};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">★ VIC’S PICK</span>` : ''}
 ${iconImgs(ev, siteUrl)}
 ${ev.time ? `<span style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:12px;padding:0 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">${escHtml(ev.time)}</span>` : ''}
-<a href="${escHtml(link)}" style="color:${C.ink};font-weight:800;text-decoration:none;">${escHtml(ev.name)}</a>${where ? ` <span style="color:${C.muted};">· ${escHtml(where)}</span>` : ''}${ev.free === true && !(ev.icons || []).includes('free') ? ` <span style="color:#2FA876;font-size:13px;font-weight:bold;">· Free</span>` : ''}
+<a href="${escHtml(link)}" style="color:${C.ink};font-weight:800;text-decoration:none;">${escHtml(ev.name)}</a>${where ? ` <span style="color:${C.muted};">· ${escHtml(where)}</span>` : ''}${ev.also ? ` <span style="color:${C.muted};font-size:13px;font-weight:bold;">· also ${escHtml(ev.also)}</span>` : ''}${ev.free === true && !(ev.icons || []).includes('free') ? ` <span style="color:#2FA876;font-size:13px;font-weight:bold;">· Free</span>` : ''}
 ${ev.description ? `<div style="color:${C.muted};font-size:13px;margin-top:2px;">${escHtml(ev.description)}</div>` : ''}
 </td></tr>`;
 }
@@ -316,23 +316,95 @@ ${safeUrl(sponsor.url) && sponsor.cta ? `<a href="${escHtml(sponsorHref(sponsor,
 </td></tr></table>` : '';
 }
 
+// ─── Choosing what an issue shows ─────────────────────────────────────
+// Each day shows PER_DAY events: paid Vic's Picks always, then editor's
+// picks, then the best-rated (`appeal`, 1–5, from the collector), then
+// earlier ones. Shown in time order (picks keep their badge), so a day
+// reads morning to night. The weekend issue leaves out what nobody plans a
+// weekend around (FILLER), never a paid pick.
+const FILLER = /\b(training|course|certification|seminar|webinar|orientation|meeting|support group|info(?:rmation)? session|hiring event|job fair|career fair|tutoring|open house|chair yoga)\b/i;
+const paidPick = e => Boolean(e.featured && !e.editor_pick);
+export function isFiller(ev) {
+  if (paidPick(ev)) return false;
+  return FILLER.test(String(ev.name || '')) || (ev.appeal != null && Number(ev.appeal) <= 2);
+}
+const startMin = e => { const t = parseTimes(e.time)[0]; return t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3)) : 9999; };
+const appealOf = e => (Number.isFinite(Number(e.appeal)) && e.appeal != null ? Number(e.appeal) : 3);
+const byBest = (a, b) => pickRank(a) - pickRank(b) || appealOf(b) - appealOf(a) || startMin(a) - startMin(b);
+const normName = v => String(v || '').toLowerCase().replace(/&/g, ' and ').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ')
+  .replace(/\b(the|disneys)\b/g, ' ').replace(/\s+/g, ' ').trim();
+// The same event listed twice (two sources): one name inside the other.
+const sameEvent = (a, b) => {
+  const x = normName(a.name), y = normName(b.name);
+  return x.length >= 8 && y.length >= 8 && (x === y || x.includes(y) || y.includes(x));
+};
+const dayShort = d => formatDay(d, { weekday: 'short' });
+
+// [{ d, list }] for the issue's days: filler out (weekend), same-day
+// duplicates merged, an event on several days shown on its first with
+// "also Sat & Sun" (a paid pick keeps its own day), best first.
+export function issueDays(events, days, { weekend = false } = {}) {
+  const out = days.map(d => {
+    const list = [];
+    for (const e of sortEvents(events.filter(x => x.date === d)).sort(byBest)) {
+      if (weekend && isFiller(e)) continue;
+      const twin = list.find(x => sameEvent(x, e) && (!x.venue || !e.venue || normName(x.venue) === normName(e.venue)));
+      if (twin && !paidPick(e)) continue;
+      list.push({ ...e });
+    }
+    return { d, list };
+  });
+  const seen = new Map();
+  for (const day of out) {
+    day.list = day.list.filter(e => {
+      const key = normName(e.name) + '|' + normName(e.venue);
+      const first = seen.get(key);
+      if (!first) { seen.set(key, e); return true; }
+      if (paidPick(e)) return true;
+      first._also = [...(first._also || []), day.d];
+      return false;
+    });
+  }
+  for (const day of out) for (const e of day.list) {
+    if (e._also) { e.also = e._also.map(dayShort).join(' & '); delete e._also; }
+  }
+  return out.filter(x => x.list.length);
+}
+
+// The day's events to show: the best PER_DAY, in time order.
+function shownOf(list) {
+  return list.slice(0, PER_DAY).sort((a, b) => startMin(a) - startMin(b) || pickRank(a) - pickRank(b));
+}
+
+// The issue's top three: best-rated across all its days.
+export function dontMiss(byDay, n = 3) {
+  return byDay.flatMap(x => x.list).slice().sort((a, b) => appealOf(b) - appealOf(a) || pickRank(a) - pickRank(b) ||
+    (a.date < b.date ? -1 : a.date > b.date ? 1 : 0) || startMin(a) - startMin(b)).slice(0, n);
+}
+
 // An issue: the rest of this week (weekly, Monday) or Friday through
 // Sunday (weekend, Thursday). See EDITIONS.
 export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, address, openPixelUrl = '', referral = null, edition = 'weekly', prefsUrl = '' }) {
   const today = localDateStr(now);
   const weekend = edition === 'weekend';
   const week = (EDITIONS[edition] || EDITIONS.weekly).days(today);
-  const byDay = week.map(d => ({ d, list: sortEvents(events.filter(e => e.date === d)) })).filter(x => x.list.length);
+  const byDay = issueDays(events, week, { weekend });
   const total = byDay.reduce((n, x) => n + x.list.length, 0);
+  const top = dontMiss(byDay);
+  // The "Don't miss" box only when there's a lot to choose from.
+  const topShown = total >= 6 ? top : [];
   const short = d => formatDay(d, { month: 'short', day: 'numeric' });
   const range = week.length ? (week.length === 1 ? short(week[0]) : `${short(week[0])}–${short(week[week.length - 1])}`) : '';
   const title = weekend ? 'This weekend in Victoria' : 'This week in Victoria';
   const listPath = weekend ? '/this-weekend' : '/';
   const subject = `${title}: ${total} ${total === 1 ? 'thing' : 'things'} to do (${range})`;
-  // Paid Vic's Picks lead, then editor's picks (pickRank), then the rest.
-  const highlights = byDay.flatMap(x => x.list).filter(e => e.featured).sort((a, b) => pickRank(a) - pickRank(b))
-    .concat(byDay.flatMap(x => x.list)).map(e => e.name);
-  const preheader = [...new Set(highlights)].slice(0, 3).join(' · ');
+  const preheader = top.map(e => e.name).join(' · ');
+  const when = e => [dayShort(e.date), (parseTimes(e.time)[0] ? e.time.split(/\s*[–—-]\s*/)[0] : '')].filter(Boolean).join(' ');
+  const topHtml = topShown.length ? `
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;background:#fff;border:3px solid ${C.ink};border-radius:16px;"><tr><td style="padding:12px 16px;">
+<div style="font-family:${DISPLAY};font-size:19px;font-weight:bold;margin-bottom:4px;">Don’t miss ${weekend ? 'this weekend' : 'this week'}</div>
+${topShown.map((e, i) => `<div style="margin-top:6px;font-size:15px;"><strong>${i + 1}.</strong> <a href="${escHtml(e.page ? siteUrl + e.page : (safeUrl(e.url) || siteUrl))}" style="color:${C.ink};font-weight:800;">${escHtml(e.name)}</a> <span style="color:${C.muted};">· ${escHtml([when(e), e.venue].filter(Boolean).join(' · '))}</span></div>`).join('')}
+</td></tr></table>` : '';
 
   // Day colors follow the weekday (Monday yellow ... Sunday coral), like the site.
   const days = byDay.map(({ d, list }) => `
@@ -341,7 +413,7 @@ export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, ad
 <span style="font-size:21px;font-weight:bold;">${escHtml(formatDay(d, { weekday: 'long' }))}</span>
 <span style="display:inline-block;margin-left:6px;font-size:13px;font-weight:bold;background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:0 9px;">${escHtml(formatDay(d, { month: 'long', day: 'numeric' }))}</span></td></tr>
 <tr><td style="padding:6px 12px 10px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${list.slice(0, PER_DAY).map(e => eventRow(e, siteUrl)).join('')}</table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${shownOf(list).map(e => eventRow(e, siteUrl)).join('')}</table>
 ${list.length > PER_DAY ? `<p style="margin:8px 0 0;font-size:13px;font-weight:bold;"><a href="${siteUrl}${listPath}" style="color:${C.accent};">+${list.length - PER_DAY} more on ${escHtml(formatDay(d, { weekday: 'long' }))} →</a></p>` : ''}
 </td></tr></table>`).join('');
 
@@ -351,7 +423,7 @@ ${list.length > PER_DAY ? `<p style="margin:8px 0 0;font-size:13px;font-weight:b
   const bodyHtml = `
 <p style="margin:16px 0 4px;font-size:16px;">${total ? `Here's what's happening in Victoria, TX ${weekend ? 'this weekend' : 'this week'}: <strong>${total} ${total === 1 ? 'event' : 'events'}</strong>.` : `Nothing is listed yet for ${weekend ? 'this weekend' : 'the rest of this week'}.`}</p>
 <div>${weekend ? pill('/', 'All week') : pill('/this-weekend', 'This weekend')}${pill('/free-things-to-do', 'Free')}${pill('/kids-and-family', 'Kids')}${pill('/live-music', 'Live music')}</div>
-${sponsorBlock}${days}
+${sponsorBlock}${topHtml}${days}
 <p style="margin:28px 0 0;text-align:center;">${btn(`${siteUrl}${listPath}`, weekend ? 'See the whole weekend' : 'See the full list')}</p>
 ${referral ? referralHtml({ siteUrl, ...referral }) : ''}`;
 
@@ -363,8 +435,9 @@ ${referral ? referralHtml({ siteUrl, ...referral }) : ''}`;
   const campaign = `${weekend ? 'weekend' : 'weekly'}-${(EDITIONS[edition] || EDITIONS.weekly).key(today)}`;
   const text = [
     `${subject}`, '', ...sponsorLine,
+    ...(topShown.length ? [`DON'T MISS ${weekend ? 'THIS WEEKEND' : 'THIS WEEK'}`, ...topShown.map((e, i) => `${i + 1}. ${e.name} (${[when(e), e.venue].filter(Boolean).join(', ')})${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
     ...byDay.flatMap(({ d, list }) => [formatDay(d, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase(),
-      ...list.slice(0, PER_DAY).map(e => `- ${e.time ? e.time + ' ' : ''}${e.name}${e.venue ? ' @ ' + e.venue : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), '']),
+      ...shownOf(list).map(e => `- ${e.time ? e.time + ' ' : ''}${e.name}${e.venue ? ' @ ' + e.venue : ''}${e.also ? ' (also ' + e.also + ')' : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), '']),
     `Full list: ${siteUrl}${listPath}`, '', ...(referral ? referralText({ siteUrl, ...referral }) : []),
     ...(prefsUrl ? [`${weekend ? 'Just want Mondays? Skip the weekend email' : 'Email settings'}: ${prefsUrl}`] : []),
     `Unsubscribe: ${unsubscribeUrl}`, `${SITE_NAME} · ${address || 'Victoria, TX'}`
@@ -372,7 +445,7 @@ ${referral ? referralHtml({ siteUrl, ...referral }) : ''}`;
 
   // The paid Vic's Picks this issue actually stars (shown, not cut by
   // PER_DAY), recorded with the send for their reports.
-  const picks = [...new Set(byDay.flatMap(({ list }) => list.slice(0, PER_DAY))
+  const picks = [...new Set(byDay.flatMap(({ list }) => shownOf(list))
     .filter(e => e.featured && !e.editor_pick && e.sponsor_order).map(e => e.sponsor_order))];
   return {
     subject, total, picks,
