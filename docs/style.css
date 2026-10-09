@@ -1833,3 +1833,14 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
   .header-actions .btn { padding: 0.35em 0.75em; }
   .header-actions .theme-toggle { display: none; }
 }
+
+/* Phones: event cards give the title and description the width. Icons
+   stack in one narrow column, and the card and list padding shrink. */
+@media (max-width: 639px) {
+  .event-icons { flex-direction: column; flex-wrap: nowrap; gap: 4px; width: 22px; }
+  .event-entry { gap: var(--space-2); padding-inline: var(--space-1); }
+  .event-entry--featured { padding-inline: var(--space-2); }
+  .event-share { margin-right: -6px; }
+  .sub-picks { padding-inline: 0; }
+  .sub-hero { padding-inline: var(--space-4); }
+}
