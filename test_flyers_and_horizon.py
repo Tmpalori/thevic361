@@ -397,6 +397,8 @@ def test_enrich_looks_up_events_with_no_link_first(monkeypatch, tmp_path):
     # Soonest two have a link (thin only for time); the later two have none.
     linked = [{**_thin(n, f"Linked {n}"), "url": f"https://example.com/{n}"} for n in (1, 2)]
     bare = [_thin(n, f"Bare {n}") for n in (5, 6)]
-    ce.enrich_thin_events(linked + bare, cache_path=str(tmp_path / "c.json"), post=post)
+    # Past the collect window and not big: still after everything near.
+    far = [_thin(40, "Far Bare")]
+    ce.enrich_thin_events(far + linked + bare, cache_path=str(tmp_path / "c.json"), post=post)
     text = "".join(asked)
-    assert "Bare 5 on" in text and "Bare 6 on" in text and "Linked" not in text
+    assert "Bare 5 on" in text and "Bare 6 on" in text and "Linked" not in text and "Far Bare" not in text

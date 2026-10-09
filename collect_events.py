@@ -1939,6 +1939,8 @@ def enrich_thin_events(events, cache_path=None, post=None, get=None, today=None)
                 "tools": [{"google_search": {}}],
                 "generationConfig": {"temperature": 0.1},
             }
+            if past_deadline():
+                return None  # not cached: tried next run
             try:
                 resp = post(GEMINI_URL.format(model=model), json=body, timeout=90,
                             headers={"x-goog-api-key": key, "Content-Type": "application/json"})
@@ -3377,9 +3379,8 @@ def fetch_google_sheet_events(days_ahead=7):
             town = (row.get("Town") or "").strip()
             # Optional "Link" column (or "URL"/"Source"): the event's own
             # page. Left blank, gap filling looks one up.
-            link = next(((row.get(c) or "").strip() for c in ("Link", "URL", "Url", "Source") if (row.get(c) or "").strip()), "")
-            if not re.match(r"https?://\S+$", link) or is_listing_url(link):
-                link = ""
+            links = ((row.get(c) or "").strip().rstrip(".,;)") for c in ("Link", "URL", "Url", "Source"))
+            link = next((u for u in links if re.match(r"https?://\S+$", u) and not is_listing_url(u)), "")
 
             # Entered by hand (the owner's sheet), so trusted like the YAML:
             # merge_events' area/religious/non-event gates and the AI
