@@ -247,6 +247,26 @@ def test_google_sheet_rows_are_curated_and_pass_the_quality_gates(monkeypatch):
     assert ce.merge_events([{**rows[0], "_source": "allevents", "curated": True}], venues=[]) == []
 
 
+def test_google_sheet_link_column_is_the_events_link(monkeypatch):
+    csv_text = ("Date,Event Name,Venue,Time,Link,URL\n"
+                f"{d(2)},Pumpkin Fest,Church,5 PM,\"https://www.facebook.com/events/42),\",\n"
+                f"{d(2)},No Link Fest,Hall,5 PM,,\n"
+                f"{d(2)},Bad Link Fest,Hall,5 PM,see facebook,https://example.org/bad-link-fest\n"
+                f"{d(2)},Listing Fest,Hall,5 PM,https://www.eventbrite.com/d/tx--victoria/events/,\n")
+
+    class R:
+        text = csv_text
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(ce.requests, "get", lambda *a, **k: R())
+    rows = ce.fetch_google_sheet_events()
+    # Trailing punctuation trimmed; a junk Link falls through to a good URL;
+    # a listing page is never an event's link.
+    assert [r["url"] for r in rows] == ["https://www.facebook.com/events/42", "", "https://example.org/bad-link-fest", ""]
+
+
 # ─── main(): past events, warnings, per-source status ───────────────────────
 
 def test_past_backfill_events_skip_the_ai_review(tmp_path, monkeypatch):

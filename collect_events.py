@@ -1789,11 +1789,13 @@ def _parse_ai_json_array(content):
 # and name the event (or be on a cited site that blocks the check). Nothing
 # set by hand or by a venue is overwritten. Results are cached in
 # enrichment_cache.json (committed by weekly-collect.yml) so each event is
-# looked up once; a miss is retried after ENRICH_RETRY_DAYS. Soonest events
-# go first, ENRICH_MAX_PER_RUN per run. GEMINI_ENABLED=0 / ENRICH_ENABLED=0
+# looked up once; a miss is retried after ENRICH_RETRY_DAYS. Events with no
+# link go first (every event should have a source link when one exists, so a
+# hand-added event only needs a name, date and venue), then soonest first,
+# ENRICH_MAX_PER_RUN per run. GEMINI_ENABLED=0 / ENRICH_ENABLED=0
 # turn it off.
 
-ENRICH_MAX_PER_RUN = 24
+ENRICH_MAX_PER_RUN = 48
 ENRICH_BATCH = 6
 ENRICH_RETRY_DAYS = 7
 THIN_DESCRIPTION_CHARS = 70
@@ -1912,7 +1914,10 @@ def enrich_thin_events(events, cache_path=None, post=None, get=None, today=None)
     todo = []
     if key and not off:
         retry_before = (today - timedelta(days=ENRICH_RETRY_DAYS)).isoformat()
-        for ev in sorted(events, key=lambda e: (e["date"] > _WINDOW_END.isoformat() and not e.get("big"), e["date"])):
+        # Events with no link first (a page without a source link has no
+        # "event details" to send people to), then the rest; soonest first.
+        for ev in sorted(events, key=lambda e: (e["date"] > _WINDOW_END.isoformat() and not e.get("big"),
+                                                bool(e.get("url")), e["date"])):
             if ev["date"] < today_s or not _is_thin(ev):
                 continue
             hit = cache.get(_enrich_key(ev))
@@ -1934,6 +1939,8 @@ def enrich_thin_events(events, cache_path=None, post=None, get=None, today=None)
                 "tools": [{"google_search": {}}],
                 "generationConfig": {"temperature": 0.1},
             }
+            if past_deadline():
+                return None  # not cached: tried next run
             try:
                 resp = post(GEMINI_URL.format(model=model), json=body, timeout=90,
                             headers={"x-goog-api-key": key, "Content-Type": "application/json"})
@@ -1961,7 +1968,7 @@ def enrich_thin_events(events, cache_path=None, post=None, get=None, today=None)
                 checks.append((ev, answers.get(i) or {}, grounded))
 
         # Each answer costs up to two 10-second page checks; one after another
-        # for 24 events, a run that reached this step near the deadline could
+        # for 48 events, a run that reached this step near the deadline could
         # pass the workflow's step timeout before candidates.json is written.
         # So check in parallel and start no new check past the deadline.
         def verify(job):
@@ -3370,6 +3377,10 @@ def fetch_google_sheet_events(days_ahead=7):
             address = row.get("Address", "").strip()
             time_str = row.get("Time", "").strip()
             town = (row.get("Town") or "").strip()
+            # Optional "Link" column (or "URL"/"Source"): the event's own
+            # page. Left blank, gap filling looks one up.
+            links = ((row.get(c) or "").strip().rstrip(".,;)") for c in ("Link", "URL", "Url", "Source"))
+            link = next((u for u in links if re.match(r"https?://\S+$", u) and not is_listing_url(u)), "")
 
             # Entered by hand (the owner's sheet), so trusted like the YAML:
             # merge_events' area/religious/non-event gates and the AI
@@ -3383,7 +3394,7 @@ def fetch_google_sheet_events(days_ahead=7):
                 "description": notes[:150] if notes else "",
                 "icons": classify_icons(name, notes, venue),
                 "free": guess_free(name, notes, venue),
-                "url": "",
+                "url": link,
                 "curated": True,
                 **({"town": town} if town else {}),
             })

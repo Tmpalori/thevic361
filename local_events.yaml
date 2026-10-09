@@ -493,7 +493,7 @@ events:
     description: "Cuero's annual Turkeyfest, Friday through Sunday. Details on the Turkeyfest page."
     icons: [community, food, family]
     free: false
-    url: ""
+    url: "https://www.turkeyfest.org/"
     town: "Cuero"
     big: true
 
@@ -514,7 +514,7 @@ events:
     description: "Day two of Cuero's annual Turkeyfest."
     icons: [community, food, family]
     free: false
-    url: ""
+    url: "https://www.turkeyfest.org/"
     town: "Cuero"
     big: true
 
@@ -545,7 +545,7 @@ events:
     description: "Halloween fun for dogs and their people at the bark park."
     icons: [outdoors, family]
     free: true
-    url: ""
+    url: "https://www.victoriatx.gov/Calendar.aspx?EID=3986"
 
   - date: "2026-10-10"
     name: "JCPenney Kids Craft"
@@ -555,7 +555,7 @@ events:
     description: "Free kids craft at JCPenney."
     icons: [family, free]
     free: true
-    url: ""
+    url: "https://www.jcpenney.com/locations/tx/victoria/clothing-stores-victoria-tx-2178.html"
 
   - date: "2026-10-10"
     name: "Weienerfest"
@@ -610,7 +610,7 @@ events:
     description: "Final day of Cuero's annual Turkeyfest."
     icons: [community, food, family]
     free: false
-    url: ""
+    url: "https://www.turkeyfest.org/"
     town: "Cuero"
     big: true
 
@@ -631,7 +631,7 @@ events:
     description: "Victoria Film Society's October movie nights at Moonshine. Tonight: Halloween."
     icons: [arts, drinks]
     free: false
-    url: ""
+    url: "https://allevents.in/victoria/victoria-film-society-presents-halloween-1978/200030795406724"
 
   - date: "2026-10-14"
     name: "Trivia Night at Evan's"
@@ -645,13 +645,13 @@ events:
 
   - date: "2026-10-15"
     name: "Symphonic Spooktacular"
-    time: "5:30 PM"
+    time: "6:30 PM"
     venue: "Victoria Fine Arts Center"
     address: "1002 Sam Houston Dr."
-    description: "Victoria Symphony's Halloween concert. Pre-show activities start at 5:30 PM. Tickets online."
+    description: "Victoria Symphony's Halloween concert; come in costume. Tickets online."
     icons: [music, family, arts]
     free: false
-    url: ""
+    url: "https://victoriasymphony.com/concert-series/"
     big: true
 
   - date: "2026-10-15"
@@ -700,7 +700,7 @@ events:
     description: "Yorktown's annual Western Days, Friday through Sunday."
     icons: [community, family, food]
     free: false
-    url: ""
+    url: "https://www.yorktowntx.com/western-days/"
     town: "Yorktown"
     big: true
 
@@ -721,7 +721,7 @@ events:
     description: "Day two of Yorktown Western Days."
     icons: [community, family, food]
     free: false
-    url: ""
+    url: "https://www.yorktowntx.com/western-days/"
     town: "Yorktown"
     big: true
 
@@ -733,7 +733,7 @@ events:
     description: "An afternoon-into-evening music festival downtown. Details online."
     icons: [music, community]
     free: false
-    url: ""
+    url: "https://www.crossroadstoday.com/features/community-crossroads/uniting-hearts-music-festival-returns-oct-17-to-downtown-victoria-with-interfaith-lineup-fundraiser-set/article_646fed45-3ef0-4e1d-a2b3-0737ba3577d6.html"
     big: true
 
   - date: "2026-10-17"
@@ -743,7 +743,7 @@ events:
     description: "Free kids workshop. Register online."
     icons: [family, free]
     free: true
-    url: ""
+    url: "https://www.lowes.com/diy-projects-and-ideas/workshops"
 
   - date: "2026-10-17"
     name: "Trunk or Treat by Denny's & La Quinta"
@@ -762,7 +762,7 @@ events:
     description: "A murder mystery night for ages 11–18. Free; register at civicrec.com."
     icons: [family, arts, free]
     free: true
-    url: ""
+    url: "https://www.victoriatx.gov/Calendar.aspx?EID=3989"
 
   - date: "2026-10-17"
     name: "Halloween Havoc"
@@ -808,7 +808,7 @@ events:
     description: "Final day of Yorktown Western Days."
     icons: [community, family, food]
     free: false
-    url: ""
+    url: "https://www.yorktowntx.com/western-days/"
     town: "Yorktown"
     big: true
 
@@ -884,12 +884,12 @@ events:
 
   - date: "2026-10-23"
     name: "Victoria College Halloween Carnival"
-    time: "5:00 PM – 8:00 PM"
+    time: "5:30 PM – 8:00 PM"
     venue: "Victoria College"
     description: "Victoria College's Halloween carnival."
     icons: [family, community]
     free: true
-    url: ""
+    url: "https://visit.victoriacollege.edu/event/victoriacollege.events.701655"
     big: true
 
   - date: "2026-10-23"
@@ -920,17 +920,17 @@ events:
     description: "A not-too-scary Halloween afternoon at the Children's Discovery Museum. $5 per person."
     icons: [family]
     free: false
-    url: ""
+    url: "https://allevents.in/victoria/happy-haunted-museum/200030575591058"
 
   - date: "2026-10-24"
     name: "Zoo Brew"
     time: "7:00 PM – 11:00 PM"
     venue: "The Texas Zoo"
     address: "110 Memorial Dr."
-    description: "Ages 21+. Details on the Texas Zoo's Facebook page."
+    description: "The Texas Zoo's Booze & Brew night. Ages 21+."
     icons: [drinks, outdoors]
     free: false
-    url: ""
+    url: "https://texaszoo.org/events/booze-brew-2026/"
     big: true
 
   - date: "2026-10-24"
@@ -1187,7 +1187,7 @@ events:
     description: "Día de los Muertos evening at The Nave. More info and tickets on their website."
     icons: [arts, drinks]
     free: false
-    url: ""
+    url: "https://navemuseum.org/events/dia-de-los-muertos/"
 
   - date: "2026-10-30"
     name: "Faith Family Church Fall Fest"
@@ -1227,7 +1227,7 @@ events:
     description: "Halloween at the zoo. Pricing online."
     icons: [family, outdoors]
     free: false
-    url: ""
+    url: "https://texaszoo.org/events/zooboo-2026/"
     big: true
 
   - date: "2026-10-31"
@@ -1380,7 +1380,7 @@ events:
     description: "A community ofrenda and a showing of Coco. You can bring a framed picture of a lost loved one for the ofrenda."
     icons: [family, arts, free]
     free: true
-    url: ""
+    url: "https://www.victoriatx.gov/Calendar.aspx?EID=3991"
     big: true
 
   - date: "2026-11-02"
@@ -1401,7 +1401,7 @@ events:
     description: "Hot Rod Riot at Riverside Park, Friday and Saturday. All info online."
     icons: [community, outdoors]
     free: false
-    url: ""
+    url: "https://hotrodriot.com/"
     big: true
 
   - date: "2026-11-06"
@@ -1432,7 +1432,7 @@ events:
     description: "Day two of Hot Rod Riot at Riverside Park."
     icons: [community, outdoors]
     free: false
-    url: ""
+    url: "https://hotrodriot.com/"
     big: true
 
   - date: "2026-11-07"
@@ -1453,7 +1453,7 @@ events:
     description: "Free kids workshop. Register online."
     icons: [family, free]
     free: true
-    url: ""
+    url: "https://www.homedepot.com/c/kids-workshop"
 
   - date: "2026-11-07"
     name: "Metal Show"
@@ -1472,7 +1472,7 @@ events:
     description: "BBQ and beer downtown. Tickets and info online."
     icons: [food, drinks, music]
     free: false
-    url: ""
+    url: "https://crossroadsbbqandbrew.com"
     big: true
 
   - date: "2026-11-14"
@@ -1492,7 +1492,7 @@ events:
     description: "Free kids workshop. Register online."
     icons: [family, free]
     free: true
-    url: ""
+    url: "https://www.lowes.com/diy-projects-and-ideas/workshops"
 
   - date: "2026-11-16"
     name: "Kids Night at Texas Roadhouse"
@@ -1511,7 +1511,7 @@ events:
     description: "Free kids workshop. Register online."
     icons: [family, free]
     free: true
-    url: ""
+    url: "https://www.homedepot.com/c/kids-workshop"
 
   - date: "2026-12-04"
     name: "Port Lavaca Christmas Parade"
@@ -1543,7 +1543,7 @@ events:
     description: "Victoria's Christmas tree lighting and parade."
     icons: [family, community, free]
     free: true
-    url: ""
+    url: "https://www.victoriatx.gov/Calendar.aspx?EID=3992"
     big: true
 
   - date: "2026-12-05"
@@ -1562,7 +1562,7 @@ events:
     description: "Free kids workshop. Register online."
     icons: [family, free]
     free: true
-    url: ""
+    url: "https://www.homedepot.com/c/kids-workshop"
 
   - date: "2026-12-05"
     name: "McCoy's Kids Craft: Wooden Ornament"
@@ -1590,7 +1590,7 @@ events:
     description: "Christmas on Main Street downtown."
     icons: [family, community, shopping]
     free: true
-    url: ""
+    url: "https://victoriatx.gov/merryonmain"
     big: true
 
   - date: "2026-12-11"
@@ -1600,7 +1600,7 @@ events:
     description: "Christmas in downtown Cuero, Friday and Saturday."
     icons: [family, community]
     free: true
-    url: ""
+    url: "https://www.tourtexas.com/all-events/78551/Christmas-In-Downtown"
     town: "Cuero"
     big: true
 
@@ -1611,7 +1611,7 @@ events:
     description: "Day two of Christmas in downtown Cuero."
     icons: [family, community]
     free: true
-    url: ""
+    url: "https://www.tourtexas.com/all-events/78551/Christmas-In-Downtown"
     town: "Cuero"
     big: true
 
@@ -1622,7 +1622,7 @@ events:
     description: "Port Lavaca's Christmas at the Bayfront. More info online."
     icons: [family, community, shopping]
     free: true
-    url: ""
+    url: "https://portlavacaevents.com/event/christmas-at-the-bayfront-5/"
     town: "Port Lavaca"
     big: true
 
@@ -1633,7 +1633,7 @@ events:
     description: "Free kids workshop. Register online."
     icons: [family, free]
     free: true
-    url: ""
+    url: "https://www.lowes.com/diy-projects-and-ideas/workshops"
 
   - date: "2026-12-21"
     name: "Kids Night at Texas Roadhouse"
@@ -1652,7 +1652,7 @@ events:
     description: "Free kids workshop. Register online."
     icons: [family, free]
     free: true
-    url: ""
+    url: "https://www.homedepot.com/c/kids-workshop"
 
   - date: "2027-01-09"
     name: "Victoria Fan Fest"
@@ -1672,7 +1672,7 @@ events:
     description: "Free kids workshop. Register online."
     icons: [family, free]
     free: true
-    url: ""
+    url: "https://www.lowes.com/diy-projects-and-ideas/workshops"
 
   - date: "2027-03-20"
     name: "Kiwanis Club's Kidz Fest"
