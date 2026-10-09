@@ -177,6 +177,8 @@ const DAY_COLORS = ['#FFC93C', '#8FD3FF', '#FF8FC0', '#3DBE8B', '#FF7A3D', '#B9A
 const ICON_KEYS = new Set(['food', 'music', 'family', 'drinks', 'arts', 'shopping', 'outdoors', 'community', 'free']);
 const DISPLAY = "'Fredoka','Baloo 2','Trebuchet MS',Arial,sans-serif";
 const BODY = "'Nunito','Helvetica Neue',Arial,sans-serif";
+// "+N more" links: a small ink-outlined pill, like the site's chips.
+const MORE_PILL = `display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:14px;color:${C.ink};border:2px solid ${C.ink};border-radius:999px;box-shadow:2px 2px 0 ${C.ink};padding:5px 14px;text-decoration:none;`;
 export const btn = (href, label) => `<a href="${escHtml(href)}" style="display:inline-block;background:${C.accent};color:#fff;font-family:${DISPLAY};font-weight:bold;font-size:16px;padding:11px 22px;border:3px solid ${C.ink};border-radius:999px;box-shadow:3px 3px 0 ${C.ink};text-decoration:none;">${escHtml(label)}</a>`;
 
 // ─── Dark mode ───────────────────────────────────────────────────────────
@@ -261,19 +263,25 @@ function iconImgs(ev, siteUrl) {
     .map(k => `<img src="${siteUrl}/email/${k}.png" width="22" height="22" alt="" style="vertical-align:middle;border:0;margin-right:2px;">`).join('');
 }
 
-export function eventRow(ev, siteUrl) {
+// A Vic's Pick is its own yellow card with space around it, so the dashed
+// divider is left off the row just above one (`next` is the row after).
+export function eventRow(ev, siteUrl, next) {
   const link = ev.page ? `${siteUrl}${ev.page}` : (safeUrl(ev.url) || siteUrl);
   const where = [ev.venue].filter(Boolean).join('');
   const rowStyle = ev.featured
     ? `padding:10px 12px;background:${C.sunLight};border:2px solid ${C.ink};border-radius:12px;`
-    : `padding:10px 4px;border-bottom:2px dashed ${C.line};`;
-  return `<tr><td style="${rowStyle}">
+    : `padding:10px 4px;${next?.featured ? '' : `border-bottom:2px dashed ${C.line};`}`;
+  const open = ev.featured
+    ? `<tr><td style="padding:6px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;"><tr><td style="${rowStyle}">`
+    : `<tr><td style="${rowStyle}">`;
+  const close = ev.featured ? '</td></tr></table></td></tr>' : '</td></tr>';
+  return `${open}
 ${ev.featured ? `<span style="display:inline-block;background:${C.sunset};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">★ VIC’S PICK</span>` : ''}
 ${iconImgs(ev, siteUrl)}
 ${ev.time ? `<span style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:12px;padding:0 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">${escHtml(ev.time)}</span>` : ''}
 <a href="${escHtml(link)}" style="color:${C.ink};font-weight:800;text-decoration:none;">${escHtml(ev.name)}</a>${where ? ` <span style="color:${C.muted};">· ${escHtml(where)}</span>` : ''}${ev.also ? ` <span style="color:${C.muted};font-size:13px;font-weight:bold;">· also ${escHtml(ev.also)}</span>` : ''}${ev.free === true && !(ev.icons || []).includes('free') ? ` <span style="color:#2FA876;font-size:13px;font-weight:bold;">· Free</span>` : ''}
 ${ev.description ? `<div style="color:${C.muted};font-size:13px;margin-top:2px;">${escHtml(ev.description)}</div>` : ''}
-</td></tr>`;
+${close}`;
 }
 
 // Email apps send no referrer, so links back to the site carry UTM tags
@@ -407,15 +415,15 @@ ${topShown.map((e, i) => `<div style="margin-top:6px;font-size:15px;"><strong>${
 </td></tr></table>` : '';
 
   // Day colors follow the weekday (Monday yellow ... Sunday coral), like the site.
-  const days = byDay.map(({ d, list }) => `
+  const days = byDay.map(({ d, list }) => { const dayColor = DAY_COLORS[(currentWeek(d).indexOf(d) + 7) % 7]; return `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:22px;border:3px solid ${C.ink};border-radius:16px;overflow:hidden;border-collapse:separate;">
-<tr><td style="background:${DAY_COLORS[(currentWeek(d).indexOf(d) + 7) % 7]};padding:10px 14px;border-bottom:3px solid ${C.ink};font-family:${DISPLAY};color:${C.ink};">
+<tr><td style="background:${dayColor};padding:10px 14px;border-bottom:3px solid ${C.ink};font-family:${DISPLAY};color:${C.ink};">
 <span style="font-size:21px;font-weight:bold;">${escHtml(formatDay(d, { weekday: 'long' }))}</span>
 <span style="display:inline-block;margin-left:6px;font-size:13px;font-weight:bold;background:#fff;border:2px solid ${C.ink};border-radius:999px;padding:0 9px;">${escHtml(formatDay(d, { month: 'long', day: 'numeric' }))}</span></td></tr>
 <tr><td style="padding:6px 12px 10px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${shownOf(list).map(e => eventRow(e, siteUrl)).join('')}</table>
-${list.length > PER_DAY ? `<p style="margin:8px 0 0;font-size:13px;font-weight:bold;"><a href="${siteUrl}${listPath}" style="color:${C.accent};">+${list.length - PER_DAY} more on ${escHtml(formatDay(d, { weekday: 'long' }))} →</a></p>` : ''}
-</td></tr></table>`).join('');
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${shownOf(list).map((e, i, arr) => eventRow(e, siteUrl, arr[i + 1])).join('')}</table>
+${list.length > PER_DAY ? `<p style="margin:12px 0 4px;text-align:center;"><a href="${siteUrl}${listPath}" style="${MORE_PILL}background:${dayColor};">+${list.length - PER_DAY} more on ${escHtml(formatDay(d, { weekday: 'long' }))} →</a></p>` : ''}
+</td></tr></table>`; }).join('');
 
   const sponsorBlock = sponsorHtml(sponsor, siteUrl);
 
@@ -554,9 +562,9 @@ export function renderWelcomeEmail(events, { siteUrl, now, sponsor, unsubscribeU
   const dayLabel = (d) => d === today ? 'Today' : formatDay(d, { weekday: 'long' });
   const coming = picks.length ? `
 <p style="margin:22px 0 6px;font-family:${DISPLAY};font-size:19px;font-weight:bold;">Coming up this week</p>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${picks.map(e =>
-    eventRow({ ...e, time: [dayLabel(e.date), e.time].filter(Boolean).join(', ') }, siteUrl)).join('')}</table>
-${soon.length > picks.length ? `<p style="margin:10px 0 0;font-size:13px;font-weight:bold;"><a href="${siteUrl}/" style="color:${C.accent};">+${soon.length - picks.length} more this week →</a></p>` : ''}` : '';
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">${picks.map((e, i) =>
+    eventRow({ ...e, time: [dayLabel(e.date), e.time].filter(Boolean).join(', ') }, siteUrl, picks[i + 1])).join('')}</table>
+${soon.length > picks.length ? `<p style="margin:12px 0 4px;text-align:center;"><a href="${siteUrl}/" style="${MORE_PILL}background:${C.sun};">+${soon.length - picks.length} more this week →</a></p>` : ''}` : '';
   const bodyHtml = `
 <p style="margin:18px 0 4px;font-size:16px;"><strong>You're in!</strong> Every Monday morning you'll get the week's events in Victoria, TX (concerts, markets, festivals, family stuff and more), and every Thursday morning the weekend's best.</p>
 ${coming}${sponsorHtml(sponsor, siteUrl, 'welcome')}

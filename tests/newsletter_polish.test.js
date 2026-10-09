@@ -96,3 +96,29 @@ describe('which events and in what order', () => {
     expect(issue.text).not.toContain('DON\'T MISS');
   });
 });
+
+describe('layout', () => {
+  const evs = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((name, i) => ({ date: '2026-10-10', name, time: `${i + 8} AM`, venue: 'V', appeal: 4, ...(i === 1 || i === 2 ? { featured: true, sponsor_order: 'o' + i } : {}) }));
+  const html = renderWeekly(withPages(evs), opts).html;
+
+  it('Vic’s Picks get space around them and no dashed line above', () => {
+    const rowStyle = name => [...html.matchAll(/<tr><td style="([^"]*)">((?:(?!<tr>)[^])*?)>([A-H])<\/a>/g)].find(m => m[3] === name)[1];
+    expect(rowStyle('A')).not.toContain('dashed');
+    expect(rowStyle('D')).toContain('dashed');
+    expect(html.match(/<tr><td style="padding:6px 0;"><table/g)).toHaveLength(2);
+  });
+
+  it('"+N more" is a pill in the day’s color, not a plain link', () => {
+    const pill = html.match(/<a [^>]*>\+2 more on Saturday →<\/a>/)[0];
+    expect(pill).toContain('border-radius:999px');
+    expect(pill).toMatch(/#B9A6FF/i); // Saturday's color, as on its header
+  });
+
+  it('the welcome email gets the same pill and pick spacing', async () => {
+    const { renderWelcomeEmail } = await import('../server/newsletter.js');
+    const soon = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((name, i) => ({ date: '2026-10-09', name, time: `${i + 8} AM`, venue: 'V', ...(i === 1 ? { featured: true, sponsor_order: 'o1' } : {}) }));
+    const w = renderWelcomeEmail(withPages(soon), { siteUrl: 'https://www.thevic361.com', now: THU, unsubscribeUrl: 'x', address: '1 Main' }).html;
+    expect(w).toMatch(/<a [^>]*border-radius:999px[^>]*>\+\d+ more this week →<\/a>/);
+    expect(w).toContain('<tr><td style="padding:6px 0;"><table');
+  });
+});
