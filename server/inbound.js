@@ -1,0 +1,193 @@
+/* server/inbound.js — Email replies land in Slack.
+ *
+ * thevic361.com's MX points at Resend (receiving), so a reply to
+ * news@thevic361.com (the newsletter, the welcome email, sponsor and
+ * submission emails) reaches Resend instead of bouncing. Resend POSTs an
+ * `email.received` webhook here (metadata only); we verify its signature
+ * (Svix: HMAC-SHA256 over "id.timestamp.body" with the whsec_ secret),
+ * fetch the message from GET /emails/receiving/:id and post the sender,
+ * subject and new text (quoted history cut off) to Slack. No inbox to
+ * check: replies about orders go to the sales channel, the rest to
+ * activity. Resend keeps every message in its dashboard either way.
+ *
+ * Setup (Railway): RESEND_WEBHOOK_SECRET, the webhook's signing secret.
+ * Unset, the endpoint answers 503 and the reply ask stays off (newsletter.js).
+ */
+
+import crypto from 'node:crypto';
+import express from 'express';
+
+const RESEND_API = 'https://api.resend.com';
+const TOLERANCE_S = 5 * 60;      // Svix timestamps older/newer than this are refused
+const MAX_TEXT = 1500;           // characters of the reply shown in Slack
+const SEEN_MAX = 500;            // webhook ids remembered (Resend retries)
+
+export function inboundConfig(env = process.env, overrides = {}) {
+  const secret = overrides.resendWebhookSecret ?? env.RESEND_WEBHOOK_SECRET ?? '';
+  return { secret, enabled: /^whsec_[A-Za-z0-9+/=]+$/.test(secret) };
+}
+
+// Svix signature check. `header` is "v1,<b64> v1,<b64>…".
+export function verifySvix(raw, { id, timestamp, signature }, secret, nowS = Math.floor(Date.now() / 1000)) {
+  if (!id || !timestamp || !signature || !/^whsec_/.test(secret || '')) return false;
+  const ts = Number(timestamp);
+  if (!Number.isFinite(ts) || Math.abs(nowS - ts) > TOLERANCE_S) return false;
+  const key = Buffer.from(secret.slice('whsec_'.length), 'base64');
+  const expected = crypto.createHmac('sha256', key).update(`${id}.${timestamp}.${raw}`).digest();
+  return String(signature).split(' ').some(part => {
+    const [version, sig] = part.split(',');
+    if (version !== 'v1' || !sig) return false;
+    const got = Buffer.from(sig, 'base64');
+    return got.length === expected.length && crypto.timingSafeEqual(got, expected);
+  });
+}
+
+// The plain text of a received email: `text`, or the HTML (sometimes a
+// data: URI) with tags stripped.
+export function bodyText(email) {
+  if (email && typeof email.text === 'string' && email.text.trim()) return email.text;
+  let html = String((email && email.html) || '');
+  const m = /^data:text\/html[^,]*?(;base64)?,(.*)$/s.exec(html);
+  if (m) html = m[1] ? Buffer.from(m[2], 'base64').toString('utf8') : decodeURIComponent(m[2]);
+  return html.replace(/<(style|script)[\s\S]*?<\/\1>/gi, '')
+    .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d)>/gi, '\n').replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;|&rsquo;/g, '\'').replace(/&quot;/g, '"');
+}
+
+// Just what they wrote: everything before the quoted original ("On … wrote:",
+// "> " lines, Outlook's "From:" block, "-----Original Message-----").
+export function newText(text) {
+  const lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+  const out = [];
+  for (const line of lines) {
+    if (/^\s*>/.test(line) || /^On .+wrote:\s*$/.test(line.trim()) || /^-{2,}\s*Original Message/i.test(line.trim()) ||
+        /^From:\s.+/.test(line.trim()) && out.some(l => l.trim())) break;
+    out.push(line);
+  }
+  const s = out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return s.length > MAX_TEXT ? s.slice(0, MAX_TEXT) + '…' : s;
+}
+
+// Out-of-office and bounces aren't worth a ping.
+export function isAutomatic(email) {
+  const h = Object.fromEntries(Object.entries((email && email.headers) || {}).map(([k, v]) => [k.toLowerCase(), String(v)]));
+  const from = String((email && email.from) || '');
+  const subject = String((email && email.subject) || '');
+  return (h['auto-submitted'] && h['auto-submitted'] !== 'no') || /^(bulk|junk|auto_reply)$/i.test(h.precedence || '') ||
+    'x-autoreply' in h || 'x-autorespond' in h || /mailer-daemon|postmaster@/i.test(from) ||
+    /^(automatic reply|auto(matic)?[- ]?reply|out of (the )?office|undeliverable|delivery status notification)/i.test(subject);
+}
+
+// The Slack "Reply" link: the admin's compose box (docs/admin.js
+// openReplyFromHash), which sends as news@ so their answer comes back here.
+export function replyLink(siteUrl, { to, subject = '', ref = '' }) {
+  const q = new URLSearchParams({ to, subject: /^re:/i.test(subject) ? subject : `Re: ${subject}` });
+  if (ref) q.set('ref', ref);
+  return `${siteUrl}/admin.html#reply?${q}`;
+}
+
+const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// A personal reply: plain text and a plain HTML twin (no newsletter
+// design, so it reads like a person wrote it), signed The Vic 361.
+export function renderReply(text, siteUrl) {
+  const body = String(text).replace(/\r\n/g, '\n').trim();
+  const sig = `The Vic 361\n${siteUrl.replace(/^https?:\/\//, '')}`;
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#1F1A3D;">` +
+    body.split(/\n{2,}/).map(par => `<p style="margin:0 0 12px;">${escHtml(par).replace(/\n/g, '<br>')}</p>`).join('') +
+    `<p style="margin:16px 0 0;color:#5B5675;">— The Vic 361<br><a href="${escHtml(siteUrl)}" style="color:#4B3FD1;">${escHtml(siteUrl.replace(/^https?:\/\//, ''))}</a></p></div>`;
+  return { html, text: `${body}\n\n— ${sig}` };
+}
+
+// Replies about money (Vic's Picks, sponsor weeks, refunds) go to sales.
+const SALES_RE = /vic[’']?s pick|sponsor|booked|receipt|refund|invoice|order|payment|report:/i;
+
+export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl = globalThis.fetch, nowFn = () => Date.now() }) {
+  const seen = new Set();
+
+  async function fetchEmail(id) {
+    const r = await fetchImpl(`${RESEND_API}/emails/receiving/${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(10_000)
+    });
+    if (!r.ok) throw new Error(`resend ${r.status}`);
+    return r.json();
+  }
+
+  async function handle(event) {
+    if (!event || event.type !== 'email.received' || !event.data || !event.data.email_id) return 'ignored';
+    const id = event.data.email_id;
+    if (seen.has(id)) return 'duplicate';
+    const email = await fetchEmail(id);
+    seen.add(id);
+    if (seen.size > SEEN_MAX) seen.delete(seen.values().next().value);
+    if (isAutomatic(email)) return 'automatic';
+    const from = String(email.from || event.data.from || '');
+    const addr = (/<([^>]+)>/.exec(from) || [, from])[1].trim();
+    const subject = String(email.subject || event.data.subject || '(no subject)');
+    const text = newText(bodyText(email)) || '(no text)';
+    const files = (email.attachments || event.data.attachments || []).filter(a => a.content_disposition !== 'inline').map(a => a.filename).filter(Boolean);
+    const sales = SALES_RE.test(subject);
+    if (slack) {
+      await slack.notify({
+        title: `${sales ? '💰' : '📬'} Email from ${addr || 'unknown sender'}`.slice(0, 150),
+        fields: [['Subject', subject], ['To', (email.to || event.data.to || []).join(', ')], ...(files.length ? [['Attachments', files.join(', ')]] : [])],
+        text,
+        link: addr ? replyLink(siteUrl, { to: addr, subject, ref: email.message_id || '' }) : null, linkLabel: 'Reply as news@',
+        footer: 'Full message in Resend → Emails → Receiving',
+        channel: sales ? 'sales' : 'activity'
+      });
+    }
+    return 'posted';
+  }
+
+  function register(app) {
+    app.post('/api/email/inbound', express.raw({ type: '*/*', limit: '256kb' }), async (req, res) => {
+      if (!config.enabled || !apiKey) return res.status(503).json({ ok: false, error: 'not-configured' });
+      const raw = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '';
+      const ok = verifySvix(raw, { id: req.get('svix-id'), timestamp: req.get('svix-timestamp'), signature: req.get('svix-signature') },
+        config.secret, Math.floor(nowFn() / 1000));
+      if (!ok) return res.status(400).json({ ok: false, error: 'bad-signature' });
+      let event;
+      try { event = JSON.parse(raw); } catch (_) { return res.status(400).json({ ok: false, error: 'bad-json' }); }
+      try {
+        res.json({ ok: true, result: await handle(event) });
+      } catch (err) {
+        // A 500 makes Resend retry; the email itself is kept in Resend.
+        console.error('[inbound] handling a received email failed:', err.message);
+        if (slack) slack.alert('inbound-email-failed', 'Email replies aren’t reaching Slack', err.message);
+        res.status(500).json({ ok: false });
+      }
+    });
+  }
+
+  // POST /api/admin/email/reply {to, subject, text, ref}: send as news@
+  // (Resend), threaded under their message when `ref` is its Message-ID.
+  // Registered after the JSON parser; admin only.
+  function registerReply(app, { requireAdmin, resend, from, normalizeEmail }) {
+    app.post('/api/admin/email/reply', requireAdmin, async (req, res) => {
+      const b = req.body || {};
+      const to = normalizeEmail(String(b.to || ''));
+      const subject = String(b.subject || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
+      const text = String(b.text || '').slice(0, 10000);
+      const ref = /^<[^<>\s]{3,300}>$/.test(String(b.ref || '')) ? b.ref : '';
+      const errors = {};
+      if (!to) errors.to = 'Add a valid email address.';
+      if (!subject) errors.subject = 'Add a subject.';
+      if (text.trim().length < 2) errors.text = 'Write a reply.';
+      if (Object.keys(errors).length) return res.status(400).json({ ok: false, errors });
+      if (!apiKey) return res.status(503).json({ ok: false, error: 'not-configured', message: 'Set RESEND_API_KEY in Railway first.' });
+      const mail = renderReply(text, siteUrl);
+      try {
+        await resend.send({ from, to: [to], subject, html: mail.html, text: mail.text,
+          ...(ref ? { headers: { 'In-Reply-To': ref, References: ref } } : {}) });
+      } catch (err) {
+        console.warn('[inbound] reply failed:', err.message);
+        return res.status(502).json({ ok: false, error: 'send-failed', message: err.message });
+      }
+      if (slack) slack.notify({ title: `↩️ Replied to ${to}`, fields: [['Subject', subject]], text: text.slice(0, 600), channel: 'activity' });
+      res.json({ ok: true });
+    });
+  }
+
+  return { register, registerReply, handle };
+}

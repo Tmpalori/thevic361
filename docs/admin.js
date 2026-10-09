@@ -268,6 +268,74 @@
     const app = document.getElementById('app');
     if (gate) gate.hidden = true;
     if (app) app.hidden = false;
+    openReplyFromHash();
+  }
+
+  // ─── REPLY AS NEWS@ ───
+  // Slack's "Reply as news@" links open admin.html#reply?to=…&subject=…&ref=…
+  // (server/inbound.js replyLink). Sign-in keeps the hash, so the box opens
+  // right after logging in too.
+  function parseReplyHash(hash) {
+    const m = /^#reply\?(.*)$/.exec(hash || '');
+    if (!m) return null;
+    const q = new URLSearchParams(m[1]);
+    return { to: q.get('to') || '', subject: q.get('subject') || '', ref: q.get('ref') || '' };
+  }
+
+  function openReplyFromHash() {
+    const r = parseReplyHash(window.location.hash);
+    const modal = document.getElementById('reply-modal');
+    if (!r || !modal || !state.session) return;
+    const form = document.getElementById('reply-form');
+    form.reset();
+    form.elements.to.value = r.to;
+    form.elements.subject.value = r.subject;
+    form.elements.ref.value = r.ref;
+    showReplyErrors({});
+    document.getElementById('reply-status').textContent = '';
+    modal.hidden = false;
+    form.elements.text.focus();
+  }
+
+  function closeReplyModal() {
+    const modal = document.getElementById('reply-modal');
+    if (modal) modal.hidden = true;
+    if (/^#reply\?/.test(window.location.hash)) history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+
+  function showReplyErrors(errors, message) {
+    document.querySelectorAll('#reply-form [data-error-for]').forEach(el => {
+      el.textContent = (errors && errors[el.getAttribute('data-error-for')]) || '';
+    });
+    const top = document.getElementById('reply-form-error');
+    top.textContent = message || '';
+    top.hidden = !message;
+  }
+
+  async function sendReply(ev) {
+    ev.preventDefault();
+    const form = ev.target;
+    const btn = document.getElementById('reply-send-btn');
+    const status = document.getElementById('reply-status');
+    const body = { to: form.elements.to.value.trim(), subject: form.elements.subject.value.trim(),
+      text: form.elements.text.value, ref: form.elements.ref.value };
+    btn.disabled = true;
+    status.textContent = 'Sending…';
+    try {
+      const { res, json } = await adminFetch('/api/admin/email/reply', { method: 'POST', body: JSON.stringify(body) });
+      if (res.ok && json && json.ok) {
+        status.textContent = 'Sent ✓';
+        setTimeout(closeReplyModal, 900);
+      } else {
+        status.textContent = '';
+        showReplyErrors((json && json.errors) || {}, json && !json.errors ? (json.message || 'Couldn’t send. Try again.') : '');
+      }
+    } catch (_) {
+      status.textContent = '';
+      showReplyErrors({}, 'Couldn’t reach the server. Try again.');
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   // ─── SERVER API ───
@@ -2593,6 +2661,18 @@
   }
 
   function wireEvents() {
+    const replyForm = document.getElementById('reply-form');
+    const replyModal = document.getElementById('reply-modal');
+    if (replyForm && replyModal) {
+      replyForm.addEventListener('submit', sendReply);
+      replyModal.addEventListener('click', (e) => {
+        if (e.target.closest('[data-act="close"]')) closeReplyModal();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !replyModal.hidden) closeReplyModal();
+      });
+      window.addEventListener('hashchange', openReplyFromHash);
+    }
     const authForm = document.getElementById('auth-form');
     if (authForm) {
       authForm.addEventListener('submit', async (e) => {
@@ -2870,6 +2950,7 @@
     initTheme, updateThemeToggleUi,
     renderSources, loadSources, triggerCollect, formatSourceTime,
     setSourcesMessage, describeTriggerError,
+    parseReplyHash, openReplyFromHash, closeReplyModal,
     openEventEditModal, closeEventEditModal, applyEditToLocalState,
     readEditFormPayload, showEditFormErrors, syncEditUrlOpenLink,
     copyEditUrl,

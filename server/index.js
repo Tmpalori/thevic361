@@ -30,12 +30,13 @@ import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys, keyedEvents } from './eventcheck.js';
 import { registerGrowth } from './growth.js';
-import { newsletterConfig, createResend, registerNewsletter, signupFormHtml } from './newsletter.js';
+import { newsletterConfig, createResend, registerNewsletter, signupFormHtml, normalizeEmail } from './newsletter.js';
 import { createTremendous, tremendousConfig } from './referralRewards.js';
 import { createMailer, renderSubmissionReceived, renderSubmissionLive, setWeekendIssue } from './notify.js';
 import { registerSubmissionReview, isPaidPick } from './submissionReview.js';
 import { stripeConfig, createStripe, createSponsors, samplePreviews, renderLogoTooLargePage, sameEvent, eventWeekStats, LEAD_IN_DAYS } from './sponsors.js';
 import { slackConfig, createSlack } from './slack.js';
+import { createInbound, inboundConfig } from './inbound.js';
 import { registerContact } from './contact.js';
 import { renderEventCard, eventCardVersion } from './ogImage.js';
 import { capDays, pickDays, shown } from './scoring.js';
@@ -316,6 +317,11 @@ export async function createApp(opts = {}) {
     getPayload: () => loadPublicPayload()
   });
   sponsors.registerWebhook(app);
+  // Replies to news@thevic361.com, received by Resend, posted to Slack
+  // (server/inbound.js). Raw body too, so also before the JSON parser.
+  const inbound = createInbound({ config: inboundConfig(process.env, opts), apiKey: newsletter.apiKey, slack, siteUrl,
+    fetchImpl: opts.inboundFetch || globalThis.fetch, nowFn: () => (opts.now ? opts.now().getTime() : Date.now()) });
+  inbound.register(app);
 
   // The admin's sponsor edit can carry a new logo (a data URL, shrunk in
   // the browser), so it alone gets a bigger JSON limit.
@@ -1878,6 +1884,7 @@ export async function createApp(opts = {}) {
 
   // Contact form → Slack; replaces publishing an email address.
   registerContact(app, { siteUrl, slack, store, requireAdmin, createRateLimiter, sendHtml, verifyHuman });
+  inbound.registerReply(app, { requireAdmin, resend: nlResend, from: newsletter.from, normalizeEmail });
 
   sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman, analyticsSecret });
 
@@ -2203,8 +2210,9 @@ export async function createApp(opts = {}) {
       { key: 'newsletter_auto', label: newsletter.weekend ? 'Newsletter sends itself (Mondays 7:43 AM, Thursdays 7:00 AM)' : 'Newsletter sends itself (Mondays 7:43 AM)', ok: newsletter.enabled && newsletter.autosend, level: 'recommended',
         fix: !newsletter.enabled ? 'Set RESEND_API_KEY in Railway first.'
           : 'NEWSLETTER_AUTOSEND=0 is set in Railway; remove it to send automatically. (Optional backup: NEWSLETTER_CRON_SECRET in Railway and GitHub lets GitHub retry later in the day.)' },
-      { key: 'reply_to', label: 'Customer email replies reach you', ok: Boolean(newsletter.replyTo), level: 'recommended',
-        fix: 'Set NEWSLETTER_REPLY_TO in Railway to an inbox you read; sponsors, submitters and readers who reply to an email land there.' },
+      { key: 'reply_to', label: 'Email replies reach you', ok: Boolean(newsletter.replyTo || newsletter.inbound), level: 'recommended',
+        fix: 'Replies to news@ go to Slack once Resend receives for thevic361.com: in Resend, turn on receiving for the domain and add its MX record; add a webhook (event email.received) to ' + siteUrl +
+          '/api/email/inbound and put its signing secret in Railway as RESEND_WEBHOOK_SECRET. (Or set NEWSLETTER_REPLY_TO to an inbox you read.)' },
       { key: 'scheduler', label: 'Social posts, event check, ads report and AI review start on time',
         ok: github.isConfigured() && !scheduler.state.dispatchBlocked, level: 'recommended',
         fix: scheduler.state.dispatchBlocked
