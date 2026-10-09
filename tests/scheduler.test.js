@@ -13,6 +13,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import { townConfig, townInputs, useTown, VICTORIA } from '../server/town.js';
 
 const job = name => JOBS.find(j => j.name === name);
 let tmpDir;
@@ -139,9 +140,30 @@ describe('createScheduler', () => {
       { file: 'social-kit.yml', ref: 'main', inputs: { scheduled: 'true' } }
     ]);
     expect(github.calls.filter(c => c.file === 'submission-review.yml')).toHaveLength(2); // 8:30 and 8:45 slots
+    expect(github.calls.every(c => !c.inputs || !('town' in c.inputs))).toBe(true); // Victoria's: as before
     expect((await s.ran('social-kit', new Date('2026-10-07T21:00:00Z'))).ran).toBe(true);
     expect((await s.ran('social-kit', new Date('2026-10-08T21:00:00Z'))).ran).toBe(false);
     expect(await s.ran('nope')).toBeNull();
+  });
+
+  it("names another town in every dispatch; Victoria's carry no town (MULTI_CITY_PLAN.md 3.5)", async () => {
+    expect(townInputs(undefined, VICTORIA)).toBeUndefined();
+    expect(townInputs({ scheduled: 'true' }, VICTORIA)).toEqual({ scheduled: 'true' });
+    const bay = townConfig({}, { town: { id: 'bay', siteName: 'The Bay 979', domain: 'thebay979.com', city: 'Bay City', state: 'TX', stateName: 'Texas', timezone: 'America/Chicago' } });
+    useTown(bay);
+    try {
+      const store = await freshStore();
+      const github = fakeGithub();
+      const s = createScheduler({ store, github, log: quiet });
+      await s.tick(new Date('2026-10-07T13:48:00Z'));
+      expect(github.calls.filter(c => c.file !== 'submission-review.yml')).toEqual([
+        { file: 'meta-ads.yml', ref: 'main', inputs: { scheduled: 'true', town: 'bay' } },
+        { file: 'social-kit.yml', ref: 'main', inputs: { scheduled: 'true', town: 'bay' } }
+      ]);
+      expect(github.calls.find(c => c.file === 'submission-review.yml').inputs).toEqual({ town: 'bay' });
+    } finally {
+      useTown(VICTORIA);
+    }
   });
 
   it('leaves dispatch jobs to GitHub\'s cron when no token is set', async () => {

@@ -197,7 +197,8 @@ These matter the moment a second town exists. All keep Victoria's values.
       so one town failing can't cancel Victoria's run. The DST gate reads
       the town's timezone. Stagger cron minutes per town.
 - [ ] **3.5 Scheduler dispatch** passes `town` and the `ran` gate calls the
-      town's own `SITE_URL`.
+      town's own `SITE_URL`. (Dispatch done: `townInputs()`; the gates'
+      `SITE_URL` comes with the town's Environment in 3.3.)
 - [ ] **3.6 Shared budget limits.** Per-town caps for Apify and OpenAI
       (`*_MAX_VENUES` etc.) or separate tokens, so a new town can't trip the
       Apify hard limit and take down Victoria's Facebook and Eventbrite
