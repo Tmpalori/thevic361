@@ -1861,16 +1861,23 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
   border-radius: 20px 20px 0 0;
   pointer-events: none;
 }
-/* An open day's card has no offset drop shadow (folded days keep theirs):
-   every edge is the same 3px border, so the stuck bar lines up flush with
-   the card in every browser (Safari draws the shadow around the bar
-   differently from Chrome). */
-.day-section--fold:has(> details[open]) { box-shadow: none; }
+/* Days with the card's thick offset edge (today and ahead; past days have
+   none): the bar's box also covers the card's own shadow beside the bar,
+   and the bar draws that shadow itself, starting 6px below its rounded
+   corner like the card's, so the edge runs flush up to the corner both at
+   rest and while stuck. The clip keeps it off the list below the bar. */
+.day-section--fold:not(.day-section--past) details[open] summary.day-header { margin-right: -9px; padding-right: calc(var(--space-5) + 9px); }
+.day-section--fold:not(.day-section--past) details[open] summary.day-header::before {
+  right: 6px;
+  box-shadow: 6px 6px 0 var(--ink);
+  clip-path: inset(0 -6px 0 0);
+}
 /* The bar stops at the last event, while the card's sides are still
    straight, so it never runs into the card's rounded bottom. */
 .day-section--fold:has(> details[open]) { padding-bottom: 24px; }
 @media (max-width: 639px) {
   .day-section--fold details[open] summary.day-header { padding-inline: calc(var(--space-3) + 3px); }
+  .day-section--fold:not(.day-section--past) details[open] summary.day-header { padding-right: calc(var(--space-3) + 9px); }
 }
 .day-count { margin-left: auto; font-size: var(--text-sm); font-weight: 800; color: var(--ink); white-space: nowrap; }
 .day-count::after { content: " ▾"; }
