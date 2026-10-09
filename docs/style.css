@@ -1807,8 +1807,16 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
 /* The page is wide (layout wide: true): details on top, price beside the
    bullet list, then the site and newsletter examples side by side. */
 .ad-package__info { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
-.ad-package__info .ad-points { margin: 0; padding-left: 1.2em; }
-.ad-package__info .ad-points li { margin-bottom: var(--space-2); }
+/* "What you get": a checklist of perks, each with a chunky green check
+   sticker, on a sunny card so it reads like a prize list. */
+.ad-checklist-wrap { background: var(--sun-light); color: var(--ink); border: 3px solid var(--ink); border-radius: 18px; box-shadow: 4px 4px 0 var(--ink); padding: var(--space-4); }
+.ad-checklist-title { font-family: var(--font-display); font-weight: 700; font-size: var(--text-lg); margin: 0 0 var(--space-3); }
+.ad-checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.ad-checklist li { display: flex; gap: var(--space-3); align-items: flex-start; line-height: 1.35; }
+.ad-check { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--cactus); color: #fff; border: 2.5px solid var(--ink); box-shadow: 2px 2px 0 var(--ink);
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: 15px; transform: rotate(-6deg); }
+.ad-checklist li:nth-child(even) .ad-check { transform: rotate(5deg); }
+.ad-check-rest { color: #4A4466; font-weight: 500; }
 .ad-package__preview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
 @media (max-width: 760px) {
   .ad-package__info, .ad-package__preview { grid-template-columns: 1fr; }

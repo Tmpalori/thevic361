@@ -425,6 +425,7 @@ export function sponsorStats(order, rows, { recipients = 0, issues = recipients 
   const inWeek = (rows || []).filter(r => r.day >= start && r.day <= end);
   const clicks = inWeek.filter(r => r.kind === 'click' && r.click_type === 'sponsor_click');
   const email = clicks.filter(r => r.path === `/go/s/${start}`);
+  const social = clicks.filter(r => r.path === `/go/s/${start}/social`);
   const site = clicks.filter(r => !String(r.path || '').startsWith('/go/') &&
     (r.ad === order.id || sameLink(r.click_url, order.sponsor && order.sponsor.url)));
   // Seen: the block was at least half on screen for a second (docs/track.js).
@@ -434,6 +435,7 @@ export function sponsorStats(order, rows, { recipients = 0, issues = recipients 
     views: rowCount(seen), view_people: peopleIn(seen), where: whereItRan(seen),
     site_clicks: rowCount(site), site_people: peopleIn(site),
     email_clicks: rowCount(email), email_people: peopleIn(email),
+    social_clicks: rowCount(social), social_people: peopleIn(social),
     site_visitors: peopleIn(inWeek.filter(r => r.kind === 'view')),
     newsletter_recipients: Number(recipients) || 0,
     newsletter_issues: Number(recipients) ? Number(issues) || 1 : 0
@@ -1743,8 +1745,10 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       try {
         const week = /^\d{4}-\d{2}-\d{2}$/.test(req.params.week) ? req.params.week : '';
         const order = week ? (await orders()).find(o => o.kind === 'weekly' && o.week_start === week && LIVE.has(o.status)) : null;
-        const src = req.query.src === 'welcome' ? 'welcome' : 'newsletter';
-        const target = order ? sponsorLandingUrl(order.sponsor && order.sponsor.url, { medium: 'email', campaign: src }) : '';
+        // src=social: the Facebook/Instagram captions (scripts/social_kit.py);
+        // counted apart from email clicks (path /go/s/<week>/social).
+        const src = ['welcome', 'social'].includes(req.query.src) ? req.query.src : 'newsletter';
+        const target = order ? sponsorLandingUrl(order.sponsor && order.sponsor.url, { medium: src === 'social' ? 'social' : 'email', campaign: src }) : '';
         res.set('Cache-Control', 'no-store');
         if (!target) return res.redirect(302, siteUrl);
         const ip = req.ip || req.socket.remoteAddress || '';
@@ -1752,7 +1756,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         if (req.method === 'GET' && !botName(ua) && typeof store.recordTraffic === 'function' && goLimiter.check(ip).ok) {
           const day = localDateStr(nowFn());
           store.recordTraffic({
-            day, kind: 'click', path: `/go/s/${week}`, visitor: visitorHash(ip, ua, day, analyticsSecret),
+            day, kind: 'click', path: `/go/s/${week}${src === 'social' ? '/social' : ''}`, visitor: visitorHash(ip, ua, day, analyticsSecret),
             click_type: 'sponsor_click', click_url: String(order.sponsor.url || '').slice(0, 300)
           }).catch(err => console.warn('[sponsors] click record failed:', err.message));
         }

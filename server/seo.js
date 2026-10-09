@@ -1150,12 +1150,19 @@ export const AD_PACKAGES = [
     price: '$300 / week',
     amount: 30000,
     blurb: 'Pick a week and write your message; it goes live on its own that Monday.',
-    where: 'Every page of thevic361.com for a whole week, plus the top of that week’s two newsletters (Monday and Thursday).',
+    where: 'Every page of thevic361.com for a whole week, the top of that week’s two newsletters (Monday and Thursday), and a shout-out in our Facebook and Instagram posts that week.',
     limit: 'One sponsor a week, so you’re the only one.',
+    // The "what you get" checklist: [bold, rest]. Every line must be true
+    // (newsletter.js sponsorHtml, seo.js sponsorHtml, social_kit.py
+    // sponsor_lines, sponsors.js sponsorStats).
     points: [
-      'Your name, message and button on every page of the site, all week',
-      'The sponsor spot at the top of both newsletters that week: Monday’s and Thursday’s weekend issue',
-      'A report the Monday after: how often your block was seen, where, and how many clicked'
+      ['Top of the newsletter', 'in both issues that week, Monday and Thursday'],
+      ['Every page of thevic361.com', 'all week long'],
+      ['Shout-out on Facebook', 'in our posts that week, with your link'],
+      ['Shout-out on Instagram', 'in our posts that week'],
+      ['Your logo, message and button', 'written by you'],
+      ['No competitors', 'one sponsor a week, so it’s all yours'],
+      ['Your results report', 'views, clicks and where you were seen, the Monday after']
     ]
   },
   {
@@ -1167,10 +1174,13 @@ export const AD_PACKAGES = [
     where: 'Your event highlighted on its day with the Vic’s Pick badge, on the site, its event page and our social posts, and in the newsletter when you book before the issue goes out (Monday’s covers the week, Thursday’s the weekend).',
     limit: 'Only 3 a day Mon–Thu and 4 a day Fri–Sun, so book early.',
     points: [
-      'Guaranteed listing, highlighted on its day on the site',
-      'Featured first in our social posts, and starred in the newsletter when booked before the issue goes out',
-      'A report the day after: times seen, page views, clicks, calendar adds and shares',
-      'Best for concerts, fundraisers, openings, and festivals'
+      ['Vic’s Pick badge', 'your event stands out on its day'],
+      ['Guaranteed listing', 'free listings aren’t'],
+      ['Starred in the newsletter', 'when you book before the issue goes out'],
+      ['Featured first on Facebook', 'in our posts for your day'],
+      ['Featured first on Instagram', 'in our posts for your day'],
+      ['Highlighted on its event page', 'tagged Featured on The Vic 361'],
+      ['Your results report', 'views, clicks, calendar adds and shares, the day after']
     ]
   }
 ];
@@ -1229,7 +1239,10 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
             <p class="ad-limit">${escHtml(p.limit)}</p>
             ${checkout ? `<a class="btn btn--primary ad-buy" href="/advertise/checkout?package=${escHtml(p.key)}">Preview yours and book →</a>` : ''}
           </div>
-          <ul class="ad-points">${p.points.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul>
+          <div class="ad-checklist-wrap">
+            <p class="ad-checklist-title">What you get</p>
+            <ul class="ad-checklist" role="list">${p.points.map(([b, rest]) => `<li><span class="ad-check" aria-hidden="true">✓</span><span><strong>${escHtml(b)}</strong>${rest ? ` <span class="ad-check-rest">${escHtml(rest)}</span>` : ''}</span></li>`).join('')}</ul>
+          </div>
         </div>
         ${previews[p.key] || emailPreviews[p.key] ? `<div class="ad-package__preview" aria-label="Example of a ${escHtml(p.name)}">` +
           (previews[p.key] ? `<div class="ad-preview"><p class="ad-preview-label">On the site</p>${previews[p.key]}</div>` : '') +

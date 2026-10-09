@@ -1126,3 +1126,36 @@ describe('selling it on /advertise', () => {
     expect(advertiseStats(evs, now, 247).subscribers).toBe(240);
   });
 });
+
+describe('weekly sponsor on Facebook and Instagram', () => {
+  const weeklyOrder = (extra = {}) => ({
+    id: 'wk1', kind: 'weekly', status: 'paid', amount: 30000, week_start: '2026-09-28', created_at: '2026-09-20T00:00:00Z',
+    business: 'Acme Tacos', email: 'acme@example.com',
+    sponsor: { name: 'Acme Tacos', text: 'Best tacos.', cta: 'Order', url: 'https://acme.example', address: '' }, ...extra
+  });
+  it('the social link counts apart from email clicks, tagged utm_medium=social, and shows in the report', async () => {
+    await startApp();
+    await store.saveSponsorOrder(weeklyOrder({ week_start: '2026-10-05' }));
+    const r = await fetch(`${baseUrl}/go/s/2026-10-05?src=social`, { redirect: 'manual', headers: { 'User-Agent': 'Mozilla/5.0 (iPhone)' } });
+    expect(r.headers.get('location')).toBe('https://acme.example/?utm_source=thevic361&utm_medium=social&utm_campaign=social');
+    const rows = async () => (await store.listTraffic('2026-01-01')).filter(x => String(x.path).startsWith('/go/s/2026-10-05'));
+    for (let i = 0; i < 100 && !(await rows()).length; i++) await new Promise(res => setTimeout(res, 20));
+    expect((await rows()).map(x => x.path)).toEqual(['/go/s/2026-10-05/social']);
+    const stats = sponsorStats(weeklyOrder({ week_start: '2026-10-05' }), await rows());
+    expect(stats).toMatchObject({ social_clicks: 1, social_people: 1, email_clicks: 0 });
+    const { renderSponsorReport } = await import('../server/notify.js');
+    const report = renderSponsorReport(weeklyOrder({ week_start: '2026-10-05' }), { ...stats, site_people: 0, email_people: 0 }, { siteUrl: 'https://www.thevic361.com', address: '1 Main' });
+    expect(report.text).toContain('- Clicked your link in our Facebook and Instagram posts: 1 person');
+    expect(report.subject).toBe('Your Vic 361 sponsor week: 1 person clicked');
+  });
+
+  it('/advertise sells it as a checklist of perks', async () => {
+    await startApp();
+    const html = await (await fetch(baseUrl + '/advertise')).text();
+    expect(html.match(/<p class="ad-checklist-title">What you get<\/p>/g)).toHaveLength(2);
+    for (const perk of ['Top of the newsletter', 'Every page of thevic361.com', 'Shout-out on Facebook', 'Shout-out on Instagram',
+      'Your results report', 'Featured first on Facebook', 'Featured first on Instagram', 'Starred in the newsletter']) {
+      expect(html).toContain(`<strong>${perk}</strong>`);
+    }
+  });
+});
