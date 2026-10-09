@@ -63,6 +63,7 @@ describe('/api/hq/summary', () => {
       town: { id: 'victoria', name: 'The Vic 361', site_url: 'https://www.thevic361.com', admin_url: 'https://www.thevic361.com/admin.html' },
       subscribers: { active: 0, pending: 1 },
       revenue: { month_to_date: { month: '2026-10', cents: 30000, orders: 1 }, orders_by_status: { paid: 1 } },
+      sponsors: { weeks_booked_next_4: 1, weeks_open_next_4: 3, picks_sold_this_month: 0 },
       submissions_waiting: 0,
       health: { database: false, scheduler_blocked: false, slack_refused: false }
     });

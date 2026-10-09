@@ -217,7 +217,8 @@ These matter the moment a second town exists. All keep Victoria's values.
       date, last month, orders by status); submissions waiting; upcoming
       event count and last collect; health (database, scheduler, Slack
       refusals); setup checklist status; admin URL.
-- [ ] **4.2 HQ service**: separate Railway service with its own login. Its
+- [ ] **4.2 HQ service** (code done: `hq/server.js`, setup in RAILWAY.md;
+      the Railway service isn't created yet): separate Railway service with its own login. Its
       town list (`slug`, `site_url`, key) in its own env. One screen:
       totals across towns, a row per town (subscribers, open rate, revenue
       this month, open sponsor weeks, picks sold, waiting submissions,

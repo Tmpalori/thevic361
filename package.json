@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node server/index.js",
+    "hq": "node hq/server.js",
     "test": "vitest run"
   },
   "dependencies": {

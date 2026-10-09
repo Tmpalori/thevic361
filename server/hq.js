@@ -11,10 +11,25 @@
 
 import crypto from 'node:crypto';
 import { dailyGrowth, sumDays, issueReport, monthRevenue, goals } from './growth.js';
-import { localDateStr, addDays } from './seo.js';
+import { localDateStr, addDays, currentWeek } from './seo.js';
 
 const CACHE_MS = 60 * 1000;
 const KEPT = new Set(['paid', 'processing', 'active', 'hidden']);
+
+// The next four sponsor weeks (from next Monday) booked or open, and picks
+// paid this month. Test orders don't count.
+export function sponsorCounts(orders, today) {
+  const live = (orders || []).filter(o => o && !o.test && KEPT.has(o.status));
+  const nextMonday = addDays(currentWeek(today)[0], 7);
+  const weeks = [0, 1, 2, 3].map(i => addDays(nextMonday, i * 7));
+  const booked = weeks.filter(w => live.some(o => o.kind === 'weekly' && o.week_start === w)).length;
+  const month = today.slice(0, 7);
+  return {
+    weeks_booked_next_4: booked,
+    weeks_open_next_4: weeks.length - booked,
+    picks_sold_this_month: live.filter(o => o.kind === 'featured' && String(o.paid_at || '').slice(0, 7) === month).length
+  };
+}
 
 function keyOk(header, key) {
   const m = /^Bearer (.+)$/.exec(String(header || ''));
@@ -65,6 +80,7 @@ export async function buildSummary({ store, nowFn, town, siteUrl, commit, getEve
       orders_by_status: byStatus,
       live_orders: orders.filter(o => o && !o.test && KEPT.has(o.status)).length
     },
+    sponsors: sponsorCounts(orders, today),
     submissions_waiting: s.status.pending_submissions ?? null,
     events: { upcoming: s.status.upcoming_events ?? null, last_collect: s.status.collected_at ?? null, published_at: s.status.published_at ?? null },
     health: await safe(health, null),
