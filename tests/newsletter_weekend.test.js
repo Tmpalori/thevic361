@@ -2,7 +2,7 @@
 // Sunday, its own send and key, skippable from /email-prefs, scheduled
 // Thursday 7:00 AM, and counted in pick and sponsor promises and reports.
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -251,8 +251,8 @@ describe('second review fixes', () => {
     await store.importSubscribers(['a@example.com'], 'import');
     const [a] = await store.listSubscribers({ status: 'active' });
     await fetch(`${baseUrl}/email/o/2026-10-08/${a.id}.gif`);
-    await new Promise(r => setTimeout(r, 50));
-    expect(await store.countEmailOpens(['2026-10-08'])).toEqual({ '2026-10-08': 1 });
+    // The open is recorded after the pixel is sent: wait for it.
+    await vi.waitFor(async () => expect(await store.countEmailOpens(['2026-10-08'])).toEqual({ '2026-10-08': 1 }));
   });
 
   it('a pending subscriber\'s settings link changes nothing', async () => {
