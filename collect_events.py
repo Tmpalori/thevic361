@@ -3928,6 +3928,11 @@ def _apify_headers(token):
 _APIFY_LIMIT_TRIPPED = False
 
 
+# --local-dir (main sets it): its venues.json comes first, then the one
+# next to this file. Tests point it at a temp dir instead of the real file.
+_VENUE_DIR = None
+
+
 def _load_venue_list():
     """Return the active venue list, with venues.json as the primary source.
 
@@ -3937,8 +3942,12 @@ def _load_venue_list():
     Sunday collector running through the transition.
     """
     here = os.path.dirname(__file__) or "."
-    for fname in ("venues.json", "facebook_venues.json", "facebook_venues.backup.json"):
-        path = os.path.join(here, fname)
+    dirs = [here]
+    if _VENUE_DIR and os.path.abspath(_VENUE_DIR) != os.path.abspath(here):
+        dirs.insert(0, _VENUE_DIR)
+    for path in (os.path.join(d, f) for d in dirs
+                 for f in ("venues.json", "facebook_venues.json", "facebook_venues.backup.json")):
+        fname = os.path.basename(path)
         if not os.path.exists(path):
             continue
         try:
@@ -5312,6 +5321,49 @@ def fetch_apify_instagram_posts(days_ahead=14):
 
 # ─── MAIN ────────────────────────────────────────────────────────────────────
 
+# ─── Sources ─────────────────────────────────────────────────────────────
+# Every web source, in run order: (name, fetch function's name,
+# expect_events), looked up when it runs. expect_events
+# False means 0 can be normal (nothing posted ahead, between shows,
+# off-season, or a source that only runs with its API key); each of those
+# warns on its own when its page no longer looks like it did.
+WEB_SOURCES = [
+    ("city_calendar", "fetch_city_calendar", True),
+    ("chamber", "fetch_chamber_events", True),
+    ("library", "fetch_library_events", True),
+    ("moonshine", "fetch_moonshine_events", False),
+    ("vtx_artwalk", "fetch_vtx_artwalk", False),
+    ("jwelch", "fetch_jwelch_events", False),
+    ("theatre_victoria", "fetch_theatre_victoria_events", False),
+    ("generals", "fetch_generals_events", False),
+    ("allevents", "fetch_allevents_events", True),
+    ("gemini_search", "fetch_gemini_events", False),          # only with GEMINI_API_KEY
+    ("apify_facebook", "fetch_apify_facebook_events", False),  # only with APIFY_TOKEN
+    ("apify_eventbrite", "fetch_apify_eventbrite_events", False),
+    # Posts → OpenAI event extraction, off unless FB_POSTS_ENABLED /
+    # IG_POSTS_ENABLED; they pull from venues.json's pages and handles.
+    ("apify_facebook_posts", "fetch_apify_facebook_posts", False),
+    ("apify_instagram_posts", "fetch_apify_instagram_posts", False),
+]
+# Scrapers of one town's own websites (Victoria's city calendar, chamber,
+# library, venues). Another town gets them only by naming them.
+LOCAL_SOURCES = {"city_calendar", "chamber", "library", "moonshine", "vtx_artwalk", "jwelch", "theatre_victoria", "generals"}
+
+
+def enabled_web_sources(town=None):
+    """The town's web sources in run order: its enabled_sources when it lists
+    them (Victoria lists all), else every source but the local scrapers."""
+    town = town or TOWN
+    names = [n for n, _, _ in WEB_SOURCES]
+    wanted = town.get("enabled_sources")
+    if wanted is None:
+        return [s for s in WEB_SOURCES if s[0] not in LOCAL_SOURCES]
+    unknown = [n for n in wanted if n not in names]
+    if unknown:
+        raise ValueError(f"TOWN={town['id']}: unknown sources in enabled_sources: {', '.join(unknown)}")
+    return [s for s in WEB_SOURCES if s[0] in set(wanted)]
+
+
 def main():
     parser = argparse.ArgumentParser(description="The Vic 361 — Event Collector")
     parser.add_argument("--output", default="./events.json", help="Output JSON path")
@@ -5363,6 +5415,8 @@ def main():
 
     # 1. Local YAML (backbone)
     print("📂 Local events...")
+    global _VENUE_DIR
+    _VENUE_DIR = args.local_dir
     yaml_path = os.path.join(args.local_dir, "local_events.yaml")
     _local_started = _stamp()
     try:
@@ -5388,53 +5442,12 @@ def main():
     all_events.extend(safe_fetch("google_sheet", fetch_google_sheet_events,
                                  args=(args.days,), expect_events=False))
 
-    # 3. Web sources — each wrapped so a crash or zero-return doesn't kill the run
+    # 3. Web sources — each wrapped so a crash or zero-return doesn't kill the run.
+    # The town's sources, in WEB_SOURCES order (enabled_web_sources).
     if not args.skip_web:
         print("\n📡 Web sources...")
-        all_events.extend(safe_fetch("city_calendar", fetch_city_calendar, args=(args.days,)))
-        all_events.extend(safe_fetch("chamber", fetch_chamber_events, args=(args.days,)))
-        all_events.extend(safe_fetch("library", fetch_library_events, args=(args.days,)))
-        # Moonshine, VTX Art Walk, J Welch, Theatre Victoria and Generals can
-        # legitimately have 0 (nothing posted ahead / between walks / between
-        # shows / off-season); each warns on its own when its page no longer
-        # looks like it did.
-        all_events.extend(safe_fetch("moonshine", fetch_moonshine_events,
-                                     args=(args.days,), expect_events=False))
-        all_events.extend(safe_fetch("vtx_artwalk", fetch_vtx_artwalk,
-                                     args=(args.days,), expect_events=False))
-        all_events.extend(safe_fetch("jwelch", fetch_jwelch_events,
-                                     args=(args.days,), expect_events=False))
-        all_events.extend(safe_fetch("theatre_victoria", fetch_theatre_victoria_events,
-                                     args=(args.days,), expect_events=False))
-        all_events.extend(safe_fetch("generals", fetch_generals_events,
-                                     args=(args.days,), expect_events=False))
-        all_events.extend(safe_fetch("allevents", fetch_allevents_events,
-                                     args=(args.days,)))
-        # Gemini + Google Search — only runs if GEMINI_API_KEY is set
-        all_events.extend(safe_fetch("gemini_search", fetch_gemini_events,
-                                     args=(args.days,), expect_events=False))
-
-        # Apify Facebook events — only runs if APIFY_TOKEN is set
-        all_events.extend(safe_fetch("apify_facebook", fetch_apify_facebook_events,
-                                     args=(args.days,), expect_events=False))
-
-        # Eventbrite (Apify) — on whenever APIFY_TOKEN is set.
-        all_events.extend(safe_fetch("apify_eventbrite", fetch_apify_eventbrite_events,
-                                     args=(args.days,), expect_events=False))
-
-        # Apify Facebook *posts* → OpenAI event extraction. Off by default;
-        # set FB_POSTS_ENABLED=1 to enable. Pulls from each high-confidence
-        # venue page so we catch events announced as posts ("live music
-        # tonight 7pm") that never become formal Event pages.
-        all_events.extend(safe_fetch("apify_facebook_posts", fetch_apify_facebook_posts,
-                                     args=(args.days,), expect_events=False))
-
-        # Apify Instagram *posts* → OpenAI event extraction. Off by default;
-        # set IG_POSTS_ENABLED=1 to enable. Mirrors the FB-posts pipeline but
-        # tier-aware (HIGH=25 posts, MEDIUM=15 posts) and pulls from each
-        # tiered venue's Instagram handle when one is known.
-        all_events.extend(safe_fetch("apify_instagram_posts", fetch_apify_instagram_posts,
-                                     args=(args.days,), expect_events=False))
+        for name, fn, expect in enabled_web_sources():  # fn: a function name in this module
+            all_events.extend(safe_fetch(name, globals()[fn], args=(args.days,), expect_events=expect))
 
     # 5. Merge + deduplicate
     print(f"\n🔀 Merging {len(all_events)} raw entries...")

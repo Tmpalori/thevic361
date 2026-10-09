@@ -124,20 +124,18 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
         already returns them); week math in the town's timezone; sponsor
         pitch copy from `town`. Keep every `vic361_*` key.
   - [x] e. `robots.txt` from a route using `siteUrl`.
-- [ ] **1.4 Python `town.py`** (twin of `server/town.js`, same
+- [x] **1.4 Python `town.py`** (twin of `server/town.js`, same
       `towns/<slug>/town.json`): timezone, `SITE_URL`, brand strings,
       hashtags, area ZIPs and other-towns list, AllEvents slug, Facebook and
       Eventbrite queries, Gemini categories, Google Sheet ID, enabled
       sources, AI prompt place names, social slide text. `TOWN` unset =
       today's literals; Python goldens unchanged.
-      (In progress: `town.py`, the scripts and the collector's town values
-      (timezone, area ZIPs, other towns, AllEvents, Sheet, Eventbrite and
-      Facebook searches, Gemini categories, prompts, place checks) are done;
-      a–c next.)
-  - [ ] a. Turn the 11 Victoria-only scrapers into a registry selected by
-        `enabled_sources` (Victoria enables all of them).
-  - [ ] b. Make `_load_venue_list` honor `--local-dir`.
-  - [ ] c. Stop `test_fb_posts.py` / `test_ig_posts.py` from overwriting the
+  - [x] a. Turn the 11 Victoria-only scrapers into a registry selected by
+        `enabled_sources` (Victoria enables all of them). `WEB_SOURCES` in
+        `collect_events.py`; a town without the list gets every source but
+        the 8 local scrapers.
+  - [x] b. Make `_load_venue_list` honor `--local-dir`.
+  - [x] c. Stop `test_fb_posts.py` / `test_ig_posts.py` from overwriting the
         real root `venues.json`.
 
 ## Phase 2: isolation, so towns can't touch each other

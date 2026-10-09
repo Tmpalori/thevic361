@@ -137,3 +137,34 @@ def test_collector_for_another_town(bay):
 def test_no_county(tmp_path, monkeypatch):
     t = town_mod.town_config(town={**BAY, "county": None})
     assert t["county"] == "" and t["area_name"] == "the Bay City area"
+
+
+def test_web_sources_victoria_runs_all_in_order():
+    import collect_events as ce
+    assert [(n, e) for n, _, e in ce.enabled_web_sources(town_mod.VICTORIA)] == [
+        ("city_calendar", True), ("chamber", True), ("library", True), ("moonshine", False),
+        ("vtx_artwalk", False), ("jwelch", False), ("theatre_victoria", False), ("generals", False),
+        ("allevents", True), ("gemini_search", False), ("apify_facebook", False), ("apify_eventbrite", False),
+        ("apify_facebook_posts", False), ("apify_instagram_posts", False)]
+    assert all(callable(getattr(ce, fn)) for _, fn, _ in ce.WEB_SOURCES)
+
+
+def test_web_sources_another_town():
+    import collect_events as ce
+    bay = town_mod.town_config(town=BAY)
+    assert [n for n, _, _ in ce.enabled_web_sources(bay)] == [
+        "allevents", "gemini_search", "apify_facebook", "apify_eventbrite", "apify_facebook_posts", "apify_instagram_posts"]
+    picked = town_mod.town_config(town={**BAY, "enabledSources": ["gemini_search", "allevents"]})
+    assert [n for n, _, _ in ce.enabled_web_sources(picked)] == ["allevents", "gemini_search"]  # run order, not list order
+    with pytest.raises(ValueError, match="unknown sources in enabled_sources: nope"):
+        ce.enabled_web_sources({**bay, "enabled_sources": ["allevents", "nope"]})
+
+
+def test_venue_list_comes_from_local_dir(tmp_path, monkeypatch):
+    import collect_events as ce
+    (tmp_path / "venues.json").write_text(json.dumps([{"name": "Bay Hall"}]))
+    monkeypatch.setattr(ce, "_VENUE_DIR", str(tmp_path))
+    assert ce._load_venue_list() == ([{"name": "Bay Hall"}], str(tmp_path / "venues.json"))
+    monkeypatch.setattr(ce, "_VENUE_DIR", None)
+    venues, path = ce._load_venue_list()
+    assert venues and os.path.abspath(os.path.dirname(path)) == os.path.dirname(os.path.abspath(ce.__file__))

@@ -54,29 +54,12 @@ def reset_state(monkeypatch, tmp_path):
         },
         {"name": "No URL Venue", "confidence": "high"},  # missing facebook_page
     ]
-    # The collector now prefers venues.json over facebook_venues.json. We
-    # write our test fixture to venues.json so it shadows the real seed list,
-    # and restore both files afterward.
-    repo_dir = os.path.dirname(ce.__file__)
-    originals = {}
-    fixture_paths = ["venues.json", "facebook_venues.json"]
-    for fname in fixture_paths:
-        path = os.path.join(repo_dir, fname)
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                originals[fname] = f.read()
-    primary = os.path.join(repo_dir, "venues.json")
-    with open(primary, "w") as f:
+    # The collector reads venues.json from --local-dir (ce._VENUE_DIR)
+    # first, so the fixture goes in a temp dir and the repo's own
+    # venues.json is never touched.
+    monkeypatch.setattr(ce, "_VENUE_DIR", str(tmp_path))
+    with open(tmp_path / "venues.json", "w") as f:
         json.dump(venues, f)
-
-    yield
-
-    for fname, content in originals.items():
-        with open(os.path.join(repo_dir, fname), "w") as f:
-            f.write(content)
-    # If venues.json didn't originally exist, remove the test artifact.
-    if "venues.json" not in originals and os.path.exists(primary):
-        os.remove(primary)
 
 
 # ─── Tests ──────────────────────────────────────────────────────────────────
