@@ -16,11 +16,11 @@ import { town } from './town.js';
  *   - /about, /sitemap.xml and /llms.txt built from the same data
  *
  * All functions are pure over (payload, now) so tests can pin dates.
- * Dates are computed in America/Chicago because that's where Victoria is;
+ * Dates are computed in the town's timezone (town.timezone; Victoria's is
+ * America/Chicago);
  * the server itself runs in UTC on Railway.
  */
 
-const TZ = 'America/Chicago';
 const UPCOMING_DAYS = 60;
 // Link-preview image: 1200x630 (the shape Facebook, X and iMessage use for
 // large cards), outside robots.txt's /social/ block, and fixed content so a
@@ -291,12 +291,12 @@ function jsonLd(obj) {
     '</script>';
 }
 
-// ─── Dates (America/Chicago) ─────────────────────────────────────────────
+// ─── Dates (the town's timezone) ─────────────────────────────────────────────
 
-// YYYY-MM-DD for `now` as seen in Victoria.
+// YYYY-MM-DD for `now` as seen in the town.
 export function localDateStr(now) {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit'
+    timeZone: town.timezone, year: 'numeric', month: '2-digit', day: '2-digit'
   }).format(now);
   return parts; // en-CA formats as YYYY-MM-DD
 }
@@ -369,15 +369,16 @@ export function dateRange(kind, today) {
   return [today, addDays(today, UPCOMING_DAYS)];
 }
 
-// Chicago UTC offset ("-05:00" / "-06:00") for a given date, so JSON-LD
-// startDate carries an explicit offset as Google recommends.
-export function chicagoOffset(dateStr) {
+// The town's UTC offset for a given date ("-05:00" / "-06:00" in Victoria),
+// so JSON-LD startDate carries an explicit offset as Google recommends.
+// shortOffset reads "GMT-5", "GMT+5:30", or plain "GMT" for UTC itself.
+export function utcOffset(dateStr) {
   const name = new Intl.DateTimeFormat('en-US', {
-    timeZone: TZ, timeZoneName: 'shortOffset'
+    timeZone: town.timezone, timeZoneName: 'shortOffset'
   }).formatToParts(parseYmd(dateStr)).find(p => p.type === 'timeZoneName');
-  const m = name && name.value.match(/GMT([+-]\d+)/);
-  const h = m ? Number(m[1]) : -6;
-  return (h < 0 ? '-' : '+') + String(Math.abs(h)).padStart(2, '0') + ':00';
+  const m = name && name.value.match(/GMT([+-])(\d+)(?::(\d+))?/);
+  if (!m) return '+00:00';
+  return m[1] + m[2].padStart(2, '0') + ':' + (m[3] || '00').padStart(2, '0');
 }
 
 // Pull "7:00 PM" / "10am" style times out of free-form strings like
@@ -653,7 +654,7 @@ export function eventsBetween(events, start, end, filter) {
 
 export function eventJsonLd(ev, siteUrl) {
   const times = parseTimes(ev.time);
-  const offset = chicagoOffset(ev.date);
+  const offset = utcOffset(ev.date);
   const startDate = times[0] ? `${ev.date}T${times[0]}:00${offset}` : ev.date;
   // "9:30 PM – 2:00 AM" ends the next day; same-day would put endDate
   // before startDate, which Google rejects (guides.js eventInstants agrees).
@@ -681,7 +682,7 @@ export function eventJsonLd(ev, siteUrl) {
   };
   // Google flags a missing endDate. With no end time listed, the event ends
   // when it starts rather than at a made-up hour.
-  obj.endDate = times[1] ? `${endDay}T${times[1]}:00${chicagoOffset(endDay)}` : startDate;
+  obj.endDate = times[1] ? `${endDay}T${times[1]}:00${utcOffset(endDay)}` : startDate;
   if (ev.description) obj.description = ev.description;
   // We don't track organizers or performers; the venue is who hosts it.
   // Without a venue there's nothing honest to name, so both stay off.
@@ -701,7 +702,7 @@ export function eventJsonLd(ev, siteUrl) {
     ...(ev.free === true ? { price: 0 } : {}),
     priceCurrency: 'USD',
     availability: 'https://schema.org/InStock',
-    validFrom: `${validDay}T00:00:00${chicagoOffset(validDay)}`,
+    validFrom: `${validDay}T00:00:00${utcOffset(validDay)}`,
     url: safeUrl(ev.url) || `${siteUrl}${ev.page}`
   };
   if (ev.free === true) obj.isAccessibleForFree = true;

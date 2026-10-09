@@ -35,14 +35,16 @@
  * (401/403) gets one Slack alert a week and a setup-checklist warning.
  */
 
-const TZ = 'America/Chicago';
+import { town } from './town.js';
+
 const MIN = 60 * 1000;
 
-// Central wall-clock parts of an instant.
-export function centralParts(now) {
+// Wall-clock parts of an instant in the town's timezone (Central for
+// Victoria; the job times below are in it).
+export function localParts(now) {
   const parts = {};
   for (const p of new Intl.DateTimeFormat('en-US', {
-    timeZone: TZ, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: town.timezone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', weekday: 'short'
   }).formatToParts(now)) parts[p.type] = p.value;
   const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday);
@@ -80,7 +82,7 @@ export const JOBS = [
 
 // The slot a job is due in right now, or null when it isn't due.
 export function dueSlot(job, now) {
-  const c = centralParts(now);
+  const c = localParts(now);
   if (job.every) {
     const n = Math.floor(c.minutes / job.every) * job.every;
     return `${c.date}T${pad(Math.floor(n / 60))}:${pad(n % 60)}`;
@@ -94,7 +96,7 @@ export function dueSlot(job, now) {
 // its time has passed, else the previous matching day). For the fallback
 // crons' "did the site already do this?" question.
 export function lastSlot(job, now) {
-  const c = centralParts(now);
+  const c = localParts(now);
   for (let i = 0; i <= 7; i++) {
     const d = prevDate(c.date, i);
     if (job.dow != null && dowOf(d) !== job.dow) continue;
