@@ -13,7 +13,7 @@
  *   - Submitter email + IP never leave the admin scope.
  */
 
-import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths, townBootProblems } from './town.js';
+import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths, townBootProblems, townInputs } from './town.js';
 import { localizeHtml } from './localize.js';
 import express from 'express';
 import compression from 'compression';
@@ -1267,7 +1267,7 @@ export async function createApp(opts = {}) {
       });
     }
     try {
-      await github.dispatchWorkflow(WEEKLY_COLLECT_WORKFLOW, github.branch);
+      await github.dispatchWorkflow(WEEKLY_COLLECT_WORKFLOW, github.branch, townInputs());
       res.json({
         ok: true,
         workflow: WEEKLY_COLLECT_WORKFLOW,

@@ -204,6 +204,13 @@ export function townBootProblems(t, { siteUrl = '', emailFrom = '' } = {}) {
   return problems;
 }
 
+// Inputs for a workflow the server dispatches (MULTI_CITY_PLAN.md 3.5):
+// another town names itself in the workflows' `town` input; Victoria's
+// dispatches stay as they were (no input means victoria).
+export function townInputs(inputs, t = town) {
+  return t.id === VICTORIA.id ? inputs : { ...(inputs || {}), town: t.id };
+}
+
 // The process's town. A live binding: modules that import it see useTown's
 // change, so read its fields when rendering, never copy them at load.
 export let town = townConfig();
