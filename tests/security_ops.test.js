@@ -117,7 +117,7 @@ describe('ad beacons are capped per client per ad per day (finding 8)', () => {
   });
 });
 
-describe('one open sponsor hold per client (finding 2)', () => {
+describe('open sponsor holds per client are capped (finding 2)', () => {
   function fakeStripe(sessions, expired) {
     return {
       createCheckoutSession: async (params, key) => {
@@ -132,23 +132,29 @@ describe('one open sponsor hold per client (finding 2)', () => {
   const post = (base, fields, ip) => fetch(base + '/advertise/checkout', { method: 'POST', redirect: 'manual',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Forwarded-For': ip }, body: new URLSearchParams(fields).toString() });
 
-  it('a new checkout from the same address replaces its earlier hold, whatever the email', async () => {
+  it('one address holds at most three checkouts; a fourth releases its oldest', async () => {
     const sessions = [], expired = [];
-    const { base, store } = await startApp({ stripeSecretKey: 'sk_test', stripeWebhookSecret: 'whsec_test', stripe: fakeStripe(sessions, expired) });
+    let t = NOW.getTime();   // a minute between checkouts, so "oldest" is well defined
+    const { base, store } = await startApp({ stripeSecretKey: 'sk_test', stripeWebhookSecret: 'whsec_test', stripe: fakeStripe(sessions, expired),
+      now: () => new Date(t) });
     const weeks = ['2026-10-12', '2026-10-19', '2026-10-26', '2026-11-02'];
-    for (const [i, w] of weeks.entries()) expect((await post(base, weekly(w, `buyer${i}@x.example`), '203.0.113.20')).status).toBe(303);
+    for (const [i, w] of weeks.entries()) {
+      expect((await post(base, weekly(w, `buyer${i}@x.example`), '203.0.113.20')).status).toBe(303);
+      t += 60 * 1000;
+    }
     const orders = await store.listSponsorOrders();
-    expect(orders.filter(o => o.status === 'pending').map(o => o.week_start)).toEqual(['2026-11-02']);
-    expect(orders.filter(o => o.status === 'cancelled')).toHaveLength(3);
-    expect(expired).toEqual(sessions.slice(0, 3).map(s => s.id));
+    // Several real buyers can share an address (a mobile carrier), so three stay held.
+    expect(orders.filter(o => o.status === 'pending').map(o => o.week_start).sort()).toEqual(['2026-10-19', '2026-10-26', '2026-11-02']);
+    expect(orders.filter(o => o.status === 'cancelled').map(o => o.week_start)).toEqual(['2026-10-12']);
+    expect(expired).toEqual([sessions[0].id]);
     // The order stores a hash, not the address.
     expect(JSON.stringify(orders)).not.toContain('203.0.113.20');
     expect(orders[0].client).toMatch(/^[0-9a-f]{16}$/);
 
     // The earlier weeks are free again for someone else.
     expect((await post(base, weekly('2026-10-12', 'other@y.example'), '198.51.100.30')).status).toBe(303);
-    // Coming back to its own held week from the same address isn't blocked.
-    expect((await post(base, weekly('2026-11-02', 'new@x.example'), '203.0.113.20')).status).toBe(303);
+    // A buyer coming back to their own held week isn't blocked.
+    expect((await post(base, weekly('2026-11-02', 'buyer3@x.example'), '203.0.113.20')).status).toBe(303);
   });
 
   it('the same email from another address also replaces its hold', async () => {

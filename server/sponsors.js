@@ -137,6 +137,9 @@ function isHold(o, nowMs, email = '') {
 // Who started a checkout, for "one open hold per client": the client's
 // address (ipKey, IPv6 on its /64), hashed with a server secret so no IP is
 // stored on the order.
+// Open (unpaid) checkouts one network address may hold at once.
+export const MAX_HOLDS_PER_CLIENT = 3;
+
 export function holdClient(ip, secret = '') {
   return crypto.createHash('sha256').update(`hold|${secret}|${ipKey(ip)}`).digest('hex').slice(0, 16);
 }
@@ -1898,8 +1901,14 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           // could otherwise hold every week and pick slot, 35 minutes at a
           // time with a new email each. This client's own open holds are
           // replaced below, so they don't block the slot it asks for now.
+          // A network address is shared by everyone behind it (a mobile
+          // carrier, an office), so it may hold a few checkouts at once; past
+          // that its oldest are released. An email holds one.
           const nowMs = nowFn().getTime();
-          const mine = x => x.client === client && isHold(x, nowMs);
+          const clientHolds = ctx.orders.filter(x => x.client === client && isHold(x, nowMs))
+            .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+          const dropping = new Set(clientHolds.slice(0, Math.max(0, clientHolds.length - (MAX_HOLDS_PER_CLIENT - 1))).map(x => x.id));
+          const mine = x => dropping.has(x.id);
           const v = validateOrder(pkg.key, body, { ...ctx, orders: ctx.orders.filter(x => !mine(x)) });
           if (!v.ok) return { errors: v.errors };
           // Same clock as bookableWeeks, so the hold window lines up.
