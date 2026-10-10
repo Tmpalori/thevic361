@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-label="Tupelo Current">
+  <defs><clipPath id="f"><circle cx="32" cy="32" r="29"/></clipPath></defs>
+  <circle cx="32" cy="32" r="29" fill="#24306B"/>
+  <g clip-path="url(#f)" stroke="#141A3A" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M-2 52Q32 44 66 52V66H-2Z" fill="#3E9B5F" stroke-width="3"/>
+    <path d="M35 4L17 34H29L23 60L48 25H35L44 4Z" fill="#FFB938"/>
+  </g>
+  <circle cx="32" cy="32" r="29" fill="none" stroke="#141A3A" stroke-width="4"/>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-label="The Rogue 541">
+  <defs><clipPath id="f"><circle cx="32" cy="32" r="29"/></clipPath></defs>
+  <circle cx="32" cy="32" r="29" fill="#C4E8EC"/>
+  <g clip-path="url(#f)" stroke="#1D2633" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M2 52L32 11L62 52Z" fill="#7A8DB3"/>
+    <path d="M32 11L24 22L29 20L32 25L36 20L40 22Z" fill="#FFFFFF" stroke-width="3"/>
+    <path d="M-2 48Q16 42 32 48T66 46V66H-2Z" fill="#1E9A96"/>
+    <path d="M18 56q6-4 12 0t12 0" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+  </g>
+  <circle cx="32" cy="32" r="29" fill="none" stroke="#1D2633" stroke-width="4"/>
+</svg>

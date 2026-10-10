@@ -47,6 +47,7 @@
   "cityTokensExtra": [
     "shoals"
   ],
+  "siteNameHtml": "Shoals <span>Setlist</span>",
   "feeds": [
     {
       "name": "shoals_chamber",

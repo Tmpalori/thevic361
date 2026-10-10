@@ -39,6 +39,7 @@
     "lincoln",
     "omaha"
   ],
+  "siteNameHtml": "The Crane <span>308</span>",
   "feeds": [
     {
       "name": "visit_kearney",
