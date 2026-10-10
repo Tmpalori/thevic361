@@ -190,10 +190,18 @@ def town_config(env=None, towns_dir=None, town=None):
 
 
 def site_url(town=None, env=None):
-    """SITE_URL when set (workflows pass it), else the town's own."""
+    """SITE_URL when set (workflows pass it), else the town's own. Another
+    town on Victoria's SITE_URL stops: until its GitHub Environment exists
+    (MULTI_CITY_PLAN.md 3.3) the repo-level SITE_URL is Victoria's, and the
+    script would read and write Victoria's site as that town."""
     env = os.environ if env is None else env
     town = town or TOWN
-    return (env.get("SITE_URL", "").strip() or town["site_url"]).rstrip("/")
+    url = (env.get("SITE_URL", "").strip() or town["site_url"]).rstrip("/")
+    host = re.sub(r"^https?://", "", url).split("/")[0].lower()
+    vic = VICTORIA["domain"]
+    if town["id"] != VICTORIA["id"] and (host == vic or host.endswith("." + vic)):
+        raise ValueError(f"TOWN={town['id']}: SITE_URL is Victoria's ({url}); give the town its own (its GitHub Environment)")
+    return url
 
 
 def tz(town=None):
@@ -236,5 +244,10 @@ if __name__ == "__main__":
     import sys
     if sys.argv[1:] != ["paths"]:
         sys.exit("usage: python3 town.py paths")
+    raw = os.environ.get("TOWN", "")
+    if raw and raw != raw.strip().lower():
+        # The workflows' concurrency groups and cache keys use the input as
+        # typed: "Victoria" would run beside Victoria's own runs.
+        sys.exit(f'TOWN="{raw}": use the lowercase slug, e.g. "{raw.strip().lower()}"')
     for k, v in town_paths().items():
         print(f"TOWN_{k.upper()}={v}")

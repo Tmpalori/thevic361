@@ -182,7 +182,8 @@ jobs:
           # (see header comment) and the collector only reads venue files.
           # enrichment_cache.json: gap-filling lookups (collect_events.py
           # enrich_thin_events), kept so each event is searched once.
-          if git diff --quiet "$TOWN_CANDIDATES" "$TOWN_COLLECTION_METADATA" "$TOWN_ENRICHMENT_CACHE" 2>/dev/null; then
+          # status, not diff: a new town's first files are untracked, which diff calls unchanged.
+          if [ -z "$(git status --porcelain -- "$TOWN_CANDIDATES" "$TOWN_COLLECTION_METADATA" "$TOWN_ENRICHMENT_CACHE")" ]; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -200,7 +201,7 @@ jobs:
           # collection_metadata.json is the admin Sources-tab feed (per-source
           # counts + timestamps). Add it only if the collector wrote one.
           [ -f "$TOWN_COLLECTION_METADATA" ] && git add "$TOWN_COLLECTION_METADATA"
-          git add "$TOWN_ENRICHMENT_CACHE"
+          [ -f "$TOWN_ENRICHMENT_CACHE" ] && git add "$TOWN_ENRICHMENT_CACHE"
           git commit -m "🏙️ Update candidates $(date +'%Y-%m-%d')"
           # main can move during the ~25 min collect (a merge, the social
           # kit's commit). Rebase and retry instead of losing this run.
