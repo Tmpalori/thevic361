@@ -53,7 +53,9 @@ async function startApp(extra = {}) {
   await fs.writeFile(venuesFile, JSON.stringify(VENUES));
   store = new FileStore(path.join(tmpDir, 's.json'));
   const { app } = await createApp({
-    storeBundle: { kind: 'file', store }, eventsFile, venuesFile, trustProxy: false, now: () => NOW,
+    // Trust the loopback "proxy", so each buyer below can come from its own
+    // address (X-Forwarded-For in form()): one client gets one open hold.
+    storeBundle: { kind: 'file', store }, eventsFile, venuesFile, trustProxy: 1, now: () => NOW,
     siteUrl: 'https://www.thevic361.com', adminUsername: 'a', adminPassword: 'b', adminSessionSecret: 'c',
     stripeSecretKey: 'sk_test', stripeWebhookSecret: WHSEC, stripe: fakeStripe(), resendApiKey: '', ...extra
   });
@@ -68,9 +70,15 @@ afterEach(async () => {
   server = null; tmpDir = null;
 });
 
-const form = (fields) => fetch(baseUrl + '/advertise/checkout', {
+// Different buyers come from different addresses: each email gets its own
+// (stable) client IP, unless the test names one.
+const buyerIp = (email) => {
+  const h = crypto.createHash('sha256').update(String(email || '')).digest();
+  return `10.0.${h[0]}.${h[1]}`;
+};
+const form = (fields, ip = buyerIp(fields.email)) => fetch(baseUrl + '/advertise/checkout', {
   method: 'POST', redirect: 'manual',
-  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Forwarded-For': ip },
   body: new URLSearchParams(fields).toString()
 });
 

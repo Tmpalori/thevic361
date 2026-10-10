@@ -49,5 +49,28 @@ export async function verifyTurnstile(token, opts = {}) {
   if (!json || !json.success) {
     return { ok: false, error: 'verification-failed', codes: json && json['error-codes'] };
   }
+  // A widget can serve several sites, so a token solved on another one
+  // passes siteverify too. When Cloudflare says where it was solved, it
+  // must be one of ours (opts.hostnames, see turnstileHostnames).
+  const hosts = opts.hostnames || [];
+  if (hosts.length && json.hostname && !hosts.includes(String(json.hostname).toLowerCase())) {
+    return { ok: false, error: 'hostname-mismatch', hostname: json.hostname };
+  }
   return { ok: true, response: json };
+}
+
+// The hostnames a token may come from: the site's own host, as www and
+// apex (either can serve the forms), plus the Railway domain this
+// environment answers on (RAILWAY_PUBLIC_DOMAIN), so a PR or staging
+// environment's forms still work.
+export function turnstileHostnames(siteUrl, extra = []) {
+  const out = new Set();
+  let host = '';
+  try { host = new URL(siteUrl).hostname.toLowerCase(); } catch { /* none */ }
+  if (host) {
+    const apex = host.replace(/^www\./, '');
+    out.add(apex).add(`www.${apex}`);
+  }
+  for (const h of [].concat(extra || [])) if (h) out.add(String(h).toLowerCase().replace(/:\d+$/, ''));
+  return [...out];
 }

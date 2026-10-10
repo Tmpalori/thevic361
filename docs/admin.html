@@ -310,6 +310,14 @@
           <textarea id="email-nl-import-text" rows="5" placeholder="Paste email addresses, one per line or comma-separated"></textarea>
           <button id="email-nl-import" type="button" class="btn btn--outline">Import</button>
         </details>
+        <details class="email-nl-import">
+          <summary>Back up the list, or delete someone's data</summary>
+          <p class="email-nl-note">Download every subscriber (email, status, source, dates) and keep the file somewhere other than Railway.</p>
+          <button id="email-nl-export" type="button" class="btn btn--outline">Download subscribers (CSV)</button>
+          <p class="email-nl-note">When someone asks us to delete what we have about them: removes their subscription, contact messages and the contact details on their submissions. Sponsor orders and gift cards keep a masked address for the books. This can't be undone.</p>
+          <input id="email-forget-to" type="email" placeholder="Their email address" aria-label="Email address to delete">
+          <button id="email-forget" type="button" class="btn btn--outline">Delete their data</button>
+        </details>
         <h3 class="traffic-h">Recent sends</h3>
         <table class="traffic-table" id="email-nl-sends"></table>
         <h3 class="traffic-h">Top referrers</h3>

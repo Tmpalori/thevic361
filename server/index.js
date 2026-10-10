@@ -23,15 +23,16 @@ import { fileURLToPath } from 'node:url';
 
 import { createStore, isOutage, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter, resolveEditKey, withPublishedLock } from './db.js';
 import { validateSubmission, validateEventEdit, checkBotSignals } from './validate.js';
-import { verifyTurnstile } from './turnstile.js';
+import { verifyTurnstile, turnstileHostnames } from './turnstile.js';
 import { createRateLimiter, ipKey } from './rateLimit.js';
-import { createAuth } from './auth.js';
+import { createAuth, MIN_SECRET } from './auth.js';
 import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys, keyedEvents } from './eventcheck.js';
 import { registerGrowth } from './growth.js';
+import { registerPrivacy, purgePersonalData } from './privacy.js';
 import { registerHq, buildSummary } from './hq.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml, normalizeEmail, sampleEmailPreviews } from './newsletter.js';
 import { createTremendous, tremendousConfig } from './referralRewards.js';
@@ -154,6 +155,8 @@ export async function createApp(opts = {}) {
   const VENUES_FILE = path.join(REPO_ROOT, PATHS.venues);
   checkTownSchedule();
   const siteUrl = (opts.siteUrl ?? process.env.SITE_URL ?? town.siteUrl).replace(/\/+$/, '');
+  // Where a Turnstile token may have been solved (server/turnstile.js).
+  const turnstileHosts = opts.turnstileHostnames ?? [...new Set([...turnstileHostnames(siteUrl, process.env.RAILWAY_PUBLIC_DOMAIN), ...turnstileHostnames(town.siteUrl)])];
   // Owner pings in Slack (server/slack.js); a no-op until SLACK_WEBHOOK_URL is set.
   const slack = opts.slack || createSlack(slackConfig(process.env, opts));
   const canonicalHost = new URL(siteUrl).host;
@@ -286,6 +289,22 @@ export async function createApp(opts = {}) {
   if (missingDatabase) {
     console.error('[db] production without DATABASE_URL: using the ephemeral file store');
     slack.alert('db-missing', 'Production has no database', NO_DATABASE);
+  }
+
+  // Admin secrets too short to resist distributed guessing (auth.weak, plus
+  // the legacy token here). Not a boot failure: the live site may run on
+  // them today, and refusing to start would take it down. The setup
+  // checklist marks it required, and production alerts on every boot.
+  const weakAdminSecrets = [...(auth.weak || []),
+    ...(adminToken && String(adminToken).length < MIN_SECRET ? [`ADMIN_TOKEN is shorter than ${MIN_SECRET} characters`] : [])];
+  const WEAK_ADMIN_FIX = 'Set a longer ADMIN_PASSWORD (12+ characters; a passphrase is fine) and ADMIN_SESSION_SECRET ' +
+    '(`openssl rand -hex 32`) in Railway; replace ADMIN_TOKEN the same way or remove it if no script uses it. ' +
+    'Changing the password or secret signs out every admin session.';
+  if (weakAdminSecrets.length) {
+    console.warn('[auth] weak admin secrets:', weakAdminSecrets.join('; '));
+    if (railwayEnv === 'production') {
+      slack.alert('admin-weak-secrets', 'Admin login secrets are too short', `${weakAdminSecrets.join('; ')}. ${WEAK_ADMIN_FIX}`);
+    }
   }
 
   // Note crawler hits on public pages for the admin Traffic tab. Registered
@@ -513,7 +532,8 @@ export async function createApp(opts = {}) {
     const ts = await verifyTurnstile(req.body && req.body.turnstile_token, {
       secret: turnstileSecret,
       remoteip: ip,
-      fetch: opts.fetch
+      fetch: opts.fetch,
+      hostnames: turnstileHosts
     });
     if (!ts.ok) {
       return res.status(400).json({ ok: false, error: 'turnstile-failed' });
@@ -1352,6 +1372,26 @@ export async function createApp(opts = {}) {
   // visitor counts reset on restart.
   const analyticsSecret = opts.analyticsSecret ?? process.env.ADMIN_SESSION_SECRET ?? crypto.randomBytes(16).toString('hex');
   const trackLimiter = opts.trackLimiter || createRateLimiter({ windowMs: 60 * 1000, max: 120 });
+  // Sponsor and Vic's Pick reports count impressions and clicks on an
+  // order's ad (and taps on its link), and the order id is public
+  // (data-ad), so a script could post beacons all day to pad a report. Each
+  // client address (ipKey) counts at most this many of each per ad (or
+  // link) per day; a real reader browsing page after page stays under it.
+  const AD_BEACON_DAILY = { impression: 20, click: 5 };
+  const adBeacons = { day: '', counts: new Map() };
+  function adBeaconAllowed(row, req) {
+    const target = row.ad || (row.kind === 'click' && /^(sponsor|event)_click$/.test(row.click_type) ? row.click_url : '');
+    if (!target || !AD_BEACON_DAILY[row.kind]) return true;
+    if (adBeacons.day !== row.day) { adBeacons.day = row.day; adBeacons.counts.clear(); }
+    const key = `${clientKey(req)}|${target}|${row.kind}`;
+    const n = adBeacons.counts.get(key) || 0;
+    if (n >= AD_BEACON_DAILY[row.kind]) return false;
+    // Bounded memory: a flood of made-up ad ids from many addresses stops
+    // being counted for the rest of the day instead of growing the map.
+    if (!n && adBeacons.counts.size >= 100000) return false;
+    adBeacons.counts.set(key, n + 1);
+    return true;
+  }
 
   app.post('/api/track', async (req, res) => {
     // Always 204: the beacon never waits on or reacts to the answer.
@@ -1365,7 +1405,7 @@ export async function createApp(opts = {}) {
       ip, ua: req.get('user-agent') || '', secret: analyticsSecret,
       siteHost: new URL(siteUrl).host, now: nowFn()
     });
-    if (!row) return;
+    if (!row || !adBeaconAllowed(row, req)) return;
     try { await store.recordTraffic(row); } catch (err) {
       console.warn('[traffic] record failed:', err.message);
     }
@@ -1647,7 +1687,7 @@ export async function createApp(opts = {}) {
     const b = req.body || {};
     const token = b['cf-turnstile-response'] || b.turnstile_token;
     const r = await verifyTurnstile(typeof token === 'string' ? token : '', {
-      secret: turnstileSecret, remoteip: req.ip, fetch: opts.fetch
+      secret: turnstileSecret, remoteip: req.ip, fetch: opts.fetch, hostnames: turnstileHosts
     });
     // The visitor only sees "try again", so the reason is logged here: a
     // pattern of failures from the Facebook/Instagram in-app browser (where
@@ -1936,6 +1976,8 @@ export async function createApp(opts = {}) {
 
   // Contact form → Slack; replaces publishing an email address.
   registerContact(app, { siteUrl, slack, store, requireAdmin, createRateLimiter, sendHtml, verifyHuman });
+  // Personal data: delete one address on request, export subscribers (server/privacy.js).
+  registerPrivacy(app, { store, requireAdmin, slack, nowFn: () => nowFn() });
   inbound.registerReply(app, { requireAdmin, resend: nlResend, from: newsletter.from, normalizeEmail });
 
   sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman, analyticsSecret });
@@ -2149,6 +2191,8 @@ export async function createApp(opts = {}) {
         : typeof sponsorsModule.sendSponsorReports === 'function'
           ? now => sponsorsModule.sendSponsorReports(now)
           : undefined,
+      // Daily: personal-data retention (server/privacy.js).
+      privacyPurge: now => purgePersonalData(store, now),
       health: async now => {
         await retryAutoPublish();
         // Hourly: the one "tap to confirm" reminder to yesterday's
@@ -2255,6 +2299,8 @@ export async function createApp(opts = {}) {
         fix: 'Add a Postgres database in Railway so events and subscribers survive deploys.' },
       { key: 'login', label: 'Admin login', ok: auth.configured, level: 'required',
         fix: 'Set ADMIN_USERNAME, ADMIN_PASSWORD and ADMIN_SESSION_SECRET in Railway.' },
+      { key: 'admin_secrets', label: 'Admin password and secrets are long enough', ok: !weakAdminSecrets.length, level: 'required',
+        fix: weakAdminSecrets.length ? `${weakAdminSecrets.join('; ')}. ${WEAK_ADMIN_FIX}` : WEAK_ADMIN_FIX },
       { key: 'auto_publish', label: 'Auto-publish events', ok: env.AUTO_PUBLISH !== '0', level: 'required',
         fix: 'Remove AUTO_PUBLISH=0 from Railway.' },
       { key: 'slack', label: 'Slack alerts', ok: slack.enabled && !slackRefusedText(), level: 'recommended',
