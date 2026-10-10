@@ -249,6 +249,9 @@ describe('Victoria outbound requests', () => {
       storeBundle: { kind: 'file', store: new FileStore(path.join(tmpDir, 's.json')) }, eventsFile, trustProxy: false, now: () => MON,
       siteUrl: SITE, adminUsername: 'a', adminPassword: 'b', adminSessionSecret: 'c',
       resendApiKey: 're_golden', newsletterAddress: ADDRESS, resend: createResend('re_golden', rec.fetchImpl),
+      // Turnstile on, as in production (a stand-in Cloudflare that passes
+      // the token): without it the signup gets a confirmation email instead.
+      turnstileSecret: 'ts_golden', fetch: async () => ({ ok: true, json: async () => ({ success: true }) }),
       slack: { enabled: false, notify: async () => false, alert: async () => false }
     });
     const server = http.createServer(app);
@@ -256,7 +259,7 @@ describe('Victoria outbound requests', () => {
     const base = `http://127.0.0.1:${server.address().port}`;
     const post = (p, body, headers = {}) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
     try {
-      await post('/api/subscribe', { email: 'reader@example.com' });
+      await post('/api/subscribe', { email: 'reader@example.com', turnstile_token: 'golden' });
       for (let i = 0; i < 100 && !rec.calls.length; i++) await new Promise(r => setTimeout(r, 10));
       const login = await (await post('/api/admin/login', { username: 'a', password: 'b' })).json();
       const sent = await post('/api/admin/newsletter/send', {}, { Authorization: `Bearer ${login.token}` });

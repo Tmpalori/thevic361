@@ -113,8 +113,47 @@ describe('the dashboard', () => {
     await login('tristen', 'wrong');
     await login('tristen', 'wrong');
     expect((await login('tristen', 'correct horse battery')).status).toBe(429);
-    const out = await fetch(base + '/logout', { redirect: 'manual' });
+    const out = await fetch(base + '/logout', { method: 'POST', redirect: 'manual' });
+    expect(out.status).toBe(303);
     expect(out.headers.get('set-cookie')).toMatch(/hq_session=;/);
+  });
+
+  it('logs out only by POST; a GET (old link, other site) asks first', async () => {
+    await start();
+    const h = { headers: await session() };
+    const dash = await (await fetch(base + '/', h)).text();
+    expect(dash).toContain('<form class="inline" method="post" action="/logout">');
+    expect(dash).not.toContain('href="/logout"');
+    const ask = await fetch(base + '/logout', { ...h, redirect: 'manual' });
+    expect(ask.status).toBe(200);
+    expect(ask.headers.get('set-cookie')).toBe(null);
+    expect(await ask.text()).toContain('<form method="post" action="/logout">');
+    expect((await fetch(base + '/api/towns', h)).status).toBe(200);   // still signed in
+  });
+
+  it('sends HSTS, and a new HQ_PASSWORD signs every session out', async () => {
+    await start();
+    const h = { headers: await session() };
+    const res = await fetch(base + '/', h);
+    expect(res.headers.get('strict-transport-security')).toBe('max-age=31536000');
+    expect((await fetch(base + '/api/towns', h)).status).toBe(200);
+    await new Promise(r => server.close(r));
+    // Same secret, new password: the old cookie no longer verifies.
+    server = http.createServer(createHqApp(hqConfig({ ...ENV, HQ_PASSWORD: 'a brand new password' }), { fetchImpl: async () => { throw new Error('x'); } }));
+    await new Promise(r => server.listen(0, r));
+    base = `http://127.0.0.1:${server.address().port}`;
+    expect((await fetch(base + '/api/towns', h)).status).toBe(401);
+  });
+
+  it("keys the login limit on the visitor's X-Real-IP behind Railway", async () => {
+    await start({ railway: true, loginLimiter: createRateLimiter({ windowMs: 60000, max: 2 }) });
+    const from = ip => fetch(base + '/login', { method: 'POST', redirect: 'manual', headers: {
+      'Content-Type': 'application/x-www-form-urlencoded', 'X-Real-IP': ip }, body: 'username=tristen&password=wrong' });
+    expect((await from('203.0.113.7')).status).toBe(401);
+    expect((await from('203.0.113.7')).status).toBe(401);
+    expect((await from('203.0.113.7')).status).toBe(429);
+    // Someone else hammering the login doesn't lock the owner out.
+    expect((await from('198.51.100.9')).status).toBe(401);
   });
 
   it('expires a session after 12 hours', async () => {

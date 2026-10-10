@@ -322,6 +322,58 @@ export function renderSponsorTooLate(order, { siteUrl, address }) {
   };
 }
 
+// What the order paid for, for the failed and double-booked emails.
+function orderWhat(order) {
+  return order.kind === 'weekly'
+    ? `the sponsor week of ${formatDay(order.week_start, { month: 'long', day: 'numeric' })}`
+    : `${(order.event && order.event.name) || 'your event'} as a ${town.pickName} on ${order.event && order.event.date ? formatDay(order.event.date, { weekday: 'long', month: 'long', day: 'numeric' }) : 'its day'}`;
+}
+
+// ─── Bank payment failed ─────────────────────────────────────────────────
+// A bank debit (ACH) that bounced (checkout.session.async_payment_failed).
+// The thank-you page told them their spot was held until it cleared, and
+// Stripe doesn't email Checkout customers about a failed one-time debit, so
+// without this they'd think they're booked while the slot is resold.
+
+export function renderSponsorPaymentFailed(order, { siteUrl, address }) {
+  const business = order.business || 'there';
+  const unit = order.kind === 'weekly' ? 'week' : 'day';
+  const again = `${siteUrl}/advertise/checkout?package=${order.kind === 'weekly' ? 'weekly' : 'featured'}`;
+  const lines = [
+    `Hi ${business}. Your bank payment for ${orderWhat(order)} didn’t go through, so nothing was charged and you’re not booked.`,
+    `We’ve released the ${unit} we were holding for you, so someone else can book it now. If you still want it, book again (a card settles at once).`
+  ];
+  return {
+    subject: `Your ${town.shortName} payment didn’t go through`,
+    html: emailShell({ title: 'Your payment didn’t go through', preheader: `Nothing was charged; the ${unit} is open again.`, siteUrl,
+      bodyHtml: lines.map(l => p(escHtml(l))).join('') + `<div style="margin:16px 0;">${btn(again, 'Book again')}</div>`,
+      footerHtml: contactFooter(siteUrl, address) }),
+    text: [...lines, `Book again: ${again}`, contactText(siteUrl)].join('\n\n')
+  };
+}
+
+// ─── Double-booked ───────────────────────────────────────────────────────
+// Two buyers paid for one week (or a full Vic's Pick day): the second isn't
+// put live (status 'conflict'). The thank-you page explains it, but a buyer
+// who closed the tab would only have Stripe's receipt. The owner refunds
+// in Stripe (our restricted key can't) or moves them to an open slot.
+
+export function renderSponsorConflict(order, { siteUrl, address }) {
+  const business = order.business || 'there';
+  const unit = order.kind === 'weekly' ? 'week' : 'day';
+  const lines = [
+    `Thanks, ${business}. Your payment for ${orderWhat(order)} went through, but that ${unit} was booked by someone else moments before you, so it isn’t running. Sorry about that.`,
+    `Your payment will be refunded in full (Stripe shows it within a few business days), unless you’d rather move to another open ${unit}: just reply to this email and we’ll set it up.`,
+    'We’ll be in touch within 1 business day either way.'
+  ];
+  return {
+    subject: `Your ${town.shortName} ${unit} was double-booked: we’ll refund or move you`,
+    html: emailShell({ title: `That ${unit} was just booked`, preheader: `Your payment will be refunded, or moved to another ${unit} if you prefer.`, siteUrl,
+      bodyHtml: lines.map(l => p(escHtml(l))).join(''), footerHtml: contactFooter(siteUrl, address) }),
+    text: [...lines, contactText(siteUrl)].join('\n\n')
+  };
+}
+
 // ─── Sponsor reports ─────────────────────────────────────────────────────
 // Weekly sponsors get theirs the Monday after their week, Vic's Picks the
 // day after their event (server/sponsors.js sendSponsorReports /

@@ -1148,9 +1148,13 @@
     const w = d.weekend || {};
     const failed = wk ? w.failed : d.this_week_failed;
     const sent = wk ? w.sent : d.this_week_sent;
+    // Possibly sent, and too long ago for Resend to dedupe: resent only on
+    // purpose (the click asks first).
+    const unknown = (wk ? w.unknown : d.this_week_unknown) || 0;
     const n = wk ? Math.max(0, d.counts.active - (w.opted_out || 0)) : d.counts.active;
-    send.disabled = !d.configured || !n || Boolean(sent) || (wk && !w.enabled);
-    send.textContent = failed ? ('Retry ' + failed + ' failed') : sent ? (wk ? 'Weekend issue already sent' : 'Already sent this week')
+    send.disabled = !d.configured || !n || (Boolean(sent) && !unknown) || (wk && !w.enabled);
+    send.textContent = failed ? ('Retry ' + failed + ' failed') : (sent && unknown) ? ('Resend unconfirmed (' + unknown + ')')
+      : sent ? (wk ? 'Weekend issue already sent' : 'Already sent this week')
       : ('Send to ' + n + ' subscribers');
   }
 
@@ -1960,7 +1964,7 @@
   // ─── SPONSORS TAB ────────────────────────────────────────────────────
   // Paid orders from the Stripe checkout (server/sponsors.js).
   const SPONSOR_KIND = { weekly: 'Weekly sponsor', partner: 'Venue partner', featured: 'Vic’s Pick event' };
-  const SPONSOR_STATUS = { paid: 'Live', active: 'Live', pending: 'Awaiting payment', hidden: 'Hidden', cancelled: 'Cancelled', paused: 'Payment issue', refunded: 'Refunded', processing: 'Payment processing', conflict: 'Double-booked: refund', late: 'Paid after its date: refund', failed: 'Checkout failed' };
+  const SPONSOR_STATUS = { paid: 'Live', active: 'Live', pending: 'Awaiting payment', hidden: 'Hidden', cancelled: 'Cancelled', paused: 'Payment issue', refunded: 'Refunded', disputed: 'Disputed', processing: 'Payment processing', conflict: 'Double-booked: refund', late: 'Paid after its date: refund', failed: 'Checkout failed' };
 
   function sponsorDetail(o) {
     if (o.kind === 'weekly') return 'Week of ' + o.week_start + (o.sponsor ? ': ' + o.sponsor.text : '');
@@ -2078,11 +2082,13 @@
               '<td>' + escapeHtml(SPONSOR_KIND[o.kind] || o.kind) + '</td>' +
               '<td>' + escapeHtml(o.business || '') + '<br><small>' + escapeHtml(o.email || '') + '</small></td>' +
               '<td>' + escapeHtml(sponsorDetail(o)) + logo + '</td>' +
-              '<td>$' + escapeHtml(String(Math.round((o.amount || 0) / 100))) + (o.test ? '<br><small>Test, not counted</small>' : '') + '</td>' +
+              '<td>$' + escapeHtml(String(Math.round((o.amount || 0) / 100))) + (o.test ? '<br><small>Test, not counted</small>' : '') +
+                (o.refunded_cents > 0 && o.status !== 'refunded' ? '<br><small>$' + escapeHtml((o.refunded_cents / 100).toFixed(2)) + ' refunded</small>' : '') + '</td>' +
               // on_site false: a paid Vic's Pick whose event the pin can't
               // find on the site (not approved yet, rejected, or edited).
               '<td>' + (o.on_site === false
                 ? '<strong class="sponsor-not-live">Paid, not on the site yet</strong><br><small>Approve its event in Submissions</small>'
+                : o.status === 'disputed' && o.dispute && o.dispute.status && o.dispute.status !== 'open' ? 'Dispute lost'
                 : escapeHtml(SPONSOR_STATUS[o.status] || o.status)) + '</td><td>' + btn + '</td></tr>';
           }).join('')
         : '<tr><td class="traffic-empty">No orders yet.</td></tr>';
@@ -2806,6 +2812,14 @@
       const wk = nlEdition() === 'weekend';
       const w = nl.weekend || {};
       const retry = (wk ? w.failed : nl.this_week_failed) || 0;
+      const unknown = (wk ? w.unknown : nl.this_week_unknown) || 0;
+      const which = wk ? 'this weekend\'s issue' : 'this week\'s newsletter';
+      if (!retry && unknown) {
+        if (!window.confirm('Resend ' + which + ' to the ' + unknown + ' subscribers Resend never confirmed?\n\n' +
+          'Warning: Resend may already have delivered it to some or all of them, and it can no longer tell us, so they may get it twice.')) return;
+        emailNlPost('/api/admin/newsletter/send', { edition: nlEdition(), resend_unknown: true }, j => 'Sent to ' + j.recipients + ' subscribers.');
+        return;
+      }
       const n = nl.counts ? (wk ? nl.counts.active - (w.opted_out || 0) : nl.counts.active) : 0;
       const what = wk ? 'this weekend\'s issue' : 'this week\'s newsletter';
       if (!window.confirm(retry ? 'Retry ' + what + ' for the ' + retry + ' subscribers who didn\'t get it?'
@@ -2824,7 +2838,8 @@
     if (nlImport) nlImport.addEventListener('click', () => emailNlPost('/api/admin/newsletter/import',
       { emails: (document.getElementById('email-nl-import-text') || {}).value },
       j => 'Imported ' + j.added + ' new, ' + j.already + ' already subscribed' +
-        (j.skipped_unsubscribed ? ', ' + j.skipped_unsubscribed + ' skipped (unsubscribed)' : '') + '.'));
+        (j.skipped_unsubscribed ? ', ' + j.skipped_unsubscribed + ' skipped (unsubscribed)' : '') +
+        (j.skipped_bounced ? ', ' + j.skipped_bounced + ' skipped (bounced)' : '') + '.'));
 
     const nlExport = document.getElementById('email-nl-export');
     if (nlExport) nlExport.addEventListener('click', downloadSubscribersCsv);
