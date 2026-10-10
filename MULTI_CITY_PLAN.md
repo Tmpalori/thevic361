@@ -199,10 +199,12 @@ These matter the moment a second town exists. All keep Victoria's values.
 - [ ] **3.5 Scheduler dispatch** passes `town` and the `ran` gate calls the
       town's own `SITE_URL`. (Dispatch done: `townInputs()`; the gates'
       `SITE_URL` comes with the town's Environment in 3.3.)
-- [ ] **3.6 Shared budget limits.** Per-town caps for Apify and OpenAI
+- [x] **3.6 Shared budget limits.** Per-town caps for Apify and OpenAI
       (`*_MAX_VENUES` etc.) or separate tokens, so a new town can't trip the
       Apify hard limit and take down Victoria's Facebook and Eventbrite
-      sources for the month.
+      sources for the month. (Done: town.json `limits` caps the Apify
+      knobs below the shared repo variables; defaults for a new town, none
+      for Victoria. Separate tokens can come with 3.3's Environments.)
 - [ ] **3.7 Update `test_workflows.py`** pins for the new inputs while
       still pinning Victoria's crons, steps and `--candidates-only`.
 

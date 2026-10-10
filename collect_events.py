@@ -4351,6 +4351,17 @@ _FB_POSTS_MAX_VENUES = None
 
 
 def _resolve_int_env(name, default):
+    """A positive-int env override (else ``default``), at most the town's
+    ``limits[name]``: repo variables are shared, so another town can't
+    inherit Victoria's caps and spend the shared Apify month (Victoria has
+    no limits; MULTI_CITY_PLAN.md 3.6).
+    """
+    n = _int_env(name, default)
+    cap = (TOWN.get("limits") or {}).get(name)
+    return min(n, cap) if isinstance(cap, int) and cap > 0 else n
+
+
+def _int_env(name, default):
     """Read a positive-int env override, falling back to ``default``.
 
     Empty / unset / unparseable / ``≤ 0`` all fall back to ``default``,

@@ -88,6 +88,11 @@ VICTORIA = {
 # own (Victoria adds its university and college).
 SHARED_GEMINI_CATEGORIES = [c for c in VICTORIA["gemini_categories"] if "Victoria" not in c]
 
+# Ceilings on the collector's Apify knobs (collect_events.py
+# _resolve_int_env) for a town that sets none: the repo variables are
+# Victoria's and the Apify month is shared. Victoria has no limits.
+DEFAULT_LIMITS = {"EVENTBRITE_MAX": 20, "FB_EVENTS_MAX": 20, "FB_POSTS_MAX_VENUES": 10, "IG_POSTS_MAX_VENUES": 10}
+
 REQUIRED = ("site_name", "domain", "city", "state", "state_name", "timezone")
 _SAFE = re.compile(r'^[^<>&"]+$')
 
@@ -134,6 +139,8 @@ def _complete(town_id, raw):
         # Two place tags plus the site's own name, e.g. "#BayCityTX #BayCityTexas #TheBay979".
         "hashtags": " ".join("#" + re.sub(r"[^A-Za-z0-9]", "", s) for s in (f"{city}{raw['state']}", f"{city}{raw['state_name']}", name)),
         **raw,
+        "limits": ({**DEFAULT_LIMITS, **raw["limits"]} if isinstance(raw.get("limits"), dict)
+                   else raw.get("limits") or dict(DEFAULT_LIMITS)),   # not a dict: _check says so
         "id": town_id,
     }
     return _check(town)
@@ -150,6 +157,9 @@ def _check(town):
         raise ValueError(f"TOWN={tid}: site_url must be https://host with no path")
     if any(not re.match(r"^\d{5}$", str(z)) for z in town.get("area_zips") or []):
         raise ValueError(f"TOWN={tid}: area_zips must be 5-digit ZIP codes")
+    limits = town.get("limits") or {}
+    if not isinstance(limits, dict) or any(not isinstance(v, int) or isinstance(v, bool) or v <= 0 for v in limits.values()):
+        raise ValueError(f"TOWN={tid}: limits must map names to positive whole numbers")
     if town.get("area_code") and not re.match(r"^\d{3}$", str(town["area_code"])):
         raise ValueError(f"TOWN={tid}: area_code must be 3 digits or empty")
     if ZoneInfo:
