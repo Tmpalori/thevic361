@@ -88,7 +88,7 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
   - Integrations: GitHub owner, repo, branch and data dir; `slackTag`
     (empty for Victoria until Phase 4).
   - Data paths: candidates, metadata, events bundle, venues, asset overlay.
-- [ ] **1.2 Move server literals to `town`**, one area per PR, goldens
+- [x] **1.2 Move server literals to `town`**, one area per PR, goldens
       unchanged each time:
   - [x] a. Brand and identity (`SITE_NAME`, header markup, from-address,
         GA snippet; keep the GA test in sync).
@@ -109,7 +109,7 @@ Tests on `main` at the time: vitest 860, pytest 564, all passing.
         (Decision: issue days stay Monday and Thursday for every town, so
         the "every Monday and Thursday" copy stays shared; a town moves
         job start times with `town.schedule` to stagger sends and collects.)
-- [ ] **1.3 `docs/` and admin**:
+- [x] **1.3 `docs/` and admin**:
   - [x] a. Static assets: an overlay lookup (`towns/<slug>/public/` checked
         before `docs/` only for non-Victoria towns), used by
         `express.static`, `ogImage.js` and the email header. Victoria has
@@ -233,9 +233,11 @@ These matter the moment a second town exists. All keep Victoria's values.
 
 ## Phase 5: launching a town
 
-- [ ] **5.1 New-town kit**: a script that creates `towns/<slug>/town.json`
+- [x] **5.1 New-town kit**: a script that creates `towns/<slug>/town.json`
       from prompts, seeds venues with `discover_venues.py`, adds the town to
       `towns/index.json`, and prints the account checklist below.
+      (Done: `scripts/new_town.py`; venues seed with
+      `TOWN=<slug> python3 discover_venues.py --repo-root towns/<slug>`.)
 - [ ] **5.2 Per-town accounts and settings** (owner):
   - Domain and DNS; brand name, logo set (logo, favicon set, apple-touch,
     og-image, skyline day and night, email skyline).
