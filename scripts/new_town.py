@@ -22,7 +22,11 @@ import sys
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 sys.path.insert(0, ROOT)
+# town.py loads TOWN at import; the town being created can't be loaded yet.
+_saved_town = os.environ.pop("TOWN", None)
 import town as town_mod  # noqa: E402
+if _saved_town is not None:
+    os.environ["TOWN"] = _saved_town
 
 FIELDS = [
     # (arg, town.json key, question, required)
@@ -72,6 +76,18 @@ def create(values, towns_dir):
     folder = os.path.join(towns_dir, slug)
     if os.path.exists(os.path.join(folder, "town.json")):
         raise ValueError(f"{os.path.relpath(folder, ROOT)}/town.json already exists")
+    # Read the index before writing anything, so a bad one stops the run
+    # with nothing half-made.
+    index_path = os.path.join(towns_dir, "index.json")
+    try:
+        with open(index_path, encoding="utf-8") as f:
+            index = json.load(f)
+    except FileNotFoundError:
+        index = {"towns": ["victoria"]}
+    except ValueError as e:
+        raise ValueError(f"{index_path} isn't valid JSON ({e}); fix it first")
+    if not isinstance(index, dict) or not isinstance(index.get("towns", []), list):
+        raise ValueError(f'{index_path} must look like {{"towns": ["victoria", …]}}')
     os.makedirs(os.path.join(folder, "public"), exist_ok=True)
     written = []
 
@@ -87,12 +103,6 @@ def create(values, towns_dir):
     write("extras.yaml", "new_and_notable: []\nsponsor: null\n")
     write(os.path.join("public", ".gitkeep"), "")
 
-    index_path = os.path.join(towns_dir, "index.json")
-    try:
-        with open(index_path, encoding="utf-8") as f:
-            index = json.load(f)
-    except FileNotFoundError:
-        index = {"towns": ["victoria"]}
     towns = [t for t in index.get("towns", []) if isinstance(t, str)]
     if slug not in towns:
         towns.append(slug)

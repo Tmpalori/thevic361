@@ -91,3 +91,22 @@ def test_discover_venues_searches_the_town(tmp_path, monkeypatch):
         importlib.reload(town_mod)
         importlib.reload(discover_venues)
     assert discover_venues.LOCATION_QUERY == "Victoria, TX"
+
+
+def test_a_bad_index_stops_before_anything_is_written(tmp_path, capsys):
+    (tmp_path / "index.json").write_text("{not json")
+    assert run(tmp_path, *BAY) == 1
+    assert "isn't valid JSON" in capsys.readouterr().err
+    assert not (tmp_path / "bay").exists()
+    (tmp_path / "index.json").write_text("[]")
+    assert run(tmp_path, *BAY) == 1
+    assert not (tmp_path / "bay").exists()
+
+
+def test_runs_with_TOWN_already_set_to_the_new_slug(tmp_path):
+    import subprocess
+    env = {**os.environ, "TOWN": "bay", "TOWNS_DIR": str(tmp_path)}
+    r = subprocess.run([sys.executable, os.path.join(HERE, "scripts", "new_town.py"), *BAY, "--towns-dir", str(tmp_path)],
+                       env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert (tmp_path / "bay" / "town.json").exists()
