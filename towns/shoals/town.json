@@ -1,0 +1,50 @@
+{
+  "siteName": "Shoals Setlist",
+  "domain": "shoalssetlist.com",
+  "city": "Florence",
+  "state": "AL",
+  "stateName": "Alabama",
+  "timezone": "America/Chicago",
+  "county": "Lauderdale County",
+  "areaCode": "256",
+  "pickName": "Headliner",
+  "areaZips": [
+    "35610",
+    "35616",
+    "35630",
+    "35632",
+    "35633",
+    "35634",
+    "35645",
+    "35646",
+    "35648",
+    "35652",
+    "35660",
+    "35661",
+    "35674",
+    "35677"
+  ],
+  "otherTowns": [
+    "decatur",
+    "huntsville",
+    "athens",
+    "russellville",
+    "hamilton",
+    "haleyville",
+    "moulton",
+    "red bay",
+    "lawrenceburg",
+    "pulaski",
+    "iuka",
+    "corinth",
+    "nashville",
+    "birmingham",
+    "memphis",
+    "savannah"
+  ],
+  "areaName": "the Shoals (Lauderdale and Colbert counties)",
+  "hashtags": "#TheShoals #MuscleShoals #FlorenceAL #ShoalsSetlist",
+  "cityTokensExtra": [
+    "shoals"
+  ]
+}
