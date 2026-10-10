@@ -395,3 +395,26 @@ def test_newsletter_refuses_another_towns_dispatch():
     assert "needs its GitHub Environment (MULTI_CITY_PLAN.md 3.3)" in r.stdout
     # The send job waits on the gate, so nothing is sent.
     assert load("newsletter.yml")["jobs"]["send"]["needs"] == "gate"
+
+
+@pytest.mark.parametrize("name", TOWN_WORKFLOWS)
+def test_town_slack_tag_is_empty_for_victoria(name):
+    # Another town's Slack posts carry vars.SLACK_TOWN_TAG (slack_notify.py
+    # falls back to its city); scheduled and Victoria runs pass "" as before.
+    wf = load(name)
+    assert wf["env"]["SLACK_TOWN_TAG"] == "${{ inputs.town && inputs.town != 'victoria' && vars.SLACK_TOWN_TAG || '' }}"
+
+
+@pytest.mark.parametrize("name", sorted(os.listdir(WF)))
+def test_town_workflows_sparse_checkout_includes_towns(name):
+    # town.py reads towns/<slug>/town.json at import: a sparse checkout
+    # without towns/ fails every run for another town.
+    wf = load(name)
+    on = wf.get("on", wf.get(True)) or {}
+    if not ((on.get("workflow_dispatch") or {}).get("inputs") or {}).get("town"):
+        return
+    for job in wf["jobs"].values():
+        for st in job.get("steps", []):
+            sparse = (st.get("with") or {}).get("sparse-checkout")
+            if sparse is not None:
+                assert "towns" in str(sparse).split(), f"{name}: sparse checkout without towns/"

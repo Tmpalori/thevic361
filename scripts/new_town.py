@@ -8,8 +8,9 @@
         --zips 77414,77404 --other-towns "wharton,palacios,el campo" --yes
 
 Writes towns/<slug>/town.json (checked by town.py, the same checks the
-server runs at boot), an empty local_events.yaml and extras.yaml for the
-collector, towns/<slug>/public/ for the town's own logo and images, and
+server runs at boot), an empty local_events.yaml, extras.yaml and
+venues.json for the collector (it never falls back to Victoria's root
+files for another town), towns/<slug>/public/ for the town's own logo and images, and
 adds the town to towns/index.json. It never touches Victoria's files and
 refuses a slug that already exists. Then it prints what to run next and
 the accounts the owner sets up.
@@ -101,6 +102,9 @@ def create(values, towns_dir):
     write("town.json", json.dumps(raw, indent=2, ensure_ascii=False) + "\n")
     write("local_events.yaml", "# Hand-added events for this town (same format as Victoria's local_events.yaml).\nevents: []\n")
     write("extras.yaml", "new_and_notable: []\nsponsor: null\n")
+    # No venues yet: the collector skips its venue-based scrapes (with a
+    # warning) until discover_venues.py seeds this list.
+    write("venues.json", "[]\n")
     write(os.path.join("public", ".gitkeep"), "")
 
     towns = [t for t in index.get("towns", []) if isinstance(t, str)]
@@ -124,7 +128,21 @@ Next, in the repo:
   3. Add its own local calendars as collector sources (collect_events.py
      WEB_SOURCES) and list them in town.json "enabledSources".
 
-Accounts and settings (owner; MULTI_CITY_PLAN.md 5.2):
+Must be done before launch (MULTI_CITY_PLAN.md; each one blocks a launch,
+and scripts/launch_check.py fails until the town is really collecting):
+  - 3.3 the town's GitHub Environment "{slug}" (SITE_URL={site}, Meta,
+    NTFY_TOPIC, cron secrets, SLACK_TOWN_TAG="{settings['city']}"), then
+    TOWN_WORKFLOWS=1 on its Railway service. Until then it starts no
+    collect, social kit, submission review or event check.
+  - 3.4 its own scheduled collects (town matrix, staggered crons,
+    fail-fast: false; Event Check gated on the town).
+  - 3.5 the workflows' gates call the town's own SITE_URL.
+  - 3.7 test_workflows.py pins the town inputs (Victoria's crons unchanged).
+  - 2.6 Railway watch paths on every service (by town #3 at the latest).
+
+Accounts and settings (owner; MULTI_CITY_PLAN.md 5.2). Follow
+RAILWAY.md "New town on Railway" end to end: every variable, fresh secrets
+per town (never copy Victoria's), Stripe webhook events, HQ_TOWNS, domain.
   - Domain {settings['domain']} and DNS.
   - Railway project with its own Postgres (backups on). Variables: TOWN={slug},
     SITE_URL={site}, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_SESSION_SECRET,
@@ -141,15 +159,20 @@ Accounts and settings (owner; MULTI_CITY_PLAN.md 5.2):
     checkout, receipts and card statements show {settings['site_name']}, not
     The Vic 361. Set its public business name, logo and statement
     descriptor, then its STRIPE_SECRET_KEY, and a webhook endpoint at
-    {site}/api/stripe/webhook with its STRIPE_WEBHOOK_SECRET. Products and
-    prices are created on the first checkout.
+    {site}/api/stripe/webhook with its STRIPE_WEBHOOK_SECRET, subscribed to
+    the events in RAILWAY.md step 5 (including charge.dispute.closed and
+    invoice.paid). Switch to the live key and live endpoint secret after the
+    launch test checkout (a test key in production is a Setup warning).
+    Products and prices are created on the first checkout.
   - Facebook page, Instagram, ad account (the town's GitHub Environment).
   - GA data stream (gaId in town.json), Tremendous campaign.
   - Turnstile: add {settings['domain']} to a widget; TURNSTILE_SITE_KEY and
     TURNSTILE_SECRET_KEY (required: without them every newsletter signup has
     to confirm by email).
 
-Before launch (5.3): the server starts (boot guards pass), a test newsletter to
+Before launch (5.3): python3 scripts/launch_check.py --town {slug} passes
+(10+ upcoming events, a collect in the last 8 days, workflows on, venues
+seeded), the server starts (boot guards pass), a test newsletter to
 delivered@resend.dev, a Stripe test-mode checkout, a reply lands in #inbox
 tagged with the town, HQ shows it, and Victoria's live check is unchanged.
 """

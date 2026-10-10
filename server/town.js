@@ -204,6 +204,25 @@ export function townBootProblems(t, { siteUrl = '', emailFrom = '' } = {}) {
   return problems;
 }
 
+// TOWN forgotten on a new town's service: unset means Victoria, so it would
+// boot as a full clone of The Vic 361 on the new domain (Victoria's name,
+// canonicals and Google tag; with a GITHUB_TOKEN, a second dispatch of
+// Victoria's workflows). A service running as Victoria must therefore be on
+// Victoria's SITE_URL (www.thevic361.com, or any thevic361.com host) or have
+// none. Railway's own hosts (staging and PR copies) and local ones pass too.
+// Returns the reason it won't start, or ''.
+export function victoriaBootProblem(t, envSiteUrl = '') {
+  if (t.id !== VICTORIA.id) return '';
+  const raw = String(envSiteUrl || '').trim();
+  if (!raw) return '';
+  let h;
+  try { h = new URL(raw).hostname.toLowerCase(); } catch (_) { return ''; }
+  const ok = [VICTORIA.domain, 'railway.app', 'localhost'].some(d => h === d || h.endsWith('.' + d)) ||
+    h === '127.0.0.1' || h === '[::1]';
+  return ok ? '' : `TOWN is unset (Victoria) but SITE_URL is ${raw}: this service would run as The Vic 361 on another ` +
+    `domain. Set TOWN to the town's slug (towns/<slug>/town.json), or SITE_URL to ${VICTORIA.siteUrl} for Victoria.`;
+}
+
 // Inputs for a workflow the server dispatches (MULTI_CITY_PLAN.md 3.5):
 // another town names itself in the workflows' `town` input; Victoria's
 // dispatches stay as they were (no input means victoria).
