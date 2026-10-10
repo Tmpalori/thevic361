@@ -32,6 +32,23 @@ def escape(text):
     return str(text if text is not None else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def town_tag(env=None):
+    """SLACK_TOWN_TAG when set (the workflows pass vars.SLACK_TOWN_TAG for
+    another town). Another town without one is tagged with its city, so its
+    posts in shared channels never read as Victoria's. Victoria: none."""
+    env = os.environ if env is None else env
+    tag = env.get("SLACK_TOWN_TAG", "").strip()
+    slug = env.get("TOWN", "").strip().lower()
+    if tag or slug in ("", "victoria"):
+        return tag
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        import town as town_mod
+        return town_mod.town_config(env)["city"]
+    except Exception:  # noqa: BLE001 - an alert must still go out, tagged with the slug
+        return slug
+
+
 def main(argv):
     url = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
     if not url.startswith("https://hooks.slack.com/"):
@@ -45,8 +62,9 @@ def main(argv):
         del args[i:i + 2]
     text = " ".join(args).strip() or "(no message)"
     # SLACK_TOWN_TAG: "[Bay City] " first, so towns can share channels
-    # (MULTI_CITY_PLAN.md 4.3, same as server/slack.js). Unset: no change.
-    tag = os.environ.get("SLACK_TOWN_TAG", "").strip()
+    # (MULTI_CITY_PLAN.md 4.3, same as server/slack.js). Unset: no change
+    # for Victoria; another town falls back to its city (town_tag).
+    tag = town_tag()
     if tag:
         text = f"[{escape(tag)}] {text}"
     if link:

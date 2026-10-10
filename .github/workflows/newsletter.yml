@@ -42,6 +42,9 @@ permissions:
 # dispatch without the input are Victoria's; town.py reads TOWN.
 env:
   TOWN: ${{ inputs.town || 'victoria' }}
+  # Another town's Slack posts carry its [tag] (scripts/slack_notify.py;
+  # vars.SLACK_TOWN_TAG, or its city when unset). Victoria: none, as before.
+  SLACK_TOWN_TAG: ${{ inputs.town && inputs.town != 'victoria' && vars.SLACK_TOWN_TAG || '' }}
 
 jobs:
   # A cron at the other DST's time is skipped (pinned to CDT alone, the

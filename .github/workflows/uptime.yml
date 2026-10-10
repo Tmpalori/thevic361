@@ -34,6 +34,9 @@ permissions:
 # dispatch without the input are Victoria's; town.py reads TOWN.
 env:
   TOWN: ${{ inputs.town || 'victoria' }}
+  # Another town's Slack posts carry its [tag] (scripts/slack_notify.py;
+  # vars.SLACK_TOWN_TAG, or its city when unset). Victoria: none, as before.
+  SLACK_TOWN_TAG: ${{ inputs.town && inputs.town != 'victoria' && vars.SLACK_TOWN_TAG || '' }}
 
 jobs:
   check:
@@ -46,7 +49,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          sparse-checkout: scripts
+          # Cone mode: root files (town.py) plus these folders. towns/ holds
+          # another town's town.json, which town.py reads at import.
+          sparse-checkout: |
+            scripts
+            towns
       # Down/up state from the last run, so an outage alerts once (plus
       # hourly reminders), not every run.
       - name: Restore state
@@ -80,7 +87,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          sparse-checkout: scripts
+          # Cone mode: root files (town.py) plus these folders. towns/ holds
+          # another town's town.json, which town.py reads at import.
+          sparse-checkout: |
+            scripts
+            towns
       - name: Stale feed
         env:
           SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}

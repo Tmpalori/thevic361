@@ -12,8 +12,17 @@ its live site, GET only, nothing posted and no key needed (HQ's aside):
   - public pages: they answer, and none names Victoria's site, domain,
     Google tag or "Victoria, TX";
   - robots.txt and the sitemap point at the town's own host;
-  - /events.json answers;
+  - /events.json answers with at least 10 upcoming events (the hourly
+    uptime check's own floor) and a collect in the last 8 days
+    (`collected_at`, the candidates auto-publish last put live);
+  - /api/config says the town's workflows are on (`town_workflows`:
+    TOWN_WORKFLOWS=1, set once its GitHub Environment exists);
+  - towns/<slug>/venues.json is seeded (the collector never borrows
+    Victoria's);
   - HQ: /api/hq/summary answers with HQ_API_KEY as this town.
+
+A town that answers but isn't actually collecting fails: an empty site
+looks fine page by page.
 
 Then it lists what only a person can check (a test newsletter to
 delivered@resend.dev, a Stripe test-mode checkout, a reply landing in
@@ -22,6 +31,7 @@ Exits 1 when any automatic check fails. Victoria isn't a launch: use
 scripts/live_check.py for it.
 """
 import argparse
+import datetime as dt
 import json
 import os
 import sys
@@ -40,7 +50,23 @@ PAGES = ["/", "/about", "/privacy", "/advertise", "/subscribe", "/contact", "/su
 # What a page copied from Victoria's would still say.
 LEAKS = ["thevic361", "The Vic 361", "Vic 361", "G-52YHD3X3C2", "Victoria, TX", "Victoria, Texas"]
 
+# A launched town needs at least this many events ahead (scripts/
+# uptime_check.py alerts below the same number) and a collect this recent.
+MIN_UPCOMING = 10
+MAX_COLLECT_AGE_DAYS = 8
+
 MANUAL = """
+Must be done before launch (MULTI_CITY_PLAN.md; each one blocks a launch):
+  [ ] 3.3 the town's GitHub Environment (SITE_URL, Meta, NTFY, cron secrets,
+      SLACK_TOWN_TAG), then TOWN_WORKFLOWS=1 on its Railway service
+  [ ] 3.4 its own scheduled collects (town matrix, staggered crons,
+      fail-fast: false; Event Check gated on the town)
+  [ ] 3.5 the workflows' gates call the town's own SITE_URL
+  [ ] 3.7 test_workflows.py pins the town inputs (Victoria's crons unchanged)
+  [ ] 2.6 Railway watch paths on every service, so one town's commits don't
+      redeploy every town (by town #3 at the latest)
+  [ ] RAILWAY.md "New town on Railway" followed end to end (fresh secrets)
+
 Check by hand before launch:
   [ ] Admin → Newsletter → send a test to delivered@resend.dev (never a real list)
   [ ] A Stripe test-mode checkout on /advertise completes and shows in Admin → Sponsors
@@ -52,8 +78,17 @@ Check by hand before launch:
 """
 
 
-def check(town, site, hq_key="", get=fetch):
+def _when(raw):
+    try:
+        t = dt.datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
+
+
+def check(town, site, hq_key="", get=fetch, now=None, venues_path=None):
     """[(ok, what)] for each automatic check."""
+    now = now or dt.datetime.now(dt.timezone.utc)
     results = []
     add = lambda ok, what: results.append((bool(ok), what))  # noqa: E731
     host = urllib.parse.urlparse(site).hostname or ""
@@ -77,6 +112,21 @@ def check(town, site, hq_key="", get=fetch):
     add(t.get("domain") == town["domain"], f"its domain is {town['domain']} (says {t.get('domain')!r})")
     add(config.get("github_events_path") == f"towns/{slug}/public/events.json",
         f"publishes to towns/{slug}/public/events.json (says {config.get('github_events_path')!r})")
+    # Until TOWN_WORKFLOWS=1 the town starts no collect, social kit, review
+    # or event check (server/town.js townWorkflowsReady).
+    add(config.get("town_workflows") is True,
+        "its workflows are on (TOWN_WORKFLOWS=1 after its GitHub Environment)" +
+        ("" if config.get("town_workflows") is True else f" (says {config.get('town_workflows')!r})"))
+
+    if venues_path:
+        try:
+            with open(venues_path, encoding="utf-8") as f:
+                venues = json.load(f)
+        except (OSError, ValueError):
+            venues = None
+        n = len(venues) if isinstance(venues, list) else 0
+        add(n > 0, f"towns/{slug}/venues.json is seeded ({n} venue{'s' if n != 1 else ''}"
+            + ("" if venues is not None else ", missing or unreadable") + ")")
 
     for path in PAGES:
         status, _, _, body = get(site + path)
@@ -92,10 +142,20 @@ def check(town, site, hq_key="", get=fetch):
 
     status, _, _, body = get(site + "/events.json")
     try:
-        ok = status == 200 and isinstance(json.loads(body).get("events"), list)
+        feed = json.loads(body)
+        ok = status == 200 and isinstance(feed.get("events"), list)
     except (ValueError, AttributeError):
-        ok = False
+        feed, ok = {}, False
     add(ok, f"/events.json answers (HTTP {status})")
+    events = feed.get("events") if ok else []
+    today = now.astimezone(town_mod.tz(town)).date().isoformat()
+    ahead = sum(1 for e in events if isinstance(e, dict) and str(e.get("date", "")) >= today)
+    add(ahead >= MIN_UPCOMING, f"at least {MIN_UPCOMING} upcoming events ({ahead})")
+    collected = _when(feed.get("collected_at")) if ok else None
+    age = (now - collected).days if collected else None
+    add(age is not None and age <= MAX_COLLECT_AGE_DAYS,
+        f"a collect in the last {MAX_COLLECT_AGE_DAYS} days (" +
+        (f"{age} day{'s' if age != 1 else ''} ago" if age is not None else "no collected_at") + ")")
 
     if hq_key:
         status, _, _, body = get(site + "/api/hq/summary", headers={"Authorization": f"Bearer {hq_key}"})
@@ -124,7 +184,8 @@ def main(argv=None, get=fetch):
         print(f"Can't read the town: {e}", file=sys.stderr)
         return 2
     site = (args.site or town["site_url"]).rstrip("/")
-    results = check(town, site, os.environ.get("HQ_API_KEY", "").strip(), get=get)
+    venues_path = os.path.join(towns_dir or os.path.join(ROOT, "towns"), args.town, "venues.json")
+    results = check(town, site, os.environ.get("HQ_API_KEY", "").strip(), get=get, venues_path=venues_path)
     print(f"Launch check: {town['site_name']} at {site}")
     for ok, what in results:
         print(f"  {'✅' if ok else '❌'} {what}")

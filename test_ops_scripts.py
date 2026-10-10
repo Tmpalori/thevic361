@@ -103,3 +103,19 @@ def test_slack_town_tag(monkeypatch):
     monkeypatch.setenv("SLACK_TOWN_TAG", "A<b>")
     slack_notify.main(["hi"])
     assert sent == ["🗓️ Collect done <https://x.example/admin.html|Open>", "[Bay City] 🗓️ Collect done", "[A&lt;b&gt;] hi"]
+
+
+def test_slack_town_tag_defaults_to_another_towns_city(tmp_path):
+    # A workflow run as another town with no SLACK_TOWN_TAG variable is
+    # still tagged (its city); Victoria, set or unset, gets no tag.
+    import json as _json
+    import slack_notify
+    (tmp_path / "bay").mkdir()
+    (tmp_path / "bay" / "town.json").write_text(_json.dumps({
+        "siteName": "The Bay 979", "domain": "thebay979.com", "city": "Bay City", "state": "TX",
+        "stateName": "Texas", "timezone": "America/Chicago"}))
+    assert slack_notify.town_tag({}) == ""
+    assert slack_notify.town_tag({"TOWN": "victoria", "SLACK_TOWN_TAG": ""}) == ""
+    assert slack_notify.town_tag({"TOWN": "bay", "TOWNS_DIR": str(tmp_path), "SLACK_TOWN_TAG": ""}) == "Bay City"
+    assert slack_notify.town_tag({"TOWN": "bay", "TOWNS_DIR": str(tmp_path), "SLACK_TOWN_TAG": "Bay"}) == "Bay"
+    assert slack_notify.town_tag({"TOWN": "nowhere", "TOWNS_DIR": str(tmp_path)}) == "nowhere"   # still tagged
