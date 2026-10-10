@@ -6,7 +6,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import http from 'node:http';
-import { createHqApp, hqConfig, rowOf, totalsOf } from '../hq/server.js';
+import { createHqApp, createPreviewApp, isPreview, hqConfig, rowOf, totalsOf } from '../hq/server.js';
 import { createRateLimiter } from '../server/rateLimit.js';
 
 const KEY_VIC = 'vic-key-0123456789abcdef';
@@ -194,5 +194,25 @@ describe('the charts and town cards', () => {
     expect(t.daily[0]).toEqual({ day: '2026-09-10', active: 200 });
     expect(t.months.map(m => m.month)).toEqual(['2026-09', '2026-10']);
     expect(t.sources[0]).toEqual(['Site', 80]);
+  });
+});
+
+describe('a PR preview copy of HQ', () => {
+  it('is a preview only in a non-production Railway environment', () => {
+    expect(isPreview({ RAILWAY_ENVIRONMENT_NAME: 'thevic361-pr-186' })).toBe(true);
+    expect(isPreview({ RAILWAY_ENVIRONMENT_NAME: 'production' })).toBe(false);
+    expect(isPreview({})).toBe(false);   // local runs
+  });
+
+  it('answers /health and nothing else: no login, no towns', async () => {
+    server = http.createServer(createPreviewApp());
+    await new Promise(r => server.listen(0, r));
+    base = `http://127.0.0.1:${server.address().port}`;
+    expect(await (await fetch(base + '/health')).json()).toEqual({ ok: true, preview: true });
+    const page = await fetch(base + '/');
+    expect(page.status).toBe(404);
+    expect(await page.text()).not.toContain('action="/login"');
+    expect((await fetch(base + '/login', { method: 'POST' })).status).toBe(404);
+    expect((await fetch(base + '/api/towns')).status).toBe(404);
   });
 });
