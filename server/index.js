@@ -21,7 +21,7 @@ import path from 'node:path';
 import { promises as fsp, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { createStore, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter, resolveEditKey, withPublishedLock } from './db.js';
+import { createStore, isOutage, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter, resolveEditKey, withPublishedLock } from './db.js';
 import { validateSubmission, validateEventEdit, checkBotSignals } from './validate.js';
 import { verifyTurnstile } from './turnstile.js';
 import { createRateLimiter, ipKey } from './rateLimit.js';
@@ -314,7 +314,17 @@ export async function createApp(opts = {}) {
     const problems = townBootProblems(town, { siteUrl, emailFrom: newsletter.from });
     if (problems.length) throw new Error(`TOWN=${town.id} won't start: ${problems.join('; ')}`);
     if (typeof store.claimTown === 'function') {
-      const owner = await store.claimTown(town.id);
+      // A database blip at boot is retried for about a minute (Railway
+      // restarts it after that); "couldn't check" is never "claimed".
+      const waits = opts.claimRetryMs || [2000, 5000, 10000, 15000, 30000];
+      let owner;
+      for (let i = 0; ; i++) {
+        try { owner = await store.claimTown(town.id); break; } catch (err) {
+          if (i >= waits.length || !isOutage(err)) throw err;
+          console.warn(`[db] TOWN=${town.id}: database unreachable at boot (${err.message}); retrying in ${waits[i] / 1000}s`);
+          await new Promise(r => setTimeout(r, waits[i]));
+        }
+      }
       if (owner.town !== town.id) {
         throw new Error(`TOWN=${town.id} won't start: its database ${owner.town ? `belongs to TOWN=${owner.town}`
           : 'already holds subscribers, orders or submissions from before towns (Victoria\'s)'}; check DATABASE_URL`);
