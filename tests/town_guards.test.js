@@ -140,6 +140,8 @@ describe('claiming the database through an outage', () => {
     broken.claimTown = async () => { tries++; throw Object.assign(new Error('syntax error'), { code: '42601' }); };
     await expect(boot({ town: BAY, siteUrl: OK.siteUrl, store: broken, claimRetryMs: [1, 1] })).rejects.toThrow(/syntax error/);
     expect(tries).toBe(1);
+  });
+});
 
 describe('workflows for another town (until its GitHub Environment exists)', () => {
   it('Victoria may always start them; another town only with TOWN_WORKFLOWS=1', async () => {
