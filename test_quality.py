@@ -15,9 +15,26 @@ sys.path.insert(0, os.path.dirname(__file__))
 import collect_events as ce
 
 
+_SAVED_WINDOW = None
+
+
 def setup_module(_):
+    global _SAVED_WINDOW
+    _SAVED_WINDOW = (ce._WINDOW_START, ce._WINDOW_END)
     ce._WINDOW_START = datetime.date(2026, 9, 28)
     ce._WINDOW_END = datetime.date(2026, 10, 12)
+
+
+def teardown_module(_):
+    ce._WINDOW_START, ce._WINDOW_END = _SAVED_WINDOW
+
+
+def _window_around_today(monkeypatch):
+    """The few tests that use the real date need a window around it, not the
+    fixed one above (or they'd start failing once the calendar passes it)."""
+    today = ce.now_central().date()
+    monkeypatch.setattr(ce, "_WINDOW_START", today)
+    monkeypatch.setattr(ce, "_WINDOW_END", today + datetime.timedelta(days=14))
 
 
 def ev(name, date="2026-10-02", venue="", address="", source=None, **kw):
@@ -434,9 +451,10 @@ def test_same_name_different_venues_stay_separate():
     assert is_same_event(a, d)
 
 
-def test_unquoted_yaml_values_dont_abort(tmp_path):
+def test_unquoted_yaml_values_dont_abort(tmp_path, monkeypatch):
     from datetime import date, timedelta
     import collect_events as ce
+    _window_around_today(monkeypatch)
     d = (ce.now_central().date() + timedelta(days=1)).isoformat()
     p = tmp_path / "local.yaml"
     p.write_text(f"events:\n  - date: {d}\n    name: 1776\n    time: 19:00\n  - date: not-a-date\n    name: Broken\n")
@@ -508,6 +526,7 @@ def test_gemini_keeps_only_grounded_in_window_events(monkeypatch):
 
 def test_gemini_skips_without_key_and_stops_on_bad_key(monkeypatch):
     import collect_events as ce
+    _window_around_today(monkeypatch)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert ce.fetch_gemini_events(14, post=lambda *a, **k: 1 / 0) == []
 

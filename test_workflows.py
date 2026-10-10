@@ -130,8 +130,9 @@ def town_env(town=None):
 
 
 def _git(cwd, *args):
+    # The machine's own git config (hooks, signing, default branch) stays out of it.
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd, check=True,
-                   capture_output=True, text=True)
+                   capture_output=True, text=True, env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull})
 
 
 def run_kit_commit(tmp_path, posting):
