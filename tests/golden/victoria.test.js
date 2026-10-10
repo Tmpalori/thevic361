@@ -16,7 +16,7 @@
 // JS files themselves), random ids (UUIDs, tokens), and Stripe's
 // checkout expiry, which follows the real clock.
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { createApp } from '../../server/index.js';
 import { FileStore } from '../../server/db.js';
 import { HUB_PAGES } from '../../server/seo.js';
@@ -53,6 +53,13 @@ const ENV_KEYS = ['SITE_URL', 'NEWSLETTER_FROM', 'NEWSLETTER_REPLY_TO', 'NEWSLET
 const saved = {};
 for (const k of ENV_KEYS) { saved[k] = process.env[k]; delete process.env[k]; }
 afterAll(() => { for (const k of ENV_KEYS) if (saved[k] !== undefined) process.env[k] = saved[k]; });
+// The real clock leaks into a few places the app's now() doesn't reach
+// (JSON-LD offers.validFrom, the footer year): freeze Date at NOW so the
+// snapshots can't drift with the calendar (they used to fail every midnight
+// Central and would again every New Year). Timers stay real.
+vi.useFakeTimers({ toFake: ['Date'] });
+vi.setSystemTime(NOW);
+afterAll(() => vi.useRealTimers());
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 function norm(text) {
