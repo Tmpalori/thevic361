@@ -175,6 +175,14 @@ describe('the charts and town cards', () => {
     expect(html).not.toMatch(/<script/i);
   });
 
+  it('shows an empty revenue chart as a note, not a $0 axis', async () => {
+    const { renderDashboard } = await import('../hq/render.js');
+    const none = full('V', { revenue: { month_to_date: { cents: 0 }, months: [{ month: '2026-09', cents: 0 }, { month: '2026-10', cents: 0 }] } });
+    const html = renderDashboard([rowOf({ slug: 'v', siteUrl: 'https://v.example', summary: none }, 0)], new Date('2026-10-10T15:30:00Z'));
+    expect(html).toContain('No revenue in the last six months yet.');
+    expect(html).not.toContain('aria-label="Revenue by month, last six months"');
+  });
+
   it('adds the towns up', () => {
     const a = rowOf({ slug: 'a', siteUrl: 'https://a.example', summary: full('A') }, 0);
     const b = rowOf({ slug: 'b', siteUrl: 'https://b.example', summary: full('B', { ads: { spend_30_days: 50, cost_per_sub_30_days: 2.5 } }) }, 1);
