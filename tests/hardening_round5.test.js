@@ -58,7 +58,7 @@ async function waitFor(fn, ms = 2000) {
 }
 
 describe('auto-publish and the edits overlay', () => {
-  const FEST = { date: '2026-10-05', name: 'Riverside Fall Fest', venue: 'Riverside Park', time: '10:00 AM' };
+  const FEST = { date: '2026-10-02', name: 'Riverside Fall Fest', venue: 'Riverside Park', time: '10:00 AM' };
   const OTHER = { date: '2026-10-20', name: 'Other', venue: 'Somewhere', time: '7:00 PM' };
 
   async function setup() {
@@ -93,7 +93,7 @@ describe('auto-publish and the edits overlay', () => {
     expect((await store.getPublished()).events.map(eventKeyOf)).toContain(eventKeyOf(FEST));
   });
 
-  it('still drops a past event nobody moved', async () => {
+  it('still drops a past event nobody moved (from before this week)', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const { store, ap } = await setup();
     await store.deleteEventEdit?.(eventKeyOf(FEST));

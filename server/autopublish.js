@@ -6,7 +6,9 @@
  * nobody opens the admin.
  *
  * The admin stays in charge:
- *   - Events already published that are still upcoming are kept as-is
+ *   - Events already published that are still upcoming are kept as-is,
+ *     and so are this week's from Monday on, so the week view still shows
+ *     the days already past (past ones are never refreshed or taken down)
  *     (including anything the admin added by hand or edited), except that
  *     an event this module added takes the collector's newer copy of it
  *     (time, venue, address, link, description; the name only when the
@@ -154,7 +156,9 @@ function sortKey(ev) {
 //    window-limited or non-deterministic sources.
 // 7: Gemini-only events retire too; reworded copies (sameSlot) fold, and
 //    removed/hidden events are matched fuzzily (sameEvent).
-export const AUTO_PUBLISH_RULES = 7;
+// 8: this week's earlier days stay published and fill in from the
+//    collector (its window starts Monday), so the week view isn't empty.
+export const AUTO_PUBLISH_RULES = 8;
 
 // Sources whose events can't be retired for going missing. FB/IG posts are
 // read back only a couple of weeks, so a post announcing an event weeks out
@@ -340,6 +344,11 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
 
     const today = localDateStr(nowFn());
     const upcoming = ev => ev && ev.date >= today && ev.name;
+    // The site's week runs Monday to Sunday and shows the days already past
+    // (folded), so this week's earlier events stay published. Only events
+    // still to come are refreshed, counted or taken down below.
+    const monday = addDays(today, -((new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7));
+    const thisWeekOn = ev => ev && ev.date >= monday && ev.name;
 
     // Retire events this module added before that the new run no longer has.
     // Hand-added and hand-edited events are never touched.
@@ -363,8 +372,9 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     // the edits unreadable we can't tell which events were moved, so past
     // ones stay this run too (the public lists filter by date anyway); the
     // next readable run drops the ones that really are over.
+    const edited1 = ev => (edits ? applyEventEdits([ev], edits)[0] : ev);
     const priorUpcoming = (Array.isArray(prior.events) ? prior.events : [])
-      .filter(ev => ev && ev.name && (!edits || upcoming(applyEventEdits([ev], edits)[0])));
+      .filter(ev => ev && ev.name && (!edits || thisWeekOn(edited1(ev))));
     // Read before retiring: approved submissions are in `keys` too (auto-
     // publish added them) but the collector never lists them, so without
     // this every one would count as missing and come down on the second run.
@@ -378,9 +388,10 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       approvedRead = false;
     }
     const freshUpcoming = fresh.filter(upcoming);
-    // A past event kept only because the edits were unreadable isn't one of
-    // this run's to retire or to count for the health ratio.
-    const ours = priorUpcoming.filter(ev => autoKeys.has(eventKeyOf(ev)) && (edits || upcoming(ev)));
+    // A past event (earlier this week, or kept only because the edits were
+    // unreadable) isn't one of this run's to retire or to count for the
+    // health ratio.
+    const ours = priorUpcoming.filter(ev => autoKeys.has(eventKeyOf(ev)) && upcoming(edited1(ev)));
     const healthEnd = addDays(today, HEALTH_WINDOW_DAYS);
     const scraped = ev => ev.date <= healthEnd && !ev.curated && ev._source !== 'local_events';
     const healthy = !submissionsOnly &&
@@ -442,11 +453,12 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
 
     // Auto-added last time but missing now: the admin took it down.
     // (Retired events aren't "rejected": if a later run finds them again,
-    // they come back.)
+    // they come back.) Remembered through the rest of the week: the
+    // collector lists this week's earlier days too.
     const rejected = new Set([
       ...(state.rejected || []),
       ...(state.keys || []).filter(k => !keptKeys.has(k) && !retiredKeys.has(k))
-    ].filter(k => k.slice(0, 10) >= today));
+    ].filter(k => k.slice(0, 10) >= monday));
     // An approved submission that merged into a listed event under another
     // name (sameEvent) is recorded as an alias of that event's key. When
     // that event is gone (the admin removed it) and wasn't retired, the
@@ -479,7 +491,7 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     // check below (the keys carry no time, so sameEvent, not sameSlot).
     const hiddenNow = Array.isArray(prior.hidden) ? prior.hidden.map(h => h && h.key).filter(Boolean) : [];
     const removedShapes = [...rejected, ...hiddenNow].map(parseEventKey)
-      .filter(r => r && r.date >= today && r.name);
+      .filter(r => r && r.date >= monday && r.name);
     const refreshed = new Set();
     const renamed = new Map();
     const canRefresh = ev => {
@@ -513,7 +525,9 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       const add = sourcesOf(raw);
       if (add.length) sourcesNow.set(k, [...new Set([...(sourcesNow.get(k) || []), ...add])]);
     };
-    for (const raw of [...approved, ...fresh.filter(upcoming)]) {
+    // The collector lists the week from Monday (its Mon–Sun grid), so the
+    // days already past fill in too; only upcoming ones count above.
+    for (const raw of [...approved, ...fresh.filter(thisWeekOn)]) {
       const ev = publicFields(raw);
       const key = eventKeyOf(ev);
       if (rejected.has(key)) { skippedRejected++; continue; }
