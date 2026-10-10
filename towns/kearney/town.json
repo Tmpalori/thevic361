@@ -38,5 +38,17 @@
     "york",
     "lincoln",
     "omaha"
+  ],
+  "feeds": [
+    {
+      "name": "visit_kearney",
+      "type": "tribe",
+      "url": "https://visitkearney.org"
+    },
+    {
+      "name": "mona",
+      "type": "tribe",
+      "url": "https://mona.unk.edu"
+    }
   ]
 }

@@ -14,6 +14,10 @@ Types:
   tribe     a WordPress site running The Events Calendar (its REST API,
             /wp-json/tribe/events/v1/events)
   localist  a Localist calendar (/api/2/events)
+  squarespace  a Squarespace events page (<page>?format=json, its "upcoming")
+  cards     a Craft CMS tourism site's event listing (Visit Tupelo's
+            tupelo.net/events: article.card blocks, "?page=N"; the time comes
+            from each event page's schema.org startDate)
 
 Each parser is pure: text or JSON in, events out, in the town's timezone and
 inside [start, end] (dates). The collector adds icons and its own checks.
@@ -29,7 +33,7 @@ try:
 except ImportError:  # pragma: no cover - Python < 3.9
     ZoneInfo = None
 
-TYPES = ("ics", "tribe", "localist")
+TYPES = ("ics", "tribe", "localist", "squarespace", "cards")
 MAX_PAGES = 10          # tribe and localist pagination cap (50 or 100 a page)
 _SLUG = re.compile(r"^[a-z0-9_]+$")
 
@@ -52,6 +56,8 @@ def check_feeds(feeds):
             raise ValueError(f'feed {name}: type must be one of {", ".join(TYPES)}')
         if not isinstance(url, str) or not url.startswith("https://"):
             raise ValueError(f"feed {name}: url must start with https://")
+        if not isinstance(f.get("library", False), bool):
+            raise ValueError(f"feed {name}: library must be true or false")
         seen.add(name)
     return feeds
 
@@ -70,6 +76,26 @@ def short(text, limit=400):
     cut = text[:limit]
     stop = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
     return (cut[:stop + 1] if stop > limit // 2 else cut.rsplit(" ", 1)[0] + "…").strip()
+
+
+REPEAT_DAYS = 5         # the same event on this many days of one feed is a run
+
+
+def collapse_runs(events):
+    """An event a feed lists on REPEAT_DAYS or more days (an exhibit or a
+    season, one entry per day) is kept on its first day only."""
+    days = {}
+    for ev in events:
+        days.setdefault((ev["name"].lower(), ev.get("venue", "").lower()), set()).add(ev["date"])
+    seen, out = set(), []
+    for ev in sorted(events, key=lambda e: e["date"]):
+        key = (ev["name"].lower(), ev.get("venue", "").lower())
+        if len(days[key]) >= REPEAT_DAYS:
+            if key in seen:
+                continue
+            seen.add(key)
+        out.append(ev)
+    return out
 
 
 def fmt_time(dt):
@@ -158,7 +184,9 @@ def parse_ics(text, tz, start, end):
         loc = text_of("LOCATION")
         venue, _, address = loc.partition(",") if re.search(r",\s*\d", loc) else (loc, "", "")
         events.append(_event(s_day, text_of("SUMMARY"), s_dt, e_dt, venue=venue, address=address.strip(),
-                             description=text_of("DESCRIPTION"), url=text_of("URL")))
+                             description=text_of("DESCRIPTION"),
+                             # CivicPlus puts the feed's own address in URL, not the event's.
+                             url="" if "icalendar.aspx" in text_of("URL").lower() else text_of("URL")))
     return events
 
 
@@ -230,6 +258,107 @@ def parse_localist(data, tz, start, end):
     return events, int(total)
 
 
+# ─── Squarespace ────────────────────────────────────────────────────────────
+
+def parse_squarespace(data, tz, start, end, base=""):
+    """Events in [start, end] from a Squarespace events page's JSON
+    (<page>?format=json): "upcoming" items with epoch-millisecond dates."""
+    events = []
+    for e in (data or {}).get("upcoming") or (data or {}).get("items") or []:
+        try:
+            s = datetime.fromtimestamp(int(e["startDate"]) / 1000, timezone.utc).astimezone(tz)
+            en = datetime.fromtimestamp(int(e["endDate"]) / 1000, timezone.utc).astimezone(tz) if e.get("endDate") else None
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not (start <= s.date() <= end):
+            continue
+        loc = e.get("location") if isinstance(e.get("location"), dict) else {}
+        addr = ", ".join(x for x in (loc.get("addressLine1"), loc.get("addressLine2")) if x)
+        url = e.get("fullUrl") or ""
+        if url.startswith("/") and base:
+            url = base.rstrip("/") + url
+        events.append(_event(s.date(), e.get("title"), s, en, venue=loc.get("addressTitle") or "", address=addr,
+                             description=e.get("body") or e.get("excerpt"), url=url))
+    return events
+
+
+def squarespace_base(url):
+    m = re.match(r"(https://[^/]+)", url)
+    return m.group(1) if m else ""
+
+
+# ─── Craft CMS tourism listing cards (Visit Tupelo) ─────────────────────────
+
+_MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
+CARDS_MAX_SPAN = 3      # a run longer than this (an exhibit, a season) is skipped
+
+
+def _card_day(text, start):
+    """'Oct. 10' → the date in the window's year (or the next one, for a
+    January card seen in December)."""
+    m = re.match(r"\s*([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})", text or "")
+    if not m or m.group(1).lower() not in _MONTHS:
+        return None
+    month, day = _MONTHS[m.group(1).lower()], int(m.group(2))
+    year = start.year + (1 if month < start.month - 6 else 0)
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
+def parse_cards(page_html, start, end):
+    """(events without times, whether the page reached past `end`) from one
+    listing page. Each event carries its page URL in "url"; runs longer than
+    CARDS_MAX_SPAN days are skipped and short ones listed on their first day."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(page_html or "", "html.parser")
+    events, past_end = [], False
+    for card in soup.select("article.card"):
+        heading = card.select_one(".card__date-heading")
+        link = card.select_one(".card__heading a[href]")
+        if not heading or not link:
+            continue
+        parts = re.split(r"\s+to\s+", heading.get_text(" ", strip=True))
+        first = _card_day(parts[0], start)
+        last = _card_day(parts[1], start) if len(parts) > 1 else first
+        if not first:
+            continue
+        if first > end:
+            past_end = True
+            continue
+        if last and (last - first).days > CARDS_MAX_SPAN:
+            continue
+        if not (start <= first <= end):
+            continue
+        spans = [clean(x.get_text(" ", strip=True)) for x in card.select(".card__address > span")]
+        venue, address = ("", spans) if spans and re.match(r"\d", spans[0]) else (spans[0] if spans else "", spans[1:])
+        events.append(_event(first, link.get_text(" ", strip=True), venue=venue, address=", ".join(address),
+                             url=link["href"]))
+    return events, past_end
+
+
+def parse_card_detail(page_html, tz):
+    """(start, end, free) from an event page: the schema.org Event's times
+    (the date is the listing's: a repeating event's startDate is its first
+    occurrence) and "Admission Free"."""
+    times = []
+    for key in ("startDate", "endDate"):
+        m = re.search(r'"%s"\s*:\s*"([^"]+)"' % key, page_html or "")
+        try:
+            times.append(_iso(m.group(1), tz) if m and "T" in m.group(1) else None)
+        except ValueError:
+            times.append(None)
+    if times[0] and times[0].hour == 0 and times[0].minute == 0:
+        times = [None, None]        # midnight to 11:59 PM: all day
+    free = bool(re.search(r"Admission\s*(?:</[^>]+>\s*)*(?:<[^>]+>\s*)*Free\b", page_html or "", re.I))
+    return times[0], times[1], free
+
+
+def _on_day(day, t):
+    return datetime.combine(day, t.timetz()) if t else None
+
+
 # ─── Fetching ───────────────────────────────────────────────────────────────
 
 def fetch_feed(feed, get, tz, start, end):
@@ -253,4 +382,30 @@ def fetch_feed(feed, get, tz, start, end):
             events.extend(got)
             page += 1
         return events
+    if kind == "squarespace":
+        return parse_squarespace(get(url).json(), tz, start, end, base=squarespace_base(url))
+    if kind == "cards":
+        sep = "&" if "?" in url else "?"
+        listed, seen = [], set()
+        for page in range(1, MAX_PAGES + 1):
+            got, past_end = parse_cards(get(f"{url}{sep}page={page}").text, start, end)
+            for ev in got:
+                if (ev["url"], ev["date"]) not in seen:
+                    seen.add((ev["url"], ev["date"]))
+                    listed.append(ev)
+            if past_end or not got:
+                break
+        details = {}
+        for ev in listed:
+            if ev["url"] not in details:
+                try:
+                    details[ev["url"]] = parse_card_detail(get(ev["url"]).text, tz)
+                except Exception:
+                    details[ev["url"]] = (None, None, False)   # no time: the event still lists
+            s_dt, e_dt, free = details[ev["url"]]
+            day = date.fromisoformat(ev["date"])
+            ev["time"] = time_range(_on_day(day, s_dt), _on_day(day, e_dt))
+            if free:
+                ev["free"] = True
+        return listed
     raise ValueError(f"unknown feed type {kind}")

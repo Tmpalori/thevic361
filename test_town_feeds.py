@@ -164,3 +164,74 @@ def test_source_keeps_going_when_one_feed_fails(monkeypatch):
     assert all(e["_source"] == "town_feeds" and e["_feed"] == "good" and e["icons"] for e in evs)
     stat = [s for s in collect_events._SOURCE_STATS if s["name"] == "town_feeds"][-1]
     assert stat["status"] == "partial" and "broken failed" in stat["message"] and "good 3" in stat["message"]
+
+
+SQUARESPACE = {"upcoming": [
+    {"title": "Lego Club", "startDate": 1791837000000, "endDate": 1791842400000, "fullUrl": "/events/lego",
+     "body": "<p>Build &amp; play.</p>",
+     "location": {"addressTitle": "Lee County Library", "addressLine1": "219 N Madison St", "addressLine2": "Tupelo, MS, 38804"}},
+    {"title": "Too late", "startDate": 1796000000000},
+]}
+
+
+def test_squarespace_events():
+    evs = town_feeds.parse_squarespace(SQUARESPACE, CT, START, END, base="https://lib.example")
+    assert evs == [{"date": "2026-10-12", "name": "Lego Club", "time": "3:30 PM – 5:00 PM", "venue": "Lee County Library",
+                    "address": "219 N Madison St, Tupelo, MS, 38804", "description": "Build & play.",
+                    "url": "https://lib.example/events/lego"}]
+
+
+def _card(day, title, href, address=("Backline Music Hall", "5339 Cliff Gookin Blvd", "Tupelo, MS 38804")):
+    spans = "".join(f"<span>{a}</span>" for a in address)
+    return (f'<article class="card"><p class="card__date-heading">{day}</p><h2 class="card__heading">'
+            f'<a href="{href}">{title}</a></h2><span class="card__address">{spans}</span></article>')
+
+
+def test_cards_listing():
+    page = "".join([
+        _card("Oct. 12", "Board Game Night", "https://t.example/events/games/"),
+        _card("Oct. 12 to Nov. 25", "Long Exhibit", "https://t.example/events/exhibit/"),      # a run: skipped
+        _card("Oct. 13 to Oct. 14", "Flea Market", "https://t.example/events/flea/", ("1879 Coley Rd", "Tupelo, MS")),
+        _card("Oct. 30", "Past the window", "https://t.example/events/late/"),
+    ])
+    evs, past_end = town_feeds.parse_cards(page, START, END)
+    assert past_end is True
+    assert [(e["date"], e["name"], e["venue"], e["address"]) for e in evs] == [
+        ("2026-10-12", "Board Game Night", "Backline Music Hall", "5339 Cliff Gookin Blvd, Tupelo, MS 38804"),
+        ("2026-10-13", "Flea Market", "", "1879 Coley Rd, Tupelo, MS")]
+
+
+def test_cards_year_rolls_over_in_december():
+    assert town_feeds._card_day("Jan. 3", date(2026, 12, 28)) == date(2027, 1, 3)
+    assert town_feeds._card_day("Dec. 30", date(2026, 12, 28)) == date(2026, 12, 30)
+
+
+def test_cards_fetch_takes_times_from_each_event_page():
+    pages = {
+        "https://t.example/events/?page=1": _card("Oct. 12", "Board Game Night", "https://t.example/events/games/")
+        + _card("Oct. 13", "Flea Market", "https://t.example/events/flea/") + _card("Oct. 31", "Late", "https://t.example/x/"),
+        # A repeating event's startDate is its first date ever: only the time is used.
+        "https://t.example/events/games/": '{"startDate":"2025-05-16T18:30:00-05:00","endDate":"2025-05-16T22:00:00-05:00"} Admission <b>Free</b>',
+        "https://t.example/events/flea/": '{"startDate":"2026-10-13T00:00:00-05:00","endDate":"2026-10-13T23:59:00-05:00"}',
+    }
+    calls = []
+    evs = town_feeds.fetch_feed({"name": "cvb", "type": "cards", "url": "https://t.example/events/"},
+                                lambda u: calls.append(u) or _Resp(pages[u]), CT, START, END)
+    assert [(e["date"], e["time"], e.get("free")) for e in evs] == [
+        ("2026-10-12", "6:30 PM – 10:00 PM", True), ("2026-10-13", "", None)]
+    assert "https://t.example/events/?page=2" not in calls     # page 1 already went past the window
+
+
+def test_collapse_runs_keeps_a_daily_exhibit_once():
+    daily = [{"date": f"2026-10-{d}", "name": "Fall Exhibit", "venue": "Gallery"} for d in range(12, 19)]
+    weekly = [{"date": d, "name": "Storytime", "venue": "Library"} for d in ("2026-10-13", "2026-10-20")]
+    assert [(e["name"], e["date"]) for e in town_feeds.collapse_runs(daily + weekly)] == [
+        ("Fall Exhibit", "2026-10-12"), ("Storytime", "2026-10-13"), ("Storytime", "2026-10-20")]
+
+
+def test_library_feed_goes_through_the_library_cap():
+    ev = {"name": "Storytime", "venue": "Lee County Library", "url": "https://lib.example/e", "_library": True}
+    assert collect_events._is_library_event(ev)
+    assert not collect_events._is_library_event({**ev, "_library": False})
+    with pytest.raises(ValueError, match="library must be"):
+        town_feeds.check_feeds([{"name": "a", "type": "ics", "url": "https://a", "library": "yes"}])

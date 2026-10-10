@@ -40,5 +40,48 @@
     "portland"
   ],
   "areaName": "the Rogue Valley (Jackson County)",
-  "hashtags": "#RogueValley #MedfordOregon #SouthernOregon #TheRogue541"
+  "hashtags": "#RogueValley #MedfordOregon #SouthernOregon #TheRogue541",
+  "feeds": [
+    {
+      "name": "ashland_news",
+      "type": "tribe",
+      "url": "https://ashland.news"
+    },
+    {
+      "name": "travel_ashland",
+      "type": "tribe",
+      "url": "https://travelashland.com"
+    },
+    {
+      "name": "craterian",
+      "type": "tribe",
+      "url": "https://craterian.org"
+    },
+    {
+      "name": "jacksonville_chamber",
+      "type": "tribe",
+      "url": "https://jacksonvilleoregon.org"
+    },
+    {
+      "name": "sou",
+      "type": "localist",
+      "url": "https://events.sou.edu"
+    },
+    {
+      "name": "ashland_city_events",
+      "type": "ics",
+      "url": "https://ashlandoregon.gov/common/modules/iCalendar/iCalendar.aspx?catID=27&feed=calendar"
+    },
+    {
+      "name": "ashland_nature_center",
+      "type": "ics",
+      "url": "https://ashlandoregon.gov/common/modules/iCalendar/iCalendar.aspx?catID=24&feed=calendar"
+    },
+    {
+      "name": "jackson_county_library",
+      "type": "ics",
+      "url": "https://jcls.libcal.com/ical_subscribe.php?src=p&cid=3210",
+      "library": true
+    }
+  ]
 }
