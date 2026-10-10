@@ -162,7 +162,22 @@ export function registerEventCheck(app, { store, requireAdmin, nowFn, secret, lo
     const published = (await store.getPublished()) || {};
     const today = localDateStr(nowFn());
     res.set('Cache-Control', 'no-store');
-    res.json({ ok: true, hidden: entries(published).filter(h => h.date >= today) });
+    // Dismissed ones stay hidden from the site; they just leave this list.
+    res.json({ ok: true, hidden: entries(published).filter(h => h.date >= today && !h.dismissed) });
+  });
+
+  // "Leave it hidden": the admin agrees with the check. The event stays off
+  // the site; only the Home list forgets it.
+  app.post('/api/admin/hidden/dismiss', requireAdmin, async (req, res) => {
+    const key = String(req.body && req.body.key || '');
+    const done = await withPublishedLock(store, async () => {
+      const published = await store.getPublished();
+      if (!published || !entries(published).some(h => h.key === key)) return false;
+      await store.setPublished({ ...published, hidden: published.hidden.map(h => (h.key === key ? { ...h, dismissed: true } : h)) });
+      return true;
+    });
+    if (!done) return res.status(404).json({ ok: false, error: 'not-hidden' });
+    res.json({ ok: true, dismissed: key });
   });
 
   app.post('/api/admin/hidden/restore', requireAdmin, async (req, res) => {

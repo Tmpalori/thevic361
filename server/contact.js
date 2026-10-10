@@ -59,8 +59,19 @@ export function registerContact(app, { siteUrl, slack, store = null, requireAdmi
   if (requireAdmin) {
     app.get('/api/admin/messages', requireAdmin, async (req, res, next) => {
       try {
-        const messages = store && typeof store.listContactMessages === 'function' ? await store.listContactMessages(50) : [];
+        // Dismissed ones are dealt with: read past them so they don't
+        // crowd newer ones out of the 50.
+        const all = store && typeof store.listContactMessages === 'function' ? await store.listContactMessages(500) : [];
+        const messages = all.filter(m => m && !m.dismissed_at).slice(0, 50);
         res.set('Cache-Control', 'no-store').json({ ok: true, messages });
+      } catch (err) { next(err); }
+    });
+    app.post('/api/admin/messages/:id/dismiss', requireAdmin, async (req, res, next) => {
+      try {
+        if (!store || typeof store.dismissContactMessage !== 'function') return res.status(501).json({ ok: false, error: 'unsupported' });
+        const ok = await store.dismissContactMessage(String(req.params.id || '').slice(0, 64));
+        if (!ok) return res.status(404).json({ ok: false, error: 'not-found' });
+        res.json({ ok: true });
       } catch (err) { next(err); }
     });
   }
