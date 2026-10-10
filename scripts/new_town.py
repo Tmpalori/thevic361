@@ -147,9 +147,13 @@ per town (never copy Victoria's), Stripe webhook events, HQ_TOWNS, domain.
   - Railway project with its own Postgres (backups on). Variables: TOWN={slug},
     SITE_URL={site}, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_SESSION_SECRET,
     the cron secrets, HQ_API_KEY, SLACK_TOWN_TAG="{settings['city']}".
-  - Resend: verify {settings['domain']} (SPF, DKIM, MX for replies);
-    NEWSLETTER_FROM="{settings['site_name']} <news@{settings['domain']}>"; inbound
-    webhook and RESEND_WEBHOOK_SECRET.
+  - Resend: verify {settings['domain']} (SPF, DKIM, MX for replies); RESEND_API_KEY;
+    NEWSLETTER_FROM="{settings['site_name']} <news@{settings['domain']}>";
+    NEWSLETTER_ADDRESS (a street address or PO box with ZIP: no issue goes out
+    without it); NEWSLETTER_REPLY_TO; NEWSLETTER_CRON_SECRET (Railway and the
+    town's GitHub Environment); a webhook to {site}/api/email/inbound with the
+    events email.received, email.bounced and email.complained, and its
+    RESEND_WEBHOOK_SECRET.
   - Stripe: the town's own Stripe account (Stripe → account menu → New
     account), on the same LLC, EIN and payout bank account as Victoria, so
     checkout, receipts and card statements show {settings['site_name']}, not
@@ -161,7 +165,10 @@ per town (never copy Victoria's), Stripe webhook events, HQ_TOWNS, domain.
     launch test checkout (a test key in production is a Setup warning).
     Products and prices are created on the first checkout.
   - Facebook page, Instagram, ad account (the town's GitHub Environment).
-  - GA data stream (gaId in town.json), Turnstile hostname, Tremendous campaign.
+  - GA data stream (gaId in town.json), Tremendous campaign.
+  - Turnstile: add {settings['domain']} to a widget; TURNSTILE_SITE_KEY and
+    TURNSTILE_SECRET_KEY (required: without them every newsletter signup has
+    to confirm by email).
 
 Before launch (5.3): python3 scripts/launch_check.py --town {slug} passes
 (10+ upcoming events, a collect in the last 8 days, workflows on, venues

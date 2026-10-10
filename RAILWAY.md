@@ -52,6 +52,20 @@ good ones publish automatically unless `SUBMISSION_AUTOAPPROVE=0`.
    `radar.early_fraud_warning.created`. An endpoint made before
    `charge.dispute.closed` and `invoice.paid` were added must add them, or
    a won dispute stays "Disputed" and partner renewals can't be matched.
+6. **Resend webhook.** In Resend → Webhooks, add one endpoint at
+   `$SITE/api/email/inbound` and subscribe it to **`email.received`**
+   (replies to news@ post to Slack), **`email.bounced`** (a hard bounce
+   marks the subscriber bounced) and **`email.complained`** (a spam
+   complaint unsubscribes them). Put its signing secret in Railway as
+   `RESEND_WEBHOOK_SECRET`. Without the last two events, a dead or
+   complaining address stays active: it keeps getting issues and counts in
+   referral rewards and sponsors' copies sent. Each town's endpoint acts
+   only on events for mail its own domain sent (`isForTown`), so one
+   Resend account can serve several towns.
+7. **Turnstile** (`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`) is required
+   in production: without it every newsletter signup has to confirm by
+   email (the signup can't be checked as a person), and the other forms
+   rely on honeypot, timing and rate limits only.
 
 ## Smoke test after a deploy
 
@@ -208,6 +222,7 @@ ADMIN_SESSION_SECRET=$(openssl rand -hex 32) npm start   # http://localhost:3000
 ```
 
 Without `TURNSTILE_SECRET_KEY`, form verification is skipped (honeypot,
-timing and rate limits still apply). Auto-publish doesn't run on boot
+timing and rate limits still apply), and a newsletter signup gets the
+confirmation email instead of going straight onto the list. Auto-publish doesn't run on boot
 outside production; force a run with
 `POST /api/admin/auto-publish`.

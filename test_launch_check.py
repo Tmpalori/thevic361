@@ -30,6 +30,7 @@ def fake_site(**override):
         "/api/health?deep=1": (200, json.dumps({"ok": True, "storage": "postgres"})),
         "/api/config": (200, json.dumps({"town": {"id": "bay", "domain": "thebay979.com"},
                                          "github_events_path": "towns/bay/public/events.json",
+                                         "turnstile_required": True, "turnstile_site_key": "0x4AAA",
                                          "town_workflows": True})),
         "/robots.txt": (200, f"User-agent: *\nSitemap: {SITE}/sitemap.xml\n"),
         "/sitemap.xml": (200, f"<urlset><url><loc>{SITE}/</loc></url></urlset>"),
@@ -87,7 +88,7 @@ def test_a_copy_of_victoria_fails(tmp_path, monkeypatch, capsys):
     for line in ["❌ runs on its own Postgres (storage: file)", "❌ runs as TOWN=bay (says 'victoria')",
                  "❌ /about answers without Victoria's name (found The Vic 361, Vic 361, Victoria, TX)",
                  "❌ / answers without Victoria's name (found G-52YHD3X3C2)", "❌ robots.txt points at its own sitemap",
-                 "❌ /events.json answers (HTTP 500)", "(HQ feed not checked"]:
+                 "❌ /events.json answers (HTTP 500)", "❌ Turnstile is on", "(HQ feed not checked"]:
         assert line in out, line
 
 
@@ -105,6 +106,19 @@ def test_reads_TOWNS_DIR_and_refuses_Victoria_in_any_case(tmp_path, monkeypatch,
     get, _ = fake_site()
     assert launch_check.main(["--town", "bay"], get=get) == 0
     assert launch_check.main(["--town", " Victoria "], get=get) == 2
+
+
+def test_lists_the_email_settings_only_a_person_can_check(tmp_path, monkeypatch, capsys):
+    # The site never says whether RESEND_API_KEY or NEWSLETTER_ADDRESS is
+    # set, so they are on the manual list; Turnstile is checked from its
+    # public /api/config flags.
+    get, _ = fake_site()
+    assert run(tmp_path, monkeypatch, get) == 0
+    out = capsys.readouterr().out
+    assert "✅ Turnstile is on" in out
+    for name in ["RESEND_API_KEY", "NEWSLETTER_ADDRESS", "NEWSLETTER_REPLY_TO", "NEWSLETTER_CRON_SECRET", "TURNSTILE_SECRET_KEY",
+                 "email.bounced", "email.complained"]:
+        assert name in out, name
 
 
 def test_an_empty_or_stale_town_fails(tmp_path, monkeypatch, capsys):

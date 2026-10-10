@@ -37,6 +37,10 @@ def test_creates_the_town(tmp_path, capsys):
     assert t["site_url"] == "https://www.thebay979.com" and t["area_zips"] == ["77414", "77404"]
     assert "TOWN=bay python3 discover_venues.py --repo-root towns/bay" in out
     assert "SITE_URL=https://www.thebay979.com" in out and "NEWSLETTER_FROM=\"The Bay 979 <news@thebay979.com>\"" in out
+    # Every email setting sending depends on is on the owner's list.
+    for name in ["RESEND_API_KEY", "NEWSLETTER_ADDRESS", "NEWSLETTER_REPLY_TO", "NEWSLETTER_CRON_SECRET", "TURNSTILE_SECRET_KEY",
+                 "RESEND_WEBHOOK_SECRET", "email.bounced", "email.complained"]:
+        assert name in out, name
     assert "thevic361" not in out
     # The deferred plan items are launch blockers, and the runbook is named.
     for item in ("3.3", "3.4", "3.5", "3.7", "2.6", "TOWN_WORKFLOWS=1", "RAILWAY.md \"New town on Railway\"",

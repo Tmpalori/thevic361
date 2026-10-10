@@ -57,6 +57,19 @@ jobs:
       run: ${{ steps.g.outputs.run }}
       edition: ${{ steps.g.outputs.edition }}
     steps:
+      # The send below calls the repo-level SITE_URL with the repo-level
+      # NEWSLETTER_CRON_SECRET, which are Victoria's. Another town's run
+      # would send Victoria's issue (a hand-run ignores its
+      # NEWSLETTER_AUTOSEND=0) and nothing of its own, so it stops here until
+      # that town has its GitHub Environment (MULTI_CITY_PLAN.md 3.3).
+      - name: Only Victoria until per-town Environments
+        env:
+          RUN_TOWN: ${{ inputs.town || 'victoria' }}
+        run: |
+          if [ "$RUN_TOWN" != "victoria" ]; then
+            echo "::error::Per-town newsletter dispatch needs its GitHub Environment (MULTI_CITY_PLAN.md 3.3). Not sending for '$RUN_TOWN': this workflow only reaches Victoria's site and secret. Send that town's issue from its own admin (Newsletter tab) instead."
+            exit 1
+          fi
       - id: g
         env:
           EVENT: ${{ github.event_name }}

@@ -8,7 +8,8 @@ Reads the town from towns/<slug>/town.json (TOWNS_DIR to override) and asks
 its live site, GET only, nothing posted and no key needed (HQ's aside):
 
   - health: up, on its own Postgres (so the boot guards passed);
-  - /api/config: it runs as this town and publishes to towns/<slug>/;
+  - /api/config: it runs as this town and publishes to towns/<slug>/, and
+    Turnstile is on (its public flags; the secret itself is never shown);
   - public pages: they answer, and none names Victoria's site, domain,
     Google tag or "Victoria, TX";
   - robots.txt and the sitemap point at the town's own host;
@@ -68,6 +69,13 @@ Must be done before launch (MULTI_CITY_PLAN.md; each one blocks a launch):
   [ ] RAILWAY.md "New town on Railway" followed end to end (fresh secrets)
 
 Check by hand before launch:
+  [ ] Admin → Home → Setup: every required item is green. The site doesn't publish
+      whether these are set, so check them in Railway: RESEND_API_KEY,
+      NEWSLETTER_ADDRESS (a street address or PO box with ZIP, not just the city),
+      NEWSLETTER_REPLY_TO, NEWSLETTER_CRON_SECRET (also in the town's GitHub
+      Environment) and TURNSTILE_SECRET_KEY
+  [ ] The Resend webhook to /api/email/inbound sends email.received, email.bounced
+      and email.complained
   [ ] Admin → Newsletter → send a test to delivered@resend.dev (never a real list)
   [ ] A Stripe test-mode checkout on /advertise completes and shows in Admin → Sponsors
   [ ] That checkout page and its receipt show the town's name and logo, not The Vic 361
@@ -127,6 +135,12 @@ def check(town, site, hq_key="", get=fetch, now=None, venues_path=None):
         n = len(venues) if isinstance(venues, list) else 0
         add(n > 0, f"towns/{slug}/venues.json is seeded ({n} venue{'s' if n != 1 else ''}"
             + ("" if venues is not None else ", missing or unreadable") + ")")
+
+    # /api/config's public Turnstile flags (the site key is public; only
+    # whether a secret is set is said). Without the secret every newsletter
+    # signup has to confirm by email and the forms have no bot check.
+    add(config.get("turnstile_required") is True and bool(config.get("turnstile_site_key")),
+        "Turnstile is on (TURNSTILE_SECRET_KEY and TURNSTILE_SITE_KEY)")
 
     for path in PAGES:
         status, _, _, body = get(site + path)
