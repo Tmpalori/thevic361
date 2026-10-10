@@ -475,12 +475,12 @@
 
     // Hook into existing tab switching so we lazy-load when the user opens
     // the tab the first time.
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-      if (btn.dataset.tab !== 'submissions') return;
-      btn.addEventListener('click', () => {
-        const { token } = resolveAuth();
-        if (token) loadSubmissions();
-      });
+    // The admin page announces each page it opens (Submissions is a
+    // sub-page of Events now).
+    document.addEventListener('vic361:tab', e => {
+      if (e.detail !== 'submissions') return;
+      const { token } = resolveAuth();
+      if (token) loadSubmissions();
     });
   }
 
@@ -502,7 +502,7 @@
     window.__vic361Submissions = {
       _state: state,
       apiUrl, loadConfig, render, renderRow,
-      _testHooks: { loadSubmissions, doStatus, pullApprovedIntoPicker }
+      _testHooks: { loadSubmissions, doStatus, pullApprovedIntoPicker, refreshPendingBadge }
     };
   }
 })();

@@ -75,27 +75,25 @@
 
   <!-- ═══ APP SHELL ═══ -->
   <main id="app" class="app" hidden>
-    <header class="admin-header">
+    <aside class="admin-side">
       <div class="admin-header__brand">
-        <strong>The Vic 361</strong>
+        <strong id="admin-brand">The Vic 361</strong>
         <span class="admin-header__tag">Admin</span>
       </div>
-      <nav class="admin-tabs" role="tablist">
-        <button class="tab-btn is-active" data-tab="home" role="tab">Home</button>
-        <button class="tab-btn" data-tab="growth" role="tab">Growth</button>
-        <button class="tab-btn" data-tab="picker" role="tab">Events</button>
-        <button class="tab-btn" data-tab="submissions" role="tab">
-          Submissions <span id="submissions-pending-badge" class="tab-badge" hidden>0</span>
-        </button>
-        <button class="tab-btn" data-tab="newsletter" role="tab">Newsletter</button>
-        <button class="tab-btn" data-tab="sponsors" role="tab">Sponsors</button>
-        <button class="tab-btn" data-tab="traffic" role="tab">Traffic</button>
-        <button class="tab-btn" data-tab="sources" role="tab">Event sources</button>
-        <button class="tab-btn" data-tab="preview" role="tab">Preview</button>
+      <!-- Pages. A page can have sub-pages (data-group): the sub-tab bar
+           below switches between them and the page stays lit. -->
+      <nav class="admin-tabs" role="tablist" aria-label="Admin pages">
+        <button class="tab-btn is-active" data-tab="home" role="tab"><span class="tab-btn__icon" aria-hidden="true">◧</span><span class="tab-btn__label">Overview</span></button>
+        <button class="tab-btn" data-tab="attention" role="tab"><span class="tab-btn__icon" aria-hidden="true">⚑</span><span class="tab-btn__label">Needs attention</span><span id="attention-badge" class="tab-badge" hidden>0</span></button>
+        <button class="tab-btn" data-tab="picker" data-group="picker submissions sources preview" role="tab"><span class="tab-btn__icon" aria-hidden="true">▦</span><span class="tab-btn__label">Events</span></button>
+        <button class="tab-btn" data-tab="newsletter" role="tab"><span class="tab-btn__icon" aria-hidden="true">✉</span><span class="tab-btn__label">Newsletter</span></button>
+        <button class="tab-btn" data-tab="sponsors" role="tab"><span class="tab-btn__icon" aria-hidden="true">$</span><span class="tab-btn__label">Sponsors</span></button>
+        <button class="tab-btn" data-tab="growth" data-group="growth traffic" role="tab"><span class="tab-btn__icon" aria-hidden="true">↗</span><span class="tab-btn__label">Analytics</span></button>
+        <button class="tab-btn" data-tab="settings" role="tab"><span class="tab-btn__icon" aria-hidden="true">⚙</span><span class="tab-btn__label">Settings</span></button>
       </nav>
-      <div class="admin-header__actions">
-        <a class="btn btn--outline" href="/" target="_blank" rel="noopener">View site</a>
-        <a class="btn btn--outline" href="/social/latest/index.html" target="_blank" rel="noopener">Social posts</a>
+      <div class="admin-side__foot admin-header__actions">
+        <a class="side-link" href="/" target="_blank" rel="noopener">View site ↗</a>
+        <a class="side-link" href="/social/latest/index.html" target="_blank" rel="noopener">Social posts ↗</a>
         <button id="theme-toggle" type="button" class="theme-toggle"
                 aria-pressed="false"
                 aria-label="Toggle dark mode">
@@ -104,7 +102,18 @@
         </button>
         <button id="signout-btn" type="button" class="btn btn--outline">Sign out</button>
       </div>
-    </header>
+    </aside>
+
+    <div class="admin-main">
+    <!-- Sub-pages of the current page (Events, Analytics). -->
+    <nav id="subtabs" class="subtabs" aria-label="Sub-pages" hidden>
+      <button type="button" class="subtab-btn" data-goto="picker" data-in="picker">Events</button>
+      <button type="button" class="subtab-btn" data-goto="submissions" data-in="picker">Submissions <span id="submissions-pending-badge" class="tab-badge" hidden>0</span></button>
+      <button type="button" class="subtab-btn" data-goto="sources" data-in="picker">Sources</button>
+      <button type="button" class="subtab-btn" data-goto="preview" data-in="picker">Preview</button>
+      <button type="button" class="subtab-btn" data-goto="growth" data-in="growth">Subscribers</button>
+      <button type="button" class="subtab-btn" data-goto="traffic" data-in="growth">Traffic</button>
+    </nav>
 
     <!-- Status / counts bar -->
     <div class="status-bar">
@@ -112,25 +121,55 @@
       <span id="status-message" class="status-message" role="status" aria-live="polite"></span>
     </div>
 
-    <!-- ─── HOME TAB ─── -->
+    <!-- ─── OVERVIEW ─── -->
     <section id="tab-home" class="tab-panel is-active" role="tabpanel">
-      <p class="tab-intro">The site runs itself: events are collected Sunday and Wednesday afternoons and go live automatically, social posts go out every morning around 8:45, and the newsletter goes out Monday at 7:43 AM (the week) and Thursday at 7:00 AM (the weekend), Central. Check here for anything that needs you.</p>
       <div id="home-error" class="empty-state empty-state--error" hidden></div>
       <div id="home-body" hidden>
-        <div id="home-goals" class="goal-strip" hidden></div>
-        <div id="home-tiles" class="home-tiles"></div>
-        <div id="home-hidden" hidden>
-          <h2 class="traffic-h">Hidden by the event check</h2>
-          <p class="home-hidden__intro">The check took these off the site because a rule was sure about them (church events, things that aren't events, exact duplicates). Nothing was deleted. Restore one and the check leaves it alone from then on; Keep hidden clears it from this list.</p>
-          <ul id="home-hidden-list" class="home-checks" role="list"></ul>
+        <header class="page-head">
+          <h1 id="home-greeting" class="page-title">Overview</h1>
+          <p id="home-sub" class="page-sub"></p>
+        </header>
+        <a id="home-attention" class="attn-banner" href="#" hidden></a>
+        <div id="home-kpis" class="kpis"></div>
+        <div class="grid-2">
+          <div class="card"><h2 class="card__title">Subscribers</h2><p id="home-subs-meta" class="card__meta"></p><div id="home-subs-chart" class="chart-box"></div></div>
+          <div class="card"><h2 class="card__title">Visitors per day</h2><p id="home-visits-meta" class="card__meta"></p><div id="home-visits-chart" class="chart-box"></div></div>
         </div>
-        <div id="home-messages" hidden>
-          <h2 class="traffic-h">Messages from the contact form</h2>
-          <ul id="home-messages-list" class="home-checks" role="list"></ul>
+        <div class="grid-2">
+          <div class="card"><h2 class="card__title">Coming up</h2><ul id="home-upcoming" class="rows" role="list"></ul></div>
+          <div class="card"><h2 class="card__title">On the site</h2><div id="home-site" class="minis"></div></div>
         </div>
-        <h2 class="traffic-h">Setup <span id="home-setup-count" class="home-setup-count"></span></h2>
-        <ul id="home-checks" class="home-checks" role="list"></ul>
       </div>
+    </section>
+
+    <!-- ─── NEEDS ATTENTION ─── -->
+    <section id="tab-attention" class="tab-panel" role="tabpanel" hidden>
+      <header class="page-head">
+        <h1 class="page-title">Needs attention</h1>
+        <p class="page-sub">Everything waiting on you, in one place. Clear an item and it's gone.</p>
+      </header>
+      <div id="attention-filters" class="chips" role="group" aria-label="Filter"></div>
+      <div id="attention-error" class="empty-state empty-state--error" hidden></div>
+      <div id="attention-list"></div>
+    </section>
+
+    <!-- ─── SETTINGS ─── -->
+    <section id="tab-settings" class="tab-panel" role="tabpanel" hidden>
+      <header class="page-head">
+        <h1 class="page-title">Settings</h1>
+        <p class="page-sub">What's connected. Anything missing also shows in Needs attention. <span id="home-setup-count" class="home-setup-count"></span></p>
+      </header>
+      <div class="settings-account mobile-only">
+        <a class="btn btn--outline" href="/" target="_blank" rel="noopener">View site ↗</a>
+        <a class="btn btn--outline" href="/social/latest/index.html" target="_blank" rel="noopener">Social posts ↗</a>
+        <button type="button" class="btn btn--outline" data-proxy="theme-toggle">Light / dark</button>
+        <button type="button" class="btn btn--outline" data-proxy="signout-btn">Sign out</button>
+      </div>
+      <ul id="home-checks" class="home-checks" role="list"></ul>
+      <details id="settings-done" class="settings-done" hidden>
+        <summary id="settings-done-summary">Set up</summary>
+        <ul id="home-checks-done" class="home-checks" role="list"></ul>
+      </details>
     </section>
 
     <!-- ─── GROWTH TAB ─── -->
@@ -440,6 +479,7 @@
       <div id="sources-message" class="sources-message" role="status" aria-live="polite"></div>
       <div id="sources-list" class="sources-list" aria-live="polite"></div>
     </section>
+    </div>
   </main>
 
   <!-- ═══ EVENT EDIT MODAL ═══
