@@ -317,6 +317,10 @@ VIC_EMPTY_SUFFIX = "${{ inputs.town && inputs.town != 'victoria' && format('-{0}
 VIC_EMPTY_PREFIX = "${{ inputs.town && inputs.town != 'victoria' && format('{0}-', inputs.town) || '' }}"
 
 
+# 3.4: these run one job per town (a matrix); the town is the job's, not the workflow's.
+MATRIX_JOBS = {"weekly-collect.yml": "collect", "event-check.yml": "check"}
+
+
 @pytest.mark.parametrize("name", TOWN_WORKFLOWS)
 def test_town_input_defaults_to_victoria(name):
     # MULTI_CITY_PLAN.md 3.1: a dispatch can name a town; scheduled runs and
@@ -324,7 +328,14 @@ def test_town_input_defaults_to_victoria(name):
     wf = load(name)
     on = wf.get("on", wf.get(True))
     assert on["workflow_dispatch"]["inputs"]["town"]["default"] == "victoria"
-    assert wf["env"]["TOWN"] == "${{ inputs.town || 'victoria' }}"
+    if name in MATRIX_JOBS:
+        job = wf["jobs"][MATRIX_JOBS[name]]
+        assert "env" not in wf
+        assert job["env"]["TOWN"] == "${{ matrix.town }}"
+        assert job["strategy"]["fail-fast"] is False
+        assert job["name"] == MATRIX_JOBS[name] + " ${{ matrix.town }}"
+    else:
+        assert wf["env"]["TOWN"] == "${{ inputs.town || 'victoria' }}"
 
 
 def test_town_groups_and_cache_keys_keep_victorias_names():
@@ -333,12 +344,14 @@ def test_town_groups_and_cache_keys_keep_victorias_names():
     groups = {
         "meta-ads.yml": "meta-ads" + VIC_EMPTY_SUFFIX,
         "submission-review.yml": "submission-review" + VIC_EMPTY_SUFFIX,
-        "weekly-collect.yml": "weekly-collect" + VIC_EMPTY_SUFFIX,
         "social-kit.yml": "social-kit-${{ (github.event_name == 'schedule' || inputs.post || inputs.scheduled) && 'post' || 'build' }}" + VIC_EMPTY_SUFFIX,
     }
     for name, group in groups.items():
         assert load(name)["concurrency"]["group"] == group
     assert load("uptime.yml")["jobs"]["check"]["concurrency"]["group"] == "uptime" + VIC_EMPTY_SUFFIX
+    assert "concurrency" not in load("weekly-collect.yml")
+    assert load("weekly-collect.yml")["jobs"]["collect"]["concurrency"]["group"] == \
+        "weekly-collect${{ matrix.town != 'victoria' && format('-{0}', matrix.town) || '' }}"
     for name, stem in (("submission-review.yml", "review-state-"), ("uptime.yml", "uptime-state-")):
         text = open(os.path.join(WF, name)).read()
         # A town's prefix goes in front, so Victoria's "review-state-" restore
@@ -402,7 +415,123 @@ def test_town_slack_tag_is_empty_for_victoria(name):
     # Another town's Slack posts carry vars.SLACK_TOWN_TAG (slack_notify.py
     # falls back to its city); scheduled and Victoria runs pass "" as before.
     wf = load(name)
-    assert wf["env"]["SLACK_TOWN_TAG"] == "${{ inputs.town && inputs.town != 'victoria' && vars.SLACK_TOWN_TAG || '' }}"
+    if name in MATRIX_JOBS:
+        assert wf["jobs"][MATRIX_JOBS[name]]["env"]["SLACK_TOWN_TAG"] == \
+            "${{ matrix.town != 'victoria' && vars.SLACK_TOWN_TAG || '' }}"
+    else:
+        assert wf["env"]["SLACK_TOWN_TAG"] == "${{ inputs.town && inputs.town != 'victoria' && vars.SLACK_TOWN_TAG || '' }}"
+
+
+# ─── 3.4: which towns a run covers ──────────────────────────────────────────
+
+def _ready_towns(tmp_path, towns):
+    """A towns/ folder: {slug: workflows flag, or "broken"}; returns its path."""
+    import json
+    base = tmp_path / "towns"
+    base.mkdir()
+    (base / "index.json").write_text(json.dumps({"towns": ["victoria", *towns]}))
+    for slug, flag in towns.items():
+        (base / slug).mkdir()
+        raw = {"siteName": "The Bay 979", "domain": f"{slug}979.com", "city": "Bay City", "state": "TX",
+               "stateName": "Texas", "timezone": "America/Chicago", "workflows": flag}
+        (base / slug / "town.json").write_text("{nope" if flag == "broken" else json.dumps(raw))
+    return base
+
+
+def _collect_towns(tmp_path, event, town="", towns_dir=None):
+    """weekly-collect's towns step, run from a copy of the repo's town.py."""
+    import shutil
+    work = tmp_path / "work"
+    work.mkdir()
+    shutil.copy(os.path.join(os.path.dirname(WF), "..", "town.py"), work / "town.py")
+    if towns_dir:
+        shutil.copytree(towns_dir, work / "towns")
+    g = next(s for s in load("weekly-collect.yml")["jobs"]["towns"]["steps"] if s.get("id") == "t")
+    out = tmp_path / "out"
+    env = {k: v for k, v in os.environ.items() if k not in ("TOWN", "TOWNS_DIR")}
+    env.update(GITHUB_OUTPUT=str(out), EVENT=event, INPUT_TOWN=town or "victoria")
+    r = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", g["run"]], cwd=work, env=env,
+                       capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    import json
+    return json.loads(out.read_text().strip().split("=", 1)[1])
+
+
+def test_scheduled_collect_covers_victoria_and_ready_towns_only(tmp_path):
+    # A town joins the scheduled runs once its town.json says "workflows":
+    # true (with its GitHub Environment, 3.3); a broken town.json is skipped,
+    # never a reason to drop Victoria's collect.
+    towns = _ready_towns(tmp_path, {"bay": True, "cuero": False, "edna": "broken"})
+    assert _collect_towns(tmp_path, "schedule", towns_dir=towns) == ["victoria", "bay"]
+
+
+def test_scheduled_collect_without_towns_is_victoria(tmp_path):
+    assert _collect_towns(tmp_path, "schedule") == ["victoria"]
+
+
+def test_manual_collect_is_the_town_asked_for(tmp_path):
+    assert _collect_towns(tmp_path, "workflow_dispatch") == ["victoria"]
+    (tmp_path / "b").mkdir()
+    assert _collect_towns(tmp_path / "b", "workflow_dispatch", town="bay") == ["bay"]
+
+
+def test_scheduled_towns_survives_a_broken_index(tmp_path):
+    sys.path.insert(0, os.path.join(os.path.dirname(WF), ".."))
+    import town
+    (tmp_path / "index.json").write_text("{nope")
+    warnings = []
+    assert town.scheduled_towns(str(tmp_path), warn=warnings.append) == ["victoria"]
+    assert warnings and "unreadable" in warnings[0]
+
+
+def _check_gate(tmp_path, jobs, conclusion="success", gh_fails=False):
+    """event-check's gate after a Weekly Collect run whose jobs are `jobs`."""
+    import json
+    g = next(s for s in load("event-check.yml")["jobs"]["gate"]["steps"] if s.get("id") == "g")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(parents=True)
+    (tmp_path / "jobs.json").write_text(json.dumps({"jobs": [{"name": n, "conclusion": c} for n, c in jobs]}))
+    # gh api <url> --jq <filter>: the filter on the run's jobs, printed raw like gh.
+    _exe(bin_dir / "gh", "#!/bin/sh\nexit 1\n" if gh_fails else
+         '#!/bin/sh\n[ "$3" = --jq ] || exit 2\njq -r "$4" "$STATE/jobs.json"\n')
+    out = tmp_path / "out"
+    out.write_text("")
+    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", GITHUB_OUTPUT=str(out), STATE=str(tmp_path),
+               EVENT="workflow_run", RUN_ID="1", CONCLUSION=conclusion, GITHUB_REPOSITORY="o/r", SCHEDULE="",
+               **{k: v for k, v in g["env"].items() if k.endswith("CRON")})
+    env.pop("INPUT_TOWN", None)
+    r = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", g["run"]], env=env,
+                       capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    o = dict(x.split("=", 1) for x in out.read_text().strip().splitlines())
+    return o["run"], json.loads(o["towns"])
+
+
+def test_event_check_checks_each_town_whose_collect_succeeded(tmp_path):
+    # Another town's collect no longer starts Victoria's check, and a town
+    # whose collect failed isn't checked while the others are.
+    jobs = [("towns", "success"), ("collect victoria", "success"), ("collect bay", "failure"), ("collect cuero", "success")]
+    assert _check_gate(tmp_path, jobs, conclusion="failure") == ("true", ["cuero", "victoria"])
+
+
+def test_event_check_skips_when_no_collect_succeeded(tmp_path):
+    assert _check_gate(tmp_path, [("towns", "success"), ("collect victoria", "failure")], conclusion="failure") == ("false", [])
+
+
+def test_event_check_reads_a_pre_matrix_collect_as_victorias(tmp_path):
+    assert _check_gate(tmp_path, [("collect", "success")]) == ("true", ["victoria"])
+
+
+def test_event_check_falls_back_to_victoria_when_jobs_cannot_be_listed(tmp_path):
+    assert _check_gate(tmp_path / "a", [], gh_fails=True) == ("true", ["victoria"])
+    assert _check_gate(tmp_path / "b", [], conclusion="failure", gh_fails=True) == ("false", [])
+
+
+def test_event_check_gate_may_read_the_collect_runs_jobs():
+    wf = load("event-check.yml")
+    assert wf["permissions"]["actions"] == "read"
+    assert "if" not in wf["jobs"]["gate"]  # partial success still checks the towns that collected
+    assert wf["jobs"]["check"]["strategy"]["matrix"]["town"] == "${{ fromJSON(needs.gate.outputs.towns) }}"
 
 
 @pytest.mark.parametrize("name", sorted(os.listdir(WF)))

@@ -70,26 +70,58 @@ on:
 permissions:
   contents: write          # Needed to push updated candidates.json
 
-# A manual run and the schedule must not collect (and push) at once.
-concurrency:
-  group: weekly-collect${{ inputs.town && inputs.town != 'victoria' && format('-{0}', inputs.town) || '' }}
-  cancel-in-progress: false
-
-# The town this run is for (MULTI_CITY_PLAN.md 3.1). Scheduled runs and a
-# dispatch without the input are Victoria's; town.py reads TOWN.
-env:
-  TOWN: ${{ inputs.town || 'victoria' }}
-  # Another town's Slack posts carry its [tag] (scripts/slack_notify.py;
-  # vars.SLACK_TOWN_TAG, or its city when unset). Victoria: none, as before.
-  SLACK_TOWN_TAG: ${{ inputs.town && inputs.town != 'victoria' && vars.SLACK_TOWN_TAG || '' }}
-
 jobs:
+  # Which towns this run collects (MULTI_CITY_PLAN.md 3.4). A scheduled run
+  # covers Victoria plus every town whose town.json has "workflows": true
+  # (set with its GitHub Environment, 3.3); a manual run, the one town asked
+  # for. If this lookup fails, Victoria still collects.
+  towns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      list: ${{ steps.t.outputs.list }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Cone mode: root files (town.py) plus towns/.
+          sparse-checkout: |
+            towns
+      - id: t
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TOWN: ${{ inputs.town || 'victoria' }}
+        run: |
+          if [ "$EVENT" = "schedule" ]; then
+            list=$(python3 town.py scheduled) || list='["victoria"]'
+          else
+            list=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "$INPUT_TOWN")
+          fi
+          echo "Towns: $list"
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+
   collect:
+    name: collect ${{ matrix.town }}
+    needs: towns
+    strategy:
+      # One town failing must not cancel another's collect (Victoria's above all).
+      fail-fast: false
+      matrix:
+        town: ${{ fromJSON(needs.towns.outputs.list) }}
+    # A manual run and the schedule must not collect (and push) the same
+    # town at once. Victoria's group keeps its old name.
+    concurrency:
+      group: weekly-collect${{ matrix.town != 'victoria' && format('-{0}', matrix.town) || '' }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     # Per-step timeouts below keep any single phase bounded; this is the
     # overall safety net — see header comment.
     timeout-minutes: 55
     env:
+      # The town this job is for (MULTI_CITY_PLAN.md 3.1); town.py reads TOWN.
+      TOWN: ${{ matrix.town }}
+      # Another town's Slack posts carry its [tag] (scripts/slack_notify.py;
+      # vars.SLACK_TOWN_TAG, or its city when unset). Victoria: none, as before.
+      SLACK_TOWN_TAG: ${{ matrix.town != 'victoria' && vars.SLACK_TOWN_TAG || '' }}
       # Force line-buffered stdout for every Python step so progress logs
       # appear in real time. The Apr-29 cancellation showed nothing between
       # collector start and kill — that was buffering, not a true hang in

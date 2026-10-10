@@ -174,10 +174,13 @@ These matter the moment a second town exists. All keep Victoria's values.
       it falls back to the town's own URL, never Victoria's. An unclaimed
       database that already has subscribers, orders or submissions is
       treated as Victoria's and refused too.)
-- [ ] **2.6 Railway watch paths** per service (shared code plus the town's
+- [x] **2.6 Railway watch paths** per service (shared code plus the town's
       own `towns/<slug>/**`; Victoria also watches its root data files), so
       one town's collect or social commit doesn't redeploy every town.
       Verify both directions on a test service.
+      (Done: Victoria watches everything but other towns' bot-written
+      files, HQ only what it runs; the patterns for a new town's service
+      are RAILWAY.md step 16.)
 
 ## Phase 3: workflows per town
 
@@ -197,12 +200,23 @@ These matter the moment a second town exists. All keep Victoria's values.
       its scheduler and Pull Now start no workflows (they'd run on
       Victoria's repo-level `SITE_URL` and secrets), and `town.py`
       `site_url()` stops any script run as another town on Victoria's URL.
-- [ ] **3.4 Town matrix** from `towns/index.json` with `fail-fast: false`,
+- [x] **3.4 Town matrix** from `towns/index.json` with `fail-fast: false`,
       so one town failing can't cancel Victoria's run. The DST gate reads
       the town's timezone. Stagger cron minutes per town.
       Event Check's `workflow_run` trigger has no inputs, so every town's
       collect currently starts Victoria's check: gate it on the triggering
       run's town here.
+      (Done: Weekly Collect's scheduled runs collect Victoria plus each
+      town in `towns/index.json` whose `town.json` has `"workflows": true`
+      (`town.py scheduled`; set with 3.3), one `collect <town>` job each,
+      `fail-fast: false`, per-town concurrency. A broken town file is
+      skipped, never Victoria's run. Event Check lists the collect run's
+      jobs and checks each town whose own job succeeded. The towns share
+      one cron and run side by side, so there's nothing to stagger (3.6
+      caps their Apify use). The other scheduled workflows' GitHub crons
+      stay Victoria's late fallbacks: every town's own site dispatches its
+      jobs on time in its own timezone (`server/scheduler.js`), so their
+      DST gates keep Central.)
 - [ ] **3.5 Scheduler dispatch** passes `town` and the `ran` gate calls the
       town's own `SITE_URL`. (Dispatch done: `townInputs()`; the gates'
       `SITE_URL` comes with the town's Environment in 3.3.)
@@ -212,8 +226,10 @@ These matter the moment a second town exists. All keep Victoria's values.
       sources for the month. (Done: town.json `limits` caps the Apify
       knobs below the shared repo variables; defaults for a new town, none
       for Victoria. Separate tokens can come with 3.3's Environments.)
-- [ ] **3.7 Update `test_workflows.py`** pins for the new inputs while
+- [x] **3.7 Update `test_workflows.py`** pins for the new inputs while
       still pinning Victoria's crons, steps and `--candidates-only`.
+      (Done with 3.4: the matrix jobs, the scheduled town list and Event
+      Check's gate are tested by running their steps.)
 
 ## Phase 4: HQ dashboard and shared Slack
 
@@ -226,8 +242,8 @@ These matter the moment a second town exists. All keep Victoria's values.
       date, last month, orders by status); submissions waiting; upcoming
       event count and last collect; health (database, scheduler, Slack
       refusals); setup checklist status; admin URL.
-- [ ] **4.2 HQ service** (code done: `hq/server.js`, setup in RAILWAY.md;
-      the Railway service isn't created yet): separate Railway service with its own login. Its
+- [x] **4.2 HQ service** (`hq/server.js`, setup in RAILWAY.md; running
+      as the `hq` service in Victoria's Railway project): separate Railway service with its own login. Its
       town list (`slug`, `site_url`, key) in its own env. One screen:
       totals across towns, a row per town (subscribers, open rate, revenue
       this month, open sponsor weeks, picks sold, waiting submissions,

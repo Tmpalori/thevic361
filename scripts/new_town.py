@@ -132,13 +132,14 @@ Must be done before launch (MULTI_CITY_PLAN.md; each one blocks a launch,
 and scripts/launch_check.py fails until the town is really collecting):
   - 3.3 the town's GitHub Environment "{slug}" (SITE_URL={site}, Meta,
     NTFY_TOPIC, cron secrets, SLACK_TOWN_TAG="{settings['city']}"), then
-    TOWN_WORKFLOWS=1 on its Railway service. Until then it starts no
-    collect, social kit, submission review or event check.
-  - 3.4 its own scheduled collects (town matrix, staggered crons,
-    fail-fast: false; Event Check gated on the town).
+    TOWN_WORKFLOWS=1 on its Railway service and "workflows": true in
+    towns/{slug}/town.json (a PR), which adds it to the scheduled Sunday
+    and Wednesday collects. Until then it starts no collect, social kit,
+    submission review or event check.
   - 3.5 the workflows' gates call the town's own SITE_URL.
-  - 3.7 test_workflows.py pins the town inputs (Victoria's crons unchanged).
-  - 2.6 Railway watch paths on every service (by town #3 at the latest).
+  - 2.6 Railway watch paths on its service: /server/**, /docs/**,
+    /package.json, /package-lock.json, /.nvmrc, /railpack.json,
+    /town.py, /towns/{slug}/**, /towns/*/town.json (RAILWAY.md step 16).
 
 Accounts and settings (owner; MULTI_CITY_PLAN.md 5.2). Follow
 RAILWAY.md "New town on Railway" end to end: every variable, fresh secrets

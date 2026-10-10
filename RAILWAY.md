@@ -171,8 +171,11 @@ copy a value from Victoria's project, or from another town's: a copied
     (MULTI_CITY_PLAN.md 3.3: its `SITE_URL`, Meta page and Instagram,
     `NTFY_TOPIC`, cron secrets, `SLACK_TOWN_TAG`). Before that the town
     starts no collect, social kit, submission review or event check, since
-    they would run on Victoria's repo-level settings. 3.4 (its own
-    scheduled collects), 3.5 and 3.7 must be done before launch too.
+    they would run on Victoria's repo-level settings. At the same time, add
+    `"workflows": true` to `towns/<slug>/town.json` (a PR): the scheduled
+    Sunday and Wednesday collects then run the town beside Victoria, each
+    in its own job, and Event Check follows each town whose collect
+    succeeded. 3.5 must be done before launch too.
 13. **Optional:** `META_PIXEL_ID` (the town's own pixel); the GA stream is
     `gaId` in `town.json` (a PR).
 14. **Domain.** Add `www.<domain>` as a custom domain and CNAME it to the
@@ -184,9 +187,20 @@ copy a value from Victoria's project, or from another town's: a copied
     a PR copy would get production's variables), or keep them and know
     that each copy boots with the town's `TOWN` and its own forked
     database.
-16. **Watch paths** (MULTI_CITY_PLAN.md 2.6, by town #3 at the latest):
-    the service watches `server/**`, `docs/**`, `package*.json` and
-    `towns/<slug>/**`, so other towns' bot commits don't redeploy it.
+16. **Watch paths** (MULTI_CITY_PLAN.md 2.6): the service watches
+    `/server/**`, `/docs/**`, `/package.json`, `/package-lock.json`,
+    `/.nvmrc`, `/railpack.json`, `/town.py`, `/towns/<slug>/**` and
+    `/towns/*/town.json` (the inbound email filter reads every town's
+    domain), so the bot commits of other towns (and Victoria's) don't
+    redeploy it. Victoria's service watches `**` minus the files bots
+    write for other towns: `!/towns/*/candidates.json`,
+    `!/towns/*/collection_metadata.json`, `!/towns/*/enrichment_cache.json`
+    and `!/towns/*/public/**` (its own data files are at the root). HQ
+    watches `/hq/**`, `/server/rateLimit.js`, `/package.json`,
+    `/package-lock.json`, `/.nvmrc` and `/railpack.json`. A commit that
+    matches none of a service's paths shows as a skipped deployment.
+    Change a service's watch paths when its code starts reading a new
+    folder.
 
 Then: `python3 scripts/launch_check.py --town <slug>` (every automatic
 check passes, including 10+ upcoming events, a collect in the last 8 days

@@ -43,8 +43,8 @@ def test_creates_the_town(tmp_path, capsys):
         assert name in out, name
     assert "thevic361" not in out
     # The deferred plan items are launch blockers, and the runbook is named.
-    for item in ("3.3", "3.4", "3.5", "3.7", "2.6", "TOWN_WORKFLOWS=1", "RAILWAY.md \"New town on Railway\"",
-                 "scripts/launch_check.py --town bay"):
+    for item in ("3.3", "3.5", "2.6", "TOWN_WORKFLOWS=1", '"workflows": true', "/towns/bay/**",
+                 "RAILWAY.md \"New town on Railway\"", "scripts/launch_check.py --town bay"):
         assert item in out, item
 
 
