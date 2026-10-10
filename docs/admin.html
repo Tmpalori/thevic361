@@ -210,7 +210,10 @@
 
     <!-- ─── EVENTS TAB (picker) ─── -->
     <section id="tab-picker" class="tab-panel" role="tabpanel" hidden>
-      <p class="tab-intro">Checked events are on the site. Uncheck one to take it down, check a new one to add it, or press Edit to fix details. Then press <strong>Save &amp; Publish</strong>. Edits save on their own.</p>
+      <header class="page-head">
+        <h1 class="page-title">Events</h1>
+        <p class="page-sub">Checked events are on the site. Change what's checked, then Save &amp; Publish. Edits save on their own.</p>
+      </header>
       <div class="filters">
         <label class="filter">
           <span>Week</span>
@@ -254,7 +257,10 @@
 
     <!-- ─── SUBMISSIONS TAB ─── -->
     <section id="tab-submissions" class="tab-panel" role="tabpanel" hidden>
-      <p class="tab-intro">Events people sent in through the Submit form. The AI review publishes the good ones and leaves the rest here for you. Approving one publishes it right away and emails the submitter.</p>
+      <header class="page-head">
+        <h1 class="page-title">Submissions</h1>
+        <p class="page-sub">Sent in through the Submit form. The AI review publishes the good ones; approving one here publishes it and emails the submitter.</p>
+      </header>
       <div class="submissions-toolbar">
         <!-- Legacy per-tab config inputs. Hidden by default — the unified
              login flow shares the same session token with the picker tab. We
@@ -461,7 +467,10 @@
     </section>
 
     <section id="tab-sources" class="tab-panel" role="tabpanel" hidden>
-      <p class="tab-intro">Where events come from and how the last automatic pull went. "Pull now" collects fresh events right away instead of waiting for Sunday or Wednesday night.</p>
+      <header class="page-head">
+        <h1 class="page-title">Event sources</h1>
+        <p class="page-sub">Where events come from and how the last pull went. "Pull now" collects fresh events right away.</p>
+      </header>
       <div class="sources-summary" id="sources-summary">
         <div class="sources-summary__item">
           <span class="sources-summary__label">Last collected</span>

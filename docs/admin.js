@@ -734,17 +734,34 @@
         );
       }).join('');
 
+      // Days fold: past ones start folded, and a day you fold stays folded
+      // through re-renders (filters, saves).
+      if (!state.dayFold) state.dayFold = {};
+      const folded = date in state.dayFold ? state.dayFold[date] : date < toLocalDateStr(townToday());
       return (
-        '<section class="day-group" data-date="' + escapeHtml(date) + '">' +
-          '<h2>' + escapeHtml(heading) +
+        '<section class="day-group' + (folded ? ' is-folded' : '') + '" data-date="' + escapeHtml(date) + '">' +
+          '<h2 class="day-group__head" role="button" tabindex="0" aria-expanded="' + (folded ? 'false' : 'true') + '">' +
+            '<span class="day-group__chev" aria-hidden="true">▾</span>' + escapeHtml(heading) +
             ' <span class="day-group__count ' + countCls + '">' +
               selectedInGroup + ' of ' + evs.length + ' on the site' +
             '</span>' +
           '</h2>' +
-          rows +
+          '<div class="day-group__rows">' + rows + '</div>' +
         '</section>'
       );
     }).join('');
+
+    listEl.querySelectorAll('.day-group__head').forEach(h => {
+      const toggle = () => {
+        const sec = h.closest('.day-group');
+        const now = !sec.classList.contains('is-folded');
+        sec.classList.toggle('is-folded', now);
+        h.setAttribute('aria-expanded', now ? 'false' : 'true');
+        state.dayFold[sec.dataset.date] = now;
+      };
+      h.addEventListener('click', toggle);
+      h.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+    });
 
     listEl.querySelectorAll('input[type="checkbox"][data-key]').forEach(cb => {
       cb.addEventListener('change', () => {
