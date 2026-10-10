@@ -39,6 +39,9 @@ from typing import Any, Iterable
 
 import requests
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from town import TOWN  # noqa: E402  (TOWN unset = Victoria)
+
 
 # ─── WARNINGS (silent failure observability) ────────────────────────────────
 # Mirrors collect_events.py. Every error path here used to print a one-liner
@@ -109,7 +112,9 @@ CATEGORY_SEARCHES = [
     "community center",
 ]
 
-LOCATION_QUERY = "Victoria, TX"
+# The town searched ("Victoria, TX" for Victoria; another town via TOWN=<slug>,
+# with --repo-root towns/<slug> so its venue files land there).
+LOCATION_QUERY = TOWN["city_state"]
 
 # Per-category place cap. Combined-call previously asked for 30 places per
 # search × 8 searches = 240 enriched places, which was the root cause of the

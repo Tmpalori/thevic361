@@ -63,7 +63,12 @@ def _prompt_for(monkeypatch, posts):
 
 
 def test_evening_post_is_dated_the_central_day_it_was_posted(monkeypatch):
-    # Fri Oct 9 2026, 8:15 PM CDT.
+    # Fri Oct 9 2026, 8:15 PM CDT. The prompt also names the window, so pin
+    # it: on the real clock it starts on today's date, and from Oct 10 that
+    # would put 2026-10-10 in the prompt for the wrong reason.
+    from datetime import date
+    monkeypatch.setattr(ce, "_WINDOW_START", date(2026, 10, 9))
+    monkeypatch.setattr(ce, "_WINDOW_END", date(2026, 10, 23))
     prompt = _prompt_for(monkeypatch, [{"text": "Trivia TONIGHT at 8!", "time": "2026-10-10T01:15:00.000Z"}])
     assert "(posted Fri 2026-10-09 8:15 PM)" in prompt
     assert "2026-10-10" not in prompt
