@@ -13,7 +13,7 @@
  *   - Submitter email + IP never leave the admin scope.
  */
 
-import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths, townBootProblems, townInputs, townWorkflowsReady } from './town.js';
+import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths, townBootProblems, townInputs, townWorkflowsReady, victoriaBootProblem } from './town.js';
 import { localizeHtml } from './localize.js';
 import express from 'express';
 import compression from 'compression';
@@ -25,7 +25,7 @@ import { createStore, isOutage, normalizePayload, newId, nowIso, applyEventEdits
 import { validateSubmission, validateEventEdit, checkBotSignals } from './validate.js';
 import { reportHoneypot } from './honeypot.js';
 import { verifyTurnstile } from './turnstile.js';
-import { createRateLimiter, ipKey } from './rateLimit.js';
+import { createRateLimiter, ipKey, railwayRealIp } from './rateLimit.js';
 import { createAuth } from './auth.js';
 import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
@@ -48,7 +48,6 @@ import { createAutoPublish, unpublishEvent, replacePublishedEvent, forgetRemoved
 import { createScheduler, schedulerEnabled, startLabel, checkTownSchedule } from './scheduler.js';
 import * as sponsorsModule from './sponsors.js';
 import crypto from 'node:crypto';
-import net from 'node:net';
 import {
   HUB_PAGES, localDateStr, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderPrivacyPage, renderAdvertisePage, advertiseStats, renderNotFoundPage, renderSitemap, renderLlmsTxt
@@ -135,11 +134,7 @@ export async function createApp(opts = {}) {
   // (docs.railway.com: Public Networking > Specs & Limits); prefer it so the
   // rate limits key on the real client however many hops sit in between.
   if (trustProxy && (opts.railway ?? Boolean(process.env.RAILWAY_ENVIRONMENT_NAME))) {
-    app.use((req, res, next) => {
-      const real = String(req.headers['x-real-ip'] || '').trim();
-      if (net.isIP(real)) Object.defineProperty(req, 'ip', { value: real, configurable: true });
-      next();
-    });
+    app.use(railwayRealIp());
   }
 
   // Canonical host. www.thevic361.com is where Google already indexes the
@@ -147,6 +142,11 @@ export async function createApp(opts = {}) {
   // search engines see one site instead of two copies.
   // The town (server/town.js): TOWN in Railway, unset = Victoria; opts.town for tests.
   useTown(townConfig(process.env, opts));
+  // A service with TOWN forgotten but another town's SITE_URL would be a
+  // silent clone of Victoria: stop before anything starts. Reads the
+  // service's own SITE_URL (opts.envSiteUrl for tests), never opts.siteUrl.
+  const victoriaProblem = victoriaBootProblem(town, opts.envSiteUrl ?? process.env.SITE_URL ?? '');
+  if (victoriaProblem) throw new Error(victoriaProblem);
   // The town's data files (townPaths): repo-relative for GitHub, absolute on disk.
   const PATHS = townPaths();
   const CANDIDATES_FILE = path.join(REPO_ROOT, PATHS.candidates);
@@ -354,7 +354,7 @@ export async function createApp(opts = {}) {
   // (server/inbound.js). Raw body too, so also before the JSON parser.
   const inbound = createInbound({ config: inboundConfig(process.env, opts), apiKey: newsletter.apiKey, slack, siteUrl,
     fetchImpl: opts.inboundFetch || globalThis.fetch, nowFn: () => (opts.now ? opts.now().getTime() : Date.now()),
-    otherDomains: opts.inboundOtherDomains });
+    otherDomains: opts.inboundOtherDomains, store });
   inbound.register(app);
 
   // The admin's sponsor edit can carry a new logo (a data URL, shrunk in
@@ -402,7 +402,11 @@ export async function createApp(opts = {}) {
       // tab links to this as a manual fallback when one-click Pull Now isn't
       // available (no token, invalid token, etc.).
       sources_actions_url: `https://github.com/${github.owner}/${github.repo}` +
-        `/actions/workflows/${WEEKLY_COLLECT_WORKFLOW}`
+        `/actions/workflows/${WEEKLY_COLLECT_WORKFLOW}`,
+      // Another town only: whether it may start workflows yet (TOWN_WORKFLOWS=1
+      // once its GitHub Environment exists), for scripts/launch_check.py. A
+      // flag, no secret. Victoria's config stays exactly as it was.
+      ...(town.id !== VICTORIA.id ? { town_workflows: townWorkflowsReady() } : {})
     });
   });
 
@@ -450,22 +454,29 @@ export async function createApp(opts = {}) {
   // ?deep=1 also asks the database (for the uptime check), so "the page
   // loads but nothing can be saved or published" counts as down. Plain
   // /api/health stays process-only, so a database blip can't fail a deploy.
+  // SELECT 1 with a deadline: rejects on an error or after ms (a hung
+  // database accepts the connection and never answers).
+  async function pingDatabase(ms) {
+    let timer;
+    try {
+      await Promise.race([
+        storeBundle.pool.query('SELECT 1'),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('database timeout')), ms); })
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   app.get('/api/health', async (req, res) => {
     if (req.query.deep && missingDatabase) {
       return res.status(503).json({ ok: false, storage: storeBundle.kind, error: 'no-database' });
     }
     if (req.query.deep && storeBundle.pool) {
-      let timer;
       try {
-        await Promise.race([
-          storeBundle.pool.query('SELECT 1'),
-          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('database timeout')), 5000); })
-        ]);
+        await pingDatabase(5000);
       } catch (err) {
         console.error('[health] database check failed:', err?.message || err);
         return res.status(503).json({ ok: false, storage: storeBundle.kind, error: 'database' });
-      } finally {
-        clearTimeout(timer);
       }
     }
     res.json({ ok: true, storage: storeBundle.kind });
@@ -1699,6 +1710,8 @@ export async function createApp(opts = {}) {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
     // The newsletter is a day-by-day list: only events that made their day.
     getPublicPayload: shownPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman, tremendous,
+    // No secret, no check: signups then confirm by email (newsletter.js).
+    turnstileConfigured: Boolean(turnstileSecret),
     // The send itself must carry the paid placements (see sponsors.apply).
     getSendPayload: () => shownPayload({ strict: true }),
     // Monday's run also sends last week's sponsor reports (and any Vic's
@@ -2288,13 +2301,20 @@ export async function createApp(opts = {}) {
       { key: 'stripe', label: 'Sponsor payments (Stripe)', ok: stripeCfg.enabled, level: 'recommended',
         fix: 'In Stripe: create a restricted key (Checkout Sessions, Products and Prices: write) and a webhook to ' + siteUrl +
           '/api/stripe/webhook on API version 2026-09-30.endive. Put them in Railway as STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.' },
+      // Production with Stripe's test keys: anyone can book with Stripe's
+      // public test card. Fine for a new town's launch test, never after.
+      ...(stripeCfg.production && stripeCfg.testKey ? [{ key: 'stripe_test_key', label: 'Stripe is in test mode', ok: false, level: 'recommended',
+        fix: 'STRIPE_SECRET_KEY in Railway is a test key (sk_test_ or rk_test_), so sponsors can book with Stripe\'s test card and nothing is charged. ' +
+          'Once the launch test checkout is done, switch to the live restricted key and the live webhook endpoint\'s STRIPE_WEBHOOK_SECRET.' }] : []),
       { key: 'event_check', label: 'Event check hides church events, non-events and duplicates',
         ok: Boolean(eventCheckSecret), level: 'recommended', link: ghSecrets,
         fix: 'Set EVENT_CHECK_SECRET in Railway and as a GitHub secret (any long random string, the same in both). Until then the check only reports to Slack.' },
       { key: 'separate_secrets', label: 'Each automation has its own secret', ok: new Set(cronSecrets).size === cronSecrets.length, level: 'optional', link: ghSecrets,
         fix: 'NEWSLETTER_CRON_SECRET, EVENT_CHECK_SECRET and SUBMISSION_REVIEW_SECRET share a value (or one is unset and borrows another), so one leak could send the newsletter, hide events and publish submissions. Give each its own long random string, the same in Railway and GitHub.' },
-      { key: 'spam', label: 'Spam protection on forms (Turnstile)', ok: Boolean(turnstileSecret && turnstileSiteKey), level: 'optional',
-        fix: `In Cloudflare Turnstile, add a widget (or add www.${town.domain} to an existing one) in Managed mode, then set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY in Railway. Protects Submit, Contact, newsletter signup and sponsor checkout.` },
+      // Required: without it every newsletter signup must confirm by email
+      // (newsletter.js), and the forms have no bot check at all.
+      { key: 'spam', label: 'Spam protection on forms (Turnstile)', ok: Boolean(turnstileSecret && turnstileSiteKey), level: 'required',
+        fix: `In Cloudflare Turnstile, add a widget (or add www.${town.domain} to an existing one) in Managed mode, then set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY in Railway. Protects Submit, Contact, newsletter signup and sponsor checkout; until then every newsletter signup has to confirm by email.` },
       { key: 'social', label: 'Auto-post to Facebook + Instagram', ok: null, level: 'recommended', link: ghSecrets,
         fix: 'In GitHub: secrets META_PAGE_ID, META_PAGE_TOKEN and the repo variable SOCIAL_AUTOPOST = 1.' },
       { key: 'collector_keys', label: 'Event collector keys (OpenAI, Apify, Gemini)', ok: null, level: 'recommended', link: ghSecrets,
@@ -2339,8 +2359,14 @@ export async function createApp(opts = {}) {
       getEvents: async () => [...(((await getPublicPayload()) || {}).events || []), ...(await listArchived().catch(() => []))],
       getOrders: async () => (typeof store.listSponsorOrders === 'function' ? store.listSponsorOrders() : []),
       setup: setupReport,
-      health: async () => ({ database: storeBundle.kind === 'postgres', scheduler_blocked: Boolean(scheduler.state.dispatchBlocked),
-        slack_refused: Boolean(slackRefusedText()) })
+      // database: Postgres configured and answering a ping now (3 s), not
+      // just configured: a town whose database is down must not read healthy.
+      health: async () => {
+        const configured = storeBundle.kind === 'postgres';
+        const database = configured && storeBundle.pool ? await pingDatabase(3000).then(() => true, () => false) : configured;
+        return { database, database_configured: configured, scheduler_blocked: Boolean(scheduler.state.dispatchBlocked),
+          slack_refused: Boolean(slackRefusedText()) };
+      }
     })
   });
 

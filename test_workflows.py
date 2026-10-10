@@ -374,3 +374,47 @@ def test_collect_commits_a_new_towns_first_files(tmp_path):
     assert _changes(tmp_path / "a", {"towns/bay/candidates.json": "{}"}, tracked=[]) == "changed=true"
     assert _changes(tmp_path / "b", {}, tracked=["towns/bay/candidates.json"]) == "changed=false"
     assert _changes(tmp_path / "c", {"towns/bay/candidates.json": "new\n"}, tracked=["towns/bay/candidates.json"]) == "changed=true"
+
+
+def _newsletter_town_guard(town):
+    g = step(load("newsletter.yml")["jobs"]["gate"], "Only Victoria until per-town Environments")
+    env = dict(os.environ, RUN_TOWN=town)
+    return subprocess.run(["bash", "-e", "-o", "pipefail", "-c", g["run"]], env=env,
+                          capture_output=True, text=True, timeout=30)
+
+
+def test_newsletter_refuses_another_towns_dispatch():
+    # The send reaches the repo-level SITE_URL and NEWSLETTER_CRON_SECRET
+    # (Victoria's): a dispatch for another town would send Victoria's issue.
+    # Until that town has its GitHub Environment (plan 3.3) it fails fast.
+    g = step(load("newsletter.yml")["jobs"]["gate"], "Only Victoria until per-town Environments")
+    assert g["env"]["RUN_TOWN"] == "${{ inputs.town || 'victoria' }}"
+    assert _newsletter_town_guard("victoria").returncode == 0
+    r = _newsletter_town_guard("bay")
+    assert r.returncode == 1
+    assert "needs its GitHub Environment (MULTI_CITY_PLAN.md 3.3)" in r.stdout
+    # The send job waits on the gate, so nothing is sent.
+    assert load("newsletter.yml")["jobs"]["send"]["needs"] == "gate"
+
+
+@pytest.mark.parametrize("name", TOWN_WORKFLOWS)
+def test_town_slack_tag_is_empty_for_victoria(name):
+    # Another town's Slack posts carry vars.SLACK_TOWN_TAG (slack_notify.py
+    # falls back to its city); scheduled and Victoria runs pass "" as before.
+    wf = load(name)
+    assert wf["env"]["SLACK_TOWN_TAG"] == "${{ inputs.town && inputs.town != 'victoria' && vars.SLACK_TOWN_TAG || '' }}"
+
+
+@pytest.mark.parametrize("name", sorted(os.listdir(WF)))
+def test_town_workflows_sparse_checkout_includes_towns(name):
+    # town.py reads towns/<slug>/town.json at import: a sparse checkout
+    # without towns/ fails every run for another town.
+    wf = load(name)
+    on = wf.get("on", wf.get(True)) or {}
+    if not ((on.get("workflow_dispatch") or {}).get("inputs") or {}).get("town"):
+        return
+    for job in wf["jobs"].values():
+        for st in job.get("steps", []):
+            sparse = (st.get("with") or {}).get("sparse-checkout")
+            if sparse is not None:
+                assert "towns" in str(sparse).split(), f"{name}: sparse checkout without towns/"

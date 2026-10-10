@@ -23,6 +23,12 @@ const EVENTS = [
 ];
 
 let tmpDir, server, baseUrl, store, sent, nlApi;
+// Production has Turnstile on, so by default these tests do too, with a
+// Cloudflare that passes every token and a token on every signup. Without
+// it every signup would confirm by email. A test that sets its own
+// turnstileSecret posts exactly what it says.
+const TURNSTILE_PASS = async () => ({ ok: true, json: async () => ({ success: true }) });
+let autoToken = false;
 
 function fakeResend() {
   sent = { single: [], batches: [] };
@@ -37,7 +43,9 @@ async function startApp(extra = {}) {
   const eventsFile = path.join(tmpDir, 'events.json');
   await fs.writeFile(eventsFile, JSON.stringify({ events: EVENTS, sponsor: { name: 'Acme Tacos', text: 'Best tacos.', cta: 'Order', url: 'https://acme.example' } }));
   store = new FileStore(path.join(tmpDir, 's.json'));
+  autoToken = !('turnstileSecret' in extra);
   const made = await createApp({
+    ...(autoToken ? { turnstileSecret: 'fake-secret', fetch: TURNSTILE_PASS } : {}),
     storeBundle: { kind: 'file', store }, eventsFile, trustProxy: false, now: () => NOW,
     siteUrl: 'https://www.thevic361.com', adminUsername: 'a', adminPassword: 'b', adminSessionSecret: 'c',
     resendApiKey: 're_test', newsletterAddress: '123 Main St, Victoria, TX 77901',
@@ -57,7 +65,8 @@ afterEach(async () => {
 });
 
 const post = (p, body, headers = {}) => fetch(baseUrl + p, {
-  method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body || {})
+  method: 'POST', headers: { 'Content-Type': 'application/json', ...headers },
+  body: JSON.stringify(autoToken && p === '/api/subscribe' && body && !('turnstile_token' in body) ? { ...body, turnstile_token: 'ok' } : (body || {}))
 });
 async function auth() {
   const r = await post('/api/admin/login', { username: 'a', password: 'b' });

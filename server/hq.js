@@ -14,6 +14,9 @@ import { dailyGrowth, sumDays, issueReport, monthRevenue, goals } from './growth
 import { localDateStr, addDays, currentWeek } from './seo.js';
 
 const CACHE_MS = 60 * 1000;
+// A summary with failed parts (database down, say) is kept only briefly:
+// HQ should see the town come back within seconds, not a minute of zeros.
+const FAILED_CACHE_MS = 5 * 1000;
 const KEPT = new Set(['paid', 'processing', 'active', 'hidden']);
 
 // The next four sponsor weeks (from next Monday) booked or open, and picks
@@ -41,28 +44,40 @@ function keyOk(header, key) {
 }
 
 // The summary from what the town's store and server already know. Every
-// part is best effort: a piece that fails reads null instead of failing all.
+// part is best effort: a piece that fails reads null instead of failing all,
+// and is named in `failed` (only present when something failed), so HQ
+// shows "database down" rather than a green row of zeros (0 subscribers,
+// $0) that would also drop the town out of the network totals.
 export async function buildSummary({ store, nowFn, town, siteUrl, commit, getEvents, getOrders, setup, health }) {
   const now = nowFn();
   const today = localDateStr(now);
-  const safe = async (fn, dflt = null) => { try { return await fn(); } catch { return dflt; } };
-  const subs = await safe(() => store.listSubscriberStats(), []);
-  const orders = await safe(getOrders, []);
-  const spend = typeof store.listAdSpend === 'function' ? await safe(() => store.listAdSpend(addDays(today, -31)), []) : [];
+  const failed = [];
+  const safe = async (fn, dflt = null, part = null) => {
+    try { return await fn(); } catch { if (part && !failed.includes(part)) failed.push(part); return dflt; }
+  };
+  const subs = await safe(() => store.listSubscriberStats(), [], 'subscribers');
+  const orders = await safe(getOrders, [], 'revenue');
+  const spend = typeof store.listAdSpend === 'function' ? await safe(() => store.listAdSpend(addDays(today, -31)), [], 'ads') : [];
   const daily = dailyGrowth(subs, spend, { today, days: 31 });
   const done = daily.filter(d => d.day < today);
   const month30 = sumDays(done.slice(-30));
   const active = subs.filter(x => x.status === 'active').length;
-  const sends = await safe(() => store.listNewsletterSends(4), []);
+  const sends = await safe(() => store.listNewsletterSends(4), [], 'issues');
   const weekKeys = sends.map(s => s.week_key);
-  const opens = weekKeys.length ? await safe(() => store.countEmailOpens(weekKeys), {}) : {};
+  const opens = weekKeys.length ? await safe(() => store.countEmailOpens(weekKeys), {}, 'issues') : {};
   const oldest = sends.map(s => String(s.sent_at || '').slice(0, 10)).filter(Boolean).sort()[0] || today;
-  const rows = await safe(() => store.listTraffic(oldest), []);
-  const events = await safe(getEvents, []);
+  const rows = await safe(() => store.listTraffic(oldest), [], 'issues');
+  const events = await safe(getEvents, [], 'events');
   const lastMonthDay = addDays(today.slice(0, 7) + '-01', -1);
   const byStatus = {};
   for (const o of orders) if (o && !o.test) byStatus[o.status] = (byStatus[o.status] || 0) + 1;
-  const s = await safe(setup, { checks: [], status: {} });
+  const s = await safe(setup, { checks: [], status: {} }, 'setup');
+  const h = await safe(health, null, 'health');
+  // A configured database that doesn't answer its ping fails the store's
+  // reads too (and setupReport swallows those): say so.
+  if (h && h.database === false && h.database_configured && !failed.includes('database')) failed.push('database');
+  const bad = part => failed.includes(part);
+  const healthOut = h && typeof h === 'object' ? (({ database_configured: _c, ...rest }) => rest)(h) : h;
   const missing = level => s.checks.filter(c => c.level === level && c.ok === false).map(c => c.key);
   // Active subscribers at the end of each day, worked back from today's count.
   let after = 0;
@@ -80,8 +95,9 @@ export async function buildSummary({ store, nowFn, town, siteUrl, commit, getEve
   return {
     ok: true,
     generated_at: now.toISOString(),
+    ...(failed.length ? { failed } : {}),
     town: { id: town.id, name: town.siteName, site_url: siteUrl, admin_url: `${siteUrl}/admin.html`, commit: commit || null },
-    subscribers: {
+    subscribers: bad('subscribers') ? null : {
       active,
       pending: subs.filter(x => x.status === 'pending').length,
       net_7_days: sumDays(done.slice(-7)).net,
@@ -92,22 +108,22 @@ export async function buildSummary({ store, nowFn, town, siteUrl, commit, getEve
       daily: history,
       goals: goals(subs, daily, monthRevenue(orders, today), today)
     },
-    issues: issueReport(sends, opens, subs, rows, events).slice(0, 4)
+    issues: bad('issues') ? null : issueReport(sends, opens, subs, rows, events).slice(0, 4)
       .map(i => ({ week: i.week, edition: i.edition, sent_at: i.sent_at, sent: i.sent, opens: i.opens, open_rate: i.open_rate,
         clickers: i.clickers, click_rate: i.click_rate })),
-    revenue: {
+    revenue: bad('revenue') ? null : {
       month_to_date: monthRevenue(orders, today),
       last_month: monthRevenue(orders, lastMonthDay),
       orders_by_status: byStatus,
       live_orders: orders.filter(o => o && !o.test && KEPT.has(o.status)).length,
       months
     },
-    ads: { spend_30_days: month30.spend, cost_per_sub_30_days: month30.cost_per_sub },
-    sponsors: sponsorCounts(orders, today),
+    ads: bad('ads') || bad('subscribers') ? null : { spend_30_days: month30.spend, cost_per_sub_30_days: month30.cost_per_sub },
+    sponsors: bad('revenue') ? null : sponsorCounts(orders, today),
     submissions_waiting: s.status.pending_submissions ?? null,
-    events: { upcoming: s.status.upcoming_events ?? null, last_collect: s.status.collected_at ?? null, published_at: s.status.published_at ?? null },
-    health: await safe(health, null),
-    setup: { required_missing: missing('required'), recommended_missing: missing('recommended') }
+    events: bad('setup') ? null : { upcoming: s.status.upcoming_events ?? null, last_collect: s.status.collected_at ?? null, published_at: s.status.published_at ?? null },
+    health: healthOut,
+    setup: bad('setup') ? null : { required_missing: missing('required'), recommended_missing: missing('recommended') }
   };
 }
 
@@ -119,7 +135,7 @@ export function registerHq(app, { key = '', limiter, nowFn = () => new Date(), b
     if (!keyOk(req.get('authorization'), key)) return res.status(401).json({ ok: false, error: 'unauthorized' });
     res.set('Cache-Control', 'no-store');
     const t = nowFn().getTime();
-    if (cache && t - cache.at < CACHE_MS) return res.json(cache.body);
+    if (cache && t - cache.at < (cache.body.failed ? FAILED_CACHE_MS : CACHE_MS)) return res.json(cache.body);
     try {
       const body = await build();
       cache = { at: t, body };

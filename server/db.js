@@ -284,6 +284,20 @@ function archiveCutoff() {
   return new Date(Date.now() - ARCHIVE_RETENTION_DAYS * 86400000).toISOString().slice(0, 10);
 }
 
+// Why an admin import must leave an existing subscriber alone, or null. An
+// import counts as an opt-in from elsewhere, which can't override an opt-out
+// here (CAN-SPAM): unsubscribed (a spam complaint is an unsubscribe),
+// bounced (a dead address), or a comeback still waiting to confirm
+// (old_tokens: they unsubscribed or bounced before, and anyone can type an
+// address into the form, which only sends that inbox a confirm email). The
+// value names the import result's counter.
+export function importSkip(sub) {
+  if (!sub || sub.status === 'active') return null;
+  if (sub.status === 'bounced') return 'skipped_bounced';
+  if (sub.status === 'unsubscribed' || (sub.old_tokens || []).length) return 'skipped_unsubscribed';
+  return null;
+}
+
 class FileStore {
   constructor(file) {
     this.file = file || DEFAULT_FILE;
@@ -448,8 +462,9 @@ class FileStore {
           ...(referredBy ? { referred_by: referredBy } : {}) };
         data.subscribers.push(sub);
         fresh = true;
-      } else if (sub.status === 'unsubscribed') {
-        // Coming back: credit where they came back from. A new token, since
+      } else if (sub.status === 'unsubscribed' || sub.status === 'bounced') {
+        // Coming back (or a bounced address signing up again, as in
+        // PgStore): credit where they came back from. A new token, since
         // it also confirms and the old one sits in every issue they got
         // (forwarded ones too); but the old one is kept for unsubscribing,
         // so those issues' links still work (see PgStore.addSubscriber).
@@ -519,8 +534,9 @@ class FileStore {
     });
   }
 
-  // Addresses Resend refused outright (newsletter.js sendWeekly). Only
-  // active ones change: someone who unsubscribed stays unsubscribed.
+  // Addresses Resend refused outright (newsletter.js sendWeekly) or reported
+  // as a hard bounce (inbound.js). Only active ones change: someone who
+  // unsubscribed stays unsubscribed.
   async markSubscribersBounced(emails) {
     const set = new Set(emails || []);
     if (!set.size) return 0;
@@ -529,6 +545,22 @@ class FileStore {
       let n = 0;
       for (const sub of data.subscribers) {
         if (set.has(sub.email) && sub.status === 'active') { Object.assign(sub, { status: 'bounced', bounced_at: nowIso() }); n++; }
+      }
+      await this._write(data);
+      return n;
+    });
+  }
+
+  // A spam complaint (server/inbound.js): an unsubscribe by address, any
+  // status, so a complainer waiting to confirm a comeback stays off too.
+  async unsubscribeByEmail(emails) {
+    const set = new Set(emails || []);
+    if (!set.size) return 0;
+    return this._withWrite(async () => {
+      const data = await this._read();
+      let n = 0;
+      for (const sub of data.subscribers) {
+        if (set.has(sub.email) && sub.status !== 'unsubscribed') { Object.assign(sub, { status: 'unsubscribed', unsubscribed_at: nowIso() }); n++; }
       }
       await this._write(data);
       return n;
@@ -704,17 +736,19 @@ class FileStore {
   }
 
   // Imported addresses already opted in elsewhere (an old list), so they start
-  // active. People who unsubscribed here are never re-added.
+  // active. People who opted out here are never re-added (importSkip): only
+  // their own inbox can put them back, through the confirm email.
   async importSubscribers(emails, source) {
     return this._withWrite(async () => {
       const data = await this._read();
-      const out = { added: 0, already: 0, skipped_unsubscribed: 0 };
+      const out = { added: 0, already: 0, skipped_unsubscribed: 0, skipped_bounced: 0 };
       for (const email of emails) {
         const sub = data.subscribers.find(x => x.email === email);
+        const skip = sub && importSkip(sub);
         if (!sub) {
           data.subscribers.push({ id: newId(), email, status: 'active', token: newToken(), source, created_at: nowIso(), confirmed_at: nowIso() });
           out.added++;
-        } else if (sub.status === 'unsubscribed') out.skipped_unsubscribed++;
+        } else if (skip) out[skip]++;
         else { if (sub.status !== 'active') Object.assign(sub, { status: 'active', confirmed_at: nowIso() }); out.already++; }
       }
       await this._write(data);
@@ -1047,7 +1081,7 @@ class PgStore {
         // queued behind it (and a timed-out ALTER failed ready()). Ask once
         // which of the added columns exist and only ALTER for missing ones.
         const added = [['event_submissions', 'ai_review'], ['traffic', 'ad'],
-          ['newsletter_sends', 'failed_emails'], ['newsletter_sends', 'picks'], ['subscribers', 'old_tokens'],
+          ['newsletter_sends', 'failed_emails'], ['newsletter_sends', 'picks'], ['newsletter_sends', 'chunks'], ['subscribers', 'old_tokens'],
           ['subscribers', 'ref_code'], ['subscribers', 'referred_by'], ['subscribers', 'ref_tier'],
           ['subscribers', 'reminded_at'], ['subscribers', 'pending_since'], ['subscribers', 'weekend_optout']];
         const cols = await this.pool.query(
@@ -1184,6 +1218,10 @@ class PgStore {
         await addColumn('newsletter_sends', 'failed_emails', `ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS failed_emails JSONB NOT NULL DEFAULT '[]'::jsonb`);
         // Paid Vic's Pick order ids the issue starred, for their reports.
         await addColumn('newsletter_sends', 'picks', 'ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS picks JSONB');
+        // Each batch's idempotency key, members and outcome, saved when first
+        // tried, so a retry resends a batch under its original key
+        // (newsletter.js sendWeeklyNow).
+        await addColumn('newsletter_sends', 'chunks', `ALTER TABLE newsletter_sends ADD COLUMN IF NOT EXISTS chunks JSONB NOT NULL DEFAULT '[]'::jsonb`);
         // Referral rewards (see FileStore.addReferralReward). key is unique:
         // a tier per referrer, or a month's drawing, is created once.
         await this.pool.query(`
@@ -1537,6 +1575,15 @@ class PgStore {
     return r.rowCount;
   }
 
+  // See FileStore.unsubscribeByEmail.
+  async unsubscribeByEmail(emails) {
+    if (!emails || !emails.length) return 0;
+    await this.ready();
+    const r = await this.pool.query(
+      `UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = NOW() WHERE email = ANY($1::text[]) AND status <> 'unsubscribed'`, [emails]);
+    return r.rowCount;
+  }
+
   async getSubscriberByToken(token) {
     if (!token) return null;
     await this.ready();
@@ -1648,18 +1695,20 @@ class PgStore {
     return r.rowCount > 0;
   }
 
+  // See FileStore.importSubscribers.
   async importSubscribers(emails, source) {
     await this.ready();
-    const out = { added: 0, already: 0, skipped_unsubscribed: 0 };
+    const out = { added: 0, already: 0, skipped_unsubscribed: 0, skipped_bounced: 0 };
     for (const email of emails) {
-      const existing = (await this.pool.query('SELECT status FROM subscribers WHERE email = $1', [email])).rows[0];
+      const existing = (await this.pool.query('SELECT status, old_tokens FROM subscribers WHERE email = $1', [email])).rows[0];
+      const skip = existing && importSkip(existing);
       if (!existing) {
         await this.pool.query(
           `INSERT INTO subscribers (id, email, status, token, source, confirmed_at) VALUES ($1, $2, 'active', $3, $4, NOW())
            ON CONFLICT (email) DO NOTHING`, [newId(), email, newToken(), source]);
         out.added++;
-      } else if (existing.status === 'unsubscribed') {
-        out.skipped_unsubscribed++;
+      } else if (skip) {
+        out[skip]++;
       } else {
         await this.pool.query(
           `UPDATE subscribers SET status = 'active', confirmed_at = CASE WHEN status <> 'active' THEN NOW() ELSE confirmed_at END WHERE email = $1`, [email]);
@@ -1672,12 +1721,12 @@ class PgStore {
   async recordNewsletterSend(rec) {
     await this.ready();
     await this.pool.query(`
-      INSERT INTO newsletter_sends (week_key, subject, recipients, failed, failed_emails, picks, sent_at) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, NOW())
+      INSERT INTO newsletter_sends (week_key, subject, recipients, failed, failed_emails, picks, chunks, sent_at) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, NOW())
       ON CONFLICT (week_key) DO UPDATE SET subject = EXCLUDED.subject, recipients = EXCLUDED.recipients,
         failed = EXCLUDED.failed, failed_emails = EXCLUDED.failed_emails,
-        picks = COALESCE(EXCLUDED.picks, newsletter_sends.picks), sent_at = NOW()
+        picks = COALESCE(EXCLUDED.picks, newsletter_sends.picks), chunks = EXCLUDED.chunks, sent_at = NOW()
     `, [rec.week_key, rec.subject, rec.recipients, rec.failed, toJsonb(rec.failed_emails || []),
-        Array.isArray(rec.picks) ? toJsonb(rec.picks) : null]);
+        Array.isArray(rec.picks) ? toJsonb(rec.picks) : null, toJsonb(Array.isArray(rec.chunks) ? rec.chunks : [])]);
   }
 
   async saveSponsorOrder(order) {

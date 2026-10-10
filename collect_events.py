@@ -1845,10 +1845,10 @@ def _is_thin(ev):
 def _enrich_prompt(batch):
     lines = []
     for i, ev in enumerate(batch, start=1):
-        town = ev.get("town") or "Victoria"
+        town = ev.get("town") or TOWN["city"]
         day = datetime.strptime(ev["date"], "%Y-%m-%d").strftime("%A %B %d, %Y")
         known = "; ".join(f"{k}: {ev[k]}" for k in ("time", "venue", "address", "description", "url") if ev.get(k))
-        lines.append(f"[{i}] {ev.get('name')} on {day} in {town}, Texas. Known: {known or 'nothing else'}")
+        lines.append(f"[{i}] {ev.get('name')} on {day} in {town}, {TOWN['state_name']}. Known: {known or 'nothing else'}")
     return (
         "Use Google Search to find details for these local events. For each one, look for the event's own page "
         "or the organizer's announcement (Facebook event or post, venue site, ticket page, official calendar).\n\n"
@@ -2415,7 +2415,9 @@ def fill_gaps(events, templates=True):
         if is_listing_url(ev.get("url")):
             ev["url"] = ""
         # Fill URL from venue lookup if missing
-        if not ev.get("url"):
+        # VENUE_URLS are Victoria's venues: another town's "Riverside Park"
+        # must not link to Victoria's parks page.
+        if not ev.get("url") and TOWN["id"] == "victoria":
             venue_lower = ev.get("venue", "").lower()
             for key, url in VENUE_URLS.items():
                 if key in venue_lower:
@@ -4064,9 +4066,12 @@ def _apify_headers(token):
 _APIFY_LIMIT_TRIPPED = False
 
 
-# --local-dir (main sets it): its venues.json comes first, then the one
-# next to this file. Tests point it at a temp dir instead of the real file.
+# --local-dir (main sets it): its venues.json comes first, then (Victoria
+# only) the one next to this file. Tests point it at a temp dir instead of
+# the real file.
 _VENUE_DIR = None
+# Another town without a venue list is warned about once per process.
+_NO_VENUES_WARNED = False
 
 
 def _load_venue_list():
@@ -4077,10 +4082,20 @@ def _load_venue_list():
     its one-cycle backup ``facebook_venues.backup.json`` to keep the
     Sunday collector running through the transition.
     """
+    global _NO_VENUES_WARNED
     here = os.path.dirname(__file__) or "."
-    dirs = [here]
-    if _VENUE_DIR and os.path.abspath(_VENUE_DIR) != os.path.abspath(here):
-        dirs.insert(0, _VENUE_DIR)
+    if TOWN["id"] == "victoria":
+        dirs = [here]
+        if _VENUE_DIR and os.path.abspath(_VENUE_DIR) != os.path.abspath(here):
+            dirs.insert(0, _VENUE_DIR)
+    else:
+        # The repo root's venue files are Victoria's. Falling back to them
+        # would spend this town's Apify cap scraping Victoria's venues and
+        # put Victoria's bar trivia on its site: no list here means none yet.
+        own = _VENUE_DIR or os.path.join(here, town_paths(TOWN)["dir"])
+        if os.path.abspath(own) == os.path.abspath(here):
+            own = os.path.join(here, town_paths(TOWN)["dir"])
+        dirs = [own]
     for path in (os.path.join(d, f) for d in dirs
                  for f in ("venues.json", "facebook_venues.json", "facebook_venues.backup.json")):
         fname = os.path.basename(path)
@@ -4094,6 +4109,10 @@ def _load_venue_list():
             continue
         if isinstance(data, list) and data:
             return data, path
+    if TOWN["id"] != "victoria" and not _NO_VENUES_WARNED:
+        _NO_VENUES_WARNED = True
+        _warn(f"[venues] no venue list for {TOWN['id']} in {os.path.relpath(dirs[0], here)}: venue-based scrapes "
+              f"are skipped until venues.json is seeded (scripts/discover_venues.py)", scraper="venues")
     return [], None
 
 
@@ -5540,9 +5559,10 @@ def main():
     # actually retries instead of inheriting the previous in-process state.
     # (No-op for the daily workflow since each run is a fresh process, but
     # matters for tests / local repeated runs.)
-    global _APIFY_LIMIT_TRIPPED, _OPENAI_DEAD
+    global _APIFY_LIMIT_TRIPPED, _OPENAI_DEAD, _NO_VENUES_WARNED
     _APIFY_LIMIT_TRIPPED = False
     _OPENAI_DEAD = False
+    _NO_VENUES_WARNED = False
 
     # Set the global collection window. Every scraper reads _WINDOW_START/_END.
     global _WINDOW_START, _WINDOW_END
