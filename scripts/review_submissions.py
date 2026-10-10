@@ -23,7 +23,10 @@ each submission waiting on the site:
 
 Without OPENAI_API_KEY only rule-certain decisions are made; everything
 else waits for the next run (or the owner). A submission the AI can't
-answer for is left for the next run too.
+answer for is left for the next run too, but only MAX_AI_ATTEMPTS times:
+then it's flagged for the owner (one that always gets a non-JSON answer
+or a refusal would otherwise cost a call every 15 minutes forever, and
+its submitter, promised a review within the hour, would never get one).
 
 Needs SUBMISSION_REVIEW_SECRET (or EVENT_CHECK_SECRET / NEWSLETTER_CRON_SECRET),
 the same value in Railway and GitHub.
@@ -283,19 +286,28 @@ def ai_review(events, api_key, budget=AI_BUDGET_S, status=None):
     status = {} if status is None else status
     start = time.monotonic()
     out, tried, failed = [], 0, 0
-    for e in events:
+    # Indexes of events whose own call got no usable answer (a bad answer,
+    # or a one-off error such as a refusal): those count as an attempt.
+    # Skipped ones (AI down, out of time) don't: that's not the submission.
+    unanswered = status.setdefault("unanswered", [])
+    for i, e in enumerate(events):
         if status.get("ai_down") or time.monotonic() - start >= budget:
             out.append(None)
             continue
         tried += 1
         try:
-            out.append(ai_review_one(e, api_key))
+            answer = ai_review_one(e, api_key)
+            if answer is None:
+                unanswered.append(i)
+            out.append(answer)
         except AIUnavailable as err:
             # No point spending the rest of the run on calls that can't work.
             status["ai_down"] = str(err)
+            status["ai_dead"] = True
             out.append(None)
         except Exception:  # noqa: BLE001 - this one waits for the next run
             failed += 1
+            unanswered.append(i)
             out.append(None)
     if tried and failed == tried and not status.get("ai_down"):
         status["ai_down"] = f"every OpenAI call failed this run ({failed})"
@@ -321,11 +333,15 @@ def cleaned_from(answer, ev):
     return out
 
 
-def decide(submissions, live, api_key, known=None, status=None):
+def decide(submissions, live, api_key, known=None, status=None, attempts=None):
     """[{id, decision, reason, cleaned}] for the site, plus a printable log.
     `status` (a dict) gets ai_down when submissions wait for an AI that
-    can't answer, so main() can alert instead of exiting quietly."""
+    can't answer, so main() can alert instead of exiting quietly.
+    `attempts` (a dict, id -> count, kept between runs) counts the runs the
+    AI couldn't answer for a submission; at MAX_AI_ATTEMPTS it's flagged
+    for the owner instead of tried again (status["gave_up"] lists them)."""
     status = {} if status is None else status
+    attempts = {} if attempts is None else attempts
     known = known_domains(live) if known is None else known
     reviews, log, for_ai = [], [], []
     for s in submissions:
@@ -341,8 +357,26 @@ def decide(submissions, live, api_key, known=None, status=None):
     if for_ai and answers is None:
         log.append(f"{len(for_ai)} left for the next run (no AI answer).")
     if answers is not None:
-        for (s, rule), a in zip(for_ai, answers):
-            if a is None or str(a.get("verdict")) not in VERDICTS:
+        # A dead account (bad key, no credit) isn't any one submission's
+        # doing; its own call failing (a refusal, a bad answer) is, even
+        # when it was the only call this run (so "every call failed").
+        counted = set(status.get("unanswered") or []) if not status.get("ai_dead") else set()
+        for n, ((s, rule), a) in enumerate(zip(for_ai, answers)):
+            if a is not None and str(a.get("verdict")) not in VERDICTS:
+                counted.add(n)
+                a = None
+            if a is None:
+                if n in counted:
+                    tries = int(attempts.get(str(s["id"])) or 0) + 1
+                    attempts[str(s["id"])] = tries
+                    if tries >= MAX_AI_ATTEMPTS:
+                        status.setdefault("gave_up", []).append(str(s["id"]))
+                        reason = f"AI couldn't review this after {tries} tries; needs a manual look"
+                        if rule:
+                            reason = f"{rule[1]}; {reason}"
+                        reviews.append({"id": s["id"], "decision": "flag", "reason": reason})
+                        log.append(f"{s['event'].get('name')}: no usable AI answer {tries} times; flagged for the owner.")
+                        continue
                 log.append(f"{s['event'].get('name')}: no usable AI answer; next run.")
                 continue
             verdict = a["verdict"]
@@ -362,6 +396,41 @@ def decide(submissions, live, api_key, known=None, status=None):
             reviews.append({"id": s["id"], "decision": decision, "reason": reason,
                             "cleaned": cleaned_from(a, s["event"])})
     return reviews, log
+
+
+# Runs in a row the AI may fail to answer for one submission before it's
+# flagged for the owner (about an hour at one run every 15 minutes).
+MAX_AI_ATTEMPTS = 4
+
+
+def load_attempts(path):
+    """{submission id: runs the AI couldn't answer for it}, from the small
+    JSON file the workflow keeps in the Actions cache (REVIEW_ATTEMPTS_STATE).
+    Without a file nothing is remembered, so nothing is ever given up on."""
+    if not path:
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): v for k, v in data.items() if isinstance(v, int) and not isinstance(v, bool)}
+
+
+def save_attempts(path, attempts, pending_ids):
+    """Keep counts only for submissions still waiting (a decided or deleted
+    one never comes back)."""
+    if not path:
+        return
+    keep = {k: v for k, v in attempts.items() if k in pending_ids}
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(keep, f)
+    except OSError as e:
+        print(f"Couldn't save the attempt counts: {e}")
 
 
 # A broken OpenAI account alerts once, then every ALERT_EVERY_S while it
@@ -436,9 +505,22 @@ def main(argv=None):
         print(f"::warning::Couldn't read the live events ({e}); trying again next run.")
         return 0
     status = {}
-    reviews, log = decide(submissions, live, os.environ.get("OPENAI_API_KEY", "").strip(), status=status)
+    attempts_path = os.environ.get("REVIEW_ATTEMPTS_STATE", "").strip()
+    attempts = load_attempts(attempts_path)
+    reviews, log = decide(submissions, live, os.environ.get("OPENAI_API_KEY", "").strip(), status=status,
+                          attempts=attempts)
     for line in log:
         print(line)
+    if not args.dry_run:
+        # A given-up id stays counted while it's pending: if the POST below
+        # fails, the next run flags it again straight away.
+        save_attempts(attempts_path, attempts, {str(s.get("id")) for s in submissions})
+    if status.get("gave_up"):
+        # The site's Slack summary lists them as "for you to look at"; the
+        # run log says why.
+        ids = ", ".join(status["gave_up"])
+        print(f"::warning::The AI couldn't review {len(status['gave_up'])} submission(s) after "
+              f"{MAX_AI_ATTEMPTS} tries; flagged for a manual look: {ids}")
     for rv in reviews:
         print(f"{rv['decision']}: {rv['id']} {rv.get('reason') or ''} {json.dumps(rv.get('cleaned') or {})}")
     # Submissions are waiting and the AI can't answer: without this the run

@@ -13,6 +13,7 @@ import { town } from './town.js';
 import { escHtml, layout } from './seo.js';
 import { replyLink } from './inbound.js';
 import { normalizeEmail } from './newsletter.js';
+import { honeypotTripped } from './honeypot.js';
 import { newId, nowIso } from './db.js';
 
 export const CONTACT_TOPICS = [
@@ -36,7 +37,7 @@ export function renderContactPage({ siteUrl, values = {}, errors = {}, sent = fa
     <p class="page-lead">Questions about advertising, an event, or a listing? Send us a note and we'll get back to you, usually within a day.</p>
     ${e._form ? `<p class="co-error co-error--form">${escHtml(e._form)}</p>` : ''}
     <form class="co-form" method="post" action="/contact" data-turnstile>
-      <div class="hp-field" aria-hidden="true"><label>Company <input name="company" tabindex="-1" autocomplete="off"></label></div>
+      <div class="hp-field" aria-hidden="true"><label>Leave this empty <input name="hp_field" tabindex="-1" autocomplete="off"></label></div>
       ${field('topic', 'What is this about?', `<select id="c-topic" name="topic">${CONTACT_TOPICS.map(([k, l]) => `<option value="${k}"${v.topic === k ? ' selected' : ''}>${escHtml(l)}</option>`).join('')}</select>`)}
       ${field('name', 'Your name', `<input id="c-name" name="name" required maxlength="80" value="${escHtml(v.name || '')}"${e.name ? ' aria-invalid="true"' : ''}>`, e.name)}
       ${field('email', 'Your email', `<input id="c-email" name="email" type="email" required maxlength="254" value="${escHtml(v.email || '')}"${e.email ? ' aria-invalid="true"' : ''}>`, e.email)}
@@ -79,7 +80,7 @@ export function registerContact(app, { siteUrl, slack, store = null, requireAdmi
         name: clean(b.name, 80), email: clean(b.email, 254), business: clean(b.business, 80), message: clean(b.message, 3000)
       };
       // Honeypot: pretend it worked so bots move on.
-      if (clean(b.company, 200)) return sendHtml(res, renderContactPage({ siteUrl, sent: true }), 200, 'no-store');
+      if (honeypotTripped(b, 'contact', { slack })) return sendHtml(res, renderContactPage({ siteUrl, sent: true }), 200, 'no-store');
       const fail = (errors, status = 400) => sendHtml(res, renderContactPage({ siteUrl, values, errors }), status, 'no-store');
       if (!limiter.check(req.ip || req.socket.remoteAddress).ok) return fail({ _form: 'Too many messages from here. Try again in an hour.' }, 429);
       if (!(await verifyHuman(req))) return fail({ _form: "We couldn't confirm you're not a bot. Please try again." });

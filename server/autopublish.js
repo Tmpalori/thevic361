@@ -13,12 +13,12 @@
  *     published one was cut off), so collector fixes reach live events.
  *   - Events this module added on an earlier run that two collector runs in
  *     a row no longer find are taken down: the collector fixed or dropped
- *     them. Never one from a source that only looks back a short time or
- *     answers differently each run (FB/IG posts, Gemini search), nor while
+ *     them. Never one from a source that only looks back a short time
+ *     (FB/IG posts), nor while
  *     its source didn't run ok this time, nor when the new run looks broken
  *     (far fewer events than this module has up).
  *   - An event this module added that the admin later removed is remembered
- *     and not re-added next run.
+ *     and not re-added next run, nor under a reworded name (sameEvent).
  *   - Approved community submissions are included.
  *   - Edits (the event_edits overlay) keep applying on read, as before.
  *
@@ -26,9 +26,106 @@
  * admin's Save & Publish already carries forward with other extras.
  */
 
-import { eventKeyOf, applyEventEdits, withPublishedLock } from './db.js';
+import { eventKeyOf, applyEventEdits, withPublishedLock, parseEventKey } from './db.js';
 import { localDateStr, addDays } from './seo.js';
 import { sameEvent } from './sponsors.js';
+import { town } from './town.js';
+
+// ─── One listing, reworded ───────────────────────────────────────────────
+// The collector's is_same_event (_same_slot) folds one event that several
+// sources word differently ("Wednesday Market", "Midweek Market" and
+// "Victoria Farmers' Market", all 9 AM at the farmers market). Copies
+// already live from earlier runs still need folding here, and sameEvent
+// (sponsors.js, which also matches paid picks) stays strict on purpose.
+// Same rules as the Python: same venue, date and known start minute, at
+// least one loosely worded name (AI-written from a post or Gemini, typed by
+// a person, or generic), and a shared distinctive word or a generic name
+// for the night's act. Two hand-entered events are never folded.
+const AI_NAMED = new Set(['apify_facebook_posts', 'apify_instagram_posts', 'gemini_search']);
+const HAND = new Set(['local_events', 'google_sheet']);
+const NAME_STOP = new Set(['the', 'a', 'an', 'at', 'in', 'of', 'and', 'with', 'for', 'on', 'annual', 'presents']);
+const WEEKDAYS = new Set(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].flatMap(d => [d, d + 's']));
+const NIGHT = new Set(['night', 'nite', 'nights']);
+const FILLER = new Set(['midweek', 'weekly', 'monthly', 'tonight', 'today', 'every', 'special']);
+const GENERIC = new Set(['live', 'music', 'band', 'trivia', 'karaoke', 'market', 'party', 'show', 'concert', 'festival',
+  'fest', 'dance', 'brunch', 'bingo', 'comedy', 'open', 'event']);
+const ACT = new Set(['live', 'music', 'band', 'concert', 'show', 'karaoke', 'trivia', 'bingo', 'comedy', 'open', 'dance']);
+const WEAK_SHARED = new Set(['society', 'club', 'group', 'series', 'community', 'kids', 'family', 'free',
+  'class', 'meeting', 'workshop', 'halloween', 'holiday', 'fall', 'spring', 'summer', 'winter']);
+const KIND = { live: 'music', music: 'music', band: 'music', concert: 'music', show: 'music' };
+const SYNONYM = { film: 'movie', cinema: 'movie', screening: 'movie', nite: 'night' };
+const VAGUE_VENUE = new Set(['downtown', 'main', 'stage', 'city', 'area']);
+
+function nameTokens(name) {
+  return String(name || '').toLowerCase().replace(/&/g, ' and ')
+    .replace(/['’]s\b/g, '')
+    .replace(/\b20\d{2}\b/g, ' ')
+    .replace(/\$\d+(?:\.\d+)?/g, ' ')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .split(/\s+/).filter(w => w && !NAME_STOP.has(w));
+}
+const stem = w => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
+const cityWords = () => new Set(nameTokens(`${town.city} ${town.state} ${town.stateName || ''}`));
+
+// Start of a time string in minutes after midnight, or null (collector's
+// _start_minutes): "6-8 PM" starts at 6 PM, "Noon" is 720.
+export function startMinutes(t) {
+  const s = String(t || '').trim();
+  if (/^noon\b/i.test(s)) return 720;
+  if (/^midnight\b/i.test(s)) return 0;
+  const m = /^(\d{1,2})(?::(\d{2}))?\s*(?:([ap])\.?\s*m\.?)?/i.exec(s);
+  if (!m) return null;
+  let ampm = m[3];
+  if (!ampm) {
+    const later = /\d\s*([ap])\.?\s*m/i.exec(s.slice(m[0].length));
+    if (!later) return null;
+    ampm = later[1];
+  }
+  const hour = Number(m[1]);
+  if (hour > 12) return null;
+  return (hour % 12 + (ampm.toLowerCase() === 'p' ? 12 : 0)) * 60 + Number(m[2] || 0);
+}
+
+function slotCore(name, drop) {
+  const out = new Set();
+  for (const w of nameTokens(name)) {
+    if (drop.has(w) || NIGHT.has(w) || FILLER.has(w)) continue;
+    const s = stem(w);
+    out.add(SYNONYM[s] || s);
+  }
+  return out;
+}
+const kinds = words => new Set([...words].filter(w => GENERIC.has(w)).map(w => KIND[w] || w));
+const overlaps = (a, b) => [...a].some(x => b.has(x));
+
+// `sources` (a, b) are the source lists of each side; a live event carries
+// none itself, so the caller passes what auto_publish.sources recorded.
+export function sameSlot(a, b, sourcesA = [], sourcesB = []) {
+  if (!a || !b || a.date !== b.date) return false;
+  const va = String(a.venue || '').trim().toLowerCase(), vb = String(b.venue || '').trim().toLowerCase();
+  if (!va || !vb || !(va.includes(vb) || vb.includes(va))) return false;
+  const city = cityWords();
+  const vague = v => nameTokens(v).every(w => city.has(w) || VAGUE_VENUE.has(w));
+  if (vague(va) || vague(vb)) return false;
+  const start = startMinutes(a.time);
+  if (start === null || start !== startMinutes(b.time)) return false;
+  const hand = (e, srcs) => e.curated === true || srcs.some(s => HAND.has(s));
+  const ha = hand(a, sourcesA), hb = hand(b, sourcesB);
+  if (ha && hb) return false;
+  const drop = new Set([...nameTokens(va), ...nameTokens(vb), ...WEEKDAYS, ...city]);
+  const ca = slotCore(a.name, drop), cb = slotCore(b.name, drop);
+  const ga = [...ca].every(w => GENERIC.has(w)), gb = [...cb].every(w => GENERIC.has(w));
+  const loose = ha || hb || [...sourcesA, ...sourcesB].some(s => AI_NAMED.has(s));
+  if (!(loose || ga || gb)) return false;
+  if (ga && gb) return !ca.size || !cb.size || overlaps(kinds(ca), kinds(cb));
+  if (ga || gb) {
+    const [generic, other] = ga ? [ca, cb] : [cb, ca];
+    if (!generic.size || ![...generic].every(w => ACT.has(w))) return false;
+    const theirs = kinds(other);
+    return !theirs.size || overlaps(theirs, kinds(generic));
+  }
+  return [...ca].some(w => w.length >= 4 && !GENERIC.has(w) && !WEAK_SHARED.has(w) && cb.has(w));
+}
 
 // Internal collector fields (_source, _also_from...) aren't public.
 function publicFields(ev) {
@@ -55,13 +152,17 @@ function sortKey(ev) {
 // 5: scoring hints refresh; approved submissions are marked `submitted`.
 // 6: retiring needs two misses, a source that ran ok, and never applies to
 //    window-limited or non-deterministic sources.
-export const AUTO_PUBLISH_RULES = 6;
+// 7: Gemini-only events retire too; reworded copies (sameSlot) fold, and
+//    removed/hidden events are matched fuzzily (sameEvent).
+export const AUTO_PUBLISH_RULES = 7;
 
 // Sources whose events can't be retired for going missing. FB/IG posts are
 // read back only a couple of weeks, so a post announcing an event weeks out
-// drops out of the window before the event happens; Gemini search finds a
-// different set each run.
-export const NEVER_RETIRE_SOURCES = new Set(['apify_facebook_posts', 'apify_instagram_posts', 'gemini_search']);
+// drops out of the window before the event happens. Gemini search used to
+// be here too (it finds a different set each run), but an event only it
+// found has no page behind it but its own answer, so one it stops finding
+// comes down like any other source's: after two misses with the source ok.
+export const NEVER_RETIRE_SOURCES = new Set(['apify_facebook_posts', 'apify_instagram_posts']);
 // Consecutive collector runs an event must be missing from before it's
 // taken down: one run's flicker (a slow page, a scraper's cap) isn't enough.
 const RETIRE_AFTER_MISSES = 2;
@@ -284,12 +385,21 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     const scraped = ev => ev.date <= healthEnd && !ev.curated && ev._source !== 'local_events';
     const healthy = !submissionsOnly &&
       freshUpcoming.filter(scraped).length >= ours.filter(scraped).length * REPLACE_MIN_RATIO;
-    const stillFound = ev => [...freshUpcoming, ...approved].some(f => eventKeyOf(f) === eventKeyOf(ev) || sameEvent(f, ev));
+    const stillFound = ev => [...freshUpcoming, ...approved].some(f => eventKeyOf(f) === eventKeyOf(ev) || sameEvent(f, ev) ||
+      sameSlot(f, ev, sourcesOf(f), liveSources(ev)));
     // What each key's source was (keys from before rule 6 have none: they
     // still need two misses) and how many runs in a row it's been missing.
     // A miss counts once per collector run (`from`), so a forced re-run or
     // a rules bump on the same candidates doesn't count it twice.
     const priorSources = (state.sources && typeof state.sources === 'object') ? state.sources : {};
+    // A live event's sources: what this run saw for it, else what was
+    // recorded when it went up (a live event doesn't carry _source).
+    const sourcesNow = new Map();
+    const liveSources = ev => {
+      const k = eventKeyOf(ev);
+      const srcs = sourcesNow.get(k) || priorSources[k];
+      return Array.isArray(srcs) ? srcs : [];
+    };
     const priorMissing = (state.missing && typeof state.missing === 'object') ? state.missing : {};
     const newRun = !submissionsOnly && (from || null) !== (state.missing_from ?? null);
     const runStatus = (candidates && candidates.sources && typeof candidates.sources === 'object') ? candidates.sources : null;
@@ -365,6 +475,11 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       ...(Array.isArray(prior.hidden) ? prior.hidden.map(h => h && h.key) : []),
       ...(prior.hidden_restored || [])
     ]);
+    // What was removed or hidden, as {date, name, venue}, for the fuzzy
+    // check below (the keys carry no time, so sameEvent, not sameSlot).
+    const hiddenNow = Array.isArray(prior.hidden) ? prior.hidden.map(h => h && h.key).filter(Boolean) : [];
+    const removedShapes = [...rejected, ...hiddenNow].map(parseEventKey)
+      .filter(r => r && r.date >= today && r.name);
     const refreshed = new Set();
     const renamed = new Map();
     const canRefresh = ev => {
@@ -394,7 +509,6 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
     let updated = 0;
     const freshSet = new Set(fresh);
     const approvedSet = new Set(approved);
-    const sourcesNow = new Map();
     const noteSources = (k, raw) => {
       const add = sourcesOf(raw);
       if (add.length) sourcesNow.set(k, [...new Set([...(sourcesNow.get(k) || []), ...add])]);
@@ -403,7 +517,15 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       const ev = publicFields(raw);
       const key = eventKeyOf(ev);
       if (rejected.has(key)) { skippedRejected++; continue; }
-      const i = events.findIndex(e => eventKeyOf(e) === key || sameEvent(e, ev));
+      let i = events.findIndex(e => eventKeyOf(e) === key || sameEvent(e, ev));
+      // Another source's wording of a live event (sameSlot) only folds into
+      // it: it never refreshes it, or a post's copy could overwrite the
+      // owner's hand-entered listing before that listing's own copy does.
+      let slotOnly = false;
+      if (i === -1) {
+        i = events.findIndex(e => sameSlot(e, ev, liveSources(e), sourcesOf(raw)));
+        slotOnly = i !== -1;
+      }
       if (i !== -1 && raw.submitted === true && !events[i].submitted) {
         // Live already, but Save & Publish sent the admin's copy, which
         // doesn't carry the flag; the score's submission bonus needs it.
@@ -411,11 +533,18 @@ export function createAutoPublish({ store, candidatesFile, readJsonFile, nowFn, 
       }
       if (i !== -1 && approvedSet.has(raw) && eventKeyOf(events[i]) !== key) aliases[key] = eventKeyOf(events[i]);
       if (i !== -1) {
+        if (slotOnly) continue;
         const mine = autoKeys.has(eventKeyOf(events[i]));
         if (freshSet.has(raw) && canRefresh(events[i]) && refresh(i, ev)) updated++;
         if (mine && freshSet.has(raw)) noteSources(eventKeyOf(events[i]), raw);
         continue;
       }
+      // The admin removed (or the event check hid) this event under another
+      // wording: the collector's names drift run to run ("Halloween Bash"
+      // one run, "Halloween Bash at Moonshine" the next), so an exact-key
+      // memory let it come back. Collector copies only: an approved
+      // submission is the owner's own later decision.
+      if (freshSet.has(raw) && removedShapes.some(r => sameEvent(r, ev))) { skippedRejected++; continue; }
       events.push(ev);
       added.push(key);
       if (freshSet.has(raw)) noteSources(key, raw);

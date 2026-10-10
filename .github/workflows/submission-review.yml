@@ -73,6 +73,9 @@ jobs:
       - name: Review new submissions
         env:
           AI_ALERT_STATE: .review-state/ai-alert.json
+          # Runs the AI couldn't answer for each submission; after a few it's
+          # flagged for the owner instead of retried every 15 minutes.
+          REVIEW_ATTEMPTS_STATE: .review-state/attempts.json
           SITE_URL: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
@@ -80,7 +83,7 @@ jobs:
         run: python3 scripts/review_submissions.py
 
       - name: Save state
-        if: always() && hashFiles('.review-state/ai-alert.json') != ''
+        if: always() && hashFiles('.review-state/*.json') != ''
         uses: actions/cache/save@v4
         with:
           path: .review-state

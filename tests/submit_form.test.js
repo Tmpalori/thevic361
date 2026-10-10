@@ -32,7 +32,7 @@ describe('submit.html structure', () => {
   it('exposes the form, honeypot, and turnstile mount', () => {
     const ids = [
       'submit-form', 'f-name', 'f-date', 'f-time', 'f-end', 'f-venue',
-      'f-address', 'f-url', 'f-desc', 'f-icons', 'f-company', 'f-turnstile',
+      'f-address', 'f-url', 'f-desc', 'f-icons', 'f-hp-field', 'f-turnstile',
       'submit-btn', 'thanks-card', 'submit-another', 'form-error'
     ];
     for (const id of ids) {
@@ -41,7 +41,7 @@ describe('submit.html structure', () => {
   });
 
   it('honeypot field is in DOM but visually hidden', () => {
-    const hp = document.getElementById('f-company');
+    const hp = document.getElementById('f-hp-field');
     expect(hp).not.toBeNull();
     const wrap = hp.closest('.hp-field');
     expect(wrap).not.toBeNull();
@@ -102,7 +102,7 @@ describe('submit.js — collectForm()', () => {
     expect(out.icons).toContain('music');
     expect(out.turnstile_token).toBe('cf-token');
     expect(typeof out.elapsed_ms).toBe('number');
-    expect(out.company).toBe('');
+    expect(out.hp_field).toBe('');
     expect(out.submitter_kind).toBe('organizer');
     expect(out.submitter_first_name).toBe('Jane');
     expect(out.submitter_last_name).toBe('Doe');
@@ -121,9 +121,11 @@ describe('submit.js — collectForm()', () => {
   });
 
   it('honeypot value is included in the payload (server detects it)', () => {
-    fill({ name: 'X', date: '2026-05-12', time: '7 PM', venue: 'V', company: 'AcmeBots' });
+    fill({ name: 'X', date: '2026-05-12', time: '7 PM', venue: 'V', hp_field: 'AcmeBots' });
     const out = api.collectForm();
-    expect(out.company).toBe('AcmeBots');
+    expect(out.hp_field).toBe('AcmeBots');
+    // Never sent as "company", the autofill name it used to have.
+    expect(out).not.toHaveProperty('company');
   });
 });
 

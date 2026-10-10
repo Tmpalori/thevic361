@@ -56,6 +56,7 @@ import {
 import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
 import { normalizeEmail } from './newsletter.js';
+import { honeypotTripped } from './honeypot.js';
 import { venueFor } from './guides.js';
 import { renderSponsorConfirmed, renderSponsorReport, renderPickReport, renderSponsorTooLate, renderSponsorPaymentFailed, renderSponsorConflict, newsletterCovers, weekendCovers, weekendIssueOn, pickWhere } from './notify.js';
 import { botName, visitorHash, pageType, PAGE_TYPES, rowCount, SHARED_LINK } from './analytics.js';
@@ -837,7 +838,7 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
     ${e._form ? `<p class="co-error co-error--form">${escHtml(e._form)}</p>` : ''}
     <form class="co-form" method="post" action="/advertise/checkout" data-turnstile>
       <input type="hidden" name="package" value="${escHtml(pkg.key)}">
-      <div class="hp-field" aria-hidden="true"><label>Company <input name="company" tabindex="-1" autocomplete="off"></label></div>
+      <div class="hp-field" aria-hidden="true"><label>Leave this empty <input name="hp_field" tabindex="-1" autocomplete="off"></label></div>
       ${fields}
       <section class="co-preview" aria-labelledby="co-preview-h">
         <h2 id="co-preview-h" class="co-preview-h">Preview: exactly how it’ll look</h2>
@@ -2106,7 +2107,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         const ctx = { siteUrl, now: nowFn(), orders: await orders(), venues: getVenues(), values: body };
         const fail = (errors, status = 400) =>
           sendHtml(res, renderCheckoutPage(pkg, { ...ctx, errors }), status, 'no-store');
-        if (typeof body.company === 'string' && body.company.trim()) return res.redirect(303, '/advertise');
+        if (honeypotTripped(body, 'sponsor checkout', { slack })) return res.redirect(303, '/advertise');
         const ip = req.ip || req.socket.remoteAddress;
         if (!limiter.check(ip).ok) return fail({ _form: 'Too many attempts. Try again in an hour.' }, 429);
         if (!(await verifyHuman(req))) return fail({ _form: "We couldn't confirm you're not a bot. Please try again." });

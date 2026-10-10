@@ -8,6 +8,7 @@
  */
 
 import { normalizeEmail } from './newsletter.js';
+import { honeypotHit } from './honeypot.js';
 
 const MAX_NAME = 200;
 const MAX_VENUE = 200;
@@ -263,7 +264,8 @@ export function validateEventEdit(input, { timeOptional = false } = {}) {
   };
 }
 
-// Honeypot: a hidden field named "company" no real user fills. Combined with
+// Honeypot: a hidden field (server/honeypot.js; "company" before) no real
+// user fills. Combined with
 // elapsed_ms (time from form render to submit), we get a cheap bot filter.
 // Only too-fast counts: there is no upper bound, because an organizer who
 // leaves the tab open over lunch (or enters a series with "Submit another")
@@ -271,9 +273,8 @@ export function validateEventEdit(input, { timeOptional = false } = {}) {
 // a trace. Turnstile and the rate limits already cover slow bots.
 export function checkBotSignals(input, opts = {}) {
   const minMs = opts.minMs ?? 1500;
-  if (input && typeof input.company === 'string' && input.company.trim()) {
-    return { ok: false, reason: 'honeypot' };
-  }
+  const field = honeypotHit(input);
+  if (field) return { ok: false, reason: 'honeypot', field };
   const elapsed = Number(input && input.elapsed_ms);
   if (Number.isFinite(elapsed)) {
     if (elapsed < minMs) return { ok: false, reason: 'too-fast' };

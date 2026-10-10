@@ -53,6 +53,7 @@
 import { town } from './town.js';
 import crypto from 'node:crypto';
 import { emailKey } from './db.js';
+import { honeypotTripped } from './honeypot.js';
 import { referralTiers, referralFlags, createReferralRewards } from './referralRewards.js';
 
 export { referralTiers, referralFlags };
@@ -693,14 +694,14 @@ export function signupFormHtml({ source = 'footer', button = 'Subscribe' } = {})
   return `<form class="signup-form" id="signup-form" action="/api/subscribe" method="post" novalidate data-turnstile="fetch" data-source="${escHtml(source)}">
   <label for="signup-email" class="visually-hidden">Email address</label>
   <input id="signup-email" name="email" type="email" required autocomplete="email" placeholder="you@example.com">
-  <input type="text" name="company" tabindex="-1" autocomplete="off" class="hp-field" aria-hidden="true">
+  <input type="text" name="hp_field" tabindex="-1" autocomplete="off" class="hp-field" aria-hidden="true">
   <button type="submit" class="btn btn--primary">${escHtml(button)}</button>
   <p class="signup-msg" id="signup-msg" role="status" aria-live="polite"></p>
 </form>
 <script>
 (function(){var f=document.getElementById('signup-form');if(!f)return;var m=document.getElementById('signup-msg');
 f.addEventListener('submit',function(e){e.preventDefault();var b=f.querySelector('button');b.disabled=true;m.textContent='';
-(window.vicTurnstile?window.vicTurnstile.token(f):Promise.resolve('')).then(function(t){return fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,company:f.company.value,turnstile_token:t,source:window.vic361Source?window.vic361Source(f.getAttribute('data-source')):f.getAttribute('data-source'),ref:window.vic361Ref?window.vic361Ref():''})});})
+(window.vicTurnstile?window.vicTurnstile.token(f):Promise.resolve('')).then(function(t){return fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,hp_field:f.hp_field.value,turnstile_token:t,source:window.vic361Source?window.vic361Source(f.getAttribute('data-source')):f.getAttribute('data-source'),ref:window.vic361Ref?window.vic361Ref():''})});})
 .then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});})
 .then(function(x){m.textContent=x.ok?'✅ '+(x.j.message||"You're on the list! Check your inbox."):(x.j.message||'Something went wrong. Try again.');if(x.ok){f.email.value='';f.classList.add('is-done');var was=false;try{was=localStorage.getItem('vic361-subscribed')==='1';localStorage.setItem('vic361-subscribed','1')}catch(e){}if(!was&&window.vic361Track)window.vic361Track('subscribe_click',{link_url:'form'});}})
 .catch(function(){m.textContent='Something went wrong. Try again.';}).then(function(){b.disabled=false;if(window.vicTurnstile)window.vicTurnstile.reset(f);});});})();
@@ -1060,7 +1061,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     if (!subscribeLimiter.check(ip).ok) return res.status(429).json({ ok: false, message: 'Too many tries. Try again later.' });
     const body = req.body || {};
     // Honeypot: a hidden field people never fill. Pretend it worked.
-    if (body.company) return res.json({ ok: true });
+    if (honeypotTripped(body, 'newsletter signup', { slack })) return res.json({ ok: true });
     const email = normalizeEmail(body.email);
     // Logged without the address: enough to tell a typo from a bot-check
     // failure ([turnstile] rejected) when a signup is turned away.
