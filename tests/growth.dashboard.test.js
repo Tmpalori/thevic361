@@ -189,8 +189,12 @@ describe('growth endpoints', () => {
     dom.window.eval(await fs.readFile(path.join(process.cwd(), 'docs/admin.js'), 'utf8'));
     dom.window.__vic361Admin.renderGrowth(g);
     const doc = dom.window.document;
-    expect(doc.getElementById('growth-goals').textContent).toContain('3 / 10,000');
+    // The goals are on Overview, not repeated here.
+    expect(doc.getElementById('growth-goals')).toBeNull();
     expect(doc.getElementById('growth-totals').textContent).toContain('Real cost per subscriber$4.00');
+    expect(doc.querySelectorAll('#growth-chart .chart-bar')).toHaveLength(7);
+    expect(doc.getElementById('growth-sources').textContent).toContain('Facebook ads');
+    expect(doc.getElementById('growth-issues-chart').textContent).toContain('No issues sent yet.');
     expect(doc.getElementById('growth-daily').textContent).toContain('Facebook ads 1, Site 1');
     expect(doc.getElementById('growth-issues').textContent).toContain('No issues sent yet.');
   });

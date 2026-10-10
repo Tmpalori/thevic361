@@ -172,42 +172,39 @@
       </details>
     </section>
 
-    <!-- ─── GROWTH TAB ─── -->
+    <!-- ─── ANALYTICS: SUBSCRIBERS ─── -->
     <section id="tab-growth" class="tab-panel" role="tabpanel" hidden>
-      <div class="traffic-head">
-        <label for="growth-days">Show</label>
-        <select id="growth-days">
-          <option value="7">Last 7 days</option>
-          <option value="30" selected>Last 30 days</option>
-          <option value="90">Last 90 days</option>
-        </select>
-        <button id="growth-refresh" type="button" class="btn btn--outline">Refresh</button>
-      </div>
-      <div id="growth-loading" class="empty-state" hidden>Loading growth…</div>
+      <header class="page-head page-head--row">
+        <div><h1 class="page-title">Subscribers</h1><p class="page-sub">Who joined, what it cost, and how each issue did.</p></div>
+        <div class="range">
+          <label for="growth-days" class="visually-hidden">Period</label>
+          <select id="growth-days">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+          <button id="growth-refresh" type="button" class="btn btn--outline">Refresh</button>
+        </div>
+      </header>
+      <div id="growth-loading" class="empty-state" hidden>Loading…</div>
       <div id="growth-error" class="empty-state empty-state--error" hidden></div>
       <div id="growth-body" hidden>
-        <div id="growth-goals" class="goal-strip"></div>
         <div class="sources-summary" id="growth-totals"></div>
-        <h3 class="traffic-h">New subscribers per day</h3>
-        <div id="growth-chart" class="traffic-chart" role="img" aria-label="New subscribers per day"></div>
-        <p class="traffic-note" id="growth-spend-note"></p>
-        <h3 class="traffic-h">Day by day</h3>
-        <div class="table-scroll"><table class="growth-table" id="growth-daily"></table></div>
-        <h3 class="traffic-h">Each issue</h3>
-        <div class="table-scroll"><table class="growth-table" id="growth-issues"></table></div>
-        <p class="traffic-note">Opened: unique readers whose email loaded its images (Apple Mail opens some on its own, so it runs high). Clicked that day: readers who came to the site from the email the day it went out, the click rate to give sponsors (it runs a little low: visitors are counted per day, so later clicks can't be told from repeat ones). Reader visits until the next issue: each reader once per day they came from it, until the next issue went out.</p>
-        <div class="traffic-grid">
-          <div>
-            <h3 class="traffic-h">Signup weeks</h3>
-            <table class="growth-table" id="growth-cohorts"></table>
-            <p class="traffic-note">Of each week's new subscribers: how many are still on the list, and how many opened one of the last two issues (out of those who joined before the latest one went out).</p>
-          </div>
-          <div>
-            <h3 class="traffic-h">What readers look at, by category</h3>
-            <table class="growth-table" id="growth-categories"></table>
-            <p class="traffic-note">Event page views and link taps in the period, by the event's category (an event can be in more than one).</p>
-          </div>
+        <div class="grid-2 grid-2--wide">
+          <div class="card"><h2 class="card__title">New subscribers per day</h2><p class="card__meta" id="growth-spend-note"></p><div id="growth-chart" class="chart-box"></div></div>
+          <div class="card"><h2 class="card__title">Where they came from</h2><p class="card__meta">In the period</p><table class="traffic-table" id="growth-sources"></table></div>
         </div>
+        <div class="card card--gap">
+          <h2 class="card__title">Each issue</h2>
+          <p class="card__meta">Open rate per issue. Opens run high (Apple Mail loads images on its own); clicks run a little low (visitors are counted once a day).</p>
+          <div id="growth-issues-chart" class="chart-box"></div>
+          <details class="more"><summary>Show table</summary><div class="table-scroll"><table class="growth-table" id="growth-issues"></table></div></details>
+        </div>
+        <div class="grid-2">
+          <div class="card"><h2 class="card__title">Signup weeks</h2><p class="card__meta">Still on the list, and opened one of the last two issues.</p><table class="growth-table" id="growth-cohorts"></table></div>
+          <div class="card"><h2 class="card__title">What readers look at</h2><p class="card__meta">Event page views and link taps by category.</p><table class="growth-table" id="growth-categories"></table></div>
+        </div>
+        <details class="more card"><summary>Day by day</summary><div class="table-scroll"><table class="growth-table" id="growth-daily"></table></div></details>
       </div>
     </section>
 
@@ -380,47 +377,54 @@
       </div>
     </section>
 
-    <!-- ─── TRAFFIC TAB ─── -->
+    <!-- ─── ANALYTICS: TRAFFIC ─── -->
     <section id="tab-traffic" class="tab-panel" role="tabpanel" hidden>
-      <div class="traffic-head">
-        <label for="traffic-days">Show</label>
-        <select id="traffic-days">
-          <option value="7">Last 7 days</option>
-          <option value="30" selected>Last 30 days</option>
-          <option value="90">Last 90 days</option>
-        </select>
-        <button id="traffic-refresh" type="button" class="btn btn--outline">Refresh</button>
-      </div>
-      <div id="traffic-loading" class="empty-state" hidden>Loading traffic…</div>
+      <header class="page-head page-head--row">
+        <div><h1 class="page-title">Traffic</h1><p class="page-sub">Counted on our own server: no cookies, bots left out, and not your own visits.</p></div>
+        <div class="range">
+          <label for="traffic-days" class="visually-hidden">Period</label>
+          <select id="traffic-days">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+          <button id="traffic-refresh" type="button" class="btn btn--outline">Refresh</button>
+        </div>
+      </header>
+      <div id="traffic-loading" class="empty-state" hidden>Loading…</div>
       <div id="traffic-error" class="empty-state empty-state--error" hidden></div>
       <div id="traffic-body" hidden>
         <div class="sources-summary" id="traffic-totals"></div>
-        <h3 class="traffic-h">Visitors per day</h3>
-        <div id="traffic-chart" class="traffic-chart" role="img" aria-label="Visitors per day"></div>
-        <h3 class="traffic-h">AI assistants</h3>
-        <div class="sources-summary" id="traffic-ai"></div>
+        <div class="card card--gap"><h2 class="card__title">Visitors per day</h2><div id="traffic-chart" class="chart-box"></div></div>
         <div class="traffic-grid">
-          <div><h3 class="traffic-h">People sent by AI</h3><table class="traffic-table" id="traffic-ai-sent"></table></div>
-          <div><h3 class="traffic-h">Pages AI read to answer someone</h3><table class="traffic-table" id="traffic-ai-pages"></table></div>
+          <div class="card"><h2 class="card__title">Top pages</h2><table class="traffic-table" id="traffic-pages"></table></div>
+          <div class="card"><h2 class="card__title">Where visitors come from</h2><table class="traffic-table" id="traffic-sources"></table></div>
+          <div class="card"><h2 class="card__title">Clicks</h2><table class="traffic-table" id="traffic-clicks"></table></div>
+          <div class="card"><h2 class="card__title">Most-clicked links</h2><table class="traffic-table" id="traffic-top-clicked"></table></div>
+          <div class="card"><h2 class="card__title">Other referring sites</h2><table class="traffic-table" id="traffic-referrers"></table></div>
+          <div class="card"><h2 class="card__title">Search &amp; AI crawlers</h2><table class="traffic-table" id="traffic-crawlers"></table></div>
         </div>
-        <p class="traffic-note">"Read to answer someone" means a person asked ChatGPT, Claude, Perplexity or Meta AI a question and it fetched our page to answer, so they got our listings without visiting. AI search crawls index pages they can cite and link to; training crawls copy pages to train models.</p>
-        <div class="traffic-grid">
-          <div><h3 class="traffic-h">Top pages</h3><table class="traffic-table" id="traffic-pages"></table></div>
-          <div><h3 class="traffic-h">Where visitors come from</h3><table class="traffic-table" id="traffic-sources"></table></div>
-          <div><h3 class="traffic-h">Clicks</h3><table class="traffic-table" id="traffic-clicks"></table></div>
-          <div><h3 class="traffic-h">Most-clicked links</h3><table class="traffic-table" id="traffic-top-clicked"></table></div>
-          <div><h3 class="traffic-h">Search &amp; AI crawler visits</h3><table class="traffic-table" id="traffic-crawlers"></table></div>
-          <div><h3 class="traffic-h">Other referring sites</h3><table class="traffic-table" id="traffic-referrers"></table></div>
+        <details class="more card card--gap" id="traffic-ai-box">
+          <summary>AI assistants</summary>
+          <p class="card__meta">"Read to answer someone": a person asked ChatGPT, Claude, Perplexity or Meta AI and it fetched our page to answer. Search crawls index pages they can cite; training crawls copy pages to train models.</p>
+          <div class="sources-summary" id="traffic-ai"></div>
+          <div class="traffic-grid traffic-grid--2">
+            <div><h3 class="card__title">People sent by AI</h3><table class="traffic-table" id="traffic-ai-sent"></table></div>
+            <div><h3 class="card__title">Pages AI read to answer someone</h3><table class="traffic-table" id="traffic-ai-pages"></table></div>
+          </div>
+        </details>
+        <div class="card card--gap">
+          <div class="card__head">
+            <h2 class="card__title">Event stats <span id="event-stats-week" class="card__meta"></span></h2>
+            <div class="card__acts">
+              <button id="event-stats-prev" type="button" class="btn btn--outline">‹ Week before</button>
+              <button id="event-stats-next" type="button" class="btn btn--outline">Week after ›</button>
+            </div>
+          </div>
+          <p class="card__meta">Each event that week: page views, link taps, shares and the visits shares brought. "Copy pitch" copies an email offering the venue a Vic's Pick.</p>
+          <div id="event-stats-msg" class="card__meta" role="status"></div>
+          <div class="table-scroll"><table class="traffic-table" id="event-stats"></table></div>
         </div>
-        <p class="traffic-note">Counted on our own server: no cookies, bots filtered out, and visits from this browser (signed into admin) aren't counted. Multi-day totals add up each day's visitors.</p>
-        <div class="traffic-head event-stats-head">
-          <h3 class="traffic-h">Event stats <span id="event-stats-week"></span></h3>
-          <button id="event-stats-prev" type="button" class="btn btn--outline">‹ Week before</button>
-          <button id="event-stats-next" type="button" class="btn btn--outline">Week after ›</button>
-        </div>
-        <p class="traffic-note">How each event did that week: views of its page, taps on its link, shares sent and the visits those shares brought. "Copy pitch" copies an email you can send the venue offering a Vic's Pick.</p>
-        <div id="event-stats-msg" class="traffic-note" role="status"></div>
-        <table class="traffic-table" id="event-stats"></table>
       </div>
     </section>
 

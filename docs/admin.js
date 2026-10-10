@@ -1717,6 +1717,12 @@
   // tooltip on hover/tap. Colors come from CSS (.chart-*), so dark mode
   // follows the theme.
   const fmtNum = n => (Number.isFinite(n) ? Math.round(n).toLocaleString('en-US') : '—');
+  // Draw at the box's real width so text keeps its size; 560 when it can't
+  // be measured (a hidden panel, tests).
+  function chartWidth(box) {
+    const w = Math.round((box && box.clientWidth) || 0);
+    return w >= 200 ? w : 560;
+  }
   function niceMax(v) {
     if (!(v > 0)) return 1;
     const p = Math.pow(10, Math.floor(Math.log10(v)));
@@ -1748,17 +1754,17 @@
     box.addEventListener('mouseleave', () => { tip.hidden = true; box.querySelectorAll('.is-hot').forEach(e => e.classList.remove('is-hot')); });
   }
   // points: [{ label, value }] oldest first.
-  function lineChart(box, points, { unit = '' } = {}) {
+  function lineChart(box, points, { unit = '', unitShort = '' } = {}) {
     if (!box) return;
     if (!points.length) { box.innerHTML = '<p class="chart-empty">No data yet.</p>'; return; }
-    const W = 560, H = 170, L = 34, R = 14, T = 14, B = 22;
+    const W = chartWidth(box), H = 170, L = 34, R = 14, T = 14, B = 22;
     const max = niceMax(Math.max(...points.map(p => p.value)));
     const x = i => L + (points.length === 1 ? 0 : i * (W - L - R) / (points.length - 1));
     const y = v => T + (H - T - B) * (1 - v / max);
     const d = points.map((p, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(p.value).toFixed(1)).join(' ');
     const area = d + ' L' + x(points.length - 1).toFixed(1) + ',' + y(0) + ' L' + x(0).toFixed(1) + ',' + y(0) + ' Z';
     const grid = [0, max / 2, max].map(g => '<line class="chart-grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(g).toFixed(1) + '" y2="' + y(g).toFixed(1) + '"/>' +
-      '<text class="chart-axis" x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" text-anchor="end">' + fmtNum(g) + '</text>').join('');
+      '<text class="chart-axis" x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" text-anchor="end">' + fmtNum(g) + unitShort + '</text>').join('');
     const last = points[points.length - 1];
     const colW = (W - L - R) / Math.max(points.length - 1, 1);
     const hits = points.map((p, i) => '<rect class="chart-hit" x="' + (x(i) - colW / 2).toFixed(1) + '" y="0" width="' + colW.toFixed(1) + '" height="' + H +
@@ -1771,25 +1777,26 @@
       '<text class="chart-axis" x="' + (W - R) + '" y="' + (H - 4) + '" text-anchor="end">' + escapeHtml(last.label) + '</text>' + hits + '</svg>';
     wireTips(box);
   }
-  function barChart(box, points, { unit = '' } = {}) {
+  function barChart(box, points, { unit = '', unitShort = '', empty = 'No data yet.', max: fixedMax = null, maxBar = 48 } = {}) {
     if (!box) return;
-    if (!points.length) { box.innerHTML = '<p class="chart-empty">No data yet.</p>'; return; }
-    const W = 560, H = 170, L = 34, R = 6, T = 14, B = 22;
-    const max = niceMax(Math.max(...points.map(p => p.value)));
-    const bw = (W - L - R) / points.length;
+    if (!points.length) { box.innerHTML = '<p class="chart-empty">' + escapeHtml(empty) + '</p>'; return; }
+    const W = chartWidth(box), H = 170, L = 34, R = 6, T = 14, B = 22;
+    const max = fixedMax || niceMax(Math.max(...points.map(p => p.value)));
+    // Few bars stay bar-shaped instead of filling the width.
+    const bw = Math.min((W - L - R) / points.length, maxBar);
     const y = v => T + (H - T - B) * (1 - v / max);
     const grid = [0, max / 2, max].map(g => '<line class="chart-grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(g).toFixed(1) + '" y2="' + y(g).toFixed(1) + '"/>' +
-      '<text class="chart-axis" x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" text-anchor="end">' + fmtNum(g) + '</text>').join('');
+      '<text class="chart-axis" x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" text-anchor="end">' + fmtNum(g) + unitShort + '</text>').join('');
     const bars = points.map((p, i) => {
       const h = Math.max((H - T - B) * p.value / max, p.value > 0 ? 2 : 0);
       return '<rect class="chart-bar' + (i === points.length - 1 ? ' chart-bar--now' : '') + '" data-mark="' + i + '" x="' + (L + i * bw + 1).toFixed(1) + '" y="' + (y(0) - h).toFixed(1) +
         '" width="' + Math.max(bw - 2, 1).toFixed(1) + '" height="' + h.toFixed(1) + '" rx="3"/>' +
         '<rect class="chart-hit" x="' + (L + i * bw).toFixed(1) + '" y="0" width="' + bw.toFixed(1) + '" height="' + H + '" data-i="' + i +
-        '" data-tip="' + escapeHtml(p.label + ': ' + fmtNum(p.value) + unit) + '"/>';
+        '" data-tip="' + escapeHtml(p.tip || (p.label + ': ' + fmtNum(p.value) + unit)) + '"/>';
     }).join('');
     box.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + escapeHtml(points.map(p => p.label + ' ' + fmtNum(p.value)).slice(-7).join(', ')) + '">' +
       grid + bars + '<text class="chart-axis" x="' + L + '" y="' + (H - 4) + '">' + escapeHtml(points[0].label) + '</text>' +
-      '<text class="chart-axis" x="' + (W - R) + '" y="' + (H - 4) + '" text-anchor="end">' + escapeHtml(points[points.length - 1].label) + '</text></svg>';
+      (points.length > 1 ? '<text class="chart-axis" x="' + (L + points.length * bw) + '" y="' + (H - 4) + '" text-anchor="end">' + escapeHtml(points[points.length - 1].label) + '</text>' : '') + '</svg>';
     wireTips(box);
   }
   function sparkline(values) {
@@ -1797,6 +1804,24 @@
     const W = 110, H = 34, max = Math.max(...values, 1);
     const d = values.map((v, i) => (i ? 'L' : 'M') + (2 + i * (W - 4) / (values.length - 1)).toFixed(1) + ',' + (H - 3 - (H - 6) * v / max).toFixed(1)).join(' ');
     return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true"><path d="' + d + '"/></svg>';
+  }
+
+  // Charts are drawn at their box's width; redraw the open page after the
+  // window settles at a new size.
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    let resizeTimer = null, lastW = window.innerWidth;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (Math.abs(window.innerWidth - lastW) < 40) return;
+        lastW = window.innerWidth;
+        const open = document.querySelector('.tab-panel.is-active');
+        const name = open && open.id.replace(/^tab-/, '');
+        if (name === 'home') loadHome();
+        else if (name === 'growth') loadGrowth();
+        else if (name === 'traffic') loadTraffic();
+      }, 300);
+    });
   }
 
   // ─── OVERVIEW ───
@@ -2167,8 +2192,7 @@
   }
 
   function renderGrowth(g) {
-    const goals = document.getElementById('growth-goals');
-    if (goals) goals.innerHTML = goalsHtml(g.goals);
+    // The goals live on Overview only.
     const t = g.totals || {};
     const item = (label, value) => '<div class="sources-summary__item"><span class="sources-summary__label">' + escapeHtml(label) +
       '</span><span class="sources-summary__value">' + escapeHtml(String(value)) + '</span></div>';
@@ -2182,16 +2206,22 @@
       item('Where they came from', Object.entries(t.by_source || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + v).join(' · ') || '—') +
       item('Waiting to confirm', g.pending || 0);
 
-    const chart = document.getElementById('growth-chart');
-    if (chart) {
-      const max = Math.max(1, ...g.daily.map(d => d.joined));
-      chart.innerHTML = g.daily.map(d => '<div class="traffic-col" title="' + escapeHtml(fmtDay(d.day) + ': ' + d.joined + ' new, ' + d.unsubscribed + ' left' +
-        (d.spend != null ? ', ' + money(d.spend) + ' spent' : '')) + '"><span class="traffic-col-bar" style="height:' + Math.round(d.joined / max * 100) + '%"></span></div>').join('');
-    }
+    barChart(document.getElementById('growth-chart'), (g.daily || []).map(d => ({
+      label: fmtDay(d.day), value: d.joined,
+      tip: fmtDay(d.day) + ': ' + d.joined + ' new, ' + d.unsubscribed + ' left' + (d.spend != null ? ', ' + money(d.spend) + ' spent' : '')
+    })));
     const note = document.getElementById('growth-spend-note');
     if (note) note.textContent = g.spend_reported
-      ? 'Real cost per subscriber is Meta’s spend that day divided by the people who actually joined (imported addresses left out). Meta’s own “signups” miss iPhones, in-app browsers and ad blockers, so this is the number to trust. Facebook ads counts only signups the site could tie to an ad, so some ad signups show as Site.'
-      : 'Ad spend shows here once the daily Meta ads report runs (8:37 AM). It sends each day’s spend to the site.';
+      ? 'Real cost per subscriber: Meta’s spend divided by the people who actually joined (Meta’s own “signups” miss iPhones and in-app browsers).'
+      : 'Ad spend shows once the daily Meta ads report runs (8:37 AM).';
+    trafficRows(document.getElementById('growth-sources'),
+      Object.entries(t.by_source || {}).sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, count })), 'No new subscribers in the period.');
+    const sent = (g.issues || []).filter(x => x.sent > 0).slice().reverse();
+    barChart(document.getElementById('growth-issues-chart'), sent.map(x => ({
+      label: (x.edition === 'weekend' ? 'Thu ' : 'Mon ') + fmtDay(x.week), value: x.open_rate || 0,
+      tip: (x.edition === 'weekend' ? 'Thu ' : 'Mon ') + fmtDay(x.week) + ': ' + (x.open_rate == null ? '—' : x.open_rate + '%') + ' opened, ' +
+        (x.click_rate == null ? '—' : x.click_rate + '%') + ' clicked · ' + x.sent + ' sent'
+    })), { empty: 'No issues sent yet.', max: 100, unitShort: '%' });
 
     const daily = document.getElementById('growth-daily');
     if (daily) {
@@ -2250,8 +2280,9 @@
       const { res, json } = await adminFetch('/api/admin/growth?days=' + encodeURIComponent(days));
       if (seq !== growthSeq) return; // a newer request (another period) is on its way
       if (!res.ok || !json || !json.ok) throw new Error((json && json.message) || ('Failed to load growth (HTTP ' + res.status + ').'));
-      renderGrowth(json);
+      // Shown first: the charts measure the width they get.
       if (body) body.hidden = false;
+      renderGrowth(json);
     } catch (err) {
       console.error(err);
       if (errEl) { errEl.hidden = false; errEl.textContent = err.message || String(err); }
@@ -2597,15 +2628,10 @@
       '<div class="sources-summary__item"><span class="sources-summary__label">Shares, last ' + t.days + ' days</span>' +
       '<span class="sources-summary__value">' + shares + ' sent · ' + fromShares + ' views from shared links</span></div>';
 
-    const chart = document.getElementById('traffic-chart');
-    if (chart) {
-      const max = Math.max(1, ...t.daily.map(d => d.visitors));
-      chart.innerHTML = t.daily.map(d => {
-        const label = new Date(d.day + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        return '<div class="traffic-col" title="' + escapeHtml(label + ': ' + d.visitors + ' visitors, ' + d.views + ' views') + '">' +
-          '<span class="traffic-col-bar" style="height:' + Math.round(d.visitors / max * 100) + '%"></span></div>';
-      }).join('');
-    }
+    barChart(document.getElementById('traffic-chart'), (t.daily || []).map(d => {
+      const label = new Date(d.day + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return { label, value: d.visitors, tip: label + ': ' + d.visitors + ' visitors, ' + d.views + ' views' };
+    }));
 
     const link = r => '<a href="' + escapeHtml(httpUrl(location.origin + r.key)) + '" target="_blank" rel="noopener">' + escapeHtml(r.key) + '</a>';
     trafficRows(document.getElementById('traffic-pages'), t.top_pages, 'No page views yet.', link);
@@ -2625,6 +2651,9 @@
         item('AI training crawls', String(ai.training_crawls));
       trafficRows(document.getElementById('traffic-ai-sent'), ai.sent_by, 'No visits from AI yet.');
       trafficRows(document.getElementById('traffic-ai-pages'), ai.answer_pages, 'None yet.', link);
+      // Folded until there's something to see.
+      const box = document.getElementById('traffic-ai-box');
+      if (box && (ai.sent_visitors || ai.answer_reads || ai.search_crawls || ai.training_crawls)) box.open = true;
     }
     trafficRows(document.getElementById('traffic-referrers'), t.referrer_sites, 'None yet.');
   }
@@ -2646,8 +2675,9 @@
         throw new Error((json && json.message) || ('Failed to load traffic (HTTP ' + res.status + ').'));
       }
       state.traffic = json;
-      renderTraffic(json);
+      // Shown first: the charts measure the width they get.
       if (body) body.hidden = false;
+      renderTraffic(json);
       loadEventStats(state.eventStatsWeek || '');
     } catch (err) {
       console.error(err);
