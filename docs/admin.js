@@ -1077,7 +1077,8 @@
     const st = document.getElementById('email-nl-status');
     const item = (label, value) => '<div class="sources-summary__item"><span class="sources-summary__label">' +
       escapeHtml(label) + '</span><span class="sources-summary__value">' + escapeHtml(String(value)) + '</span></div>';
-    if (st) st.innerHTML = item('Subscribers', d.counts.active) + item('Awaiting confirmation', d.counts.pending) +
+    // The subscriber count is on Overview and on the Send button.
+    if (st) st.innerHTML = item('Awaiting confirmation', d.counts.pending) +
       item('Unsubscribed', d.counts.unsubscribed) +
       item('Monday issue', d.this_week_failed ? ('Partly sent (' + d.this_week_failed + ' failed)')
         : d.this_week_sent ? 'Sent' : (d.next.events + ' events ready')) +
@@ -1085,7 +1086,7 @@
         : d.weekend.failed ? ('Partly sent (' + d.weekend.failed + ' failed)')
         : d.weekend.sent ? 'Sent' : (d.weekend.next.events + ' events ready')) +
         item('Skip Thursdays', d.weekend.opted_out || 0) : '') +
-      item('Auto-send', d.autosend ? (d.weekend && d.weekend.enabled === false ? 'On, Mondays' : 'On, Mondays and Thursdays') : 'Off');
+      item('Auto-send', d.autosend ? (d.weekend && d.weekend.enabled === false ? 'On, Mon' : 'On, Mon & Thu') : 'Off');
     const warn = document.getElementById('email-nl-warning');
     const issues = [];
     if (!d.configured) issues.push('Add RESEND_API_KEY in Railway to turn on sending. Signups are being saved in the meantime.');
@@ -2481,6 +2482,23 @@
     }
     const cal = document.getElementById('sponsors-calendar');
     if (cal && Array.isArray(d.calendar)) cal.innerHTML = d.calendar.map(renderCalendarWeek).join('');
+    const kpis = document.getElementById('sponsors-kpis');
+    if (kpis && Array.isArray(d.calendar)) {
+      const weeks = d.calendar;
+      const days = weeks.flatMap(w => (w.days || []).filter(x => !x.past));
+      const weeklyBooked = weeks.filter(w => w.weekly && w.weekly.state === 'booked').length;
+      const picksTaken = days.reduce((n, x) => n + (x.taken || 0), 0);
+      const picksCap = days.reduce((n, x) => n + (x.cap || 0), 0);
+      const todayStr = toLocalDateStr(townToday());
+      const upcoming = (d.orders || []).filter(o => !o.test && (o.status === 'paid' || o.status === 'active') &&
+        ((o.week_start && o.week_start >= todayStr) || (o.event && o.event.date >= todayStr)));
+      const cents = upcoming.reduce((n, o) => n + (Number(o.amount) || 0), 0);
+      const item = (label, value) => '<div class="sources-summary__item"><span class="sources-summary__label">' + escapeHtml(label) +
+        '</span><span class="sources-summary__value">' + escapeHtml(String(value)) + '</span></div>';
+      kpis.innerHTML = item('Sponsor weeks sold', weeklyBooked + ' of ' + weeks.length) +
+        item('Vic’s Picks sold', picksTaken + ' of ' + picksCap) +
+        item('Booked, still to run', '$' + Math.round(cents / 100).toLocaleString('en-US'));
+    }
   }
 
   // One week of the sponsorship calendar: the weekly sponsor slot, then a

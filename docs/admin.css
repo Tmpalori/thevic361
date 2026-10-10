@@ -1573,3 +1573,36 @@ details.more[open] > summary::before { content: '▾ '; }
 details.more.card > summary { color: var(--admin-text); font-size: 0.98rem; padding: 0; }
 details.more.card[open] > summary { margin-bottom: 0.6rem; }
 @media (max-width: 760px) { .grid-2--wide { grid-template-columns: 1fr; } }
+
+/* Sponsors: the 8-week calendar as compact rows in one card. */
+.sponsor-cal { display: flex; flex-direction: column; gap: 0; }
+.sponsor-cal .cal-week { border: 0; border-radius: 0; padding: 0.6rem 0; border-top: 1px solid var(--admin-border); }
+.sponsor-cal .cal-week:first-child { border-top: 0; }
+.sponsor-cal .cal-week__head { margin-bottom: 0.4rem; font-size: 0.85rem; }
+.sponsor-cal .cal-grid { grid-template-columns: repeat(7, minmax(84px, 1fr)); gap: 4px; }
+.sponsor-cal .cal-day { min-height: 0; padding: 4px 6px; border-radius: 6px; font-size: 0.74rem; border-color: transparent; background: var(--admin-surface-2); }
+.sponsor-cal .cal-day--weekend { background: var(--admin-surface-2); }
+.sponsor-cal .cal-day--full { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(34, 139, 90, 0.6); }
+.sponsor-cal .cal-day__head { margin-bottom: 2px; font-weight: 600; }
+.sponsor-cal .cal-count { display: none; }
+.sponsor-cal .cal-dot { width: 9px; height: 9px; border-width: 1.5px; }
+.sponsor-cal .cal-names { margin-top: 2px; font-size: 0.7rem; }
+.cal-key { font-size: 0.78rem; color: var(--admin-muted); }
+.email-nl .newsletter-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.email-nl .newsletter-actions select, .email-nl .newsletter-actions input {
+  font: inherit; font-size: 0.88rem; padding: 0.45rem 0.6rem; border-radius: 0.6rem; border: 1px solid var(--admin-border);
+  background: var(--admin-surface); color: var(--admin-text);
+}
+.email-nl details.more { border-top: 1px solid var(--admin-border); padding: 0.4rem 0; }
+.email-nl details.more:first-of-type { border-top: 0; }
+.email-nl details.more[open] { padding-bottom: 0.8rem; }
+.email-nl { margin-top: 0; padding-top: 0; border-top: 0; }
+.sources-message:empty { display: none; }
+/* Tables in cards: left-aligned headers, a fixed layout only where asked. */
+.card .traffic-table th { text-align: left; font-size: 0.72rem; font-weight: 600; color: var(--admin-muted); padding: 0.3rem 0.5rem 0.3rem 0; border-bottom: 1px solid var(--admin-border); }
+.sponsors-table { table-layout: auto; }
+.sponsors-table td { vertical-align: top; padding: 0.55rem 0.6rem 0.55rem 0; }
+.sponsors-table td:last-child { white-space: nowrap; }
+.sponsors-table td:last-child .btn, .sponsors-table td:last-child button { margin: 0 0.25rem 0.25rem 0; }
+.card .traffic-table th.traffic-num, .card .traffic-table th.num { text-align: right; padding-right: 0; }
+.sponsors-table td:first-child { white-space: nowrap; }
