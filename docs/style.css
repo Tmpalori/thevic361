@@ -1020,7 +1020,7 @@ a.logo-group { color: inherit; text-decoration: none; }
 /* After a successful signup only the confirmation shows, big enough to notice. */
 .signup-form.is-done input, .signup-form.is-done button { display: none; }
 .signup-form.is-done .signup-msg { font-size: var(--text-base); font-weight: 800; color: inherit; padding: var(--space-2) 0; }
-.hp-field { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.hp-field { display: none; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* ─── Sponsor checkout (server/sponsors.js) ─── */

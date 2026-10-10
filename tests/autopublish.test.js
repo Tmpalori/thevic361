@@ -96,6 +96,66 @@ describe('auto-publish', () => {
     expect((await live()).events.map(e => e.name)).not.toContain('Farmers Market');
   });
 
+  it("doesn't re-add a removed event under a reworded AI name", async () => {
+    const bash = { date: '2026-10-10', name: 'Halloween Bash', time: '9:00 PM', venue: 'Moonshine Drinkery', _source: 'apify_facebook_posts' };
+    await start({ candidates: { last_updated: 'r1', events: [bash] } });
+    await runNow();
+    const h = await auth();
+    await fetch(baseUrl + '/api/admin/publish-events', { method: 'POST', headers: h, body: JSON.stringify({ events: [] }) });
+    // Next run the model words the same post differently.
+    await fs.writeFile(path.join(tmpDir, 'candidates.json'), JSON.stringify({
+      last_updated: 'r2', events: [{ ...bash, name: 'Halloween Bash at Moonshine' }]
+    }));
+    const r = await runNow();
+    expect(r).toMatchObject({ added: 0, skipped_removed: 1 });
+    expect((await live()).events).toEqual([]);
+  });
+
+  it("doesn't re-add a hidden event under a reworded name once it's gone from the list", async () => {
+    const key = '2026-10-10|Halloween Bash|Moonshine Drinkery';
+    await start({
+      candidates: { last_updated: 'r2', events: [{ date: '2026-10-10', name: 'Halloween Bash Party', time: '9:00 PM', venue: 'Moonshine Drinkery', _source: 'apify_instagram_posts' }] },
+      published: { last_updated: 'x', events: [], hidden: [{ key, why: 'non-event' }], auto_publish: { from: 'r1', keys: [], rejected: [] } }
+    });
+    const r = await runNow();
+    expect(r).toMatchObject({ added: 0, skipped_removed: 1 });
+  });
+
+  it('a removed event never blocks an approved submission with a similar name', async () => {
+    await start({
+      candidates: { last_updated: 'r2', events: [] },
+      published: { last_updated: 'x', events: [], auto_publish: { from: 'r1', keys: [], rejected: ['2026-10-10|Fall Fest|Riverside Park'] } }
+    });
+    await store.insert({ id: 's1', status: 'approved', source: 'submission', created_at: NOW.toISOString(), updated_at: NOW.toISOString(),
+      payload: { date: '2026-10-10', name: 'Fall Fest Riverside', time: '5:00 PM', venue: 'Riverside Park', description: 'Fun.', icons: [] } });
+    await runNow();
+    expect((await live()).events.map(e => e.name)).toEqual(['Fall Fest Riverside']);
+  });
+
+  it('folds reworded copies of one listing already live (same venue, date and start)', async () => {
+    // Real copies from candidates.json (2026-10-07 and 10-19): the farmers
+    // market's posts and the YAML, and the film society's Monday screening.
+    const yaml = { date: '2026-10-07', name: "Victoria Farmers' Market", time: '9:00 AM – 1:00 PM', venue: 'Victoria Farmers Market',
+      address: '2805 N. Navarro St.', description: 'Hand-written.', _source: 'local_events', curated: true };
+    const wed = { date: '2026-10-07', name: 'Wednesday Market', time: '9 AM–1 PM', venue: 'Victoria Farmers Market', description: 'Post copy.', _source: 'apify_facebook_posts' };
+    const mid = { ...wed, name: 'Midweek Market' };
+    const film = { date: '2026-10-19', name: 'Victoria Film Society presents “Friday the 13th” (1980)', time: '07:00 PM', venue: 'Moonshine Drinkery', _source: 'allevents' };
+    const movie = { date: '2026-10-19', name: 'Movie Night: Friday the 13th', time: '7:00 PM', venue: 'Moonshine Drinkery', _source: 'local_events', curated: true };
+    const ig = { date: '2026-10-19', name: 'Monday Movie Nights with Victoria Film Society', time: '7:00 PM', venue: 'Moonshine Drinkery', _source: 'apify_instagram_posts' };
+    // A different show at the same venue and minute stays.
+    const other = { date: '2026-10-19', name: 'Bourbon Society Mixer', time: '7:00 PM', venue: 'Moonshine Drinkery', _source: 'allevents' };
+    await start({ candidates: { last_updated: 'r1', events: [yaml, film] } });
+    await runNow();
+    await fs.writeFile(path.join(tmpDir, 'candidates.json'), JSON.stringify({ last_updated: 'r2', events: [wed, yaml, mid, ig, movie, film, other] }));
+    const r = await runNow();
+    const names = (await live()).events.map(e => e.name);
+    expect(names).toEqual(["Victoria Farmers' Market", 'Victoria Film Society presents “Friday the 13th” (1980)', 'Bourbon Society Mixer']);
+    expect(r.added).toBe(1);
+    // The post copy never overwrote the owner's listing.
+    const market = (await live()).events.find(e => e.name === "Victoria Farmers' Market");
+    expect(market).toMatchObject({ description: 'Hand-written.', curated: true });
+  });
+
   it('includes approved submissions', async () => {
     await start({ candidates: { last_updated: 'x', events: [] } });
     await store.insert({
@@ -424,20 +484,36 @@ describe('auto-publish retires only reliable misses', () => {
   const names = async () => (await live()).events.map(e => e.name);
   const comedy = { date: '2026-10-12', name: 'Comedy Night', time: '8:00 PM', venue: 'The Club', _source: 'allevents' };
 
-  it('never takes down an event found in posts or Gemini search', async () => {
+  it('never takes down an event found in posts', async () => {
     const post = { date: '2026-10-10', name: 'Oktoberfest Party', time: '6:00 PM', venue: 'Some Bar', _source: 'apify_instagram_posts' };
-    const gem = { date: '2026-10-11', name: 'Harvest Fair', time: '9:00 AM', venue: 'Fairgrounds', _source: 'allevents', _also_from: ['gemini_search'] };
-    await start({ candidates: { last_updated: 'r1', events: [...filler, post, gem], sources: ok } });
+    const both = { date: '2026-10-11', name: 'Harvest Fair', time: '9:00 AM', venue: 'Fairgrounds', _source: 'gemini_search', _also_from: ['apify_facebook_posts'] };
+    await start({ candidates: { last_updated: 'r1', events: [...filler, post, both], sources: { ...ok, apify_facebook_posts: 'ok' } } });
     await runNow();
     expect((await store.getPublished()).auto_publish.sources).toMatchObject({
       '2026-10-10|Oktoberfest Party|Some Bar': ['apify_instagram_posts'],
-      '2026-10-11|Harvest Fair|Fairgrounds': ['allevents', 'gemini_search']
+      '2026-10-11|Harvest Fair|Fairgrounds': ['gemini_search', 'apify_facebook_posts']
     });
     for (const from of ['r2', 'r3', 'r4']) {
-      await write(from, []);
+      await write(from, [], { ...ok, apify_facebook_posts: 'ok' });
       expect((await runNow()).retired).toBe(0);
     }
     expect(await names()).toEqual(expect.arrayContaining(['Oktoberfest Party', 'Harvest Fair']));
+  });
+
+  it('takes down a Gemini-only event after two misses, like other sources', async () => {
+    // Gemini's answer was its only evidence; once it stops finding it, it goes.
+    const gem = { date: '2026-10-12', name: 'Weekly Karaoke', time: '8:00 PM', venue: 'Casa Jalisco', _source: 'gemini_search' };
+    await start({ candidates: { last_updated: 'r1', events: [...filler, gem], sources: ok } });
+    await runNow();
+    // Gemini didn't run ok: no miss counts.
+    await write('r2', [], { ...ok, gemini_search: 'error' });
+    expect((await runNow()).retired).toBe(0);
+    await write('r3', []);
+    expect((await runNow()).retired).toBe(0);
+    expect(await names()).toContain('Weekly Karaoke');
+    await write('r4', []);
+    expect((await runNow()).retired).toBe(1);
+    expect(await names()).not.toContain('Weekly Karaoke');
   });
 
   it('needs two runs in a row, each with its source ok', async () => {

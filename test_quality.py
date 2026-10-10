@@ -148,6 +148,82 @@ def test_same_event_ignores_venue_and_weekday_words():
     assert not ce.is_same_event(ev("Brunch", venue=""), ev("Sunday Brunch at J Welch Farms", venue="J Welch Farms"))
 
 
+def _slot(name, source, date="2026-10-07", venue="Victoria Farmers Market", time="9 AM–1 PM", **kw):
+    return ev(name, date=date, venue=venue, source=source, time=time, **kw)
+
+
+def test_reworded_copies_at_one_venue_and_minute_match():
+    # Real copies from candidates.json (Oct 2026), each pair once missed.
+    wed = _slot("Wednesday Market", "apify_facebook_posts")
+    mid = _slot("Midweek Market", "apify_facebook_posts")
+    yaml = _slot("Victoria Farmers' Market", "local_events", time="9:00 AM – 1:00 PM", curated=True)
+    for a, b in [(wed, mid), (wed, yaml), (mid, yaml)]:
+        assert ce.is_same_event(a, b) and ce.is_same_event(b, a), (a["name"], b["name"])
+
+    film = dict(date="2026-10-19", venue="Moonshine Drinkery")
+    vfs = _slot("Victoria Film Society presents “Friday the 13th” (1980)", "allevents", time="07:00 PM", **film)
+    movie = _slot("Movie Night: Friday the 13th", "local_events", time="7:00 PM", curated=True, **film)
+    ig = _slot("Monday Movie Nights with Victoria Film Society", "apify_instagram_posts", time="7:00 PM", **film)
+    for a, b in [(vfs, movie), (vfs, ig), (movie, ig)]:
+        assert ce.is_same_event(a, b), (a["name"], b["name"])
+
+    oct5 = dict(date="2026-10-05", venue="Moonshine Drinkery", time="7:00 PM")
+    psycho = _slot("Psycho | October Horror Film Series", "apify_facebook_posts", **oct5)
+    monday = _slot("Monday Movie Night", "apify_facebook_posts", **oct5)
+    nights = _slot("Monday Movie Nights with Victoria Film Society", "apify_instagram_posts", **oct5)
+    for a, b in [(psycho, monday), (psycho, nights), (monday, nights)]:
+        assert ce.is_same_event(a, b), (a["name"], b["name"])
+    # A generic name stands in for the night's act.
+    assert ce.is_same_event(_slot("Live Music", "apify_facebook_posts", venue="Aero Crafters", time="8:00 PM"),
+                            _slot("Jake Smith Band", "allevents", venue="Aero Crafters", time="8 PM"))
+
+
+def test_reworded_copies_merge_into_one_listing():
+    out = ce.merge_events([
+        _slot("Wednesday Market", "apify_facebook_posts"),
+        _slot("Midweek Market", "apify_facebook_posts"),
+        _slot("Victoria Farmers' Market", "local_events", time="9:00 AM – 1:00 PM", address="2805 N. Navarro St."),
+    ], venues=[])
+    assert [e["name"] for e in out] == ["Victoria Farmers' Market"]
+
+
+def test_different_events_at_one_venue_and_minute_stay_apart():
+    moon = dict(date="2026-10-19", venue="Moonshine Drinkery", time="7:00 PM")
+    # Two specific names sharing nothing but a weak word.
+    assert not ce.is_same_event(_slot("Victoria Film Society presents “Friday the 13th”", "allevents", **moon),
+                                _slot("Bourbon Society Mixer", "apify_facebook_posts", **moon))
+    # A multi-stage venue's two shows, both official listings.
+    welder = dict(date="2026-10-17", venue="Leo J. Welder Center", time="7:00 PM")
+    assert not ce.is_same_event(_slot("Halloween Pops Concert", "theatre_victoria", **welder),
+                                _slot("Kids Costume Craft", "apify_facebook_posts", **welder))
+    # Generic names of different kinds: karaoke isn't trivia.
+    bar = dict(venue="Shooters Bar", time="9:00 PM")
+    assert not ce.is_same_event(_slot("Karaoke", "apify_facebook_posts", **bar), _slot("Trivia Night", "allevents", **bar))
+    # A generic offering isn't any specific listing ("Brunch" vs "Corn Maze").
+    farm = dict(date="2026-10-11", venue="J Welch Farms", time="10:00 AM – 3:00 PM")
+    assert not ce.is_same_event(_slot("Sunday Brunch", "apify_facebook_posts", **farm), _slot("Corn Maze", "jwelch", **farm))
+    # Two hand-entered listings were kept apart on purpose.
+    assert not ce.is_same_event(_slot("Sunday Brunch at J Welch Farms", "local_events", curated=True, **farm),
+                                _slot("J Welch Farms Corn Maze", "local_events", curated=True, **farm))
+    # Start times must be known and equal.
+    assert not ce.is_same_event(_slot("Wednesday Market", "apify_facebook_posts", time=""),
+                                _slot("Midweek Market", "apify_facebook_posts", time=""))
+    assert not ce.is_same_event(_slot("Wednesday Market", "apify_facebook_posts", time="9 AM"),
+                                _slot("Midweek Market", "apify_facebook_posts", time="3 PM"))
+    # Venues must agree by name; a shared strip-center address isn't enough.
+    assert not ce.is_same_event(_slot("Live Music", "apify_facebook_posts", venue="Bar One", address="100 Main St", time="8 PM"),
+                                _slot("Jake Smith Band", "allevents", venue="Bar Two", address="100 Main St", time="8 PM"))
+
+
+def test_merge_keeps_hand_entered_price():
+    out = ce.merge_events([
+        ev("Pumpkin Fest", date="2026-10-09", venue="DeLeon Plaza", source="local_events", free=False, icons=["family"]),
+        ev("Pumpkin Fest", date="2026-10-09", venue="DeLeon Plaza", source="allevents", free=True, icons=["free", "food"]),
+    ], venues=[])
+    assert len(out) == 1
+    assert out[0]["free"] is False and "free" not in out[0]["icons"]
+
+
 def test_merge_prefers_official_source_and_fills_gaps():
     out = ce.merge_events([
         ev("Tejas Fest 2026", time="05:30 PM", address="101 N Main St", source="allevents",
@@ -513,6 +589,8 @@ def test_gemini_keeps_only_grounded_in_window_events(monkeypatch):
     def get(url):
         if "invented" in url:
             return Page(404)
+        if "victoriatx" in url:
+            return Page(200, "<h1>Fall Fest</h1> at DeLeon Plaza")
         return Page(200, "<h1>Pumpkin Patch Party</h1> Oct at the farm")
 
     items.append({"name": "Pumpkin Patch Party", "date": d, "venue": "Farm", "url": "https://somefarm.example/events/pumpkin"})

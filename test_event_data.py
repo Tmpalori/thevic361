@@ -340,8 +340,15 @@ def test_gemini_links_on_cited_sites_are_checked(monkeypatch):
         # The real thing.
         {"name": "Stroller Barre", "date": d, "venue": "Ethel Lee Tracy Park",
          "url": "https://www.victoriatx.gov/Calendar.aspx?EID=3988"},
-        # Facebook answers bots with a login page: trusted as before.
+        # Facebook answers bots with a login page: an event's own page is
+        # trusted as before.
         {"name": "Band Night", "date": d, "venue": "Bar", "url": "https://www.facebook.com/events/123/"},
+        # ...but a bare page root confirms nothing (The Hideaway, Oct 2026).
+        {"name": "Weekly Karaoke", "date": d, "venue": "The Hideaway Bar",
+         "url": "https://www.facebook.com/TheHideawayVictoriaTX"},
+        # A post is the venue announcing it: kept.
+        {"name": "Trivia Night", "date": d, "venue": "Bar",
+         "url": "https://www.facebook.com/somebar/posts/pfbid0abc"},
         # A bot block can't tell us anything: kept.
         {"name": "Pumpkin Patch", "date": d, "venue": "Farm", "url": "https://www.eventbrite.com/e/pumpkin-123"},
     ]
@@ -360,11 +367,25 @@ def test_gemini_links_on_cited_sites_are_checked(monkeypatch):
         items, ("victoriatx.gov", "facebook.com", "eventbrite.com", "perfectgame.org")),
         categories=["x"], get=get, workers=1)
     links = {e["name"]: e["url"] for e in out}
-    assert links == {"Wags-O-Ween": "", "Citizens Run Against Cancer": "",
-                     "Stroller Barre": "https://www.victoriatx.gov/Calendar.aspx?EID=3988",
+    # A failed link was the event's only evidence: the event goes too (it
+    # used to stay up with no link).
+    assert links == {"Stroller Barre": "https://www.victoriatx.gov/Calendar.aspx?EID=3988",
                      "Band Night": "https://www.facebook.com/events/123/",
+                     "Trivia Night": "https://www.facebook.com/somebar/posts/pfbid0abc",
                      "Pumpkin Patch": "https://www.eventbrite.com/e/pumpkin-123"}
-    assert "https://www.facebook.com/events/123/" not in seen
+    assert not any("facebook.com" in u for u in seen)
+
+
+def test_social_event_urls_vs_page_roots():
+    for u in ["https://www.facebook.com/events/123456/", "https://www.facebook.com/moonshinedrinkery/posts/pfbid0j8S",
+              "https://www.facebook.com/permalink.php?story_fbid=1&id=2", "https://www.facebook.com/groups/38460/posts/24195/",
+              "https://www.facebook.com/share/p/1AbCd/", "https://www.instagram.com/p/DeIZju3ieSu/",
+              "https://www.instagram.com/reel/Cx1/"]:
+        assert ce._is_social_event_url(u), u
+    for u in ["https://www.facebook.com/TheHideawayVictoriaTX", "https://www.facebook.com/TheHideawayVictoriaTX/",
+              "https://www.facebook.com/moonshinedrinkery/events", "https://www.instagram.com/lacantinavictoria/",
+              "https://www.facebook.com/events/", ""]:
+        assert not ce._is_social_event_url(u), u
 
 
 def test_city_calendar_home_and_search_pages_are_listing_urls():

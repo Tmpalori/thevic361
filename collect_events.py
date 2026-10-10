@@ -1556,19 +1556,31 @@ def fetch_gemini_events(days_ahead=14, post=None, categories=None, get=None, wor
             else:
                 unverified.append(ev)
 
+    # Facebook/Instagram answer bots with a login page, so their links can't
+    # be checked. A link to one event or post there is the event's own page;
+    # a bare page link (facebook.com/TheHideawayVictoriaTX) only says the
+    # venue exists, so the event stands on Gemini's word alone: dropped.
+    def social_page_only(ev):
+        return bool(_LINK_CHECK_SKIP.search(ev["url"])) and not _is_social_event_url(ev["url"])
+    for lst in (cited, unverified):
+        bare = [e for e in lst if social_page_only(e)]
+        if bare:
+            dropped["social page link, not an event"] += len(bare)
+            lst[:] = [e for e in lst if not social_page_only(e)]
+
     # A link on a site Gemini cited still has to be that event's page:
     # Gemini makes up deep links on real sites (victoriatx.gov/calendar?
-    # view=detail&id=12089 redirects to the calendar home). A link that
-    # fails is dropped but the event stays (the site was cited for it);
-    # Facebook/Instagram answer bots with a login page, so they're trusted.
+    # view=detail&id=12089 redirects to the calendar home). The link was the
+    # event's only evidence, so a link that fails drops the event too (it
+    # used to stay up with no link: "Weekly Karaoke" at Casa Jalisco).
     checkable = [e for e in cited if not _LINK_CHECK_SKIP.search(e["url"])]
     if checkable:
         with ThreadPoolExecutor(max_workers=8) as pool:
             ok = list(pool.map(lambda e: _page_mentions(e["url"], e["name"], get=get, unsure=True), checkable[:60]))
-        for ev, good in zip(checkable, ok):
-            if not good:
-                ev["url"] = ""
-                dropped["bad link removed (event kept)"] += 1
+        bad = {id(ev) for ev, good in zip(checkable, ok) if not good}
+        if bad:
+            dropped["link didn't check out (event dropped)"] += len(bad)
+            cited = [e for e in cited if id(e) not in bad]
     events.extend(cited)
 
     # A link on a site Gemini didn't cite is kept only if the page loads and
@@ -1810,6 +1822,10 @@ ENRICH_MAX_PER_RUN = 48
 ENRICH_BATCH = 6
 ENRICH_RETRY_DAYS = 7
 THIN_DESCRIPTION_CHARS = 70
+# A hand-entered description (local_events.yaml, the Google Sheet) the AI
+# review may replace: only an empty or near-empty one ("Fall fest."). The
+# owner's short lines are deliberate; hand-entered data wins.
+CURATED_REWRITE_BELOW_CHARS = 12
 _TIME_RE = re.compile(r"^\d{1,2}(:\d{2})?\s*[AaPp]\.?[Mm]\.?(\s*[–—-]\s*\d{1,2}(:\d{2})?\s*[AaPp]\.?[Mm]\.?)?$")
 
 
@@ -2176,13 +2192,19 @@ def _align_review(parsed, n):
     return out if any(out) else None
 
 
+def _hand_entered(ev):
+    """An event a person entered (local_events.yaml or the Google Sheet),
+    alone or merged with scraped copies: its own facts win over the AI's."""
+    return bool(ev.get("curated")) or bool(_sources_of(ev) & HAND_SOURCES)
+
+
 def ai_review(events, batch_size=8):
     """Polish descriptions + reassign icons via OpenAI.
 
     Mutates events in place AND returns the list. Each event:
       - description: rewritten to ≤160 chars, no emojis
       - icons: filtered to 1–3 valid values, ordered by relevance
-      - free: re-evaluated boolean
+      - free: re-evaluated boolean (never on a hand-entered event)
 
     Falls back to the original event values when AI is unavailable or
     a batch fails.
@@ -2213,9 +2235,15 @@ def ai_review(events, batch_size=8):
         for ev, ai in zip(batch, result):
             if not isinstance(ai, dict):
                 continue
+            hand = _hand_entered(ev)
 
             # Description: trust AI; clamp + strip emojis as belt-and-suspenders.
+            # A hand-written one stays unless it's (nearly) empty: the model
+            # was adding details nobody wrote ("Plan for parades and live
+            # entertainment" on Turkeyfest's "Details on the Turkeyfest page.").
             new_desc = ai.get("description")
+            if hand and len(str(ev.get("description") or "").strip()) >= CURATED_REWRITE_BELOW_CHARS:
+                new_desc = None
             if isinstance(new_desc, str) and new_desc.strip():
                 cleaned = _strip_emojis(new_desc).strip()
                 if len(cleaned) > 200:  # hard ceiling, AI was told 160
@@ -2241,8 +2269,12 @@ def ai_review(events, batch_size=8):
                 if cleaned_icons:
                     ev["icons"] = cleaned_icons
 
-            # Free flag: trust AI bool, keep `free` icon in sync.
-            new_free = ai.get("free")
+            # Free flag: trust AI bool, keep `free` icon in sync. Never on a
+            # hand-entered event: the owner's `free: false` (Cuero Turkeyfest,
+            # Oct 2026) was flipped to free, a false price claim on the site,
+            # in its JSON-LD and in the newsletter. Its icons follow its own
+            # flag instead, whatever icons the model picked.
+            new_free = ev.get("free") is True if hand else ai.get("free")
             if isinstance(new_free, bool):
                 ev["free"] = new_free
                 if new_free and "free" not in ev.get("icons", []):
@@ -2295,6 +2327,19 @@ def is_listing_url(url):
 
 
 _LINK_CHECK_SKIP = re.compile(r"(facebook|instagram|fb)\.com", re.I)
+# One event or one post on Facebook/Instagram, as opposed to a page's root
+# or its about/events tab: /events/<id>, /<page>/posts/<id>, a permalink,
+# photo, video or story, an fb.me/e/ share link, instagram.com/p/ or /reel/.
+_SOCIAL_EVENT_URL = re.compile(
+    r"(facebook|fb)\.com/(events/\d|[^/?#]+/(posts|videos|photos)/[^/?#]|permalink\.php|story\.php|photo(\.php)?/?\?|"
+    r"groups/[^/?#]+/(posts|permalink)/[^/?#]|share/[pve]/)"
+    r"|fb\.me/e/"
+    r"|instagram\.com/(p|reel|reels)/[^/?#]",
+    re.I)
+
+
+def _is_social_event_url(url):
+    return bool(_SOCIAL_EVENT_URL.search(url or ""))
 
 
 # The link check runs before any deadline check, right after the ~30-minute
@@ -2691,7 +2736,88 @@ def is_same_event(a, b):
     # venue. Post events are never retired, so the copies would all stay up.
     if _same_festival(a, b):
         return True
+    # One listing reworded by each source at one place and the same minute
+    # ("Wednesday Market", "Midweek Market" and "Victoria Farmers' Market",
+    # all 9 AM at the farmers market; "Movie Night: Friday the 13th" and
+    # "Victoria Film Society presents 'Friday the 13th'", 7 PM at Moonshine).
+    if _same_slot(a, b):
+        return True
     return False
+
+
+# Words that only say how often or when ("Midweek Market", "Weekly
+# Karaoke"); dropped before asking whether a name is generic.
+_FILLER_TOKENS = {"midweek", "weekly", "monthly", "tonight", "today", "every", "special"}
+# One thing, two words ("Movie Night" and "Film Society", "Screening").
+_SLOT_SYNONYMS = {"film": "movie", "cinema": "movie", "screening": "movie", "nite": "night"}
+# Generic words that name the same kind of thing: "Live Music" is the
+# "Jake Smith Band" show, never the bar's "Trivia" at that minute.
+_GENERIC_KIND = {"live": "music", "music": "music", "band": "music", "concert": "music", "show": "music"}
+# Generic words that name a night's act, which a specific listing can name
+# instead ("Karaoke" for "Karaoke with DJ Rocketman").
+# Words two different events at one venue easily share ("Film Society" and
+# "Bourbon Society"): not enough on their own to call them one listing.
+_WEAK_SHARED_TOKENS = {"society", "club", "group", "series", "community", "kids", "family", "free",
+                       "class", "meeting", "workshop", "halloween", "holiday", "fall", "spring", "summer", "winter"}
+_ACT_TOKENS = {"live", "music", "band", "concert", "show", "karaoke", "trivia", "bingo", "comedy", "open", "dance"}
+
+
+def _slot_core(e, drop):
+    words = _stem_tokens(set(_name_tokens(e.get("name"))) - drop - _NIGHT_TOKENS - _FILLER_TOKENS)
+    return {_SLOT_SYNONYMS.get(w, w) for w in words}
+
+
+def _generic_kinds(words):
+    return {_GENERIC_KIND.get(w, w) for w in words if w in _GENERIC_CORE_TOKENS}
+
+
+def _same_slot(a, b):
+    """Same venue, same date, same known start minute, and names that are
+    two sources' wording of one listing. Conservative, since a venue can run
+    two things at once: at least one name is loosely worded (an AI wrote it
+    from a post or Gemini's answer, a person typed it, or it's generic like
+    "Live Music"/"Karaoke"/"Trivia"), and the names share a distinctive
+    word or one of them is generic (of the same kind as anything generic
+    in the other). Two specific names with nothing in common stay two
+    events: a multi-stage venue's 7 PM play and 7 PM kids' craft."""
+    if a.get("date") != b.get("date"):
+        return False
+    va, vb = (a.get("venue") or "").strip(), (b.get("venue") or "").strip()
+    if not va or not vb or va.lower() in _NON_PLACE_NAMES or vb.lower() in _NON_PLACE_NAMES:
+        return False
+    # The venues themselves must agree (a shared street address isn't
+    # enough: a strip center has several), and "Downtown Victoria" names no
+    # single place.
+    ha, hb = _venue_home(va), _venue_home(vb)
+    if _generic_venue(va, []) or _generic_venue(vb, []) or not (ha in hb or hb in ha):
+        return False
+    start = _start_minutes(a.get("time"))
+    if start is None or start != _start_minutes(b.get("time")):
+        return False
+    drop = set(_name_tokens(va)) | set(_name_tokens(vb)) | _WEEKDAY_TOKENS | _CITY_TOKENS
+    ca, cb = _slot_core(a, drop), _slot_core(b, drop)
+    # An empty core is a name that's only the venue and the weekday
+    # ("Victoria Farmers' Market" at the farmers market): generic too.
+    ga, gb = ca <= _GENERIC_CORE_TOKENS, cb <= _GENERIC_CORE_TOKENS
+    # Two hand-entered events were listed apart on purpose (J Welch Farms'
+    # "Sunday Brunch" and "Corn Maze", both 10 AM-3 PM).
+    if _hand_entered(a) and _hand_entered(b):
+        return False
+    loose = lambda e: _hand_entered(e) or _name_source(e) in AI_NAMED_SOURCES
+    if not (loose(a) or loose(b) or ga or gb):
+        return False
+    if ga and gb:
+        return not ca or not cb or bool(_generic_kinds(ca) & _generic_kinds(cb))
+    if ga or gb:
+        # A generic name stands in for a specific one only when it names
+        # the evening's act ("Live Music" for "Jake Smith Band"), not a
+        # whole offering ("Brunch" is not the farm's "Corn Maze").
+        generic, other = (ca, cb) if ga else (cb, ca)
+        if not generic or not generic <= _ACT_TOKENS:
+            return False
+        theirs = _generic_kinds(other)
+        return not theirs or bool(theirs & _generic_kinds(generic))
+    return any(len(w) >= 4 and w not in _GENERIC_CORE_TOKENS and w not in _WEAK_SHARED_TOKENS for w in ca & cb)
 
 
 # Words an AI adds to a post's event name to say which part of the event
@@ -2910,7 +3036,12 @@ def _merge_pair(old, new):
     if _same_festival(old, new):
         _tidy_festival(merged, other)
     merged["icons"] = list(dict.fromkeys((base.get("icons") or []) + (other.get("icons") or [])))[:4]
-    merged["free"] = bool(base.get("free") or other.get("free"))
+    # A hand-entered copy's price wins: a scraped "free" copy must not turn
+    # the owner's `free: false` into a Free listing.
+    hand = base if _hand_entered(base) else other if _hand_entered(other) else None
+    merged["free"] = bool(hand.get("free")) if hand else bool(base.get("free") or other.get("free"))
+    if hand and not merged["free"]:
+        merged["icons"] = [i for i in merged["icons"] if i != "free"]
     # Hand-set tags (local_events.yaml) survive a better-ranked scraped copy.
     if base.get("big") or other.get("big"):
         merged["big"] = True

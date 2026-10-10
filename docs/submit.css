@@ -194,13 +194,10 @@ html, body {
   line-height: 1.4;
 }
 
-/* Honeypot field — visually hidden but still in the DOM. */
+/* Honeypot field — in the DOM for bots, never shown or focusable for
+   people (an off-screen field could still be reached and autofilled). */
 .hp-field {
-  position: absolute;
-  left: -10000px;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
+  display: none;
 }
 
 .turnstile-mount { margin: 0.5rem 0; min-height: 1px; }

@@ -498,6 +498,71 @@ def test_run_apify_discovery_does_not_retry_4xx_permanent(monkeypatch):
     assert state["calls"] == len(dv.CATEGORY_SEARCHES)
 
 
+def _count_calls(make):
+    state = {"calls": 0}
+
+    def fake_post(url, **kwargs):
+        state["calls"] += 1
+        return make()
+
+    dv.run_apify_discovery("tok", http_post=fake_post, sleep=lambda *_a, **_k: None)
+    return state["calls"]
+
+
+def test_a_paid_run_whose_response_failed_to_parse_is_not_run_again():
+    """A 200 means Apify already ran and billed the actor: re-running it
+    after a parse failure paid for the same search up to three times."""
+    def bad_json():
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.side_effect = ValueError("Expecting value")
+        return resp
+    assert _count_calls(bad_json) == len(dv.CATEGORY_SEARCHES)
+
+
+def test_a_run_that_may_have_started_is_not_run_again():
+    """A read timeout, a connection dropped mid-request, or run-sync's 408
+    (the run outlived its limit) all mean a run may exist and be billed."""
+    import requests
+
+    def raiser(exc):
+        def make():
+            raise exc
+        return make
+
+    def status(code):
+        def make():
+            resp = MagicMock()
+            resp.status_code = code
+            resp.text = "timeout"
+            return resp
+        return make
+
+    for make in (raiser(requests.ReadTimeout("read timed out")),
+                 raiser(requests.ConnectionError("('Connection aborted.', RemoteDisconnected('closed'))")),
+                 status(408)):
+        assert _count_calls(make) == len(dv.CATEGORY_SEARCHES)
+
+
+def test_a_request_that_never_reached_apify_is_retried():
+    import requests
+
+    def connect_timeout():
+        raise requests.ConnectTimeout("connect timed out")
+
+    def refused():
+        raise requests.ConnectionError("Failed to establish a new connection: [Errno 111] Connection refused")
+
+    def rate_limited():
+        resp = MagicMock()
+        resp.status_code = 429
+        resp.text = "slow down"
+        return resp
+
+    for make in (connect_timeout, refused, rate_limited):
+        assert _count_calls(make) == len(dv.CATEGORY_SEARCHES) * (1 + dv.APIFY_MAX_RETRIES)
+
+
 def test_run_apify_discovery_recovers_on_retry(monkeypatch):
     """First attempt blows up, retry succeeds → items flow through."""
     state = {"calls": 0}

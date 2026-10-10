@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createStore, isOutage, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter, resolveEditKey, withPublishedLock } from './db.js';
 import { validateSubmission, validateEventEdit, checkBotSignals } from './validate.js';
+import { reportHoneypot } from './honeypot.js';
 import { verifyTurnstile } from './turnstile.js';
 import { createRateLimiter, ipKey } from './rateLimit.js';
 import { createAuth } from './auth.js';
@@ -502,7 +503,10 @@ export async function createApp(opts = {}) {
     const bot = checkBotSignals(req.body || {});
     if (!bot.ok) {
       // Return 200 to bots so they don't retry/iterate; log for visibility.
+      // A trap hit also reaches Slack (once a day), so autofill filling the
+      // hidden field for a real organizer can be noticed.
       console.warn('[submissions] bot-signal-block:', bot.reason, ip);
+      if (bot.reason === 'honeypot') reportHoneypot('submit', bot.field, { slack });
       return res.json({ ok: true, queued: false });
     }
 
