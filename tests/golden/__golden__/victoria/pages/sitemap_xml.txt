@@ -24,6 +24,10 @@
   <url><loc>https://www.thevic361.com/venues</loc><lastmod>2026-10-07</lastmod><changefreq>weekly</changefreq><priority>0.5</priority></url>
   <url><loc>https://www.thevic361.com/subscribe</loc><lastmod>2026-10-07</lastmod><changefreq>weekly</changefreq><priority>0.5</priority></url>
   <url><loc>https://www.thevic361.com/privacy</loc><lastmod>2026-10-07</lastmod><changefreq>weekly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://www.thevic361.com/terms</loc><lastmod>2026-10-07</lastmod><changefreq>weekly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://www.thevic361.com/advertising-terms</loc><lastmod>2026-10-07</lastmod><changefreq>weekly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://www.thevic361.com/accessibility</loc><lastmod>2026-10-07</lastmod><changefreq>weekly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://www.thevic361.com/referral-rules</loc><lastmod>2026-10-07</lastmod><changefreq>weekly</changefreq><priority>0.5</priority></url>
   <url><loc>https://www.thevic361.com/halloween-events</loc><lastmod>2026-10-07</lastmod><changefreq>weekly</changefreq><priority>0.5</priority></url>
   <url><loc>https://www.thevic361.com/venues/aero-crafters</loc><lastmod>2026-10-07</lastmod><changefreq>weekly</changefreq><priority>0.5</priority></url>
   <url><loc>https://www.thevic361.com/venues/de-leon-plaza</loc><lastmod>2026-10-07</lastmod><changefreq>weekly</changefreq><priority>0.5</priority></url>

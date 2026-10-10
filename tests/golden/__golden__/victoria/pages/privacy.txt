@@ -9,11 +9,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Privacy | The Vic 361</title>
-<meta name="description" content="What The Vic 361 collects, why, and the choices you have.">
+<meta name="description" content="What The Vic 361 collects, why, how long we keep it, and the choices you have.">
 <link rel="canonical" href="https://www.thevic361.com/privacy">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Privacy | The Vic 361">
-<meta property="og:description" content="What The Vic 361 collects, why, and the choices you have.">
+<meta property="og:description" content="What The Vic 361 collects, why, how long we keep it, and the choices you have.">
 <meta property="og:url" content="https://www.thevic361.com/privacy">
 <meta property="og:site_name" content="The Vic 361">
 <meta property="og:image" content="https://www.thevic361.com/og-image.png">
@@ -61,34 +61,68 @@
   <div class="container container--narrow">
 
     <h1 class="page-title">Privacy</h1>
-    <p class="page-lead">The Vic 361 is a free events guide for Victoria, Texas. This page explains what we collect, why, and the choices you have. Last updated October 8, 2026.</p>
-    <h2 class="section-heading">What you give us</h2>
-    <ul>
-      <li><strong>Newsletter:</strong> your email address, so we can send the newsletter (Mondays and Thursdays). Every email has a one-click unsubscribe link. We don't sell or share your address.</li>
-      <li><strong>Event submissions and contact messages:</strong> what you type into those forms, used to review your event or answer you.</li>
-      <li><strong>Sponsor purchases:</strong> payments are handled by Stripe; we never see your card number. We keep your name, email, business and order details.</li>
+    <p class="page-lead">The Vic 361 is a free events guide for Victoria, Texas. This page explains what we collect, why, how long we keep it, and the choices you have.</p>
+    <p class="legal-version">Last updated October 10, 2026 · Version 2026-10-10</p>
+    <h2 class="section-heading" id="who">Who we are</h2>
+<p>The Vic 361 runs thevic361.com and its newsletter. In this policy "we" and "us" mean The Vic 361. Questions or requests about your information: email <a href="mailto:news@thevic361.com?subject=Privacy%20request">news@thevic361.com</a>.</p>
+    <h2 class="section-heading" id="collect">What you give us</h2>
+<ul>
+      <li><strong>Newsletter:</strong> your email address, so we can send the newsletter (Mondays and Thursdays), and, if you joined through a friend's share link, which link it was. Every email has a one-click unsubscribe link. We don't sell or rent your address, and sponsors never get it.</li>
+      <li><strong>Event submissions:</strong> the event details plus your name, email address and phone number, used to review the event, ask you about it if a detail needs checking, and email you when it's live. We also store the IP address and browser details (user agent) the submission came from, to stop spam and abuse of the form.</li>
+      <li><strong>Contact messages:</strong> your name, email address and message, used to answer you.</li>
+      <li><strong>Sponsor purchases:</strong> payments are handled by Stripe; we never see your card number. We keep your name or business, email, the ad or event details and logo you send, the order, and which version of our <a href="/advertising-terms">advertising terms</a> you agreed to and when.</li>
     </ul>
-    <h2 class="section-heading">What we measure</h2>
-    <ul>
-      <li><strong>Our own visit counts:</strong> which pages are viewed and which links are clicked, so we know what's useful. We don't use cookies for this and don't store IP addresses; a visitor is a one-way code that changes every day.</li>
+    <h2 class="section-heading" id="public">Public event information</h2>
+<p>Most listings come from public sources: venue and organizer websites, public calendars, and public Facebook and Instagram pages of venues and organizations. We gather them with automated tools (including Apify for public social media pages, and OpenAI and Google Gemini to read event details and write short summaries). We collect event details (what, when, where, price), not information about individual people. If you organize an event and want a listing changed or removed, email <a href="mailto:news@thevic361.com?subject=Event%20listing">news@thevic361.com</a>.</p>
+    <h2 class="section-heading" id="measure">What we measure</h2>
+<ul>
+      <li><strong>Our own visit counts:</strong> which pages are viewed and which links are clicked, so we know what's useful and can report to sponsors how often their placement was seen. We don't use cookies for this, and this counter doesn't keep your IP address; a visitor is a one-way code that changes every day.</li>
       <li><strong>Referrals:</strong> every subscriber gets a share link. When someone signs up through it, we note who shared it so we can count referrals and send rewards; we don't tell the person who shared it who signed up. Gift card rewards are sent by our rewards partner, <a href="https://www.tremendous.com/privacy" rel="noopener">Tremendous</a>, which gets the winner's email address to deliver them (see the <a href="/referral-rules">rules</a>).</li>
-      <li><strong>Newsletter opens:</strong> each newsletter has a tiny invisible image, so we can tell whether you opened that issue (we count each person once per issue). Turning off images in your email app stops it.</li>
-      <li><strong>Google Analytics</strong> measures visits to the site and uses cookies. See <a href="https://policies.google.com/technologies/partner-sites" rel="noopener">how Google uses this data</a>.</li>
-      <li><strong>Meta Pixel:</strong> when we advertise on Facebook and Instagram, the Meta Pixel tells Meta that someone visited from an ad or signed up for the newsletter, so we can see whether our ads work and show them to people likely to be interested. Meta may combine this with what it knows about your Meta account. It's never loaded on the newsletter confirm or unsubscribe pages. You can control this in your <a href="https://www.facebook.com/adpreferences/ad_settings" rel="noopener">Meta ad settings</a>.</li>
+      <li><strong>Newsletter opens:</strong> each newsletter has a tiny invisible image, so we can tell whether you opened that issue (we count each person once per issue), and links back to the site are tagged with the issue they came from. Turning off images in your email app stops the open count.</li>
+      <li><strong>Google Analytics</strong> measures visits to the site and uses cookies. See <a href="https://policies.google.com/technologies/partner-sites" rel="noopener">how Google uses this data</a>, or use Google's <a href="https://tools.google.com/dlpage/gaoptout" rel="noopener">opt-out add-on</a>.</li>
+      <li><strong>Meta Pixel:</strong> when we advertise on Facebook and Instagram, the Meta Pixel tells Meta that someone visited from an ad or signed up for the newsletter, so we can see whether our ads work and show them to people likely to be interested. Meta may combine this with what it knows about your Meta account. It's never loaded on the newsletter confirm or unsubscribe pages. You can control this in your <a href="https://www.facebook.com/adpreferences/ad_settings" rel="noopener">Meta ad settings</a>, or through the <a href="https://optout.aboutads.info/" rel="noopener">DAA</a> and <a href="https://optout.networkadvertising.org/" rel="noopener">NAI</a> opt-out pages.</li>
+      <li><strong>Global Privacy Control:</strong> if your browser sends a Global Privacy Control signal, we treat it as a request to opt out of targeted advertising and don't load the Meta Pixel.</li>
     </ul>
-    <h2 class="section-heading">Services we use</h2>
-    <p>Railway hosts the site and its database; Resend delivers our emails; Cloudflare Turnstile checks that forms are sent by people, not bots; Stripe takes sponsor payments. Each only gets what it needs to do that job.</p>
-    <h2 class="section-heading">Your choices</h2>
+    <h2 class="section-heading" id="services">Services we use</h2>
+<p>Each of these only gets what it needs to do its job:</p>
     <ul>
+      <li>Railway hosts the site and its database.</li>
+      <li>Resend delivers our emails.</li>
+      <li>Stripe takes sponsor payments.</li>
+      <li>Cloudflare Turnstile checks that forms are sent by people, not bots; it looks at your browser and device to do that.</li>
+      <li>Google Fonts serves the site's and the emails' fonts, so Google sees your IP address when they load.</li>
+      <li>OpenAI reviews submitted events (the event details, not your contact details) before they're published.</li>
+      <li>Slack: contact messages (with the sender's email), new submissions and sponsor orders (with the business name and email) are relayed to our staff's Slack so we can respond quickly.</li>
+      <li>Tremendous delivers referral gift cards.</li>
+      <li>Google Analytics and the Meta Pixel, as described above.</li>
+    </ul>
+    <p>We may also share information if the law requires it, or with a buyer if the business is ever sold. We don't sell your personal information.</p>
+    <h2 class="section-heading" id="retention">How long we keep it</h2>
+<ul>
+      <li>Subscribers: while you're subscribed. After you unsubscribe we keep your address only so we never email you again.</li>
+      <li>Event submissions: the IP address and browser details stored with a submission are deleted after 12 months. The event itself stays on the site while it's listed and in our archive after that.</li>
+      <li>Contact messages: deleted after 24 months.</li>
+      <li>Our own visit counts and newsletter open records: about 13 months.</li>
+      <li>Sponsor orders: kept as business and tax records (up to 7 years).</li>
+    </ul>
+    <h2 class="section-heading" id="choices">Your choices</h2>
+<ul>
       <li>Unsubscribe from any newsletter with the link at the bottom, any time.</li>
       <li>Block or delete cookies in your browser settings; the site works without them.</li>
-      <li>Ask us to see or delete what we have about you through our <a href="/contact">contact page</a>.</li>
+      <li>Ask us what we have about you, or ask us to correct or delete it, by emailing <a href="mailto:news@thevic361.com?subject=Privacy%20request">news@thevic361.com</a>. We'll remove what you ask us to delete within 30 days (except what we must keep by law, such as payment records), and we'll tell you when it's done. We honor these requests wherever you live, and won't treat you differently for making one.</li>
     </ul>
+    <h2 class="section-heading" id="children">Children</h2>
+<p>The Vic 361 is a general events guide and isn't directed to children under 13. We don't knowingly collect information from children under 13; if you think a child has sent us information, email <a href="mailto:news@thevic361.com?subject=Privacy%20request">news@thevic361.com</a> and we'll delete it. Event submissions and referral rewards are for adults (18 or older).</p>
+    <h2 class="section-heading" id="security">Security</h2>
+<p>The site uses encrypted connections (HTTPS), only our staff can reach the admin, and we never see or store card numbers. No system is perfect; if a breach affects your information we'll tell you as the law requires.</p>
+    <h2 class="section-heading" id="changes">Changes and contact</h2>
+<p>When this policy changes we update the date at the top, and we tell subscribers about important changes in the newsletter.</p>
+    <p class="legal-contact"><strong>The Vic 361</strong><br>Email: <a href="mailto:news@thevic361.com">news@thevic361.com</a><br>Or use our <a href="/contact">contact form</a>.</p>
   </div>
 </main>
 <footer class="site-footer">
     <div class="container">
-      <div class="footer-grid">
+      <div class="footer-grid footer-grid--4">
         <div class="footer-section">
           <h2>Stay in the loop</h2>
           <p>Get Victoria's best events in your inbox every Monday and Thursday.</p>
@@ -122,7 +156,16 @@
             <li><a href="/venues">Venues</a></li>
             <li><a href="/advertise">Advertise</a></li>
             <li><a href="/contact">Contact</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h2>Policies</h2>
+          <ul class="footer-links" role="list">
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="/advertising-terms">Advertising terms</a></li>
             <li><a href="/privacy">Privacy</a></li>
+            <li><a href="/accessibility">Accessibility</a></li>
+            <li><a href="/referral-rules">Referral rules</a></li>
           </ul>
         </div>
       </div>

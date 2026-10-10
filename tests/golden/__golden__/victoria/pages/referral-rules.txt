@@ -58,22 +58,36 @@
   <div class="container container--narrow">
 <h1 class="page-title">Referral rewards: official rules</h1>
 <p class="page-lead">Share The Vic 361 with friends and earn gift cards. No purchase is necessary: subscribing and sharing are free.</p>
+<p class="legal-version">Last updated October 10, 2026 · Version 2026-10-10</p>
+<p class="legal-loud"><strong>NO PURCHASE OR PAYMENT OF ANY KIND IS NECESSARY TO TAKE PART OR WIN. A PURCHASE WILL NOT IMPROVE YOUR CHANCES. VOID WHERE PROHIBITED.</strong></p>
 <ul>
-<li><strong>Who can take part.</strong> Anyone subscribed to The Vic 361 newsletter who is 18 or older and lives in the United States. The Vic 361's owner and their household can't win. Void where prohibited.</li>
-<li><strong>Your link.</strong> Every subscriber gets a personal share link in each newsletter. A friend counts for you when they sign up through your link, confirm their email address, and stay subscribed for at least 24 hours. Each email inbox counts once, and your own addresses don't count.</li>
-<li><strong>Monthly drawing.</strong> Each friend who joins through your link during a calendar month is one entry in that month's drawing. In the first week of the next month, one entry is picked at random from all entries, and its owner gets a $25 digital gift card. Your odds depend on how many entries there are that month. Entries don't carry over to the next month.</li>
+<li><strong>Sponsor.</strong> The program is run by The Vic 361 (email <a href="mailto:news@thevic361.com?subject=Referral%20rewards">news@thevic361.com</a>). "We" and "us" below mean the sponsor.</li>
+<li><strong>When it runs.</strong> These rules apply from October 10, 2026 until we end the program. Each drawing covers one calendar month, from 12:00 a.m. on the 1st to 11:59 p.m. on its last day, Victoria local time.</li>
+<li><strong>Who can take part.</strong> Anyone subscribed to The Vic 361 newsletter who lives in the United States and is 18 or older, or the age of majority in their state if that's higher. The Vic 361's owners, employees and contractors, and the people in their households, can't win. Void where prohibited.</li>
+<li><strong>Your link.</strong> Every subscriber gets a personal share link in each newsletter. A friend counts for you once they have signed up through your link, confirmed their email address, and been subscribed for 24 hours, and only while both of you are still subscribed when we count. Each email inbox counts once (for whoever referred it first), and your own addresses don't count.</li>
 <li><strong>5 friends.</strong> A $10 digital gift card, once per subscriber.</li>
 <li><strong>10 friends.</strong> A $25 digital gift card, once per subscriber.</li>
-<li><strong>How rewards arrive.</strong> Gift cards are sent by email from our rewards partner, Tremendous, usually on the Monday after you earn them. You choose the store from their list. Tremendous gets your email address to send it.</li>
-<li><strong>Fair play.</strong> Referrals have to be real people who want the newsletter. We can hold back or cancel rewards for sign-ups that look made up (fake, throwaway or duplicate addresses), and our decisions about who counts are final.</li>
-<li><strong>Changes.</strong> We may change or end the program at any time. Rewards you have already earned will still be sent.</li>
+<li><strong>Gift card timing.</strong> We count friends every Monday after the newsletter goes out, and send any gift card you've reached then. A reward that needs a closer look (see Fair play) is sent once we've checked it.</li>
+<li><strong>Monthly drawing: how to enter.</strong> Each friend who confirms through your link during a calendar month is one entry in that month's drawing. <strong>Free way to enter without referring anyone:</strong> email <a href="mailto:news@thevic361.com?subject=Drawing%20entry">news@thevic361.com</a> with the subject "Drawing entry", your name and the email address you're subscribed with, for one entry in that month's drawing. One free entry per person per month; it must arrive by the last day of the month. Free entries have the same chance of winning as referral entries. Entries don't carry over to the next month.</li>
+<li><strong>Monthly drawing: picking the winner.</strong> On the first Monday on or after the 2nd of the next month (so between the 2nd and the 8th), one entry is picked at random from all eligible entries for that month, and its owner gets a $25 digital gift card. Your odds depend on how many eligible entries there are that month.</li>
+<li><strong>Prize.</strong> One $25 digital gift card each month (approximate retail value $25). No cash or substitute, except that we may substitute a prize of equal or greater value. The gift card issuer's terms apply.</li>
+<li><strong>How rewards arrive.</strong> Gift cards are sent by email from our rewards partner, Tremendous, to the address you're subscribed with. You choose the store from their list. Tremendous gets your email address to send it. The drawing winner's gift card email says they won; it is usually sent the day of the drawing.</li>
+<li><strong>Claiming a prize.</strong> Redeem a gift card from its email; if you can't find it, contact us within 30 days of the drawing. A prize that can't be delivered, isn't claimed within 30 days, or goes to someone who turns out not to be eligible is forfeited, and we may draw another entry from that month.</li>
+<li><strong>Winners list.</strong> To ask who won a month's drawing, email <a href="mailto:news@thevic361.com?subject=Winners%20list">news@thevic361.com</a> within 60 days after that month's drawing.</li>
+<li><strong>Taxes.</strong> Winners are responsible for any taxes on their prize. We'll send any tax form the law requires.</li>
+<li><strong>Fair play.</strong> Referrals have to be real people who want the newsletter. We can hold back or cancel rewards for sign-ups that look made up (fake, throwaway or duplicate addresses), disqualify anyone who tampers with the program, and our decisions about who counts are final.</li>
+<li><strong>Sharing your link.</strong> Share it with people you know or on your own pages, and don't spam. If you post your link publicly, say that you get rewards if people sign up (for example, "I get a gift card if you join"). We never send invitations for you.</li>
+<li><strong>Liability.</strong> By taking part you release us from claims about the program and its prizes, except where the law doesn't allow it.</li>
+<li><strong>Privacy.</strong> Our <a href="/privacy">privacy policy</a> covers the information we use to run the program.</li>
+<li><strong>Changes.</strong> We may change or end the program at any time, for example because of fraud or technical problems. Rewards you have already earned will still be sent, and a month already under way is drawn from the eligible entries received up to the end.</li>
+<li><strong>Governing law.</strong> These rules are governed by the laws of the State of Texas.</li>
 </ul>
-<p>Questions? <a href="/contact">Get in touch</a>.</p>
+<p>Questions? Email <a href="mailto:news@thevic361.com?subject=Referral%20rewards">news@thevic361.com</a> or <a href="/contact">get in touch</a>.</p>
   </div>
 </main>
 <footer class="site-footer">
     <div class="container">
-      <div class="footer-grid">
+      <div class="footer-grid footer-grid--4">
         <div class="footer-section">
           <h2>Stay in the loop</h2>
           <p>Get Victoria's best events in your inbox every Monday and Thursday.</p>
@@ -107,7 +121,16 @@
             <li><a href="/venues">Venues</a></li>
             <li><a href="/advertise">Advertise</a></li>
             <li><a href="/contact">Contact</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h2>Policies</h2>
+          <ul class="footer-links" role="list">
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="/advertising-terms">Advertising terms</a></li>
             <li><a href="/privacy">Privacy</a></li>
+            <li><a href="/accessibility">Accessibility</a></li>
+            <li><a href="/referral-rules">Referral rules</a></li>
           </ul>
         </div>
       </div>

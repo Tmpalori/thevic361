@@ -235,7 +235,7 @@ describe('booking fails closed', () => {
     store.listSponsorOrders = async () => { throw new Error('statement timeout'); };
     const r = await fetch(baseUrl + '/advertise/checkout', {
       method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ package: 'weekly', week: '2026-10-19', business: 'Beta', text: 'Hi.', url: 'b.example', email: 'b@b.example' }).toString()
+      body: new URLSearchParams({ package: 'weekly', week: '2026-10-19', business: 'Beta', text: 'Hi.', url: 'b.example', email: 'b@b.example', agree: '1' }).toString()
     });
     expect(r.status).toBe(503);
     expect(await r.text()).toMatch(/try again/i);
@@ -272,7 +272,7 @@ describe('a hanging Resend doesn’t hold the booking lock', () => {
     await vi.waitFor(() => expect(mails).toBe(1));
     const booking = fetch(baseUrl + '/advertise/checkout', {
       method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ package: 'weekly', week: '2026-10-26', business: 'Beta', text: 'Hi.', url: 'b.example', email: 'b@b.example' }).toString()
+      body: new URLSearchParams({ package: 'weekly', week: '2026-10-26', business: 'Beta', text: 'Hi.', url: 'b.example', email: 'b@b.example', agree: '1' }).toString()
     }).then(r => r.status);
     const outcome = await Promise.race([booking, new Promise(r => setTimeout(() => r('blocked'), 2000))]);
     release();

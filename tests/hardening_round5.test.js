@@ -202,7 +202,7 @@ describe('sponsor checkout', () => {
     const base = await listen(app);
     const form = fields => fetch(base + '/advertise/checkout', {
       method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(fields).toString()
+      body: new URLSearchParams({ agree: '1', ...fields }).toString()
     });
     return { store, form };
   }

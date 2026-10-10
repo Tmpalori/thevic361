@@ -34,6 +34,9 @@ export function metaPixelJs(id) {
   // backstop.
   if (/[?&](token|from|cancelled|order|ref)=/.test(location.search) || location.pathname.indexOf('/subscribe/confirm') === 0 ||
       location.pathname.indexOf('/unsubscribe') === 0) skip = true;
+  // Global Privacy Control: the browser asks not to be tracked for ads, so
+  // the pixel never loads (the privacy page says so).
+  try { if (navigator.globalPrivacyControl === true) skip = true; } catch (e) { /* no navigator */ }
   if (skip) return;
   !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
   n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;

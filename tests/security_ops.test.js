@@ -128,7 +128,7 @@ describe('open sponsor holds per client are capped (finding 2)', () => {
       expireCheckoutSession: async (id) => { expired.push(id); return { id, status: 'expired' }; }
     };
   }
-  const weekly = (week, email) => ({ package: 'weekly', week, business: 'B', text: 'x', url: 'b.example', email });
+  const weekly = (week, email) => ({ package: 'weekly', week, business: 'B', text: 'x', url: 'b.example', email, agree: '1' });
   const post = (base, fields, ip) => fetch(base + '/advertise/checkout', { method: 'POST', redirect: 'manual',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Forwarded-For': ip }, body: new URLSearchParams(fields).toString() });
 

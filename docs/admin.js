@@ -2080,7 +2080,12 @@
             const logo = hasLogo ? '<br><img class="sponsor-admin-logo" alt="Uploaded logo" data-logo-id="' + escapeHtml(o.id) + '">' : '';
             return '<tr><td>' + escapeHtml((o.paid_at || o.created_at || '').slice(0, 10)) + '</td>' +
               '<td>' + escapeHtml(SPONSOR_KIND[o.kind] || o.kind) + '</td>' +
-              '<td>' + escapeHtml(o.business || '') + '<br><small>' + escapeHtml(o.email || '') + '</small></td>' +
+              '<td>' + escapeHtml(o.business || '') + '<br><small>' + escapeHtml(o.email || '') + '</small>' +
+              // Which advertising terms the buyer ticked at checkout, and
+              // when (evidence for a dispute). Orders from before the box
+              // have none.
+              (o.terms_version ? '<br><small class="sponsor-terms">Agreed to terms v' + escapeHtml(o.terms_version) +
+                (o.terms_accepted_at ? ' on ' + escapeHtml(String(o.terms_accepted_at).slice(0, 10)) : '') + '</small>' : '') + '</td>' +
               '<td>' + escapeHtml(sponsorDetail(o)) + logo + '</td>' +
               '<td>$' + escapeHtml(String(Math.round((o.amount || 0) / 100))) + (o.test ? '<br><small>Test, not counted</small>' : '') +
                 (o.refunded_cents > 0 && o.status !== 'refunded' ? '<br><small>$' + escapeHtml((o.refunded_cents / 100).toFixed(2)) + ' refunded</small>' : '') + '</td>' +

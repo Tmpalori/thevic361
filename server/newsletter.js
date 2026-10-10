@@ -60,8 +60,9 @@ export { referralTiers, referralFlags };
 import { inboundConfig } from './inbound.js';
 import {
   escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank, parseTimes,
-  sponsorLinkUrl, formatTime, placeText, iconKeys, isSponsorLogo, SAMPLE_LOGO
+  sponsorLinkUrl, formatTime, placeText, iconKeys, isSponsorLogo, SAMPLE_LOGO, isPaidPick, SPONSORED_LABEL
 } from './seo.js';
+import { operatorHtml, operatorName, mailingAddress, emailLink, versionDate, REFERRAL_RULES_VERSION } from './legal.js';
 
 const RESEND_API = 'https://api.resend.com';
 // Strict enough that Resend accepts every address we keep: no empty dot
@@ -329,7 +330,7 @@ export function eventRow(ev, siteUrl, next) {
     : `<tr><td style="${rowStyle}">`;
   const close = ev.featured ? '</td></tr></table></td></tr>' : '</td></tr>';
   return `${open}
-${ev.featured ? `<span style="display:inline-block;background:${C.sunset};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">★ VIC’S PICK</span>` : ''}
+${ev.featured ? `<span style="display:inline-block;background:${C.sunset};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">★ ${escHtml(town.pickName.toUpperCase())}</span>` : ''}${paidPick(ev) ? `<span style="display:inline-block;background:#fff;color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">${SPONSORED_LABEL.toUpperCase()}</span>` : ''}
 ${ev.town ? `<span style="display:inline-block;background:${C.sky};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">Nearby · ${escHtml(ev.town)}</span>` : ''}
 ${iconImgs(ev, siteUrl)}
 ${ev.time ? `<span style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:12px;padding:0 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">${escHtml(formatTime(ev.time))}</span>` : ''}
@@ -403,7 +404,9 @@ export function sampleEmailPreviews(siteUrl = '') {
 // reads morning to night. The weekend issue leaves out what nobody plans a
 // weekend around (FILLER), never a paid pick.
 const FILLER = /\b(training|course|certification|seminar|webinar|orientation|meeting|support group|info(?:rmation)? session|hiring event|job fair|career fair|tutoring|open house|chair yoga)\b/i;
-const paidPick = e => Boolean(e.featured && !e.editor_pick);
+const paidPick = isPaidPick;
+// The plain-text part labels a paid pick too (FTC: in every format).
+const paidTag = e => (paidPick(e) ? ` (${town.pickNamePlain}, ${SPONSORED_LABEL.toLowerCase()})` : '');
 export function isFiller(ev) {
   if (paidPick(ev)) return false;
   return FILLER.test(String(ev.name || '')) || (ev.appeal != null && Number(ev.appeal) <= 2);
@@ -483,7 +486,7 @@ export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, ad
   const topHtml = topShown.length ? `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;background:#fff;border:3px solid ${C.ink};border-radius:16px;"><tr><td style="padding:12px 16px;">
 <div style="font-family:${DISPLAY};font-size:19px;font-weight:bold;margin-bottom:4px;">Don’t miss ${weekend ? 'this weekend' : 'this week'}</div>
-${topShown.map((e, i) => `<div style="margin-top:6px;font-size:15px;"><strong>${i + 1}.</strong> <a href="${escHtml(e.page ? siteUrl + e.page : (safeUrl(e.url) || siteUrl))}" style="color:${C.ink};font-weight:800;">${escHtml(e.name)}</a> <span style="color:${C.muted};">· ${escHtml([when(e), e.venue || placeText(e)].filter(Boolean).join(' · '))}</span></div>`).join('')}
+${topShown.map((e, i) => `<div style="margin-top:6px;font-size:15px;"><strong>${i + 1}.</strong> <a href="${escHtml(e.page ? siteUrl + e.page : (safeUrl(e.url) || siteUrl))}" style="color:${C.ink};font-weight:800;">${escHtml(e.name)}</a> <span style="color:${C.muted};">· ${escHtml([when(e), e.venue || placeText(e)].filter(Boolean).join(' · '))}${paidPick(e) ? ` · ${SPONSORED_LABEL}` : ''}</span></div>`).join('')}
 </td></tr></table>` : '';
 
   // Day colors follow the weekday (Monday yellow ... Sunday coral), like the site.
@@ -516,9 +519,9 @@ ${referral ? referralHtml({ siteUrl, ...referral }) : ''}`;
   const campaign = `${weekend ? 'weekend' : 'weekly'}-${(EDITIONS[edition] || EDITIONS.weekly).key(today)}`;
   const text = [
     `${subject}`, '', ...sponsorLine,
-    ...(topShown.length ? [`DON'T MISS ${weekend ? 'THIS WEEKEND' : 'THIS WEEK'}`, ...topShown.map((e, i) => `${i + 1}. ${e.name} (${[when(e), e.venue || placeText(e)].filter(Boolean).join(', ')})${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
+    ...(topShown.length ? [`DON'T MISS ${weekend ? 'THIS WEEKEND' : 'THIS WEEK'}`, ...topShown.map((e, i) => `${i + 1}. ${e.name} (${[when(e), e.venue || placeText(e)].filter(Boolean).join(', ')})${paidTag(e)}${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
     ...byDay.flatMap(({ d, list }) => [formatDay(d, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase(),
-      ...shownOf(list).map(e => `- ${e.time ? formatTime(e.time) + ' ' : ''}${e.name}${placeText(e) ? ' @ ' + placeText(e) : ''}${e.town ? ' (' + e.town + ')' : ''}${e.also ? ' (also ' + e.also + ')' : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), '']),
+      ...shownOf(list).map(e => `- ${e.time ? formatTime(e.time) + ' ' : ''}${e.name}${placeText(e) ? ' @ ' + placeText(e) : ''}${e.town ? ' (' + e.town + ')' : ''}${e.also ? ' (also ' + e.also + ')' : ''}${paidTag(e)}${e.page ? ' ' + siteUrl + e.page : ''}`), '']),
     `Full list: ${siteUrl}${listPath}`, '', ...(replyAsk ? [replyAskText(false), ''] : []), ...(referral ? referralText({ siteUrl, ...referral }) : []),
     ...(prefsUrl ? [`${weekend ? 'Just want Mondays? Skip the weekend email' : 'Email settings'}: ${prefsUrl}`] : []),
     `Unsubscribe: ${unsubscribeUrl}`, `${town.siteName} · ${address || town.cityState}`
@@ -594,30 +597,53 @@ function referralHtml({ siteUrl, code, count = 0 }) {
 <p style="margin:0;font-size:12px;color:${C.muted};">${tiers}<br>Every friend who joins in a month is another entry in that month's drawing. A friend counts a day after they sign up with your link and confirm their email, for as long as they stay subscribed. Gift cards arrive by email. <a href="${siteUrl}/referral-rules" style="color:${C.muted};">Rules</a></p>
 </td></tr></table>`;
 }
+// The official rules. Every line describes what server/referralRewards.js
+// and server/db.js actually do: a friend counts once confirmed for
+// REF_HOLD_HOURS and while both of you stay subscribed (tallyReferrals,
+// drawingEntries); gift card tiers are checked after each Monday issue
+// (rewards.run); the drawing for a month runs with the first Monday issue
+// on or after the 2nd of the next month (drawingMonth), picking one entry
+// with crypto.randomInt. The free entry by email is handled by the owner
+// by hand (AGENTS.md "Referral rewards": nothing automatic reads it).
 export function renderReferralRules({ siteUrl }) {
   const cards = referralTiers().filter(t => t.amount);
+  const amount = town.business.drawingAmount;
   const li = (title, text) => `<li><strong>${title}</strong> ${text}</li>`;
   return layout({
     siteUrl, path: '/referral-rules', nav: null, pixel: false, title: `Referral rewards: official rules | ${town.siteName}`,
     description: `How ${town.siteName} newsletter referral rewards and monthly gift card drawing work.`,
     body: `<h1 class="page-title">Referral rewards: official rules</h1>
 <p class="page-lead">Share ${town.siteName} with friends and earn gift cards. No purchase is necessary: subscribing and sharing are free.</p>
+<p class="legal-version">Last updated ${versionDate(REFERRAL_RULES_VERSION)} · Version ${REFERRAL_RULES_VERSION}</p>
+<p class="legal-loud"><strong>NO PURCHASE OR PAYMENT OF ANY KIND IS NECESSARY TO TAKE PART OR WIN. A PURCHASE WILL NOT IMPROVE YOUR CHANCES. VOID WHERE PROHIBITED.</strong></p>
 <ul>
-${li('Who can take part.', `Anyone subscribed to ${town.siteName} newsletter who is 18 or older and lives in the United States. ${town.siteName}'s owner and their household can't win. Void where prohibited.`)}
-${li('Your link.', 'Every subscriber gets a personal share link in each newsletter. A friend counts for you when they sign up through your link, confirm their email address, and stay subscribed for at least 24 hours. Each email inbox counts once, and your own addresses don\'t count.')}
-${li('Monthly drawing.', `Each friend who joins through your link during a calendar month is one entry in that month's drawing. In the first week of the next month, one entry is picked at random from all entries, and its owner gets a $${town.business.drawingAmount} digital gift card. Your odds depend on how many entries there are that month. Entries don't carry over to the next month.`)}
+${li('Sponsor.', `The program is run by ${operatorHtml()}${mailingAddress() ? `, ${escHtml(mailingAddress())}` : ''} (email ${emailLink('Referral rewards')}). "We" and "us" below mean the sponsor.`)}
+${li('When it runs.', `These rules apply from ${versionDate(REFERRAL_RULES_VERSION)} until we end the program. Each drawing covers one calendar month, from 12:00 a.m. on the 1st to 11:59 p.m. on its last day, ${escHtml(town.city)} local time.`)}
+${li('Who can take part.', `Anyone subscribed to ${town.siteName} newsletter who lives in the United States and is 18 or older, or the age of majority in their state if that's higher. ${escHtml(operatorName())}'s owners, employees and contractors, and the people in their households, can't win. Void where prohibited.`)}
+${li('Your link.', 'Every subscriber gets a personal share link in each newsletter. A friend counts for you once they have signed up through your link, confirmed their email address, and been subscribed for 24 hours, and only while both of you are still subscribed when we count. Each email inbox counts once (for whoever referred it first), and your own addresses don\'t count.')}
 ${cards.map(t => li(`${t.n} friends.`, `A $${t.amount} digital gift card, once per subscriber.`)).join('\n')}
-${li('How rewards arrive.', 'Gift cards are sent by email from our rewards partner, Tremendous, usually on the Monday after you earn them. You choose the store from their list. Tremendous gets your email address to send it.')}
-${li('Fair play.', 'Referrals have to be real people who want the newsletter. We can hold back or cancel rewards for sign-ups that look made up (fake, throwaway or duplicate addresses), and our decisions about who counts are final.')}
-${li('Changes.', 'We may change or end the program at any time. Rewards you have already earned will still be sent.')}
+${li('Gift card timing.', 'We count friends every Monday after the newsletter goes out, and send any gift card you\'ve reached then. A reward that needs a closer look (see Fair play) is sent once we\'ve checked it.')}
+${li('Monthly drawing: how to enter.', `Each friend who confirms through your link during a calendar month is one entry in that month's drawing. <strong>Free way to enter without referring anyone:</strong> email ${emailLink('Drawing entry')} with the subject "Drawing entry", your name and the email address you're subscribed with, for one entry in that month's drawing. One free entry per person per month; it must arrive by the last day of the month. Free entries have the same chance of winning as referral entries. Entries don't carry over to the next month.`)}
+${li('Monthly drawing: picking the winner.', `On the first Monday on or after the 2nd of the next month (so between the 2nd and the 8th), one entry is picked at random from all eligible entries for that month, and its owner gets a $${amount} digital gift card. Your odds depend on how many eligible entries there are that month.`)}
+${li('Prize.', `One $${amount} digital gift card each month (approximate retail value $${amount}). No cash or substitute, except that we may substitute a prize of equal or greater value. The gift card issuer's terms apply.`)}
+${li('How rewards arrive.', 'Gift cards are sent by email from our rewards partner, Tremendous, to the address you\'re subscribed with. You choose the store from their list. Tremendous gets your email address to send it. The drawing winner\'s gift card email says they won; it is usually sent the day of the drawing.')}
+${li('Claiming a prize.', 'Redeem a gift card from its email; if you can\'t find it, contact us within 30 days of the drawing. A prize that can\'t be delivered, isn\'t claimed within 30 days, or goes to someone who turns out not to be eligible is forfeited, and we may draw another entry from that month.')}
+${li('Winners list.', `To ask who won a month's drawing, email ${emailLink('Winners list')} within 60 days after that month's drawing.`)}
+${li('Taxes.', 'Winners are responsible for any taxes on their prize. We\'ll send any tax form the law requires.')}
+${li('Fair play.', 'Referrals have to be real people who want the newsletter. We can hold back or cancel rewards for sign-ups that look made up (fake, throwaway or duplicate addresses), disqualify anyone who tampers with the program, and our decisions about who counts are final.')}
+${li('Sharing your link.', 'Share it with people you know or on your own pages, and don\'t spam. If you post your link publicly, say that you get rewards if people sign up (for example, "I get a gift card if you join"). We never send invitations for you.')}
+${li('Liability.', 'By taking part you release us from claims about the program and its prizes, except where the law doesn\'t allow it.')}
+${li('Privacy.', 'Our <a href="/privacy">privacy policy</a> covers the information we use to run the program.')}
+${li('Changes.', 'We may change or end the program at any time, for example because of fraud or technical problems. Rewards you have already earned will still be sent, and a month already under way is drawn from the eligible entries received up to the end.')}
+${li('Governing law.', 'These rules are governed by the laws of the State of Texas.')}
 </ul>
-<p>Questions? <a href="/contact">Get in touch</a>.</p>`
+<p>Questions? Email ${emailLink('Referral rewards')} or <a href="/contact">get in touch</a>.</p>`
   });
 }
 
 function referralText({ siteUrl, code, count = 0 }) {
   if (!code) return [];
-  return ['SHARE THE VIC 361', `Send friends your link: ${refLink(siteUrl, code)}`, referralProgress(count),
+  return [`SHARE ${town.siteName.toUpperCase()}`, `Send friends your link: ${refLink(siteUrl, code)}`, referralProgress(count),
     `Rules: ${siteUrl}/referral-rules`, ''];
 }
 
@@ -668,7 +694,7 @@ ${referral ? referralHtml({ siteUrl, ...referral }) : `<p style="margin:22px 0 0
     `You're in! Every Monday morning you'll get the week's events in ${town.cityState}, and every Thursday the weekend's best.`, '',
     ...(replyAsk ? [replyAskText(true), ''] : []),
     ...(picks.length ? ['COMING UP THIS WEEK', ...picks.map(e =>
-      `- ${dayLabel(e.date)}${e.time ? ' ' + formatTime(e.time) : ''}: ${e.name}${placeText(e) ? ' @ ' + placeText(e) : ''}${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
+      `- ${dayLabel(e.date)}${e.time ? ' ' + formatTime(e.time) : ''}: ${e.name}${placeText(e) ? ' @ ' + placeText(e) : ''}${paidTag(e)}${e.page ? ' ' + siteUrl + e.page : ''}`), ''] : []),
     `This week's events: ${siteUrl}/`, '', ...(referral ? referralText({ siteUrl, ...referral }) : []),
     `Unsubscribe: ${unsubscribeUrl}`, `${town.siteName} · ${address || town.cityState}`
   ].join('\n');

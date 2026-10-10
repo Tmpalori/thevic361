@@ -259,6 +259,13 @@ These matter the moment a second town exists. All keep Victoria's values.
     `NEWSLETTER_CRON_SECRET` (Railway and the town's GitHub Environment),
     the webhook to `/api/email/inbound` (events `email.received`,
     `email.bounced`, `email.complained`) and `RESEND_WEBHOOK_SECRET`.
+  - Business identity for the legal pages (`server/legal.js`):
+    `BUSINESS_LEGAL_NAME` (the LLC's legal name), `BUSINESS_CONTACT_EMAIL`
+    (an inbox someone reads: refunds, privacy and deletion requests, free
+    drawing entries) and `NEWSLETTER_ADDRESS` (a PO box or registered
+    mailbox; also required in every email). Until they're set the terms
+    name the site itself and fall back to the reply-to or news@ address.
+    File a Texas assumed-name certificate for the town's brand name.
   - Stripe: the town's own Stripe account (same login, LLC, EIN and payout
     bank account as Victoria), so checkout, receipts and card statements
     carry the town's name and logo; its business name, logo and statement

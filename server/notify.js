@@ -8,7 +8,7 @@
  * sees the on-page confirmation. Off until RESEND_API_KEY is set.
  */
 
-import { town, dollars } from './town.js';
+import { town } from './town.js';
 import { escHtml, formatDay, safeUrl, currentWeek, addDays, localDateStr, formatTime, placeText } from './seo.js';
 import { C, btn, emailShell, eventRow } from './newsletter.js';
 
@@ -139,7 +139,9 @@ function eventTable(ev, siteUrl) {
 // none of the submitter's free text beyond a shortened event name (escaped):
 // a fixed subject and no description, so it can't be used to mail strangers
 // a message of the sender's choosing. Index.js also caps it per address.
-export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
+// No paid upgrade offer: /submit promises the address isn't used for
+// marketing (the form itself still mentions the paid option).
+export function renderSubmissionReceived(ev, { siteUrl, address }) {
   const short = String(ev.name || '').slice(0, 80);
   const name = short ? (short.length < String(ev.name).length ? `${short}…` : short) : 'your event';
   ev = { ...ev, name, description: '', url: '' };
@@ -152,7 +154,6 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
       `If it's a fit, it goes on <a href="${siteUrl}" style="color:${C.accent};">${town.domain}</a> and can show up in our Monday and Thursday newsletters and our social posts.`,
       'Free listings aren’t guaranteed a spot, and we may tidy up the wording.'
     ]) +
-    box(`<strong>Want it guaranteed and highlighted on its day?</strong> Make it a ${town.pickName} (${dollars(town.business.pickAmount.weekday)} Mon–Thu, ${dollars(town.business.pickAmount.weekend)} Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, `Make it a ${town.pickName}`)}`) +
     p('Need to change a detail? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
   return {
     subject: 'We got your event submission',
@@ -165,7 +166,6 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
       '1. We review every submission, usually within the hour, and we’ll email you when it’s live; some need a closer look and take a day or two.',
       `2. If it's a fit, it goes on ${siteUrl} and can show up in our Monday and Thursday newsletters and our social posts.`,
       '3. Free listings aren’t guaranteed a spot, and we may tidy up the wording.', '',
-      `Want it guaranteed and highlighted on its day? Make it a ${town.pickNamePlain}: ${upgradeUrl}`, '',
       'Need to change a detail? Reply to this email with the fix.',
       contactText(siteUrl)
     ].join('\n')
@@ -178,13 +178,13 @@ export function renderSubmissionReceived(ev, { siteUrl, address, upgradeUrl }) {
 // offer (they bought it) and no "we tidied the wording" (the buyer's words
 // are kept). The newsletter line is worded from `at`, when they bought it,
 // like the confirmation: a pick bought after its week's issue went out
-// isn't promised the star. No `upgradeUrl` leaves the upgrade offer out
-// (a paid pick that was refunded or hidden still gets a plain "you're live").
-export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl, pick = false, at = null }) {
+// isn't promised the star. A free submission gets no upgrade offer (the
+// submit form promises its address isn't used for marketing), and a paid
+// pick that was refunded or hidden gets the same plain "you're live".
+export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, pick = false, at = null }) {
   const name = ev.name || 'your event';
   const link = pageUrl || siteUrl;
   const pickShare = `Share that link anywhere you promote the event. It’s ${pickWhere(ev.date, at)}.`;
-  const offer = !pick && Boolean(upgradeUrl);
   const lead = pick
     ? `Good news: <strong>${escHtml(name)}</strong> is live on ${town.siteName} as a ${town.pickName}, highlighted on its day.`
     : `Good news: <strong>${escHtml(name)}</strong> is now on ${town.siteName}.`;
@@ -194,7 +194,6 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
     `<div style="margin:16px 0;">${btn(link, 'See it on the site')}</div>` +
     p(pick ? escHtml(pickShare)
       : 'Share that link anywhere you promote the event. It can also show up in our Monday and Thursday newsletters and our social posts.') +
-    (!offer ? '' : box(`<strong>Want it to stand out on its day?</strong> Make it a ${town.pickName} (${dollars(town.business.pickAmount.weekday)} Mon–Thu, ${dollars(town.business.pickAmount.weekend)} Fri–Sun). You’ll see a preview before you pay.<br><br>${btn(upgradeUrl, `Make it a ${town.pickName}`)}`)) +
     p(pick ? 'Something wrong? Reply to this email with the fix.'
       : 'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.', `color:${C.muted};font-size:14px;`);
   return {
@@ -207,7 +206,6 @@ export function renderSubmissionLive(ev, { siteUrl, address, pageUrl, upgradeUrl
       `See it: ${link}`,
       pick ? pickShare
         : 'Share that link anywhere you promote the event. It can also show up in our Monday and Thursday newsletters and our social posts.', '',
-      ...(!offer ? [] : [`Want it to stand out on its day? Make it a ${town.pickNamePlain}: ${upgradeUrl}`, '']),
       pick ? 'Something wrong? Reply to this email with the fix.' : 'We may have tidied the wording a little. Something wrong? Reply to this email with the fix.',
       contactText(siteUrl)
     ].join('\n')

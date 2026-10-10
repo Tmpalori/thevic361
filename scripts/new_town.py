@@ -154,6 +154,10 @@ per town (never copy Victoria's), Stripe webhook events, HQ_TOWNS, domain.
     town's GitHub Environment); a webhook to {site}/api/email/inbound with the
     events email.received, email.bounced and email.complained, and its
     RESEND_WEBHOOK_SECRET.
+  - Legal pages (Railway): BUSINESS_LEGAL_NAME (the LLC's legal name),
+    BUSINESS_CONTACT_EMAIL (an inbox you read: refunds, privacy requests,
+    free drawing entries) and NEWSLETTER_ADDRESS (a PO box or registered
+    mailbox; every email needs it too).
   - Stripe: the town's own Stripe account (Stripe → account menu → New
     account), on the same LLC, EIN and payout bank account as Victoria, so
     checkout, receipts and card statements show {settings['site_name']}, not
