@@ -116,6 +116,33 @@ describe('PgStore.claimTown', () => {
   });
 });
 
+describe('claiming the database through an outage', () => {
+  const outage = () => Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+
+  it('retries a database that is down at boot, then claims it', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-guards-'));
+    const store = new FileStore(path.join(tmpDir, 's.json'));
+    const real = store.claimTown.bind(store);
+    let tries = 0;
+    store.claimTown = async id => { if (++tries < 3) throw outage(); return real(id); };
+    await boot({ town: BAY, siteUrl: OK.siteUrl, store, claimRetryMs: [1, 1, 1] });
+    expect(tries).toBe(3);
+    expect((await store._read()).town_meta).toEqual({ town: 'bay' });
+  });
+
+  it('gives up after the retries, and never retries a real error', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-guards-'));
+    const down = new FileStore(path.join(tmpDir, 'a.json'));
+    down.claimTown = async () => { throw outage(); };
+    await expect(boot({ town: BAY, siteUrl: OK.siteUrl, store: down, claimRetryMs: [1, 1] })).rejects.toThrow(/ECONNREFUSED/);
+    const broken = new FileStore(path.join(tmpDir, 'b.json'));
+    let tries = 0;
+    broken.claimTown = async () => { tries++; throw Object.assign(new Error('syntax error'), { code: '42601' }); };
+    await expect(boot({ town: BAY, siteUrl: OK.siteUrl, store: broken, claimRetryMs: [1, 1] })).rejects.toThrow(/syntax error/);
+    expect(tries).toBe(1);
+  });
+});
+
 describe('workflows for another town (until its GitHub Environment exists)', () => {
   it('Victoria may always start them; another town only with TOWN_WORKFLOWS=1', async () => {
     const { townWorkflowsReady } = await import('../server/town.js');
