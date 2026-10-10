@@ -77,3 +77,12 @@ def test_refuses_victoria_and_an_unknown_town(tmp_path, capsys):
     assert launch_check.main(["--town", "victoria"], get=lambda *a, **k: None) == 2
     assert launch_check.main(["--town", "nope", "--towns-dir", str(tmp_path)], get=lambda *a, **k: None) == 2
     assert "Can't read the town" in capsys.readouterr().err
+
+
+def test_reads_TOWNS_DIR_and_refuses_Victoria_in_any_case(tmp_path, monkeypatch, capsys):
+    assert new_town.main([*BAY, "--towns-dir", str(tmp_path)]) == 0
+    monkeypatch.setenv("TOWNS_DIR", str(tmp_path))
+    monkeypatch.delenv("HQ_API_KEY", raising=False)
+    get, _ = fake_site()
+    assert launch_check.main(["--town", "bay"], get=get) == 0
+    assert launch_check.main(["--town", " Victoria "], get=get) == 2
