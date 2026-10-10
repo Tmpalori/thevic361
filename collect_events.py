@@ -2908,6 +2908,7 @@ _WEEKDAY_TOKENS = {"monday", "tuesday", "wednesday", "thursday", "friday", "satu
 SOURCE_RANK = {
     "local_events": 10, "google_sheet": 9, "city_calendar": 8, "library": 8,
     "chamber": 7, "theatre_victoria": 7, "jwelch": 7, "generals": 7,
+    "town_feeds": 8,
     "apify_eventbrite": 5,
     "moonshine": 6, "vtx_artwalk": 6, "allevents": 4, "apify_facebook": 4,
     "apify_facebook_posts": 3, "apify_instagram_posts": 3,
@@ -3857,6 +3858,43 @@ def fetch_generals_events(days_ahead=7):
         _mark_partial("generals", "schedule data not found")
         return []
     print(f"  [Victoria Generals] {len(events)} home games")
+    return events
+
+
+# ─── SOURCE: THE TOWN'S OFFICIAL FEEDS (town.json "feeds") ──────────────────
+
+def fetch_town_feeds(days_ahead=14):
+    """Events from the calendar feeds the town lists in town.json "feeds"
+    (iCalendar, The Events Calendar, Localist; see town_feeds.py). Victoria
+    lists none. A feed that fails or comes back empty marks the source
+    partial and warns, and the others still run."""
+    import town_feeds
+    feeds = town_feeds.check_feeds(TOWN.get("feeds"))
+    if not feeds:
+        return []
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo(TOWN["timezone"])
+    events, counts = [], []
+    for feed in feeds:
+        try:
+            got = town_feeds.fetch_feed(feed, http_get, tz, _WINDOW_START, _WINDOW_END)
+        except Exception as e:
+            _warn(f"[Feeds] {feed['name']} failed: {type(e).__name__}: {e}", feed=feed["name"], url=feed["url"])
+            _mark_partial("town_feeds", f"{feed['name']} failed")
+            counts.append(f"{feed['name']} failed")
+            continue
+        if not got:
+            _warn(f"[Feeds] {feed['name']} returned 0 events", feed=feed["name"], url=feed["url"])
+        for ev in got:
+            if not ev.get("name"):
+                continue
+            ev["icons"] = classify_icons(ev["name"], ev.get("description", ""), ev.get("venue", ""))
+            ev.setdefault("free", False)
+            ev["_feed"] = feed["name"]
+            events.append(ev)
+        counts.append(f"{feed['name']} {len(got)}")
+    _note_source("town_feeds", ", ".join(counts))
+    print(f"  [Feeds] {len(events)} events ({', '.join(counts)})")
     return events
 
 
@@ -5504,6 +5542,8 @@ WEB_SOURCES = [
     ("jwelch", "fetch_jwelch_events", False),
     ("theatre_victoria", "fetch_theatre_victoria_events", False),
     ("generals", "fetch_generals_events", False),
+    # The town's official calendar feeds (town.json "feeds"; none for Victoria).
+    ("town_feeds", "fetch_town_feeds", False),
     ("allevents", "fetch_allevents_events", True),
     ("gemini_search", "fetch_gemini_events", False),          # only with GEMINI_API_KEY
     ("apify_facebook", "fetch_apify_facebook_events", False),  # only with APIFY_TOKEN

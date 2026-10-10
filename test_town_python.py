@@ -153,7 +153,7 @@ def test_web_sources_another_town():
     import collect_events as ce
     bay = town_mod.town_config(town=BAY)
     assert [n for n, _, _ in ce.enabled_web_sources(bay)] == [
-        "allevents", "gemini_search", "apify_facebook", "apify_eventbrite", "apify_facebook_posts", "apify_instagram_posts"]
+        "town_feeds", "allevents", "gemini_search", "apify_facebook", "apify_eventbrite", "apify_facebook_posts", "apify_instagram_posts"]
     picked = town_mod.town_config(town={**BAY, "enabledSources": ["gemini_search", "allevents"]})
     assert [n for n, _, _ in ce.enabled_web_sources(picked)] == ["allevents", "gemini_search"]  # run order, not list order
     with pytest.raises(ValueError, match="unknown sources in enabled_sources: nope"):
