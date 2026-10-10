@@ -36,26 +36,28 @@ on:
 
 permissions:
   contents: read
-
-# The town this run is for (MULTI_CITY_PLAN.md 3.1). Scheduled runs and a
-# dispatch without the input are Victoria's; town.py reads TOWN.
-env:
-  TOWN: ${{ inputs.town || 'victoria' }}
-  # Another town's Slack posts carry its [tag] (scripts/slack_notify.py;
-  # vars.SLACK_TOWN_TAG, or its city when unset). Victoria: none, as before.
-  SLACK_TOWN_TAG: ${{ inputs.town && inputs.town != 'victoria' && vars.SLACK_TOWN_TAG || '' }}
+  actions: read            # the gate lists the collect run's jobs
 
 jobs:
+  # Whether to check, and which towns (MULTI_CITY_PLAN.md 3.4). After a
+  # Weekly Collect: each town whose own collect job succeeded ("collect
+  # <town>"), so another town's collect never starts Victoria's check and a
+  # town that failed isn't checked. The fallback cron is Victoria's (each
+  # town's site dispatches its own check); a manual run, the town asked for.
   gate:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     outputs:
       run: ${{ steps.g.outputs.run }}
+      towns: ${{ steps.g.outputs.towns }}
     steps:
       - id: g
         env:
           EVENT: ${{ github.event_name }}
+          INPUT_TOWN: ${{ inputs.town }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          GH_TOKEN: ${{ github.token }}
           SCHEDULE: ${{ github.event.schedule }}
           SITE: ${{ vars.SITE_URL || 'https://www.thevic361.com' }}
           CDT_CRON: '43 11 * * 1'
@@ -74,13 +76,38 @@ jobs:
               echo "The site's scheduler already ran Monday's check; skipping this late cron run."; run=false
             fi
           fi
+          towns=$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "${INPUT_TOWN:-victoria}")
+          if [ "$EVENT" = "workflow_run" ]; then
+            # Jobs from before the matrix were plain "collect": Victoria's.
+            towns=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" --jq \
+              '[.jobs[] | select(.conclusion == "success") | .name | select(. == "collect" or startswith("collect ")) | if . == "collect" then "victoria" else ltrimstr("collect ") end] | unique | tojson') || {
+              # Can't tell which towns collected: Victoria's check, as before
+              # the matrix, if the whole run succeeded.
+              echo "::warning::Couldn't list the collect run's jobs."
+              if [ "$CONCLUSION" = "success" ]; then towns='["victoria"]'; else towns='[]'; fi
+            }
+            [ "$towns" = "[]" ] && { echo "No town's collect succeeded; nothing to check."; run=false; }
+          fi
+          echo "Towns: $towns"
+          echo "towns=$towns" >> "$GITHUB_OUTPUT"
           echo "run=$run" >> "$GITHUB_OUTPUT"
 
   check:
+    name: check ${{ matrix.town }}
     needs: gate
     if: needs.gate.outputs.run == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        town: ${{ fromJSON(needs.gate.outputs.towns) }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      # The town this job is for (MULTI_CITY_PLAN.md 3.1); town.py reads TOWN.
+      TOWN: ${{ matrix.town }}
+      # Another town's Slack posts carry its [tag] (scripts/slack_notify.py;
+      # vars.SLACK_TOWN_TAG, or its city when unset). Victoria: none, as before.
+      SLACK_TOWN_TAG: ${{ matrix.town != 'victoria' && vars.SLACK_TOWN_TAG || '' }}
     steps:
       - uses: actions/checkout@v6
 

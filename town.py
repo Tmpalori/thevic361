@@ -238,12 +238,50 @@ def repo_path(key, town=None):
 TOWN = town_config()
 
 
+def scheduled_towns(towns_dir=None, warn=None):
+    """The towns the scheduled workflow runs cover (MULTI_CITY_PLAN.md 3.4):
+    Victoria first, always, then each town in towns/index.json whose
+    town.json says "workflows": true. That flag goes in with the town's
+    GitHub Environment (3.3); until then its scheduled runs would use
+    Victoria's repo-level settings. A missing or broken index or town.json
+    is skipped (with a warning), never a reason to drop Victoria's run."""
+    warn = warn or (lambda msg: None)
+    base = towns_dir or os.path.join(ROOT, "towns")
+    out = [VICTORIA["id"]]
+    try:
+        with open(os.path.join(base, "index.json"), encoding="utf-8") as f:
+            listed = json.load(f).get("towns", [])
+    except FileNotFoundError:
+        return out
+    except (OSError, ValueError, AttributeError) as e:
+        warn(f"towns/index.json unreadable ({e}); running Victoria only")
+        return out
+    for slug in listed if isinstance(listed, list) else []:
+        if not isinstance(slug, str) or slug in out or not re.match(r"^[a-z0-9-]+$", slug):
+            continue
+        try:
+            with open(os.path.join(base, slug, "town.json"), encoding="utf-8") as f:
+                raw = json.load(f)
+            if raw.get("workflows") is not True:
+                continue
+            _complete(slug, dict(raw))
+        except (OSError, ValueError, AttributeError) as e:
+            warn(f"towns/{slug}/town.json skipped ({e})")
+            continue
+        out.append(slug)
+    return out
+
+
 if __name__ == "__main__":
     # `python3 town.py paths >> "$GITHUB_ENV"`: the workflows' file paths for
     # TOWN (TOWN_DIR, TOWN_CANDIDATES, TOWN_EVENTS, TOWN_SOCIAL…).
+    # `python3 town.py scheduled`: the scheduled runs' towns as a JSON list.
     import sys
+    if sys.argv[1:] == ["scheduled"]:
+        print(json.dumps(scheduled_towns(warn=lambda m: print(f"::warning::{m}", file=sys.stderr))))
+        sys.exit(0)
     if sys.argv[1:] != ["paths"]:
-        sys.exit("usage: python3 town.py paths")
+        sys.exit("usage: python3 town.py paths | scheduled")
     raw = os.environ.get("TOWN", "")
     if raw and raw != raw.strip().lower():
         # The workflows' concurrency groups and cache keys use the input as
