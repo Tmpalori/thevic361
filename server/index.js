@@ -2546,6 +2546,14 @@ const isMain = (() => {
   } catch (_) { return false; }
 })();
 
+export function shutdown(server, { exit = code => process.exit(code), graceMs = 8000, log = console.log } = {}) {
+  log('[thevic361] SIGTERM: finishing requests, then exiting');
+  const timer = setTimeout(() => exit(0), graceMs);
+  if (timer.unref) timer.unref();
+  server.close(() => { clearTimeout(timer); exit(0); });
+  if (server.closeIdleConnections) server.closeIdleConnections();
+}
+
 if (isMain) {
   const port = Number(process.env.PORT) || 3000;
   const cfg = slackConfig();
@@ -2563,9 +2571,13 @@ if (isMain) {
   createApp().then(({ app, storeBundle }) => {
     // No "deployed" ping: every merge redeploys, so it was noise. A failed
     // boot or a crash still alerts (below and above).
-    app.listen(port, () => {
+    const server = app.listen(port, () => {
       console.log(`[thevic361] listening on :${port} (storage=${storeBundle.kind})`);
     });
+    // Railway stops the old copy with SIGTERM on every deploy. Finish the
+    // requests in flight and exit 0, so npm doesn't log the stop as an
+    // error ("npm error signal SIGTERM"). Cut off after 8s either way.
+    process.once('SIGTERM', () => shutdown(server));
   }).catch(err => {
     console.error('[thevic361] failed to start:', err);
     bootSlack.alert('boot', 'Server failed to start', (err && err.message) || String(err))
