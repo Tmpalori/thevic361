@@ -2295,6 +2295,11 @@ export async function createApp(opts = {}) {
       { key: 'stripe', label: 'Sponsor payments (Stripe)', ok: stripeCfg.enabled, level: 'recommended',
         fix: 'In Stripe: create a restricted key (Checkout Sessions, Products and Prices: write) and a webhook to ' + siteUrl +
           '/api/stripe/webhook on API version 2026-09-30.endive. Put them in Railway as STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.' },
+      // Production with Stripe's test keys: anyone can book with Stripe's
+      // public test card. Fine for a new town's launch test, never after.
+      ...(stripeCfg.production && stripeCfg.testKey ? [{ key: 'stripe_test_key', label: 'Stripe is in test mode', ok: false, level: 'recommended',
+        fix: 'STRIPE_SECRET_KEY in Railway is a test key (sk_test_ or rk_test_), so sponsors can book with Stripe\'s test card and nothing is charged. ' +
+          'Once the launch test checkout is done, switch to the live restricted key and the live webhook endpoint\'s STRIPE_WEBHOOK_SECRET.' }] : []),
       { key: 'event_check', label: 'Event check hides church events, non-events and duplicates',
         ok: Boolean(eventCheckSecret), level: 'recommended', link: ghSecrets,
         fix: 'Set EVENT_CHECK_SECRET in Railway and as a GitHub secret (any long random string, the same in both). Until then the check only reports to Slack.' },

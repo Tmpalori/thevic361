@@ -1937,7 +1937,7 @@
   // ─── SPONSORS TAB ────────────────────────────────────────────────────
   // Paid orders from the Stripe checkout (server/sponsors.js).
   const SPONSOR_KIND = { weekly: 'Weekly sponsor', partner: 'Venue partner', featured: 'Vic’s Pick event' };
-  const SPONSOR_STATUS = { paid: 'Live', active: 'Live', pending: 'Awaiting payment', hidden: 'Hidden', cancelled: 'Cancelled', paused: 'Payment issue', refunded: 'Refunded', processing: 'Payment processing', conflict: 'Double-booked: refund', late: 'Paid after its date: refund', failed: 'Checkout failed' };
+  const SPONSOR_STATUS = { paid: 'Live', active: 'Live', pending: 'Awaiting payment', hidden: 'Hidden', cancelled: 'Cancelled', paused: 'Payment issue', refunded: 'Refunded', disputed: 'Disputed', processing: 'Payment processing', conflict: 'Double-booked: refund', late: 'Paid after its date: refund', failed: 'Checkout failed' };
 
   function sponsorDetail(o) {
     if (o.kind === 'weekly') return 'Week of ' + o.week_start + (o.sponsor ? ': ' + o.sponsor.text : '');
@@ -2055,11 +2055,13 @@
               '<td>' + escapeHtml(SPONSOR_KIND[o.kind] || o.kind) + '</td>' +
               '<td>' + escapeHtml(o.business || '') + '<br><small>' + escapeHtml(o.email || '') + '</small></td>' +
               '<td>' + escapeHtml(sponsorDetail(o)) + logo + '</td>' +
-              '<td>$' + escapeHtml(String(Math.round((o.amount || 0) / 100))) + (o.test ? '<br><small>Test, not counted</small>' : '') + '</td>' +
+              '<td>$' + escapeHtml(String(Math.round((o.amount || 0) / 100))) + (o.test ? '<br><small>Test, not counted</small>' : '') +
+                (o.refunded_cents > 0 && o.status !== 'refunded' ? '<br><small>$' + escapeHtml((o.refunded_cents / 100).toFixed(2)) + ' refunded</small>' : '') + '</td>' +
               // on_site false: a paid Vic's Pick whose event the pin can't
               // find on the site (not approved yet, rejected, or edited).
               '<td>' + (o.on_site === false
                 ? '<strong class="sponsor-not-live">Paid, not on the site yet</strong><br><small>Approve its event in Submissions</small>'
+                : o.status === 'disputed' && o.dispute && o.dispute.status && o.dispute.status !== 'open' ? 'Dispute lost'
                 : escapeHtml(SPONSOR_STATUS[o.status] || o.status)) + '</td><td>' + btn + '</td></tr>';
           }).join('')
         : '<tr><td class="traffic-empty">No orders yet.</td></tr>';
