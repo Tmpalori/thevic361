@@ -210,7 +210,7 @@ function sparkline(values, { w = 120, h = 34 } = {}) {
 
 // Revenue per month, one stacked column per month, a segment per town.
 function revenueColumns(months, { w = 640, h = 240 } = {}) {
-  if (!months.length) return '<p class="empty">No revenue yet.</p>';
+  if (!months.some(m => m.towns.some(t => t.cents > 0))) return '<p class="empty">No revenue in the last six months yet.</p>';
   const L = 52, R = 12, T = 22, B = 28;
   const pw = w - L - R, ph = h - T - B;
   const totals = months.map(m => m.towns.reduce((a, t) => a + t.cents, 0));
