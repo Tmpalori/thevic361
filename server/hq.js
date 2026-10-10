@@ -70,7 +70,10 @@ export async function buildSummary({ store, nowFn, town, siteUrl, commit, getEve
   const sends = await safe(() => store.listNewsletterSends(4), [], 'issues');
   const weekKeys = sends.map(s => s.week_key);
   const opens = weekKeys.length ? await safe(() => store.countEmailOpens(weekKeys), {}, 'issues') : {};
-  const oldest = sends.map(s => String(s.sent_at || '').slice(0, 10)).filter(Boolean).sort()[0] || today;
+  // Postgres returns sent_at as a Date (String() of one reads "Fri Oct 09
+  // ..."), the file store as an ISO string: both to the town's YYYY-MM-DD.
+  const dayOf = v => { const d = v ? new Date(v) : null; return d && !Number.isNaN(d.getTime()) ? localDateStr(d) : null; };
+  const oldest = sends.map(s => dayOf(s.sent_at)).filter(Boolean).sort()[0] || today;
   const rows = await safe(() => store.listTraffic(oldest), [], 'issues');
   const events = await safe(getEvents, [], 'events');
   const lastMonthDay = addDays(today.slice(0, 7) + '-01', -1);
