@@ -192,3 +192,33 @@ def test_paths_another_town(bay):
     kit = bay["social_kit"]
     assert os.path.normpath(kit.OUT_DIR) == os.path.join(HERE, "towns", "bay", "public", "social", "latest")
     assert os.path.normpath(kit.VENUES_FILE) == os.path.join(HERE, "towns", "bay", "venues.json")
+
+
+def test_victoria_has_no_budget_ceiling(monkeypatch):
+    import collect_events as ce
+    assert "limits" not in town_mod.VICTORIA
+    monkeypatch.setenv("EVENTBRITE_MAX", "100")
+    assert ce._resolve_int_env("EVENTBRITE_MAX", 60) == 100   # the repo variable, as before
+    monkeypatch.delenv("EVENTBRITE_MAX")
+    assert ce._resolve_int_env("EVENTBRITE_MAX", 60) == 60
+
+
+def test_another_town_is_capped_below_shared_variables(bay, monkeypatch):
+    # MULTI_CITY_PLAN.md 3.6: repo variables are Victoria's and the Apify
+    # month is shared, so another town gets ceilings.
+    ce = bay["collect_events"]
+    assert ce.TOWN["limits"] == town_mod.DEFAULT_LIMITS
+    monkeypatch.setenv("EVENTBRITE_MAX", "100")
+    assert ce._resolve_int_env("EVENTBRITE_MAX", 60) == 20
+    monkeypatch.setenv("EVENTBRITE_MAX", "5")
+    assert ce._resolve_int_env("EVENTBRITE_MAX", 60) == 5
+    monkeypatch.delenv("FB_POSTS_MAX_VENUES", raising=False)
+    assert ce._resolve_int_env("FB_POSTS_MAX_VENUES", 40) == 10
+
+
+def test_town_limits_override_the_defaults_and_are_checked():
+    t = town_mod.town_config(town={**BAY, "limits": {"EVENTBRITE_MAX": 5}})
+    assert t["limits"] == {**town_mod.DEFAULT_LIMITS, "EVENTBRITE_MAX": 5}
+    for bad in ({"EVENTBRITE_MAX": 0}, {"EVENTBRITE_MAX": "20"}, {"EVENTBRITE_MAX": True}, ["x"]):
+        with pytest.raises(ValueError, match="limits"):
+            town_mod.town_config(town={**BAY, "limits": bad})
