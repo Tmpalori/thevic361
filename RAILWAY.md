@@ -37,6 +37,21 @@ good ones publish automatically unless `SUBMISSION_AUTOAPPROVE=0`.
    `SUBMISSION_REVIEW_SECRET`) must match between Railway and the GitHub
    secrets of the same name. Give each its own value; see AGENTS.md
    "Security notes".
+5. **Stripe** (sponsor checkout; each town has its own Stripe account and
+   endpoint). Live restricted key (`rk_live_`) in production as
+   `STRIPE_SECRET_KEY`; a test key there shows a Setup checklist warning,
+   and with a live key a test-mode payment is never fulfilled. Webhook
+   endpoint `<SITE_URL>/api/stripe/webhook` on API version
+   `2026-09-30.endive`, its signing secret as `STRIPE_WEBHOOK_SECRET`,
+   subscribed to: `checkout.session.completed`,
+   `checkout.session.async_payment_succeeded`,
+   `checkout.session.async_payment_failed`, `checkout.session.expired`,
+   `customer.subscription.updated`, `customer.subscription.deleted`,
+   `invoice.payment_failed`, `invoice.paid`, `charge.refunded`,
+   `charge.dispute.created`, `charge.dispute.closed`,
+   `radar.early_fraud_warning.created`. An endpoint made before
+   `charge.dispute.closed` and `invoice.paid` were added must add them, or
+   a won dispute stays "Disputed" and partner renewals can't be matched.
 
 ## Smoke test after a deploy
 
