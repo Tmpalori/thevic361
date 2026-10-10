@@ -70,7 +70,10 @@ _COUNTY_ALT = ("|" + _re_words(TOWN["county"])) if TOWN["county"] else ""
 _CITY_WORDS = TOWN["city"].lower().split()
 _PLACE_WORDS = [*_CITY_WORDS, TOWN["state"].lower(), TOWN["state_name"].lower()]
 _ZIP_STATE_DIGIT = TOWN["area_zips"][0][0] if TOWN["area_zips"] else r"\d"
-_ZIP_AREA_PREFIX = os.path.commonprefix(TOWN["area_zips"])[:2] if TOWN["area_zips"] else r"\d\d"
+# The area's ZIPs' shared first two digits ("77" for Victoria). Fewer in
+# common: the shared first digit then any, else any two digits.
+_ZIP_COMMON = os.path.commonprefix(TOWN["area_zips"])[:2] if TOWN["area_zips"] else ""
+_ZIP_AREA_PREFIX = _ZIP_COMMON if len(_ZIP_COMMON) == 2 else (_ZIP_COMMON + r"\d" if _ZIP_COMMON else r"\d\d")
 _PLACE_FULL = f"{TOWN['city_state_long']} ({TOWN['county']})" if TOWN["county"] else TOWN["city_state_long"]
 
 
@@ -2406,12 +2409,12 @@ VICTORIA_AREA_ZIPS = set(TOWN["area_zips"])  # the town's ZIP codes (the name is
 # Towns near enough to show up in regional feeds but not ours. Street names
 # like "Houston Hwy" or "Port Lavaca Dr" are real Victoria addresses, so a
 # match followed by a street suffix doesn't count.
-_OTHER_TOWNS = list(TOWN["other_towns"])
+_OTHER_TOWNS = [t for t in TOWN["other_towns"] if str(t).strip()]
 _STREET_SUFFIX = r"(?:hwy|highway|st|street|ave|avenue|rd|road|dr|drive|blvd|ln|lane|hwy\.|loop|pkwy)\b"
 _OTHER_TOWN_RE = re.compile(
     r"\b(" + "|".join(re.escape(t) for t in _OTHER_TOWNS) + r")\b(?!\s+" + _STREET_SUFFIX + r")",
     re.IGNORECASE,
-)
+) if _OTHER_TOWNS else re.compile(r"(?!)")   # none listed: never matches (an empty group matched everything)
 
 
 def out_of_area_reason(ev):
@@ -2422,14 +2425,16 @@ def out_of_area_reason(ev):
     Victoria still passes.
     """
     loc = " ".join(str(ev.get(k) or "") for k in ("venue", "address"))
-    for z in re.findall(r"\b(7\d{4})\b", loc):
+    # A ZIP in the town's state range that isn't one of its own. A town
+    # without area_zips has nothing to compare, so the check is off.
+    for z in re.findall(r"\b(" + _ZIP_STATE_DIGIT + r"\d{4})\b", loc) if VICTORIA_AREA_ZIPS else ():
         if z not in VICTORIA_AREA_ZIPS:
             return f"zip {z}"
     m = _OTHER_TOWN_RE.search(loc)
     if m and not re.search(r"\b" + _CITY_RE + r"\b", loc, re.IGNORECASE):
         return f"town {m.group(1).lower()}"
-    m = re.search(r",\s*(" + "|".join(re.escape(t) for t in _OTHER_TOWNS) + r"),?\s*(?:tx|texas)\b",
-                  str(ev.get("description") or ""), re.IGNORECASE)
+    m = _OTHER_TOWNS and re.search(r",\s*(" + "|".join(re.escape(t) for t in _OTHER_TOWNS) + r"),?\s*(?:" + _STATE_RE + r")\b",
+                                   str(ev.get("description") or ""), re.IGNORECASE)
     if m:
         return f"town {m.group(1).lower()}"
     return None
@@ -2500,7 +2505,7 @@ def _street_key(addr):
         "n", "s", "e", "w", "north", "south", "east", "west",
         "st", "street", "ave", "avenue", "rd", "road", "dr", "drive", "blvd", "ln", "lane",
         "suite", "ste", *_PLACE_WORDS, "united", "states"}]
-    words = [w for w in words if not re.fullmatch(r"7\d{4}", w)]
+    words = [w for w in words if not re.fullmatch(_ZIP_STATE_DIGIT + r"\d{4}", w)]
     return " ".join(words[:2])
 
 
@@ -4358,7 +4363,9 @@ def _resolve_int_env(name, default):
     """
     n = _int_env(name, default)
     cap = (TOWN.get("limits") or {}).get(name)
-    return min(n, cap) if isinstance(cap, int) and cap > 0 else n
+    if not (isinstance(cap, int) and cap > 0):
+        return n
+    return cap if n is None else min(n, cap)   # None: no cap of its own (FB posts' default)
 
 
 def _int_env(name, default):
