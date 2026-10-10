@@ -235,3 +235,56 @@ def test_library_feed_goes_through_the_library_cap():
     assert not collect_events._is_library_event({**ev, "_library": False})
     with pytest.raises(ValueError, match="library must be"):
         town_feeds.check_feeds([{"name": "a", "type": "ics", "url": "https://a", "library": "yes"}])
+
+
+WEEKLY = (
+    "BEGIN:VEVENT\nUID:story\nSUMMARY:Storytime\nDTSTART;TZID=America/Chicago:20250107T100000\n"
+    "DTEND;TZID=America/Chicago:20250107T103000\nRRULE:FREQ=WEEKLY;BYDAY=TU,TH\n"
+    "EXDATE;TZID=America/Chicago:20261015T100000\nEND:VEVENT\n"
+    # The Oct 20 instance moved to Oct 21 (listed on its own).
+    "BEGIN:VEVENT\nUID:story\nRECURRENCE-ID;TZID=America/Chicago:20261020T100000\nSUMMARY:Storytime\n"
+    "DTSTART;TZID=America/Chicago:20261021T110000\nEND:VEVENT\n"
+    "BEGIN:VEVENT\nUID:club\nSUMMARY:Teen Club\nDTSTART:20261001T210000Z\nRRULE:FREQ=DAILY;INTERVAL=7;COUNT=3\nEND:VEVENT\n"
+)
+
+
+def test_ics_expands_weekly_and_daily_repeats():
+    evs = town_feeds.parse_ics(WEEKLY, CT, START, END)
+    assert [(e["name"], e["date"], e["time"]) for e in evs] == [
+        ("Storytime", "2026-10-13", "10:00 AM – 10:30 AM"),   # Oct 15 is an EXDATE, Oct 20 moved
+        ("Storytime", "2026-10-22", "10:00 AM – 10:30 AM"),
+        ("Storytime", "2026-10-21", "11:00 AM"),
+        ("Teen Club", "2026-10-15", "4:00 PM"),               # Oct 1, 8, 15; COUNT=3 ends it
+    ]
+
+
+def test_exclude_and_place():
+    evs = [{"name": "SNAP Available", "venue": "Private Location (sign in to view)"},
+           {"name": "Senior Recital", "venue": "Private Location (sign in to view)", "address": "1 Harrison Plaza"},
+           {"name": "Teen D&D", "venue": "", "address": ""}]
+    kept = town_feeds.excluded(evs, r"snap|^(?!.*recital).*private location")
+    assert [e["name"] for e in kept] == ["Senior Recital", "Teen D&D"]
+    town_feeds.place(kept, "Public Library", "350 N Wood Ave")
+    assert [(e["venue"], e.get("address")) for e in kept] == [("", "1 Harrison Plaza"), ("Public Library", "350 N Wood Ave")]
+    with pytest.raises(ValueError, match="regular expression"):
+        town_feeds.check_feeds([{"name": "a", "type": "ics", "url": "https://a", "exclude": "("}])
+    with pytest.raises(ValueError, match="timeout"):
+        town_feeds.check_feeds([{"name": "a", "type": "ics", "url": "https://a", "timeout": 999}])
+
+
+def test_growthzone_reads_each_events_calendar_file():
+    month = '<a href="https://c.example/events/details/fall-fest-1?calendarMonth=2026-10-01">x</a>' * 2
+    ics = "BEGIN:VEVENT\nSUMMARY:Fall Fest\nDTSTART:20261017T140000Z\nLOCATION:Mobile Plaza\\, 18 Mobile St\nEND:VEVENT\n"
+    calls = []
+
+    def get(u):
+        calls.append(u)
+        return _Resp(month if "/calendar/" in u else ics)
+
+    evs = town_feeds.fetch_feed({"name": "c", "type": "growthzone", "url": "https://c.example"}, get, CT, START, END)
+    assert [(e["name"], e["date"], e["time"], e["venue"]) for e in evs] == [("Fall Fest", "2026-10-17", "9:00 AM", "Mobile Plaza")]
+    assert calls == ["https://c.example/events/calendar/2026-10-01", "https://c.example/events/addtocalendar/fall-fest-1?format=ICal"]
+
+
+def test_page_builder_shortcodes_are_stripped():
+    assert town_feeds.clean("[et_pb_section][et_pb_text]Patchwork quilts[/et_pb_text][/et_pb_section]") == "Patchwork quilts"

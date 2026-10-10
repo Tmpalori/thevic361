@@ -3878,7 +3878,9 @@ def fetch_town_feeds(days_ahead=14):
     events, counts = [], []
     for feed in feeds:
         try:
-            got = town_feeds.fetch_feed(feed, http_get, tz, _WINDOW_START, _WINDOW_END)
+            get = (lambda u, t=feed["timeout"]: http_get(u, timeout=t)) if feed.get("timeout") else http_get
+            got = town_feeds.excluded(town_feeds.fetch_feed(feed, get, tz, _WINDOW_START, _WINDOW_END), feed.get("exclude"))
+            got = town_feeds.place(got, feed.get("venue", ""), feed.get("address", ""))
         except Exception as e:
             _warn(f"[Feeds] {feed['name']} failed: {type(e).__name__}: {e}", feed=feed["name"], url=feed["url"])
             _mark_partial("town_feeds", f"{feed['name']} failed")
