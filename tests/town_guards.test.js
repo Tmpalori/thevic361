@@ -115,3 +115,32 @@ describe('PgStore.claimTown', () => {
     expect(p.seen.some(t => /town_meta/.test(t))).toBe(false);
   });
 });
+
+describe('workflows for another town (until its GitHub Environment exists)', () => {
+  it('Victoria may always start them; another town only with TOWN_WORKFLOWS=1', async () => {
+    const { townWorkflowsReady } = await import('../server/town.js');
+    expect(townWorkflowsReady(VICTORIA, {})).toBe(true);
+    expect(townWorkflowsReady(bay, {})).toBe(false);
+    expect(townWorkflowsReady(bay, { TOWN_WORKFLOWS: '1' })).toBe(true);
+  });
+
+  it("another town's Pull Now answers 409 instead of dispatching", async () => {
+    const http = (await import('node:http')).default;
+    const calls = [];
+    const { app } = await boot({ town: BAY, siteUrl: OK.siteUrl, githubToken: 'gh', githubOwner: 'o', githubRepo: 'r',
+      fetch: async (url, init) => { calls.push(url); return { ok: true, status: 204, json: async () => ({}) }; } });
+    const server = http.createServer(app);
+    await new Promise(r => server.listen(0, r));
+    try {
+      const base = `http://127.0.0.1:${server.address().port}`;
+      const login = await (await fetch(base + '/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'a', password: 'b' }) })).json();
+      const r = await fetch(base + '/api/admin/trigger-collect', { method: 'POST', headers: { Authorization: `Bearer ${login.token}` } });
+      expect(r.status).toBe(409);
+      expect((await r.json()).error).toBe('town-workflows-not-ready');
+      expect(calls.filter(u => /dispatches/.test(u))).toEqual([]);
+    } finally {
+      await new Promise(r => server.close(r));
+    }
+  });
+});

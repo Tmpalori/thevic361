@@ -224,6 +224,25 @@ def test_town_limits_override_the_defaults_and_are_checked():
             town_mod.town_config(town={**BAY, "limits": bad})
 
 
+def test_another_town_refuses_victorias_site_url():
+    bay = town_mod.town_config(town=BAY)
+    with pytest.raises(ValueError, match="SITE_URL is Victoria's"):
+        town_mod.site_url(bay, {"SITE_URL": "https://www.thevic361.com"})
+    assert town_mod.site_url(bay, {}) == "https://www.thebay979.com"
+    assert town_mod.site_url(town_mod.VICTORIA, {"SITE_URL": "https://www.thevic361.com/"}) == "https://www.thevic361.com"
+
+
+def test_paths_refuses_a_slug_typed_in_the_wrong_case():
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "TOWNS_DIR"}
+    r = subprocess.run([sys.executable, os.path.join(HERE, "town.py"), "paths"], env={**env, "TOWN": "Victoria"},
+                       capture_output=True, text=True)
+    assert r.returncode != 0 and 'use the lowercase slug, e.g. "victoria"' in r.stderr
+    r = subprocess.run([sys.executable, os.path.join(HERE, "town.py"), "paths"], env={**env, "TOWN": "victoria"},
+                       capture_output=True, text=True)
+    assert r.returncode == 0 and "TOWN_CANDIDATES=candidates.json" in r.stdout
+
+
 @pytest.fixture
 def town_as(tmp_path, monkeypatch):
     """Reload town.py and the collector as a town.json of the test's choosing."""

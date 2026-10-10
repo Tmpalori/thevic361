@@ -193,9 +193,16 @@ These matter the moment a second town exists. All keep Victoria's values.
       secrets, `NTFY_TOPIC`, `SOCIAL_AUTOPOST`, source toggles and digest
       recipient. Victoria's jobs keep reading repo-level secrets (an
       Environment's secrets override repo secrets of the same name).
+      Then set `TOWN_WORKFLOWS=1` on the town's Railway service: until then
+      its scheduler and Pull Now start no workflows (they'd run on
+      Victoria's repo-level `SITE_URL` and secrets), and `town.py`
+      `site_url()` stops any script run as another town on Victoria's URL.
 - [ ] **3.4 Town matrix** from `towns/index.json` with `fail-fast: false`,
       so one town failing can't cancel Victoria's run. The DST gate reads
       the town's timezone. Stagger cron minutes per town.
+      Event Check's `workflow_run` trigger has no inputs, so every town's
+      collect currently starts Victoria's check: gate it on the triggering
+      run's town here.
 - [ ] **3.5 Scheduler dispatch** passes `town` and the `ran` gate calls the
       town's own `SITE_URL`. (Dispatch done: `townInputs()`; the gates'
       `SITE_URL` comes with the town's Environment in 3.3.)
