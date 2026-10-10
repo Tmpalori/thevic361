@@ -98,8 +98,10 @@ describe('the dashboard', () => {
     expect(html).toContain('database, setup: login');
     expect(html).toContain('unreachable');
     expect(html).toContain('1 not answering');
-    expect(html).toContain('<b>400</b><span>subscribers</span>');
-    expect(html).toContain('<b>$600</b><span>revenue this month</span>');
+    expect(html).toContain('<small>Active subscribers</small>400</div>');
+    expect(html).toContain('<div class="tlabel">Revenue this month</div><div class="tvalue">$600</div>');
+    // A town that doesn't report a number (an older summary) reads —, not 0.
+    expect(html).toContain('<div class="tlabel">Ad spend, 30 days</div><div class="tvalue">—</div>');
     for (const key of [KEY_VIC, KEY_BAY, 'tulsa-key']) expect(html).not.toContain(key);
     const json = await (await fetch(base + '/api/towns', h)).json();
     expect(json.totals).toMatchObject({ towns: 3, down: 1, subscribers: 400, net7: 3, revenueCents: 60000, openWeeks: 4, picks: 6, waiting: 2, openRate: 42.5 });
@@ -127,9 +129,62 @@ describe('the dashboard', () => {
 
 describe('rows', () => {
   it('reads a summary into a row, and an error into a red one', () => {
-    expect(rowOf({ slug: 'x', siteUrl: 'https://x.example', error: 'key refused' })).toEqual({ slug: 'x', siteUrl: 'https://x.example', error: 'key refused' });
+    expect(rowOf({ slug: 'x', siteUrl: 'https://x.example', error: 'key refused' }, 2)).toEqual({ slug: 'x', siteUrl: 'https://x.example', color: 2, error: 'key refused' });
     const r = rowOf({ slug: 'v', siteUrl: 'https://v.example', summary: summary('V') });
     expect(r).toMatchObject({ subscribers: 100, net7: 5, openRate: 50, revenueCents: 30000, openWeeks: 2, picks: 3, waiting: 1, upcoming: 40, problems: [] });
     expect(totalsOf([r, { error: 'x' }])).toMatchObject({ towns: 2, down: 1, subscribers: 100, openRate: 50 });
+  });
+});
+
+describe('the charts and town cards', () => {
+  const days = n => Array.from({ length: n }, (_, i) => ({ day: `2026-09-${String(10 + i).padStart(2, '0')}`, active: 100 + i * 3 }));
+  const full = (name, extra = {}) => summary(name, {
+    subscribers: { active: 160, pending: 4, net_7_days: 21, net_30_days: 60, joined_30_days: 70, left_30_days: 10,
+      sources_30_days: { Site: 40, 'Facebook ads': 25, '<b>x</b>': 5 }, daily: days(21),
+      goals: { subscribers: { active: 160, goal: 5000, per_week: 21, eta: '2027-06-01' }, revenue: { goal_cents: 300000 } } },
+    issues: [{ sent_at: '2026-10-08T13:00:00Z', edition: 'monday', sent: 150, open_rate: 51.2, click_rate: 8.1 },
+      { sent_at: '2026-10-05T13:00:00Z', edition: 'weekend', sent: 140, open_rate: 47 }],
+    revenue: { month_to_date: { cents: 45000, recurring_cents: 10000 }, last_month: { cents: 30000 },
+      months: [{ month: '2026-09', cents: 30000 }, { month: '2026-10', cents: 45000 }] },
+    ads: { spend_30_days: 100, cost_per_sub_30_days: 4 },
+    sponsors: { weeks: [{ week_start: '2026-10-12', booked: true }, { week_start: '2026-10-19', booked: false }],
+      weeks_booked_next_4: 1, weeks_open_next_4: 1, picks_sold_this_month: 2 },
+    ...extra
+  });
+
+  it('draws trends, revenue, sources and each town, all escaped', async () => {
+    const { renderDashboard } = await import('../hq/render.js');
+    const rows = [
+      rowOf({ slug: 'victoria', siteUrl: 'https://www.thevic361.com', error: 'timed out' }, 0),
+      rowOf({ slug: 'bay', siteUrl: 'https://www.thebay979.com', summary: full('The Bay <979>') }, 1)
+    ];
+    const html = renderDashboard(rows, new Date('2026-10-10T15:30:00Z'));
+    expect(html).toContain('updated Oct 10, 10:30 AM CT');
+    expect(html).toMatch(/<svg class="chart"[^>]*aria-label="Active subscribers, last 21 days"/);
+    expect(html).toContain('Revenue by month');
+    expect(html).toContain('The Bay &lt;979&gt; · Oct: $450');   // a segment's hover title
+    expect(html).toContain('&lt;b&gt;x&lt;/b&gt;');               // a source name is data
+    expect(html).not.toContain('<979>');
+    expect(html).not.toContain('<b>x</b>');
+    expect(html).toContain('Week of Oct 12: booked');
+    expect(html).toContain('$4.00 per subscriber');
+    expect(html).toContain('▲</span> 50% vs last month');
+    // Colors follow the town's place in HQ_TOWNS: Bay stays slot 1 though Victoria is down.
+    expect(html).toContain('<article class="card pad town-card t1">');
+    expect(html).toContain('<article class="card pad town-card t0">');
+    expect(html).not.toMatch(/<script/i);
+  });
+
+  it('adds the towns up', () => {
+    const a = rowOf({ slug: 'a', siteUrl: 'https://a.example', summary: full('A') }, 0);
+    const b = rowOf({ slug: 'b', siteUrl: 'https://b.example', summary: full('B', { ads: { spend_30_days: 50, cost_per_sub_30_days: 2.5 } }) }, 1);
+    const t = totalsOf([a, b]);
+    expect(t).toMatchObject({ subscribers: 320, net30: 120, joined30: 140, recurringCents: 20000, lastMonthCents: 60000, adSpend: 150,
+      bookedWeeks: 2, openWeeks: 2, subGoal: 10000, revenueGoalCents: 600000, clickRate: 8.1 });
+    expect(t.costPerSub).toBe(3.33);   // $150 over 25 + 20 paid sign-ups
+    expect(t.daily).toHaveLength(21);
+    expect(t.daily[0]).toEqual({ day: '2026-09-10', active: 200 });
+    expect(t.months.map(m => m.month)).toEqual(['2026-09', '2026-10']);
+    expect(t.sources[0]).toEqual(['Site', 80]);
   });
 });
