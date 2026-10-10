@@ -13,7 +13,7 @@
  *   - Submitter email + IP never leave the admin scope.
  */
 
-import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths, townBootProblems, townInputs, townWorkflowsReady } from './town.js';
+import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths, townBootProblems, townInputs, townWorkflowsReady, victoriaBootProblem } from './town.js';
 import { localizeHtml } from './localize.js';
 import express from 'express';
 import compression from 'compression';
@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { createStore, isOutage, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter, resolveEditKey, withPublishedLock } from './db.js';
 import { validateSubmission, validateEventEdit, checkBotSignals } from './validate.js';
 import { verifyTurnstile } from './turnstile.js';
-import { createRateLimiter, ipKey } from './rateLimit.js';
+import { createRateLimiter, ipKey, railwayRealIp } from './rateLimit.js';
 import { createAuth } from './auth.js';
 import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
@@ -47,7 +47,6 @@ import { createAutoPublish, unpublishEvent, replacePublishedEvent, forgetRemoved
 import { createScheduler, schedulerEnabled, startLabel, checkTownSchedule } from './scheduler.js';
 import * as sponsorsModule from './sponsors.js';
 import crypto from 'node:crypto';
-import net from 'node:net';
 import {
   HUB_PAGES, localDateStr, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderPrivacyPage, renderAdvertisePage, advertiseStats, renderNotFoundPage, renderSitemap, renderLlmsTxt
@@ -134,11 +133,7 @@ export async function createApp(opts = {}) {
   // (docs.railway.com: Public Networking > Specs & Limits); prefer it so the
   // rate limits key on the real client however many hops sit in between.
   if (trustProxy && (opts.railway ?? Boolean(process.env.RAILWAY_ENVIRONMENT_NAME))) {
-    app.use((req, res, next) => {
-      const real = String(req.headers['x-real-ip'] || '').trim();
-      if (net.isIP(real)) Object.defineProperty(req, 'ip', { value: real, configurable: true });
-      next();
-    });
+    app.use(railwayRealIp());
   }
 
   // Canonical host. www.thevic361.com is where Google already indexes the
@@ -146,6 +141,11 @@ export async function createApp(opts = {}) {
   // search engines see one site instead of two copies.
   // The town (server/town.js): TOWN in Railway, unset = Victoria; opts.town for tests.
   useTown(townConfig(process.env, opts));
+  // A service with TOWN forgotten but another town's SITE_URL would be a
+  // silent clone of Victoria: stop before anything starts. Reads the
+  // service's own SITE_URL (opts.envSiteUrl for tests), never opts.siteUrl.
+  const victoriaProblem = victoriaBootProblem(town, opts.envSiteUrl ?? process.env.SITE_URL ?? '');
+  if (victoriaProblem) throw new Error(victoriaProblem);
   // The town's data files (townPaths): repo-relative for GitHub, absolute on disk.
   const PATHS = townPaths();
   const CANDIDATES_FILE = path.join(REPO_ROOT, PATHS.candidates);
@@ -401,7 +401,11 @@ export async function createApp(opts = {}) {
       // tab links to this as a manual fallback when one-click Pull Now isn't
       // available (no token, invalid token, etc.).
       sources_actions_url: `https://github.com/${github.owner}/${github.repo}` +
-        `/actions/workflows/${WEEKLY_COLLECT_WORKFLOW}`
+        `/actions/workflows/${WEEKLY_COLLECT_WORKFLOW}`,
+      // Another town only: whether it may start workflows yet (TOWN_WORKFLOWS=1
+      // once its GitHub Environment exists), for scripts/launch_check.py. A
+      // flag, no secret. Victoria's config stays exactly as it was.
+      ...(town.id !== VICTORIA.id ? { town_workflows: townWorkflowsReady() } : {})
     });
   });
 
@@ -449,22 +453,29 @@ export async function createApp(opts = {}) {
   // ?deep=1 also asks the database (for the uptime check), so "the page
   // loads but nothing can be saved or published" counts as down. Plain
   // /api/health stays process-only, so a database blip can't fail a deploy.
+  // SELECT 1 with a deadline: rejects on an error or after ms (a hung
+  // database accepts the connection and never answers).
+  async function pingDatabase(ms) {
+    let timer;
+    try {
+      await Promise.race([
+        storeBundle.pool.query('SELECT 1'),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('database timeout')), ms); })
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   app.get('/api/health', async (req, res) => {
     if (req.query.deep && missingDatabase) {
       return res.status(503).json({ ok: false, storage: storeBundle.kind, error: 'no-database' });
     }
     if (req.query.deep && storeBundle.pool) {
-      let timer;
       try {
-        await Promise.race([
-          storeBundle.pool.query('SELECT 1'),
-          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('database timeout')), 5000); })
-        ]);
+        await pingDatabase(5000);
       } catch (err) {
         console.error('[health] database check failed:', err?.message || err);
         return res.status(503).json({ ok: false, storage: storeBundle.kind, error: 'database' });
-      } finally {
-        clearTimeout(timer);
       }
     }
     res.json({ ok: true, storage: storeBundle.kind });
@@ -2340,8 +2351,14 @@ export async function createApp(opts = {}) {
       getEvents: async () => [...(((await getPublicPayload()) || {}).events || []), ...(await listArchived().catch(() => []))],
       getOrders: async () => (typeof store.listSponsorOrders === 'function' ? store.listSponsorOrders() : []),
       setup: setupReport,
-      health: async () => ({ database: storeBundle.kind === 'postgres', scheduler_blocked: Boolean(scheduler.state.dispatchBlocked),
-        slack_refused: Boolean(slackRefusedText()) })
+      // database: Postgres configured and answering a ping now (3 s), not
+      // just configured: a town whose database is down must not read healthy.
+      health: async () => {
+        const configured = storeBundle.kind === 'postgres';
+        const database = configured && storeBundle.pool ? await pingDatabase(3000).then(() => true, () => false) : configured;
+        return { database, database_configured: configured, scheduler_blocked: Boolean(scheduler.state.dispatchBlocked),
+          slack_refused: Boolean(slackRefusedText()) };
+      }
     })
   });
 

@@ -29,6 +29,7 @@ def test_creates_the_town(tmp_path, capsys):
         "timezone": "America/Chicago", "county": "Matagorda County", "areaCode": "979",
         "areaZips": ["77414", "77404"], "otherTowns": ["wharton", "palacios"]}
     assert (tmp_path / "bay" / "local_events.yaml").read_text().endswith("events: []\n")
+    assert json.loads((tmp_path / "bay" / "venues.json").read_text()) == []   # never Victoria's root list
     assert (tmp_path / "bay" / "public").is_dir()
     assert json.loads((tmp_path / "index.json").read_text()) == {"towns": ["victoria", "bay"]}
     # town.py reads it back as the server would at boot.
@@ -37,6 +38,10 @@ def test_creates_the_town(tmp_path, capsys):
     assert "TOWN=bay python3 discover_venues.py --repo-root towns/bay" in out
     assert "SITE_URL=https://www.thebay979.com" in out and "NEWSLETTER_FROM=\"The Bay 979 <news@thebay979.com>\"" in out
     assert "thevic361" not in out
+    # The deferred plan items are launch blockers, and the runbook is named.
+    for item in ("3.3", "3.4", "3.5", "3.7", "2.6", "TOWN_WORKFLOWS=1", "RAILWAY.md \"New town on Railway\"",
+                 "scripts/launch_check.py --town bay"):
+        assert item in out, item
 
 
 def test_index_stays_sorted_with_victoria_first(tmp_path):
@@ -110,3 +115,20 @@ def test_runs_with_TOWN_already_set_to_the_new_slug(tmp_path):
                        env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert (tmp_path / "bay" / "town.json").exists()
+
+
+def test_railway_runbook_covers_a_new_town():
+    # new_town.py's checklist points at this section; it must hold every
+    # setting a town's Railway project needs.
+    with open(os.path.join(HERE, "RAILWAY.md"), encoding="utf-8") as f:
+        doc = f.read()
+    assert "## New town on Railway" in doc
+    section = doc.split("## New town on Railway", 1)[1].split("\n## ", 1)[0]
+    for item in ("TOWN=<slug>", "SITE_URL", "DATABASE_URL", "ADMIN_SESSION_SECRET", "openssl rand -hex 32",
+                 "NEWSLETTER_CRON_SECRET", "EVENT_CHECK_SECRET", "SUBMISSION_REVIEW_SECRET", "ADS_SPEND_SECRET",
+                 "RESEND_API_KEY", "NEWSLETTER_FROM", "NEWSLETTER_ADDRESS", "NEWSLETTER_REPLY_TO", "RESEND_WEBHOOK_SECRET",
+                 "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "checkout.session.completed", "checkout.session.expired",
+                 "charge.refunded", "charge.dispute.created", "TREMENDOUS_CAMPAIGN_ID", "TURNSTILE_SITE_KEY",
+                 "GITHUB_TOKEN", "HQ_API_KEY", "HQ_TOWNS", "SLACK_TOWN_TAG", "TOWN_WORKFLOWS=1", "apex",
+                 "PR environments", "Never", "launch_check.py"):
+        assert item in section, item

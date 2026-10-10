@@ -54,8 +54,12 @@ export function rowOf(t, index = 0) {
   const health = s.health || {};
   const setup = s.setup || {};
   const goals = subs.goals || {};
+  // Parts the town couldn't read (database down, say) arrive as null with
+  // their names in `failed`: a problem, never a row of zeros.
+  const failed = (Array.isArray(s.failed) ? s.failed : []).map(String);
   const problems = [
-    health.database === false && 'database',
+    (health.database === false || failed.includes('database')) && 'database',
+    ...failed.filter(p => p !== 'database').map(p => `${p} unavailable`),
     health.scheduler_blocked && 'scheduler',
     health.slack_refused && 'Slack',
     ...(setup.required_missing || []).map(k => `setup: ${k}`)
@@ -95,6 +99,7 @@ export function rowOf(t, index = 0) {
     subGoal: goals.subscribers ? { goal: fin(goals.subscribers.goal), perWeek: fin(goals.subscribers.per_week), eta: goals.subscribers.eta || null } : null,
     revenueGoalCents: goals.revenue ? fin(goals.revenue.goal_cents) : null,
     recommendedMissing: (setup.recommended_missing || []).length,
+    failed,
     problems
   };
 }
@@ -120,6 +125,8 @@ export function totalsOf(rows) {
   const paidJoined = spendRows.reduce((a, r) => a + (Number.isFinite(r.costPerSub) && r.costPerSub > 0 ? r.adSpend / r.costPerSub : 0), 0);
   return {
     towns: rows.length, down: rows.filter(r => r.error).length,
+    // Answering, but with parts missing: the sums below leave those out.
+    partial: rows.filter(r => !r.error && r.failed && r.failed.length).length,
     attention: rows.filter(r => r.error || (r.problems && r.problems.length)).length,
     subscribers: sum('subscribers'), pending: sum('pending'), net7: sum('net7'), net30: sum('net30'),
     joined30: sum('joined30'), left30: sum('left30'),
@@ -325,6 +332,7 @@ header.top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--pa
 .meta{color:var(--muted);font-size:13px}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:9px;border:1px solid var(--ring);background:var(--raise);color:var(--ink);text-decoration:none;font-size:13px;font-weight:550}
 .btn:hover{border-color:var(--axis)}
+form.inline{display:inline;margin:0}button.btn{font:inherit;font-size:13px;cursor:pointer}
 .btn.primary{background:var(--accent);border-color:transparent;color:#fff}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12.5px;font-weight:600;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .chip.ok{background:var(--ok-bg);color:var(--good)}.chip.warn{background:var(--warn-bg);color:var(--warn-ink)}.chip.crit{background:var(--crit-bg);color:var(--bad)}
@@ -448,6 +456,14 @@ export function renderLogin(error = '') {
     `<input name="password" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password" required><button>Log in</button></form></div></main>`);
 }
 
+// GET /logout (an old bookmark or link): logging out is a POST, so a link
+// on another site can't sign the owner out.
+export function renderLogout() {
+  return page('HQ · Log out', `<main class="login"><div class="card"><div class="logo" aria-hidden="true">HQ</div>` +
+    `<h2>Log out of HQ?</h2><form method="post" action="/logout"><button>Log out</button></form>` +
+    `<p><a href="/">Back to the dashboard</a></p></div></main>`);
+}
+
 function townCard(r, now) {
   if (r.error) {
     return `<article class="card pad town-card ${townClass(r)}"><div class="tc-head"><div class="tc-name"><h2>${dot(r)}${esc(r.slug)}</h2>` +
@@ -504,7 +520,7 @@ export function renderDashboard(rows, now) {
   const up = rows.filter(r => !r.error);
   const when = now.toLocaleString('en-US', { timeZone: TZ, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   const status = t.attention
-    ? `<span class="chip warn"><span aria-hidden="true">!</span> ${t.attention} need${t.attention === 1 ? 's' : ''} attention${t.down ? ` · ${t.down} not answering` : ''}</span>`
+    ? `<span class="chip warn"><span aria-hidden="true">!</span> ${t.attention} need${t.attention === 1 ? 's' : ''} attention${t.down ? ` · ${t.down} not answering` : ''}${t.partial ? ` · totals incomplete (${t.partial} partial)` : ''}</span>`
     : '<span class="chip ok"><span aria-hidden="true">✓</span> All towns healthy</span>';
   const revChange = changePct(t.revenueCents, t.lastMonthCents);
   const monthTotals = t.months.map(m => m.towns.reduce((a, x) => a + x.cents, 0));
@@ -534,7 +550,7 @@ export function renderDashboard(rows, now) {
   const body =
     `<header class="top"><div class="bar"><a class="brand" href="/"><span class="logo" aria-hidden="true">HQ</span>Network HQ</a>${status}` +
     `<span class="spacer"></span><span class="meta">${t.towns} town${t.towns === 1 ? '' : 's'} · updated ${esc(when)} CT</span>` +
-    `<a class="btn" href="/">Refresh</a><a class="btn" href="/logout">Log out</a></div></header>` +
+    `<a class="btn" href="/">Refresh</a><form class="inline" method="post" action="/logout"><button class="btn" type="submit">Log out</button></form></div></header>` +
     `<main class="shell">` +
     `<h1>Network</h1>` +
     `<section class="card hero"><div class="left"><div class="big"><small>Active subscribers</small>${num(t.subscribers)}</div>` +

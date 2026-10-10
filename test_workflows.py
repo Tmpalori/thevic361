@@ -374,3 +374,26 @@ def test_collect_commits_a_new_towns_first_files(tmp_path):
     assert _changes(tmp_path / "a", {"towns/bay/candidates.json": "{}"}, tracked=[]) == "changed=true"
     assert _changes(tmp_path / "b", {}, tracked=["towns/bay/candidates.json"]) == "changed=false"
     assert _changes(tmp_path / "c", {"towns/bay/candidates.json": "new\n"}, tracked=["towns/bay/candidates.json"]) == "changed=true"
+
+
+@pytest.mark.parametrize("name", TOWN_WORKFLOWS)
+def test_town_slack_tag_is_empty_for_victoria(name):
+    # Another town's Slack posts carry vars.SLACK_TOWN_TAG (slack_notify.py
+    # falls back to its city); scheduled and Victoria runs pass "" as before.
+    wf = load(name)
+    assert wf["env"]["SLACK_TOWN_TAG"] == "${{ inputs.town && inputs.town != 'victoria' && vars.SLACK_TOWN_TAG || '' }}"
+
+
+@pytest.mark.parametrize("name", sorted(os.listdir(WF)))
+def test_town_workflows_sparse_checkout_includes_towns(name):
+    # town.py reads towns/<slug>/town.json at import: a sparse checkout
+    # without towns/ fails every run for another town.
+    wf = load(name)
+    on = wf.get("on", wf.get(True)) or {}
+    if not ((on.get("workflow_dispatch") or {}).get("inputs") or {}).get("town"):
+        return
+    for job in wf["jobs"].values():
+        for st in job.get("steps", []):
+            sparse = (st.get("with") or {}).get("sparse-checkout")
+            if sparse is not None:
+                assert "towns" in str(sparse).split(), f"{name}: sparse checkout without towns/"

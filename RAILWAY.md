@@ -82,6 +82,100 @@ is reported as a warning and doesn't undo the save. Without the token the
 admin still loads candidates from the bundled `candidates.json` plus
 approved submissions.
 
+## New town on Railway
+
+Each town is its own Railway **project**: one service from this repo plus
+its own Postgres. It never shares Victoria's database, secrets or accounts.
+`scripts/new_town.py` makes the town's files and prints the short version
+of this list; this is the full one. Run `scripts/launch_check.py --town
+<slug>` at the end: it fails until the town is really collecting.
+
+**Every secret is fresh for the town** (`openssl rand -hex 32` each). Never
+copy a value from Victoria's project, or from another town's: a copied
+`ADMIN_SESSION_SECRET` or cron secret opens every town that shares it.
+
+1. **Project and database.** New project → deploy from this repo's `main`
+   (Railpack runs `npm start`; healthcheck path `/api/health`). Add
+   Postgres (Railway injects `DATABASE_URL`) and turn on its backups. On
+   first boot the town claims the empty database (`town_meta`); a database
+   that already holds another town's data, or Victoria's, stops the boot.
+2. **Town identity.**
+   - `TOWN=<slug>` (the folder in `towns/`). Forgetting it boots the service
+     as Victoria; with any `SITE_URL` that isn't thevic361.com it refuses to
+     start and says so.
+   - `SITE_URL=https://www.<domain>` (the town's own; Victoria's is refused).
+3. **Admin login.** `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`
+   (fresh). Don't set `ADMIN_TOKEN` on a new town.
+4. **Cron secrets** (fresh, one each, the same value in the town's GitHub
+   Environment): `NEWSLETTER_CRON_SECRET`, `EVENT_CHECK_SECRET`,
+   `SUBMISSION_REVIEW_SECRET`, `ADS_SPEND_SECRET`.
+5. **Email (Resend).** Verify the town's domain in Resend (SPF, DKIM, and MX
+   for replies). `RESEND_API_KEY`; `NEWSLETTER_FROM="<Site name>
+   <news@<domain>>"` (an address on the town's domain; Victoria's is
+   refused); `NEWSLETTER_ADDRESS` (the mailing address the law requires in
+   every email); `NEWSLETTER_REPLY_TO` (an inbox you read, or leave it out
+   and use receiving instead); receiving: a webhook (event `email.received`)
+   to `https://www.<domain>/api/email/inbound` with its secret as
+   `RESEND_WEBHOOK_SECRET`.
+6. **Stripe: the town's own account** (Stripe → account menu → New
+   account; same LLC, EIN and payout bank), with its public business name,
+   logo and statement descriptor, so checkout and card statements show the
+   town, not The Vic 361. Its keys only: `STRIPE_SECRET_KEY` (a restricted
+   key: Checkout Sessions, Products and Prices: write) and
+   `STRIPE_WEBHOOK_SECRET` from a webhook endpoint at
+   `https://www.<domain>/api/stripe/webhook` (API version as in the admin
+   setup checklist) sending these events:
+   `checkout.session.completed`, `checkout.session.expired`,
+   `checkout.session.async_payment_succeeded`,
+   `checkout.session.async_payment_failed`, `charge.refunded`,
+   `charge.dispute.created`, `customer.subscription.updated`,
+   `customer.subscription.deleted`, `invoice.payment_failed`,
+   `radar.early_fraud_warning.created`. Check it with a test-mode checkout.
+7. **Referral gift cards (Tremendous).** The town's own campaign (its name
+   and logo on the reward email): `TREMENDOUS_API_KEY`,
+   `TREMENDOUS_CAMPAIGN_ID`, `TREMENDOUS_FUNDING_SOURCE`. Or leave them out
+   and send cards by hand from the admin.
+8. **Forms (Turnstile).** Add `www.<domain>` to a Turnstile widget (Managed
+   mode); `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`. A site key without
+   the town's hostname fails every form.
+9. **GitHub.** `GITHUB_TOKEN`: a fine-grained token on this repo only, with
+   Contents: write and Actions: write and nothing else (publishing the
+   town's `events.json` and starting its workflows).
+10. **Slack.** `SLACK_WEBHOOK_URL` (and the optional `SLACK_*_WEBHOOK_URL`
+    channels, shared with Victoria is fine) and `SLACK_TOWN_TAG` (the city,
+    e.g. `Bay City`), so the town's posts read `[Bay City] …`. Set
+    `SLACK_TOWN_TAG` in the town's GitHub Environment too (step 12).
+11. **HQ.** `HQ_API_KEY` (fresh, different per town). Then on the HQ
+    service add the town to `HQ_TOWNS`
+    (`{"slug":"<slug>","site_url":"https://www.<domain>","key":"<its HQ_API_KEY>"}`)
+    and check its row. HQ lives in Victoria's project on purpose: it holds
+    no town data and reads each town through its key.
+12. **`TOWN_WORKFLOWS=1` only after** the town's GitHub Environment exists
+    (MULTI_CITY_PLAN.md 3.3: its `SITE_URL`, Meta page and Instagram,
+    `NTFY_TOPIC`, cron secrets, `SLACK_TOWN_TAG`). Before that the town
+    starts no collect, social kit, submission review or event check, since
+    they would run on Victoria's repo-level settings. 3.4 (its own
+    scheduled collects), 3.5 and 3.7 must be done before launch too.
+13. **Optional:** `META_PIXEL_ID` (the town's own pixel); the GA stream is
+    `gaId` in `town.json` (a PR).
+14. **Domain.** Add `www.<domain>` as a custom domain and CNAME it to the
+    Railway target. Make the apex redirect to `www` with the path kept (a
+    DNS host's 301 that keeps paths, or the apex on Railway too, where the
+    server redirects it). Don't repeat Victoria's Squarespace forwarding,
+    which breaks every deep link on the apex.
+15. **PR environments.** Decide per town project: turn them off (simplest;
+    a PR copy would get production's variables), or keep them and know
+    that each copy boots with the town's `TOWN` and its own forked
+    database.
+16. **Watch paths** (MULTI_CITY_PLAN.md 2.6, by town #3 at the latest):
+    the service watches `server/**`, `docs/**`, `package*.json` and
+    `towns/<slug>/**`, so other towns' bot commits don't redeploy it.
+
+Then: `python3 scripts/launch_check.py --town <slug>` (every automatic
+check passes, including 10+ upcoming events, a collect in the last 8 days
+and workflows on), its manual list, and `python3 scripts/live_check.py`
+for Victoria before and after.
+
 ## HQ dashboard (optional, its own service)
 
 `hq/server.js` shows every town on one screen. It is a separate Railway

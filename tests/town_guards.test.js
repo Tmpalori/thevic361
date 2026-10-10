@@ -8,7 +8,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { townConfig, townBootProblems, useTown, VICTORIA } from '../server/town.js';
+import http from 'node:http';
+import { townConfig, townBootProblems, useTown, VICTORIA, victoriaBootProblem } from '../server/town.js';
 import { createApp } from '../server/index.js';
 import { FileStore, PgStore } from '../server/db.js';
 
@@ -169,5 +170,49 @@ describe('workflows for another town (until its GitHub Environment exists)', () 
     } finally {
       await new Promise(r => server.close(r));
     }
+  });
+});
+
+
+describe('a service with TOWN forgotten', () => {
+  it("passes Victoria on its own URL, none, or Railway's and local hosts", () => {
+    for (const url of ['', 'https://www.thevic361.com', 'https://thevic361.com/', 'https://staging.thevic361.com',
+      'https://thevic361-staging.up.railway.app', 'http://localhost:3000', 'http://127.0.0.1:3000', 'not a url']) {
+      expect(victoriaBootProblem(VICTORIA, url), url).toBe('');
+    }
+    expect(victoriaBootProblem(bay, 'https://www.thebay979.com')).toBe('');   // another town: townBootProblems' job
+  });
+
+  it("stops Victoria on another town's SITE_URL, with what to set", async () => {
+    const why = victoriaBootProblem(VICTORIA, 'https://www.thebay979.com');
+    expect(why).toMatch(/TOWN is unset \(Victoria\) but SITE_URL is https:\/\/www\.thebay979\.com/);
+    expect(why).toMatch(/Set TOWN to the town's slug/);
+    expect(victoriaBootProblem(VICTORIA, 'https://www.notthevic361.com')).not.toBe('');
+    await expect(boot({ envSiteUrl: 'https://www.thebay979.com' })).rejects.toThrow(/TOWN is unset \(Victoria\)/);
+    await boot({ envSiteUrl: 'https://www.thevic361.com' });
+    await boot({ envSiteUrl: '' });
+  });
+});
+
+describe('/api/config town_workflows (scripts/launch_check.py)', () => {
+  const config = async extra => {
+    const { app } = await boot(extra);
+    const server = http.createServer(app);
+    await new Promise(r => server.listen(0, r));
+    try {
+      return await (await fetch(`http://127.0.0.1:${server.address().port}/api/config`)).json();
+    } finally {
+      await new Promise(r => server.close(r));
+    }
+  };
+  const saved = process.env.TOWN_WORKFLOWS;
+  afterEach(() => { if (saved === undefined) delete process.env.TOWN_WORKFLOWS; else process.env.TOWN_WORKFLOWS = saved; });
+
+  it("is another town's flag only; Victoria's config is unchanged", async () => {
+    delete process.env.TOWN_WORKFLOWS;
+    expect(await config({ siteUrl: 'https://www.thevic361.com' })).not.toHaveProperty('town_workflows');
+    expect((await config({ town: BAY, siteUrl: OK.siteUrl })).town_workflows).toBe(false);
+    process.env.TOWN_WORKFLOWS = '1';
+    expect((await config({ town: BAY, siteUrl: OK.siteUrl })).town_workflows).toBe(true);
   });
 });
