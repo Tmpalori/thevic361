@@ -301,13 +301,19 @@ export async function createApp(opts = {}) {
 
   // Admin secrets too short to resist distributed guessing (auth.weak, plus
   // the legacy token here). Not a boot failure: the live site may run on
-  // them today, and refusing to start would take it down. The setup
-  // checklist marks it required, and production alerts on every boot.
-  const weakAdminSecrets = [...(auth.weak || []),
+  // them today, and refusing to start would take it down. The session
+  // secret and token are random keys nobody types, so a short one is
+  // required in the setup checklist and alerts on every production boot.
+  // The password is the owner's call (one they chose and are sure of may
+  // be short): only a "recommended" setup item, no alert and no log line.
+  const isPasswordNote = w => w.startsWith('ADMIN_PASSWORD ');
+  const shortPassword = (auth.weak || []).filter(isPasswordNote);
+  const weakAdminSecrets = [...(auth.weak || []).filter(w => !isPasswordNote(w)),
     ...(adminToken && String(adminToken).length < MIN_SECRET ? [`ADMIN_TOKEN is shorter than ${MIN_SECRET} characters`] : [])];
-  const WEAK_ADMIN_FIX = 'Set a longer ADMIN_PASSWORD (12+ characters; a passphrase is fine) and ADMIN_SESSION_SECRET ' +
-    '(`openssl rand -hex 32`) in Railway; replace ADMIN_TOKEN the same way or remove it if no script uses it. ' +
-    'Changing the password or secret signs out every admin session.';
+  const WEAK_ADMIN_FIX = 'Set a longer ADMIN_SESSION_SECRET (`openssl rand -hex 32`) in Railway; replace ADMIN_TOKEN the same way ' +
+    'or remove it if no script uses it. Changing the secret signs out every admin session.';
+  const SHORT_PASSWORD_FIX = 'A longer ADMIN_PASSWORD (12+ characters; a passphrase is fine) is harder to guess from many ' +
+    'addresses at once. Changing it signs out every admin session.';
   if (weakAdminSecrets.length) {
     console.warn('[auth] weak admin secrets:', weakAdminSecrets.join('; '));
     if (railwayEnv === 'production') {
@@ -2333,8 +2339,10 @@ export async function createApp(opts = {}) {
         fix: 'Add a Postgres database in Railway so events and subscribers survive deploys.' },
       { key: 'login', label: 'Admin login', ok: auth.configured, level: 'required',
         fix: 'Set ADMIN_USERNAME, ADMIN_PASSWORD and ADMIN_SESSION_SECRET in Railway.' },
-      { key: 'admin_secrets', label: 'Admin password and secrets are long enough', ok: !weakAdminSecrets.length, level: 'required',
+      { key: 'admin_secrets', label: 'Admin session secret and token are long enough', ok: !weakAdminSecrets.length, level: 'required',
         fix: weakAdminSecrets.length ? `${weakAdminSecrets.join('; ')}. ${WEAK_ADMIN_FIX}` : WEAK_ADMIN_FIX },
+      { key: 'admin_password', label: 'Admin password is 12+ characters', ok: !shortPassword.length, level: 'recommended',
+        fix: SHORT_PASSWORD_FIX },
       { key: 'auto_publish', label: 'Auto-publish events', ok: env.AUTO_PUBLISH !== '0', level: 'required',
         fix: 'Remove AUTO_PUBLISH=0 from Railway.' },
       { key: 'slack', label: 'Slack alerts', ok: slack.enabled && !slackRefusedText(), level: 'recommended',
