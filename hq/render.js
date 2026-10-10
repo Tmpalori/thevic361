@@ -43,7 +43,7 @@ function ago(iso, now) {
 
 // One town's numbers, from its /api/hq/summary (or its error).
 export function rowOf(t, index = 0) {
-  const base = { slug: t.slug, siteUrl: t.siteUrl, color: index };
+  const base = { slug: t.slug, siteUrl: t.siteUrl, color: index, ...(t.sso ? { sso: true } : {}) };
   const s = t.summary;
   if (!s) return { ...base, error: t.error };
   const subs = s.subscribers || {};
@@ -332,7 +332,7 @@ header.top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--pa
 .meta{color:var(--muted);font-size:13px}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:9px;border:1px solid var(--ring);background:var(--raise);color:var(--ink);text-decoration:none;font-size:13px;font-weight:550}
 .btn:hover{border-color:var(--axis)}
-form.inline{display:inline;margin:0}button.btn{font:inherit;font-size:13px;cursor:pointer}
+form.inline,form.go{display:inline;margin:0}button.btn{font:inherit;font-size:13px;cursor:pointer}
 .btn.primary{background:var(--accent);border-color:transparent;color:#fff}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12.5px;font-weight:600;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .chip.ok{background:var(--ok-bg);color:var(--good)}.chip.warn{background:var(--warn-bg);color:var(--warn-ink)}.chip.crit{background:var(--crit-bg);color:var(--bad)}
@@ -464,12 +464,19 @@ export function renderLogout() {
     `<p><a href="/">Back to the dashboard</a></p></div></main>`);
 }
 
+// With the town's sso secret, a button that opens its admin signed in
+// (POST /go/<slug>); without, a plain link to its own login.
+function adminButton(r, label) {
+  if (r.sso) return `<form class="go" method="post" action="/go/${esc(r.slug)}"><button class="btn">${esc(label)}</button></form>`;
+  return `<a class="btn" href="${esc(r.adminUrl || `${r.siteUrl}/admin.html`)}">${esc(label)}</a>`;
+}
+
 function townCard(r, now) {
   if (r.error) {
     return `<article class="card pad town-card ${townClass(r)}"><div class="tc-head"><div class="tc-name"><h2>${dot(r)}${esc(r.slug)}</h2>` +
       `<a class="host" href="${esc(r.siteUrl)}">${esc(r.siteUrl.replace(/^https:\/\//, ''))}</a></div>${healthChip(r)}</div>` +
       `<div class="down"><p class="meta">HQ couldn't read this town just now. Its own admin may still work.</p>` +
-      `<div><a class="btn" href="${esc(r.siteUrl)}/admin.html">Open admin →</a></div></div></article>`;
+      `<div>${adminButton(r, 'Open admin →')}</div></div></article>`;
   }
   const revChange = changePct(r.revenueCents, r.lastMonthCents);
   const sg = r.subGoal;
@@ -477,7 +484,7 @@ function townCard(r, now) {
   return `<article class="card pad town-card ${townClass(r)}">` +
     `<div class="tc-head"><div class="tc-name"><h2>${dot(r)}${esc(r.name || r.slug)}</h2>` +
     `<a class="host" href="${esc(r.siteUrl)}">${esc(r.siteUrl.replace(/^https:\/\//, ''))}</a></div>` +
-    `<a class="btn" href="${esc(r.adminUrl)}">Admin →</a></div>` +
+    `${adminButton(r, 'Admin →')}</div>` +
     `<div>${healthChip(r)}${r.recommendedMissing ? ` <span class="chip warn" title="Recommended settings not set">${r.recommendedMissing} to set up</span>` : ''}</div>` +
     `<div class="stats">` +
     `<div class="stat"><span>Subscribers</span><b>${num(r.subscribers)}</b>${delta(r.net7, { suffix: ' 7d' })}</div>` +

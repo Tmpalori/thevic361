@@ -162,10 +162,12 @@ copy a value from Victoria's project, or from another town's: a copied
     channels, shared with Victoria is fine) and `SLACK_TOWN_TAG` (the city,
     e.g. `Bay City`), so the town's posts read `[Bay City] …`. Set
     `SLACK_TOWN_TAG` in the town's GitHub Environment too (step 12).
-11. **HQ.** `HQ_API_KEY` (fresh, different per town). Then on the HQ
-    service add the town to `HQ_TOWNS`
-    (`{"slug":"<slug>","site_url":"https://www.<domain>","key":"<its HQ_API_KEY>"}`)
-    and check its row. HQ lives in Victoria's project on purpose: it holds
+11. **HQ.** `HQ_API_KEY` and `HQ_SSO_SECRET` (both fresh, different per
+    town and from each other). Then on the HQ service add
+    `HQ_TOWN_<SLUG>` = `{"site_url":"https://www.<domain>","key":"<its HQ_API_KEY>"}`
+    and `HQ_SSO_<SLUG>` = its `HQ_SSO_SECRET` (or add both to the town's
+    entry in `HQ_TOWNS`), and check its row and its Admin → (it should
+    open the admin signed in). HQ lives in Victoria's project on purpose: it holds
     no town data and reads each town through its key.
 12. **`TOWN_WORKFLOWS=1` only after** the town's GitHub Environment exists
     (MULTI_CITY_PLAN.md 3.3: its `SITE_URL`, Meta page and Instagram,
@@ -224,7 +226,19 @@ service in the same project; it never touches a town's database.
 3. Give it a domain. It refuses to start and logs why when a variable is
    missing or wrong. `/health` answers `{"ok":true}`.
 
-Each row links to that town's admin, which still asks for its own login.
+**One sign-in for every town (optional, recommended).** Give each town a
+fresh `HQ_SSO_SECRET` (`openssl rand -hex 32`, different per town and
+different from its `HQ_API_KEY`), and give HQ the same value as
+`HQ_SSO_<SLUG>` (e.g. `HQ_SSO_KEARNEY`) or as `"sso"` in its `HQ_TOWNS`
+entry. That town's **Admin →** on HQ then opens its admin already signed
+in: HQ posts a one-time pass (one town, 30 seconds, one use, never in a
+URL; `server/sso.js`) to the town's `POST /api/admin/sso`, which answers
+with an ordinary admin session. Without the pair the button is a plain link
+to the town's own login, which always keeps working. Anyone who can sign in
+to HQ can open every town that has a secret, so HQ's password is the one
+that matters: long, unique, never shared. A new town can be added to HQ as
+its own variable, `HQ_TOWN_<SLUG>` = `{"site_url":"https://www.<domain>","key":"<its HQ_API_KEY>"}`,
+without touching `HQ_TOWNS`. HQ's watch paths include `/server/sso.js`.
 
 PR environments copy the hq service (with production's variables) when a PR
 changes HQ's code. Outside `production` it starts in preview mode: `/health`
