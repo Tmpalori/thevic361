@@ -56,6 +56,7 @@
     moonshine: 'Moonshine',
     vtx_artwalk: 'Art Walk',
     allevents: 'AllEvents',
+    town_feeds: 'Official feeds',
     apify_facebook: 'Facebook events',
     apify_eventbrite: 'Eventbrite',
     apify_facebook_posts: 'Facebook posts',
