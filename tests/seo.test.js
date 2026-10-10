@@ -372,7 +372,8 @@ describe('paid placements', () => {
     const llms = (await get('/llms.txt')).text;
     expect(llms).toContain("## Vic's Picks");
     expect(llms).toContain('some are paid placements');
-    expect(llms).toMatch(/Paid Late Show\]\([^)]+\) at B \(Vic's Pick\)/);
+    // A paid pick is labeled as one (FTC), an editor's pick isn't.
+    expect(llms).toMatch(/Paid Late Show\]\([^)]+\) at B \(Vic's Pick, sponsored\)/);
     expect(llms).not.toMatch(/Early Show\]\([^)]+\) at A \(Vic's Pick\)/);
     const list = (await get('/this-weekend')).text;
     const page = list.match(/href="(\/events\/[^"]*paid-late-show[^"]*)"/)[1];

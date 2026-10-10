@@ -143,7 +143,7 @@ describe('server wiring', () => {
       stripeSecretKey: 'sk_test', stripeWebhookSecret: 'whsec_test', now: () => new Date('2026-10-07T15:00:00Z'),
       stripe: { createCheckoutSession: async () => { throw new Error('card network down'); } }
     });
-    const form = new URLSearchParams({ package: 'weekly', week: '2026-10-12', business: 'Acme', text: 'Hi.', url: 'acme.example', email: 'a@acme.example' });
+    const form = new URLSearchParams({ package: 'weekly', week: '2026-10-12', business: 'Acme', text: 'Hi.', url: 'acme.example', email: 'a@acme.example', agree: '1' });
     const bad = await fetch(baseUrl + '/advertise/checkout', { method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form.toString() });
     expect(bad.status).toBe(502);
     expect(sent.find(m => m.kind === 'alert').key).toBe('stripe-checkout');

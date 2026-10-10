@@ -746,13 +746,26 @@ export function adAttr(id) {
   return AD_ID.test(id || '') ? ` data-ad="${escHtml(id)}"` : '';
 }
 
+// A paid pick (featured, not an editor's pick: a Vic's Pick order, a venue
+// partner's event, or one the admin marked paid) carries a "Sponsored" tag
+// next to the pick badge, so readers can tell it from the editors' unpaid
+// picks before they tap it (FTC: label paid placements). docs/app.js
+// pickBadges and the newsletter's eventRow render the same.
+export const isPaidPick = ev => Boolean(ev && ev.featured && !ev.editor_pick);
+export const SPONSORED_LABEL = 'Sponsored';
+export function pickBadges(ev) {
+  if (!ev.featured) return '';
+  return `<span class="badge badge--featured">${town.pickName}</span> ` +
+    (isPaidPick(ev) ? `<span class="badge badge--sponsored">${SPONSORED_LABEL}</span> ` : '');
+}
+
 export function renderEventItem(ev) {
   const place = placeText(ev);
   const ad = ev.featured && !ev.editor_pick ? adAttr(ev.sponsor_order) : '';
   return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}"${ad} data-icons="${escHtml((ev.icons || []).join(' ') + (ev.free === true ? ' free' : ''))}">` +
     `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
     '<div class="event-details">' +
-      (ev.featured ? `<span class="badge badge--featured">${town.pickName}</span> ` : '') +
+      pickBadges(ev) +
       nearbyBadge(ev) +
       (ev.time ? `<span class="event-time">${escHtml(formatTime(ev.time))}</span> ` : '') +
       `<span class="event-name"><a href="${escHtml(ev.page)}">${escHtml(ev.name)}</a></span>` +
@@ -868,7 +881,7 @@ function footerHtml() {
   const year = localDateStr(new Date()).slice(0, 4);
   return `<footer class="site-footer">
     <div class="container">
-      <div class="footer-grid">
+      <div class="footer-grid footer-grid--4">
         <div class="footer-section">
           <h2>Stay in the loop</h2>
           <p>Get ${town.city}'s best events in your inbox every Monday and Thursday.</p>
@@ -889,7 +902,16 @@ function footerHtml() {
             <li><a href="/venues">Venues</a></li>
             <li><a href="/advertise">Advertise</a></li>
             <li><a href="/contact">Contact</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h2>Policies</h2>
+          <ul class="footer-links" role="list">
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="/advertising-terms">Advertising terms</a></li>
             <li><a href="/privacy">Privacy</a></li>
+            <li><a href="/accessibility">Accessibility</a></li>
+            <li><a href="/referral-rules">Referral rules</a></li>
           </ul>
         </div>
       </div>
@@ -1069,7 +1091,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
   const body = `
     <p class="breadcrumbs"><a href="/">This week</a> › ${escHtml(ev.name)}</p>
     <h1 class="page-title">${escHtml(ev.name)}</h1>
-    ${ev.featured ? `<p class="event-pick"><span class="badge badge--featured">${town.pickName}</span> Featured on ${town.siteName}</p>` : ''}
+    ${ev.featured ? `<p class="event-pick">${pickBadges(ev)}Featured on ${town.siteName}</p>` : ''}
     <p class="page-lead">${escHtml(lead)}</p>
     ${ev.date < today ? `<p class="past-notice">This event has passed. <a href="/">See what's happening this week</a>.</p>` : ''}
     <dl class="event-facts">
@@ -1094,43 +1116,6 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
     title: `${heading} | ${town.siteName}`,
     description: description.slice(0, 300), body, ld,
     ...(image ? { image, imageSize: [1200, 630] } : {})
-  });
-}
-
-// Plain-language privacy notice. Meta's Business Tools terms require one
-// once the Pixel runs; it also covers analytics, the newsletter and forms.
-export const PRIVACY_UPDATED = 'October 8, 2026';
-export function renderPrivacyPage({ siteUrl }) {
-  const body = `
-    <h1 class="page-title">Privacy</h1>
-    <p class="page-lead">${town.siteName} is a free events guide for ${town.cityStateLong}. This page explains what we collect, why, and the choices you have. Last updated ${PRIVACY_UPDATED}.</p>
-    <h2 class="section-heading">What you give us</h2>
-    <ul>
-      <li><strong>Newsletter:</strong> your email address, so we can send the newsletter (Mondays and Thursdays). Every email has a one-click unsubscribe link. We don't sell or share your address.</li>
-      <li><strong>Event submissions and contact messages:</strong> what you type into those forms, used to review your event or answer you.</li>
-      <li><strong>Sponsor purchases:</strong> payments are handled by Stripe; we never see your card number. We keep your name, email, business and order details.</li>
-    </ul>
-    <h2 class="section-heading">What we measure</h2>
-    <ul>
-      <li><strong>Our own visit counts:</strong> which pages are viewed and which links are clicked, so we know what's useful. We don't use cookies for this and don't store IP addresses; a visitor is a one-way code that changes every day.</li>
-      <li><strong>Referrals:</strong> every subscriber gets a share link. When someone signs up through it, we note who shared it so we can count referrals and send rewards; we don't tell the person who shared it who signed up. Gift card rewards are sent by our rewards partner, <a href="https://www.tremendous.com/privacy" rel="noopener">Tremendous</a>, which gets the winner's email address to deliver them (see the <a href="/referral-rules">rules</a>).</li>
-      <li><strong>Newsletter opens:</strong> each newsletter has a tiny invisible image, so we can tell whether you opened that issue (we count each person once per issue). Turning off images in your email app stops it.</li>
-      <li><strong>Google Analytics</strong> measures visits to the site and uses cookies. See <a href="https://policies.google.com/technologies/partner-sites" rel="noopener">how Google uses this data</a>.</li>
-      <li><strong>Meta Pixel:</strong> when we advertise on Facebook and Instagram, the Meta Pixel tells Meta that someone visited from an ad or signed up for the newsletter, so we can see whether our ads work and show them to people likely to be interested. Meta may combine this with what it knows about your Meta account. It's never loaded on the newsletter confirm or unsubscribe pages. You can control this in your <a href="https://www.facebook.com/adpreferences/ad_settings" rel="noopener">Meta ad settings</a>.</li>
-    </ul>
-    <h2 class="section-heading">Services we use</h2>
-    <p>Railway hosts the site and its database; Resend delivers our emails; Cloudflare Turnstile checks that forms are sent by people, not bots; Stripe takes sponsor payments. Each only gets what it needs to do that job.</p>
-    <h2 class="section-heading">Your choices</h2>
-    <ul>
-      <li>Unsubscribe from any newsletter with the link at the bottom, any time.</li>
-      <li>Block or delete cookies in your browser settings; the site works without them.</li>
-      <li>Ask us to see or delete what we have about you through our <a href="/contact">contact page</a>.</li>
-    </ul>`;
-  return layout({
-    siteUrl, path: '/privacy',
-    title: `Privacy | ${town.siteName}`,
-    description: `What ${town.siteName} collects, why, and the choices you have.`,
-    body
   });
 }
 
@@ -1259,6 +1244,13 @@ export function adFlowHtml() {
     </section>`;
 }
 
+// How close to a booked week or event a buyer can still cancel for a full
+// refund (the advertise FAQ and the advertising terms, server/legal.js).
+// The same 7 days as LEAD_IN_DAYS in server/sponsors.js (a pick's report
+// counts its traffic from then; tests/legal_pages.test.js checks they
+// match): from that point the placement is being promoted.
+export const CANCEL_NOTICE_DAYS = 7;
+
 // Questions a business asks before buying. Keep every answer true to what
 // the site does (server/sponsors.js, server/newsletter.js).
 const adFaq = () => [
@@ -1267,6 +1259,7 @@ const adFaq = () => [
   ['When does it make the newsletter?', `Monday’s issue covers the whole week and Thursday’s covers the weekend. Book a ${town.pickName} before the issue goes out and it’s starred in it; a weekly sponsor is at the top of both issues of its week.`],
   ['Can I change something after I pay?', 'Yes. Reply to your confirmation email with the change and we’ll update it.'],
   ['What’s in the report?', `Weekly sponsors get one the Monday after: how often your block was seen, where, and how many people clicked. A ${town.pickName} gets one the day after your event: times seen, page views, clicks, calendar adds and shares.`],
+  ['Can I cancel?', `Yes. Email us at least ${CANCEL_NOTICE_DAYS} days before your sponsor week starts or your event's date for a full refund. Our advertising terms (linked below) have the details, including what happens if something goes wrong on our side.`],
   ['What if my day is sold out?', `${town.pickName}s are limited each day so they stand out. Pick another day, or book a weekly sponsorship to be on every page all week.`]
 ];
 
@@ -1313,7 +1306,8 @@ export function renderAdvertisePage({ siteUrl, checkout = false, previews = {}, 
     <div class="ad-faq">${adFaq().map(([q, a]) => `<details><summary>${escHtml(q)}</summary><p>${escHtml(a)}</p></details>`).join('')}</div>
     <h2 class="section-heading">${checkout ? 'Something else?' : 'Get started'}</h2>
     <p>${checkout ? 'Pick a package above to book and pay online in a couple of minutes. Questions or a custom package?' : 'Tell us your business name and what you\'d like to promote, and we\'ll reply with open dates and our latest audience numbers.'} <a href="/contact?topic=advertising">Send us a message</a>.</p>
-    <p>Listing a community event is always free: <a href="/submit">submit it here</a>.</p>`;
+    <p>Listing a community event is always free: <a href="/submit">submit it here</a>.</p>
+    <p class="ad-terms-note">Buying a placement means agreeing to our <a href="/advertising-terms">advertising terms</a>, including <a href="/advertising-terms#refunds">cancellations and refunds</a>.</p>`;
   return layout({
     siteUrl, path: '/advertise', wide: true,
     title: `Advertise | ${town.siteName}`,
@@ -1401,6 +1395,7 @@ export function renderComingUp(events, today) {
     const ad = ev.featured && !ev.editor_pick ? adAttr(ev.sponsor_order) : '';
     return `<li class="coming-item"${ad}><a href="${escHtml(ev.page)}">` +
       `<span class="coming-date">${escHtml(formatDay(ev.date, { weekday: 'short', month: 'short', day: 'numeric' }))}</span>` +
+      (isPaidPick(ev) ? `<span class="badge badge--sponsored coming-sponsored">${SPONSORED_LABEL}</span>` : '') +
       `<span class="coming-name">${escHtml(ev.name)}</span>` +
       (where ? `<span class="coming-where">${escHtml(where)}</span>` : '') +
       '</a></li>';
@@ -1512,12 +1507,12 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
   if (picks.length) {
     lines.push(`## ${town.pickNamePlain}s`, '',
       `Featured events, highlighted on their day on ${town.siteName}. Some are our editors' can't-miss picks; some are paid placements by the venue or organizer.`, '',
-      ...picks.map(line), '');
+      ...picks.map(ev => line(ev) + (isPaidPick(ev) ? ' (sponsored)' : " (editors' pick)")), '');
   }
   lines.push(`## Upcoming events (as of ${formatDay(today, { month: 'long', day: 'numeric', year: 'numeric' })})`, '');
   if (!upcoming.length) lines.push('- No events listed yet this week.');
   for (const ev of upcoming) {
-    lines.push(line(ev) + (ev.featured ? ` (${town.pickNamePlain})` : '') + (ev.description ? ` - ${ev.description}` : ''));
+    lines.push(line(ev) + (ev.featured ? ` (${town.pickNamePlain}${isPaidPick(ev) ? ', sponsored' : ''})` : '') + (ev.description ? ` - ${ev.description}` : ''));
   }
   return lines.join('\n') + '\n';
 }

@@ -12,6 +12,7 @@ import { sameEvent, verifyStripeSignature, formEncode, bookableWeeks, pickAvaila
 import { promises as fs } from 'node:fs';
 import { renderSubmissionReceived, renderSponsorConfirmed } from '../server/notify.js';
 import { sponsorLinkUrl } from '../server/seo.js';
+import { ADVERTISING_TERMS_VERSION } from '../server/legal.js';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
@@ -68,10 +69,11 @@ afterEach(async () => {
   server = null; tmpDir = null;
 });
 
+// Ticks the advertising terms box like a buyer does (agree: '' leaves it off).
 const form = (fields) => fetch(baseUrl + '/advertise/checkout', {
   method: 'POST', redirect: 'manual',
   headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams(fields).toString()
+  body: new URLSearchParams({ agree: '1', ...fields }).toString()
 });
 
 function webhook(event, secret = WHSEC) {
@@ -590,7 +592,7 @@ describe('confirmation emails', () => {
     expect(mail.sent[0].text).toContain('Best tacos.');
   });
 
-  it('a free submission with an email gets "we got it", what to expect, the upgrade link and how to reach us', async () => {
+  it('a free submission with an email gets "we got it", what to expect and how to reach us, with no paid upsell', async () => {
     const mail = fakeMail();
     await startApp({ resendApiKey: 're_test', resend: mail.resend });
     const body = { name: 'Fall Fest', date: '2026-10-17', time: '10:00 AM', venue: 'De Leon Plaza', address: '101 N Main St',
@@ -605,7 +607,9 @@ describe('confirmation emails', () => {
     expect(m.text).toContain('Free listings aren’t guaranteed a spot');
     expect(m.html).not.toContain('Music and food all day.');
     const { id } = await r.json();
-    expect(m.text).toContain(`/advertise/checkout?package=featured&from=${id}`);
+    // /submit promises the address isn't used for marketing: no upgrade offer.
+    expect(m.text).not.toContain('/advertise/checkout');
+    expect(m.html).not.toContain('/advertise/checkout');
     expect(m.text).not.toContain('org%40example.com');
     expect(m.text).toContain('/contact');
 
@@ -1187,7 +1191,7 @@ describe('towns sharing one Stripe account (MULTI_CITY_PLAN.md 2.2)', () => {
     await weekly();
     const s = sessions[0];
     const id = s.params.client_reference_id;
-    expect(s.params.metadata).toEqual({ order_id: id, package: 'weekly' });
+    expect(s.params.metadata).toEqual({ order_id: id, package: 'weekly', terms_version: ADVERTISING_TERMS_VERSION, terms_accepted_at: expect.any(String) });
     expect(s.params.payment_intent_data).toBeUndefined();
     await completed(s, { metadata: { town: 'bay' } });
     expect(await status()).toBe('pending');
@@ -1203,7 +1207,7 @@ describe('towns sharing one Stripe account (MULTI_CITY_PLAN.md 2.2)', () => {
     await weekly();
     const s = sessions[0];
     const id = s.params.client_reference_id;
-    expect(s.params.metadata).toEqual({ order_id: id, package: 'weekly', town: 'bay' });
+    expect(s.params.metadata).toEqual({ order_id: id, package: 'weekly', terms_version: ADVERTISING_TERMS_VERSION, terms_accepted_at: expect.any(String), town: 'bay' });
     expect(s.params.payment_intent_data).toEqual({ metadata: { order_id: id, town: 'bay' } });
     expect(s.key).toBe(`bay-order-${id}`);
     await completed(s); // untagged = Victoria's

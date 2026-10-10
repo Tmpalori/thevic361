@@ -58,6 +58,7 @@ import { normalizeEmail } from './newsletter.js';
 import { venueFor } from './guides.js';
 import { renderSponsorConfirmed, renderSponsorReport, renderPickReport, renderSponsorTooLate, newsletterCovers, weekendCovers, weekendIssueOn, pickWhere } from './notify.js';
 import { botName, visitorHash, pageType, PAGE_TYPES, rowCount, SHARED_LINK } from './analytics.js';
+import { ADVERTISING_TERMS_VERSION } from './legal.js';
 
 export { newsletterCovers, pickWhere };
 
@@ -65,9 +66,11 @@ const STRIPE_API = 'https://api.stripe.com/v1';
 // Stripe's shortest Checkout expiry is 30 minutes; hold a week a little
 // longer so it can't be resold while the first buyer is still paying.
 const CHECKOUT_TTL_S = 31 * 60;
-const HOLD_MS = 35 * 60 * 1000;
-const WEEKS_AHEAD = 8;
-const FEATURE_DAYS_AHEAD = 120;
+export const HOLD_MS = 35 * 60 * 1000;
+// The advertising terms (server/legal.js BOOKING) state these; keep them in
+// step (tests/legal_pages.test.js).
+export const WEEKS_AHEAD = 8;
+export const FEATURE_DAYS_AHEAD = 120;
 const SIG_TOLERANCE_S = 300;
 // Orders are read on every page view; a minute of staleness is fine and
 // every write below clears it anyway.
@@ -774,6 +777,22 @@ export function samplePreviews() {
   };
 }
 
+// The clickwrap: an unchecked box the buyer must tick, next to the pay
+// button, with the terms one click away (new tab, so the form isn't lost).
+// Enforced on the server (POST /advertise/checkout), which records the
+// version agreed to on the order. Kept ticked only when the buyer ticked it
+// and the form came back with another error.
+export const AGREE_ERROR = 'Please tick the box to agree to the advertising terms.';
+export function agreed(value) {
+  return value === '1' || value === 'on' || value === true || value === 'true';
+}
+function agreeField(value, error) {
+  return `<div class="co-field"><label class="co-check" for="f-agree">` +
+    `<input type="checkbox" id="f-agree" name="agree" value="1" required${agreed(value) ? ' checked' : ''}${error ? ' aria-invalid="true"' : ''}>` +
+    `<span>I agree to the <a href="/advertising-terms" target="_blank" rel="noopener">Advertising Terms</a>, including the <a href="/advertising-terms#refunds" target="_blank" rel="noopener">cancellation and refund policy</a>.</span></label>` +
+    (error ? `<small class="co-error">${escHtml(error)}</small>` : '') + '</div>';
+}
+
 export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values = {}, errors = {} }) {
   const e = errors;
   const v = values;
@@ -817,6 +836,7 @@ export function renderCheckoutPage(pkg, { siteUrl, now, orders, venues, values =
         <div id="co-preview" aria-live="polite">${renderPreview(pkg.key, v, { now, orders, venues })}</div>
       </section>
       ${field({ name: 'email', label: 'Email for your receipt', type: 'email', value: v.email, error: e.email, max: 254 })}
+      ${agreeField(v.agree, e.agree)}
       <button class="btn btn--primary" type="submit">Continue to payment</button>
       <p class="co-hint">Secure payment by Stripe. ${pkg.interval ? 'Cancel any time from your receipt email.' : ''}</p>
     </form>
@@ -1886,11 +1906,21 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
             return { errors: { _form: 'We couldn’t check what’s still available just now. Please try again in a minute.' }, status: 503 };
           }
           const v = validateOrder(pkg.key, body, ctx);
-          if (!v.ok) return { errors: v.errors };
+          // The terms box is checked here, beside the fields, so one round
+          // trip shows every problem. Not in validateOrder: admin edits use it.
+          const accepted = agreed(body.agree);
+          if (!v.ok || !accepted) return { errors: { ...(v.ok ? {} : v.errors), ...(accepted ? {} : { agree: AGREE_ERROR }) } };
           // Same clock as bookableWeeks, so the hold window lines up.
           const priced = pkg.key === 'featured' ? pickPackage(v.order.event.date) : pkg;
           const { logo, ...fields } = v.order;
-          const o = { ...fields, id: newId(), status: 'pending', amount: priced.amount, created_at: nowFn().toISOString() };
+          // terms_version / terms_accepted_at: the Advertising Terms the
+          // buyer ticked the box for, and when (with `email`, the record of
+          // who agreed). Kept in the order's payload (sponsor_orders is
+          // JSONB in Postgres, the order object in the FileStore), so it
+          // survives every later status change, which spreads the order.
+          const at = nowFn().toISOString();
+          const o = { ...fields, id: newId(), status: 'pending', amount: priced.amount, created_at: at,
+            terms_version: ADVERTISING_TERMS_VERSION, terms_accepted_at: at };
           if (logo && typeof store.saveSponsorLogo === 'function') {
             await store.saveSponsorLogo(o.id, logo);
             o.sponsor = { ...o.sponsor, logo: `/sponsor-logo/${o.id}` };
@@ -1942,7 +1972,15 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
           // each town's webhook skips the others' sessions and subscriptions.
           // Victoria's carry none (untagged means Victoria), so its requests
           // are what they were before towns.
-          metadata: { order_id: order.id, package: pkg.key, ...townTag() },
+          metadata: { order_id: order.id, package: pkg.key, terms_version: order.terms_version, terms_accepted_at: order.terms_accepted_at, ...townTag() },
+          // A line by the pay button pointing back to the terms the buyer
+          // just agreed to on our form. Only `submit`: Stripe's own terms
+          // checkbox (consent_collection.terms_of_service, and with it
+          // custom_text.terms_of_service_acceptance) refuses to create a
+          // session unless a Terms of Service URL is set in each Stripe
+          // account's Dashboard, which would break checkout for any town
+          // that hasn't. custom_text.submit needs no Dashboard setting.
+          custom_text: { submit: { message: `By paying you confirm the order and our [Advertising Terms](${siteUrl}/advertising-terms) (version ${order.terms_version}), including cancellations and refunds.` } },
           subscription_data: pkg.interval ? { metadata: { order_id: order.id, ...townTag() } } : undefined,
           payment_intent_data: pkg.interval || town.id === VICTORIA.id ? undefined : { metadata: { order_id: order.id, ...townTag() } },
           expires_at: Math.floor(Date.now() / 1000) + CHECKOUT_TTL_S,

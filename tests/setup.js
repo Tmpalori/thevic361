@@ -17,3 +17,8 @@ if (globalThis.jsdom && typeof globalThis.localStorage?.setItem !== 'function') 
     });
   }
 }
+
+// The legal pages' business identity (server/legal.js) comes from these;
+// a developer's shell that exports one would change every page's text.
+delete process.env.BUSINESS_LEGAL_NAME;
+delete process.env.BUSINESS_CONTACT_EMAIL;

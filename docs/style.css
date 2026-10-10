@@ -688,6 +688,10 @@
   .footer-grid {
     grid-template-columns: 2fr 1fr 1fr;
   }
+  /* Server-rendered pages add a Policies column (seo.js footerHtml). */
+  .footer-grid--4 {
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+  }
 }
 
 .footer-section {
@@ -1372,6 +1376,10 @@ h1, h2, h3, .day-name, .section-heading, .page-title, .site-title, .sponsor-name
 .badge--new { background: var(--cactus); color: var(--ink); }
 .badge--coming { background: var(--lilac); color: var(--ink); }
 .badge--nearby { background: var(--sky-light); color: var(--color-text); }
+/* A paid pick's "Sponsored" tag beside the pick badge (seo.js pickBadges):
+   plain and legible on both themes, so it reads as a label, not a prize. */
+.badge--sponsored { background: #fff; color: #1F1A3D; }
+.coming-sponsored { justify-self: start; width: fit-content; font-size: var(--text-xs); }
 
 /* ─── Coming up (server/seo.js renderComingUp) ─── */
 .coming-up { margin-top: var(--space-6); }
@@ -2029,3 +2037,11 @@ a.notable-name { color: inherit; text-decoration: underline; text-decoration-thi
   .sub-picks { padding-inline: 0; }
   .sub-hero { padding-inline: var(--space-4); }
 }
+
+/* ─── Legal pages (server/legal.js) and the checkout's terms box ─── */
+.legal-version { color: var(--color-text-muted); font-size: var(--text-sm); }
+.legal-loud { text-transform: none; border-left: 4px solid var(--ink); padding-left: var(--space-3); }
+.legal-contact { line-height: 1.7; }
+.co-check { display: flex; gap: var(--space-2); align-items: flex-start; font-weight: 600; }
+.co-check input { width: 1.25rem; height: 1.25rem; margin-top: 0.15rem; flex: none; }
+.ad-terms-note { color: var(--color-text-muted); font-size: var(--text-sm); }

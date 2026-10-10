@@ -132,6 +132,10 @@ Accounts and settings (owner; MULTI_CITY_PLAN.md 5.2):
   - Resend: verify {settings['domain']} (SPF, DKIM, MX for replies);
     NEWSLETTER_FROM="{settings['site_name']} <news@{settings['domain']}>"; inbound
     webhook and RESEND_WEBHOOK_SECRET.
+  - Legal pages (Railway): BUSINESS_LEGAL_NAME (the LLC's legal name),
+    BUSINESS_CONTACT_EMAIL (an inbox you read: refunds, privacy requests,
+    free drawing entries) and NEWSLETTER_ADDRESS (a PO box or registered
+    mailbox; every email needs it too).
   - Stripe: the town's own Stripe account (Stripe → account menu → New
     account), on the same LLC, EIN and payout bank account as Victoria, so
     checkout, receipts and card statements show {settings['site_name']}, not

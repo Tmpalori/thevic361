@@ -102,6 +102,10 @@ The newsletter runs on Resend (`server/newsletter.js`); Beehiiv is no longer use
 2. In Railway set `RESEND_API_KEY` and `NEWSLETTER_ADDRESS` (mailing address shown in every email)
 3. Optional: `NEWSLETTER_CRON_SECRET` (Railway + GitHub secret) for the backup automatic send (Mondays and Thursdays)
 
+## 8. Legal pages
+
+`/terms`, `/advertising-terms` (refunds at `/refunds`), `/privacy` and `/accessibility` name the business from Railway variables: `BUSINESS_LEGAL_NAME` (the LLC's legal name), `BUSINESS_CONTACT_EMAIL` (an inbox you read for refunds, privacy requests and free drawing entries) and `NEWSLETTER_ADDRESS`. They're plain-English drafts, not legal advice: have an attorney review them. See AGENTS.md "Legal pages".
+
 ## Monthly Costs
 
 | Service | Cost |

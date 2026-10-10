@@ -49,7 +49,8 @@ const ENV_KEYS = ['SITE_URL', 'NEWSLETTER_FROM', 'NEWSLETTER_REPLY_TO', 'NEWSLET
   'TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY', 'RESEND_API_KEY', 'RESEND_WEBHOOK_SECRET', 'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET', 'SLACK_WEBHOOK_URL', 'SLACK_SALES_WEBHOOK_URL', 'SLACK_ACTIVITY_WEBHOOK_URL',
   'SLACK_ALERTS_WEBHOOK_URL', 'SLACK_HYPE_WEBHOOK_URL', 'SLACK_INBOX_WEBHOOK_URL', 'TOWN', 'SLACK_TOWN_TAG',
-  'NEWSLETTER_WEEKEND', 'NEWSLETTER_AUTOSEND', 'AUTO_PUBLISH', 'SCHEDULER', 'DATABASE_URL', 'RAILWAY_ENVIRONMENT_NAME'];
+  'NEWSLETTER_WEEKEND', 'NEWSLETTER_AUTOSEND', 'AUTO_PUBLISH', 'SCHEDULER', 'DATABASE_URL', 'RAILWAY_ENVIRONMENT_NAME',
+  'BUSINESS_LEGAL_NAME', 'BUSINESS_CONTACT_EMAIL'];
 const saved = {};
 for (const k of ENV_KEYS) { saved[k] = process.env[k]; delete process.env[k]; }
 afterAll(() => { for (const k of ENV_KEYS) if (saved[k] !== undefined) process.env[k] = saved[k]; });
@@ -107,6 +108,7 @@ describe('Victoria pages and feeds', () => {
 
   const PAGES = ['/', '/about', '/privacy', '/advertise', '/advertise/checkout?package=weekly', '/advertise/checkout?package=featured',
     '/subscribe', '/referral-rules', '/contact', '/submit', '/venues', '/no-such-page', '/events.json', '/events.json?all=1',
+    '/terms', '/advertising-terms', '/refunds', '/accessibility',
     '/sitemap.xml', '/llms.txt', '/robots.txt', '/pixel.js',
     ...HUB_PAGES.map(p => p.path), ...SEASONS.map(s => s.path)];
 
@@ -226,9 +228,9 @@ describe('Victoria outbound requests', () => {
     const post = fields => fetch(base + '/advertise/checkout', { method: 'POST', redirect: 'manual',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(fields).toString() });
     try {
-      const w = await post({ package: 'weekly', week: '2026-10-12', business: 'Acme Tacos', text: 'Best tacos in town.', url: 'acme.example', cta: 'Order', email: 'owner@acme.example' });
+      const w = await post({ package: 'weekly', week: '2026-10-12', business: 'Acme Tacos', text: 'Best tacos in town.', url: 'acme.example', cta: 'Order', email: 'owner@acme.example', agree: '1' });
       const f = await post({ package: 'featured', event_name: 'Fall Festival', date: '2026-10-10', time: '10 AM', venue: 'De Leon Plaza',
-        address: '101 N Main St', description: 'Food, music, rides.', business: 'Main Street', email: 'ms@example.com' });
+        address: '101 N Main St', description: 'Food, music, rides.', business: 'Main Street', email: 'ms@example.com', agree: '1' });
       expect([w.status, f.status]).toEqual([303, 303]);
       await expect(json(rec.shown())).toMatchFileSnapshot(golden('outbound/stripe.json'));
     } finally {

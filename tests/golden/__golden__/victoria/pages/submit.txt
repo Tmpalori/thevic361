@@ -223,7 +223,10 @@
 
         <p class="submit-foot">
           Your event won't appear on the site until it's been reviewed and
-          approved. We won't share your email or use it for marketing.
+          approved. We use your contact details only for this event: we won't
+          share your email or use it for marketing. By submitting, you confirm
+          you're 18 or older and agree to our <a href="/terms">terms</a>; see
+          how we handle your details in our <a href="/privacy">privacy policy</a>.
         </p>
       </form>
     </section>
@@ -254,6 +257,17 @@
       </div>
     </section>
   </main>
+
+  <footer class="submit-site-footer">
+    <nav aria-label="Policies">
+      <a href="/terms">Terms</a>
+      <a href="/advertising-terms">Advertising terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/accessibility">Accessibility</a>
+      <a href="/contact">Contact</a>
+    </nav>
+    <p>&copy; The Vic 361 · Victoria, TX</p>
+  </footer>
 
   <script src="./submit.js"></script>
   <script src="./pixel.js" defer></script>

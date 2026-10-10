@@ -8,13 +8,13 @@
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());(function(){var k=new URLSearchParams();new URLSearchParams(location.search).forEach(function(v,n){if(/^(utm_[a-z]+|gclid)$/.test(n))k.append(n,v);});var q=k.toString();gtag('config','G-52YHD3X3C2',{page_location:location.origin+location.pathname+(q?'?'+q:'')});})();</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aero Crafters Events in Victoria, TX | The Vic 361</title>
-<meta name="description" content="Upcoming events at Aero Crafters in Victoria, TX.">
-<link rel="canonical" href="https://www.thevic361.com/venues/aero-crafters">
+<title>Terms of use | The Vic 361</title>
+<meta name="description" content="The terms for using The Vic 361, its newsletter and its forms.">
+<link rel="canonical" href="https://www.thevic361.com/terms">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Aero Crafters Events in Victoria, TX | The Vic 361">
-<meta property="og:description" content="Upcoming events at Aero Crafters in Victoria, TX.">
-<meta property="og:url" content="https://www.thevic361.com/venues/aero-crafters">
+<meta property="og:title" content="Terms of use | The Vic 361">
+<meta property="og:description" content="The terms for using The Vic 361, its newsletter and its forms.">
+<meta property="og:url" content="https://www.thevic361.com/terms">
 <meta property="og:site_name" content="The Vic 361">
 <meta property="og:image" content="https://www.thevic361.com/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -31,9 +31,7 @@
 <link rel="stylesheet" href="/base.css?v=HASH">
 <link rel="stylesheet" href="/style.css?v=HASH">
 <script>(function(){var d=document.documentElement,K='vic361-theme';try{var t=localStorage.getItem(K);if(t==='dark'||t==='light')d.setAttribute('data-theme',t);}catch(e){}function cur(){return d.getAttribute('data-theme')||(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}function label(){var l='Switch to '+(cur()==='dark'?'light':'dark')+' mode';document.querySelectorAll('[data-theme-toggle]').forEach(function(b){b.setAttribute('aria-label',l);});}document.addEventListener('click',function(e){var b=e.target&&e.target.closest&&e.target.closest('[data-theme-toggle]');if(!b)return;var n=cur()==='dark'?'light':'dark';d.setAttribute('data-theme',n);try{localStorage.setItem(K,n);}catch(e2){}label();});document.addEventListener('DOMContentLoaded',label);})();</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"Place","name":"Aero Crafters","url":"https://www.thevic361.com/venues/aero-crafters","address":{"@type":"PostalAddress","streetAddress":"1502 E Airline Rd","addressLocality":"Victoria","addressRegion":"TX","addressCountry":"US"}}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Venues","item":"https://www.thevic361.com/venues"},{"@type":"ListItem","position":2,"name":"Aero Crafters","item":"https://www.thevic361.com/venues/aero-crafters"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"Event","name":"Friday Live Music","startDate":"2026-10-09T20:00:00-05:00","eventStatus":"https://schema.org/EventScheduled","eventAttendanceMode":"https://schema.org/OfflineEventAttendanceMode","location":{"@type":"Place","name":"Aero Crafters","address":{"@type":"PostalAddress","addressLocality":"Victoria","addressRegion":"TX","addressCountry":"US"}},"image":["https://www.thevic361.com/og-image.png"],"url":"https://www.thevic361.com/events/2026-10-09-friday-live-music","endDate":"2026-10-09T20:00:00-05:00","description":"Local bands on the patio.","organizer":{"@type":"Organization","name":"Aero Crafters"},"performer":{"@type":"Organization","name":"Aero Crafters"},"offers":{"@type":"Offer","priceCurrency":"USD","availability":"https://schema.org/InStock","validFrom":"2026-10-07T00:00:00-05:00","url":"https://www.thevic361.com/events/2026-10-09-friday-live-music"}}</script>
+
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
@@ -62,21 +60,52 @@
 <main class="main-content" id="main">
   <div class="container container--narrow">
 
-    <p class="breadcrumbs"><a href="/venues">Venues</a> › Aero Crafters</p>
-    <h1 class="page-title">Aero Crafters</h1>
-    <p class="page-lead">Aero Crafters has 1 upcoming event listed on The Vic 361, starting Friday, October 9.</p>
-    <dl class="event-facts">
-      <dt>Type</dt><dd>Bar / Live Music</dd>
-      <dt>Address</dt><dd>1502 E Airline Rd, Victoria, TX</dd>
-      
-    </dl>
-    
-    <h2 class="section-heading">Upcoming events</h2>
-    <section class="day-section day--d4" id="day-0"><div class="day-header"><h2 class="day-name">Friday</h2><span class="day-date">October 9</span></div><ul class="event-list" role="list"><li class="event-entry event-entry--featured" data-icons="music"><span class="event-icons" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-music"></use></svg></span><div class="event-details"><span class="badge badge--featured">Vic’s Pick</span> <span class="badge badge--sponsored">Sponsored</span> <span class="event-time">8:00 PM</span> <span class="event-name"><a href="/events/2026-10-09-friday-live-music">Friday Live Music</a></span><span class="event-venue">Aero Crafters</span><div class="event-desc">Local bands on the patio.</div></div><button type="button" class="event-share" data-share-url="/events/2026-10-09-friday-live-music" data-share-text="Friday Live Music" aria-label="Share Friday Live Music" title="Share"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true" focusable="false"><path d="M17.5 4.5l10 8.6c.6.5.6 1.3 0 1.8l-10 8.6c-.7.6-1.7.1-1.7-.8v-4.4C10 18.4 6.6 21 4.3 26.2c-.3.7-1.3.5-1.3-.3C3.4 16.8 8.6 11 15.8 10.6V5.3c0-.9 1-1.4 1.7-.8z" fill="#FF8FC0" stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round"/></svg></button></li></ul></section>
-    <h2 class="section-heading">Recent events</h2>
-    <ul class="event-list" role="list"><li class="event-entry" data-icons="drinks"><span class="event-icons" aria-hidden="true"><svg class="ico" aria-hidden="true" focusable="false"><use href="/icons.svg#i-drinks"></use></svg></span><div class="event-details"><span class="event-time">7:00 PM</span> <span class="event-name"><a href="/events/2026-10-05-monday-trivia">Monday Trivia</a></span><span class="event-venue">Aero Crafters · 1502 E Airline Rd</span><div class="event-desc">Teams of up to six; prizes for the top three.</div></div><button type="button" class="event-share" data-share-url="/events/2026-10-05-monday-trivia" data-share-text="Monday Trivia" aria-label="Share Monday Trivia" title="Share"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true" focusable="false"><path d="M17.5 4.5l10 8.6c.6.5.6 1.3 0 1.8l-10 8.6c-.7.6-1.7.1-1.7-.8v-4.4C10 18.4 6.6 21 4.3 26.2c-.3.7-1.3.5-1.3-.3C3.4 16.8 8.6 11 15.8 10.6V5.3c0-.9 1-1.4 1.7-.8z" fill="#FF8FC0" stroke="#1F1A3D" stroke-width="2.4" stroke-linejoin="round"/></svg></button></li></ul>
-    <section class="sponsor-section"><div class="sponsor-block"><div class="sponsor-label">This week's sponsor</div><div class="sponsor-name">Acme Tacos</div><div class="sponsor-text">Best tacos in town.</div><div class="sponsor-address">📍 123 Main St</div><a href="https://acme.example/?utm_source=thevic361&amp;utm_medium=sponsor&amp;utm_campaign=weekly-sponsor" class="btn btn--outline sponsor-cta" target="_blank" rel="sponsored noopener">Order now</a></div></section>
-    <p class="page-cta">Own or manage Aero Crafters? <a href="/advertise">Feature your events every week</a>.</p>
+    <h1 class="page-title">Terms of use</h1>
+    <p class="page-lead">The rules for using The Vic 361, its newsletter and its forms, in plain English.</p>
+    <p class="legal-version">Last updated October 10, 2026 · Version 2026-10-10</p>
+    <h2 class="section-heading" id="intro">Who we are</h2>
+<p>The Vic 361 runs thevic361.com and its newsletter. "We" and "us" mean The Vic 361. By using the site or subscribing, you agree to these terms and to our <a href="/privacy">privacy policy</a>. Buying an ad or a Vic’s Pick is covered by our separate <a href="/advertising-terms">advertising terms</a>.</p>
+    <h2 class="section-heading" id="who-can">Who can use it</h2>
+<p>The site is for a general audience. You need to be at least 13 to subscribe to the newsletter. Event submissions and referral rewards are for adults: 18 or older, or the age of majority in your state if that's higher.</p>
+    <h2 class="section-heading" id="accuracy">Event information can be wrong</h2>
+<p>Listings come from public sources (venue and organizer pages, public social media pages, public calendars and web searches) and from people who submit them, and we gather and summarize many of them with automated tools, including AI. <strong>Details change and can be wrong, so always check with the organizer before you go.</strong> We don't organize, run or endorse the events we list, and we aren't responsible for events, venues, tickets or other websites we link to.</p>
+    <h2 class="section-heading" id="paid">Paid placements</h2>
+<p>Some content is paid for. The weekly sponsor is labeled "This week's sponsor", and a paid Vic’s Pick is labeled "Sponsored". Vic’s Picks without that label are our editors' picks, which nobody pays for.</p>
+    <h2 class="section-heading" id="submissions">What you submit</h2>
+<ul>
+      <li>When you submit an event (text, flyers, images), you give us a non-exclusive, worldwide, royalty-free license to host, copy, edit for format and length, display and share it on our site, in our newsletters and on our social media accounts to promote the event, and to keep it in our archive. Our service providers can use it only to help us do that.</li>
+      <li>You promise you're allowed to submit it, that it's accurate, that you own or have permission to use any image, and that it isn't unlawful.</li>
+      <li>We review every submission and may edit, decline or remove any of it. Free listings aren't guaranteed a spot.</li>
+      <li>Please don't send anything confidential.</li>
+    </ul>
+    <h2 class="section-heading" id="use">Using the site fairly</h2>
+<ul>
+      <li>No scraping or bulk copying beyond normal search engine indexing, and no bots on our forms.</li>
+      <li>Don't interfere with the site, its security or its spam checks.</li>
+      <li>No false or misleading submissions, spam, harassment, impersonation or illegal content.</li>
+    </ul>
+    <h2 class="section-heading" id="newsletter">The newsletter</h2>
+<p>The newsletter is free and goes out every Monday and Thursday. You can unsubscribe any time with the link in every email. We may change how often it comes, what's in it, or stop it.</p>
+    <h2 class="section-heading" id="referrals">Referral rewards</h2>
+<p>Referral rewards and the monthly drawing are governed by their <a href="/referral-rules">official rules</a>.</p>
+    <h2 class="section-heading" id="ip">Our content</h2>
+<p>The site's design, logo, text and the way we put the listings together belong to us. Event names, logos and trademarks belong to their owners. You're welcome to use the site and share links to it for personal, non-commercial purposes.</p>
+    <h2 class="section-heading" id="copyright">Copyright complaints</h2>
+<p>If you think something on the site infringes your copyright (a flyer or photo, for example), email <a href="mailto:news@thevic361.com?subject=Copyright%20complaint">news@thevic361.com</a> with: the work you own, where it appears on our site (the link), your contact details, a statement that you believe in good faith the use isn't authorized, a statement that your notice is accurate and that you're the owner or authorized to act for them, and your signature (typing your full name is fine). We remove infringing material promptly, and we remove the content of anyone who repeatedly infringes. If your content was removed and you think that was a mistake, email us and tell us why.</p>
+    <h2 class="section-heading" id="links">Other websites</h2>
+<p>We link to other websites (organizers, venues, ticket sellers, sponsors). They have their own terms and privacy policies, and we're not responsible for them.</p>
+    <h2 class="section-heading" id="disclaimer">No warranties</h2>
+<p class="legal-loud"><strong>THE SITE, THE NEWSLETTER AND ALL LISTINGS ARE PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING ANY WARRANTY OF ACCURACY, FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT, TO THE FULLEST EXTENT THE LAW ALLOWS.</strong></p>
+    <h2 class="section-heading" id="liability">Limit of liability</h2>
+<p class="legal-loud"><strong>TO THE FULLEST EXTENT THE LAW ALLOWS, THE VIC 361 IS NOT LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL OR PUNITIVE DAMAGES, OR LOST PROFITS, ARISING FROM YOUR USE OF THE SITE OR THE NEWSLETTER, AND OUR TOTAL LIABILITY FOR ANY CLAIM ABOUT THEM IS LIMITED TO $100 OR THE AMOUNT YOU PAID US IN THE 12 MONTHS BEFORE THE CLAIM, WHICHEVER IS MORE.</strong></p>
+    <h2 class="section-heading" id="indemnity">Your responsibility</h2>
+<p class="legal-loud"><strong>YOU AGREE TO DEFEND AND COMPENSATE THE VIC 361 FOR ANY THIRD-PARTY CLAIM, LOSS OR EXPENSE (INCLUDING REASONABLE ATTORNEYS' FEES) ARISING FROM WHAT YOU SUBMIT OR FROM YOUR MISUSE OF THE SITE.</strong></p>
+    <h2 class="section-heading" id="law">Governing law</h2>
+<p>These terms are governed by the laws of the State of Texas, without regard to its conflict-of-law rules. Before going to court, email us and give us 30 days to try to sort it out. After that, disputes go to the state or federal courts in Texas, and either of us may use small claims court.</p>
+    <h2 class="section-heading" id="changes">Changes</h2>
+<p>We may update these terms. We'll change the date at the top, and tell subscribers about important changes in the newsletter. If you keep using the site after a change, the new terms apply.</p>
+    <h2 class="section-heading" id="contact">Contact</h2>
+<p class="legal-contact"><strong>The Vic 361</strong><br>Email: <a href="mailto:news@thevic361.com">news@thevic361.com</a><br>Or use our <a href="/contact">contact form</a>.</p>
   </div>
 </main>
 <footer class="site-footer">

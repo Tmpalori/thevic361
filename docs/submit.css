@@ -294,3 +294,8 @@ body {
 /* Keep checkbox, icon and label on one line inside each chip. */
 .chip span { display: inline-flex; align-items: center; white-space: nowrap; }
 
+/* Policy links under the form (this page has no site footer). */
+.submit-site-footer { max-width: 640px; margin: 0 auto; padding: 1rem 1rem 2.5rem; text-align: center; font-size: 0.9rem; }
+.submit-site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem 1rem; }
+.submit-site-footer a { color: inherit; font-weight: 700; }
+.submit-site-footer p { margin: 0.6rem 0 0; opacity: 0.75; }

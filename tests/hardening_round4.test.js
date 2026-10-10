@@ -55,7 +55,7 @@ describe('footer year', () => {
   it('is the year in Victoria, not UTC, on the evening of Dec 31', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2027-01-01T01:30:00Z')); // Dec 31, 7:30 PM Central
-    const html = seo.renderPrivacyPage({ siteUrl: SITE });
+    const html = seo.renderAboutPage({ siteUrl: SITE });
     expect(html).toContain('&copy; 2026 The Vic 361');
     expect(html).not.toContain('&copy; 2027');
   });

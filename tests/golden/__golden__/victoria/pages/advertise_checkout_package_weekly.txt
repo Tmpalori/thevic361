@@ -73,6 +73,7 @@
         <div id="co-preview" aria-live="polite"><p class="co-preview-where">Shown on every page of thevic361.com for your week, and at the top of that week’s newsletters (Monday’s and Thursday’s).</p><section class="sponsor-section"><div class="sponsor-block"><div class="sponsor-label">This week's sponsor</div><div class="sponsor-name">Your business</div><div class="sponsor-text">Your one or two sentences about your business go here.</div><span class="btn btn--outline" style="cursor:default; opacity:0.6">Learn more</span></div></section></div>
       </section>
       <div class="co-field"><label for="f-email">Email for your receipt</label><input type="email" id="f-email" name="email" required maxlength="254" value=""></div>
+      <div class="co-field"><label class="co-check" for="f-agree"><input type="checkbox" id="f-agree" name="agree" value="1" required><span>I agree to the <a href="/advertising-terms" target="_blank" rel="noopener">Advertising Terms</a>, including the <a href="/advertising-terms#refunds" target="_blank" rel="noopener">cancellation and refund policy</a>.</span></label></div>
       <button class="btn btn--primary" type="submit">Continue to payment</button>
       <p class="co-hint">Secure payment by Stripe. </p>
     </form>
@@ -157,7 +158,7 @@
 </main>
 <footer class="site-footer">
     <div class="container">
-      <div class="footer-grid">
+      <div class="footer-grid footer-grid--4">
         <div class="footer-section">
           <h2>Stay in the loop</h2>
           <p>Get Victoria's best events in your inbox every Monday and Thursday.</p>
@@ -191,7 +192,16 @@
             <li><a href="/venues">Venues</a></li>
             <li><a href="/advertise">Advertise</a></li>
             <li><a href="/contact">Contact</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h2>Policies</h2>
+          <ul class="footer-links" role="list">
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="/advertising-terms">Advertising terms</a></li>
             <li><a href="/privacy">Privacy</a></li>
+            <li><a href="/accessibility">Accessibility</a></li>
+            <li><a href="/referral-rules">Referral rules</a></li>
           </ul>
         </div>
       </div>

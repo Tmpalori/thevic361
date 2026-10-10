@@ -202,7 +202,7 @@ describe('spam check (Turnstile) on public forms', () => {
     expect((await sub('good-token')).status).toBe(200);
     expect((await store.countSubscribers()).active).toBe(1);
 
-    const order = { package: 'weekly', week: '2026-10-19', business: 'Acme', text: 'x', url: 'acme.example', email: 'a@acme.example' };
+    const order = { package: 'weekly', week: '2026-10-19', business: 'Acme', text: 'x', url: 'acme.example', email: 'a@acme.example', agree: '1' };
     expect((await postForm('/advertise/checkout', order)).status).toBe(400);
     expect((await postForm('/advertise/checkout', { ...order, 'cf-turnstile-response': 'good-token' })).status).toBe(303);
   });

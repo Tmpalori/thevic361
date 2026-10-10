@@ -50,9 +50,13 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import {
   HUB_PAGES, localDateStr, renderHome, renderHubPage, renderEventPage,
-  renderAboutPage, renderPrivacyPage, renderAdvertisePage, advertiseStats, renderNotFoundPage, renderSitemap, renderLlmsTxt
+  renderAboutPage, renderAdvertisePage, advertiseStats, renderNotFoundPage, renderSitemap, renderLlmsTxt
   , fillSeasonalNav, currentWeek, addDays, shiftToWeek
 } from './seo.js';
+import {
+  businessConfig, useBusiness, hasLegalName, hasContactEmail, mailingAddress,
+  renderPrivacyPage, renderTermsPage, renderAdvertisingTermsPage, renderAccessibilityPage
+} from './legal.js';
 import {
   buildVenues, venueFor, renderVenuePage, renderVenueIndex, venuesWithEvents,
   townSeasons, activeSeasons, renderSeasonPage, renderIcs, eventActionsHtml
@@ -146,6 +150,9 @@ export async function createApp(opts = {}) {
   // search engines see one site instead of two copies.
   // The town (server/town.js): TOWN in Railway, unset = Victoria; opts.town for tests.
   useTown(townConfig(process.env, opts));
+  // Who runs the site, for the legal pages (server/legal.js): Railway's
+  // BUSINESS_LEGAL_NAME, BUSINESS_CONTACT_EMAIL and NEWSLETTER_ADDRESS.
+  useBusiness(businessConfig(process.env, opts));
   // The town's data files (townPaths): repo-relative for GitHub, absolute on disk.
   const PATHS = townPaths();
   const CANDIDATES_FILE = path.join(REPO_ROOT, PATHS.candidates);
@@ -475,12 +482,6 @@ export async function createApp(opts = {}) {
   // (and the Slack alert with the path).
   const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-  // Vic's Pick checkout prefilled with a submission's event and contact
-  // (by its id; server/sponsors.js fills them in, so none of it is in the URL).
-  function upgradeUrlFor(row) {
-    return `${siteUrl}/advertise/checkout?package=featured&from=${encodeURIComponent(row.id)}`;
-  }
-
   // ─── Public: submit ───
   app.post('/api/submissions', wrap(async (req, res) => {
     const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -560,7 +561,9 @@ export async function createApp(opts = {}) {
     });
     // Tell them it worked and what happens next (no-op without Resend).
     if (row.submitter_email && receiptLimiter.check(row.submitter_email.toLowerCase()).ok) {
-      const mail = renderSubmissionReceived(ev, { siteUrl, address: newsletter.address, upgradeUrl: upgradeUrlFor(row) });
+      // No paid upsell here: the submit form promises the address isn't
+      // used for marketing.
+      const mail = renderSubmissionReceived(ev, { siteUrl, address: newsletter.address });
       mailer.send(row.submitter_email, mail, `${town.keyPrefix}-submission-${row.id}`);
     }
     return res.status(201).json({ ok: true, queued: true, id: row.id });
@@ -1948,10 +1951,24 @@ export async function createApp(opts = {}) {
     sendHtml(res, renderPrivacyPage(ctx));
   }));
 
+  // Terms of use, the advertising terms checkout links to (with the refund
+  // and cancellation policy at #refunds) and the accessibility statement
+  // (server/legal.js).
+  app.get('/terms', pageHandler(async (req, res, payload, ctx) => {
+    sendHtml(res, renderTermsPage(ctx));
+  }));
+  app.get('/advertising-terms', pageHandler(async (req, res, payload, ctx) => {
+    sendHtml(res, renderAdvertisingTermsPage(ctx));
+  }));
+  app.get('/refunds', (req, res) => res.redirect(301, '/advertising-terms#refunds'));
+  app.get('/accessibility', pageHandler(async (req, res, payload, ctx) => {
+    sendHtml(res, renderAccessibilityPage(ctx));
+  }));
+
   app.get('/sitemap.xml', pageHandler(async (req, res, payload, ctx) => {
     res.set('Cache-Control', 'public, max-age=300');
     const extraPaths = [
-      '/venues', '/subscribe', '/privacy',
+      '/venues', '/subscribe', '/privacy', '/terms', '/advertising-terms', '/accessibility', '/referral-rules',
       ...activeSeasons(payload.events, ctx.archived, ctx.now).map(s => s.path),
       ...venuesWithEvents(venues, payload.events, ctx.archived, ctx.now).map(v => v.path)
     ];
@@ -2000,7 +2017,7 @@ export async function createApp(opts = {}) {
       // worded from when it was bought (the paid row is created at payment).
       const pinned = paid && Boolean(live.featured) && !live.editor_pick;
       const mail = renderSubmissionLive(paid ? { ...row.payload, name: live.name, featured: pinned } : row.payload, {
-        siteUrl, address: newsletter.address, upgradeUrl: paid ? '' : upgradeUrlFor(row), pick: pinned, at: row.created_at,
+        siteUrl, address: newsletter.address, pick: pinned, at: row.created_at,
         pageUrl: live.page ? `${siteUrl}${live.page}` : ''
       });
       // mailer.deliver never throws. A throw here is what the review's retry
@@ -2261,6 +2278,12 @@ export async function createApp(opts = {}) {
         fix: slackRefusedText() || 'Set SLACK_WEBHOOK_URL in Railway (and as a GitHub secret) to get pings for breakage, sponsors and submissions. Optional: SLACK_SALES_WEBHOOK_URL, SLACK_ACTIVITY_WEBHOOK_URL, SLACK_ALERTS_WEBHOOK_URL, SLACK_HYPE_WEBHOOK_URL (new subscribers and sponsors) and SLACK_INBOX_WEBHOOK_URL (replies and contact messages) send each kind to its own channel.' },
       { key: 'newsletter', label: 'Email newsletter (Resend)', ok: newsletter.enabled && Boolean(newsletter.address), level: 'recommended',
         fix: newsletter.enabled ? 'Set NEWSLETTER_ADDRESS (a mailing address is required by law in every email).' : 'Set RESEND_API_KEY and NEWSLETTER_ADDRESS in Railway.' },
+      { key: 'business_name', label: 'Legal pages name your business', ok: hasLegalName(), level: 'recommended',
+        fix: `Set BUSINESS_LEGAL_NAME in Railway to the legal name of the company that runs the site (e.g. "Example Media LLC"). Until then the terms, privacy policy and referral rules name ${town.siteName} itself as the operator.` },
+      { key: 'business_contact', label: 'Legal and privacy contact email', ok: hasContactEmail(), level: 'recommended',
+        fix: 'Set BUSINESS_CONTACT_EMAIL in Railway to an inbox you read. The terms, privacy policy, refund policy and referral rules tell people to email it (refunds, deletion requests, free drawing entries). Until then they show NEWSLETTER_REPLY_TO or the news@ address.' },
+      { key: 'business_address', label: 'Mailing address on the legal pages', ok: Boolean(mailingAddress()), level: 'recommended',
+        fix: 'Set NEWSLETTER_ADDRESS in Railway (a PO box or a registered mailbox is fine). The legal pages print it as the business address, and every newsletter must carry it.' },
       { key: 'newsletter_auto', label: newsletter.weekend ? `Newsletter sends itself (Mondays ${startLabel('newsletter')}, Thursdays ${startLabel('newsletter-weekend')})` : `Newsletter sends itself (Mondays ${startLabel('newsletter')})`, ok: newsletter.enabled && newsletter.autosend, level: 'recommended',
         fix: !newsletter.enabled ? 'Set RESEND_API_KEY in Railway first.'
           : 'NEWSLETTER_AUTOSEND=0 is set in Railway; remove it to send automatically. (Optional backup: NEWSLETTER_CRON_SECRET in Railway and GitHub lets GitHub retry later in the day.)' },

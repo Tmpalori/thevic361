@@ -56,7 +56,8 @@ describe('another town', () => {
     expect(page).not.toMatch(/\$300|\$49\b|\$89\b/);
     const email = renderSubmissionReceived({ name: 'Fish Fry', date: '2026-10-09', time: '6:00 PM', venue: 'Hall' },
       { siteUrl: 'https://www.thebay979.com', address: '', upgradeUrl: 'https://www.thebay979.com/up' });
-    expect(email.html).toContain('($29.50 Mon–Thu, $59 Fri–Sun)');
+    // The free-submission email carries no paid upsell (and so no prices).
+    expect(email.html).not.toMatch(/\$29\.50|\$59|\$49|\$89/);
   });
 
   it('keeps the shared curation defaults it doesn’t set', () => {
