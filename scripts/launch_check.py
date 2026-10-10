@@ -44,6 +44,8 @@ MANUAL = """
 Check by hand before launch:
   [ ] Admin → Newsletter → send a test to delivered@resend.dev (never a real list)
   [ ] A Stripe test-mode checkout on /advertise completes and shows in Admin → Sponsors
+  [ ] That checkout page and its receipt show the town's name and logo, not The Vic 361
+      (the town has its own Stripe account)
   [ ] A reply to news@ lands in #inbox with the town's [tag]
   [ ] The HQ dashboard shows the town
   [ ] python3 scripts/live_check.py: Victoria unchanged

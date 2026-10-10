@@ -132,8 +132,13 @@ Accounts and settings (owner; MULTI_CITY_PLAN.md 5.2):
   - Resend: verify {settings['domain']} (SPF, DKIM, MX for replies);
     NEWSLETTER_FROM="{settings['site_name']} <news@{settings['domain']}>"; inbound
     webhook and RESEND_WEBHOOK_SECRET.
-  - Stripe: a webhook endpoint at {site}/api/stripe/webhook and its
-    STRIPE_WEBHOOK_SECRET (same account and key as Victoria).
+  - Stripe: the town's own Stripe account (Stripe → account menu → New
+    account), on the same LLC, EIN and payout bank account as Victoria, so
+    checkout, receipts and card statements show {settings['site_name']}, not
+    The Vic 361. Set its public business name, logo and statement
+    descriptor, then its STRIPE_SECRET_KEY, and a webhook endpoint at
+    {site}/api/stripe/webhook with its STRIPE_WEBHOOK_SECRET. Products and
+    prices are created on the first checkout.
   - Facebook page, Instagram, ad account (the town's GitHub Environment).
   - GA data stream (gaId in town.json), Turnstile hostname, Tremendous campaign.
 
