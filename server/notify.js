@@ -81,6 +81,9 @@ export function createMailer({ resend, config }) {
   // (email not set up, or no address). Never throws.
   async function deliver(to, mail, idempotencyKey) {
     if (!enabled || !to) return 'off';
+    // A masked address (j•••@gmail.com) is what an order keeps after its
+    // buyer asked us to delete their data (server/privacy.js): no mail.
+    if (String(to).includes('•')) return 'refused';
     try {
       await resend.send({
         from: config.from, to: [to], subject: mail.subject, html: mail.html, text: mail.text,

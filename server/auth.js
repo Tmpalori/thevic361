@@ -59,6 +59,11 @@ function safeEqualBuf(a, b) {
   return crypto.timingSafeEqual(a, b);
 }
 
+// Minimum lengths for the admin password and the session / legacy token
+// secrets (the same rule HQ uses).
+export const MIN_PASSWORD = 12;
+export const MIN_SECRET = 32;
+
 export function createAuth(opts = {}) {
   const username = opts.username ?? process.env.ADMIN_USERNAME ?? null;
   const password = opts.password ?? process.env.ADMIN_PASSWORD ?? null;
@@ -72,6 +77,14 @@ export function createAuth(opts = {}) {
   // ADMIN_SESSION_SECRET means we can't sign anything, so we refuse to
   // pretend login works.
   const configured = Boolean(username && password && secret);
+
+  // Too short to stand up to guessing spread over many addresses (each
+  // gets its own login budget). Not refused: production may run on these
+  // today, and turning login off would lock the owner out of the admin.
+  // Instead the setup checklist and a boot alert say so (server/index.js).
+  const weak = [];
+  if (configured && String(password).length < MIN_PASSWORD) weak.push(`ADMIN_PASSWORD is shorter than ${MIN_PASSWORD} characters`);
+  if (configured && String(secret).length < MIN_SECRET) weak.push(`ADMIN_SESSION_SECRET is shorter than ${MIN_SECRET} characters`);
 
   // Same token format and algorithm; only the key changes with the
   // credentials. The password enters as a hash, never as key material
@@ -130,6 +143,7 @@ export function createAuth(opts = {}) {
 
   return {
     configured,
+    weak,
     ttlMs,
     username,
     signToken,

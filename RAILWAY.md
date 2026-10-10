@@ -27,8 +27,11 @@ good ones publish automatically unless `SUBMISSION_AUTOAPPROVE=0`.
    tables on first use; there is no migration step. Without `DATABASE_URL`
    it falls back to a JSON file under `data/`, which is fine locally but not
    durable on Railway.
-3. **Set the variables.** At minimum `ADMIN_USERNAME`, `ADMIN_PASSWORD` and
-   `ADMIN_SESSION_SECRET` (`openssl rand -hex 32`); then work down the
+3. **Set the variables.** At minimum `ADMIN_USERNAME`, `ADMIN_PASSWORD`
+   (12+ characters) and `ADMIN_SESSION_SECRET` (32+, `openssl rand -hex 32`;
+   the same for a legacy `ADMIN_TOKEN`). Shorter ones still work, but the
+   checklist marks them required and production alerts Slack on every boot.
+   Then work down the
    admin Home tab's setup checklist, which says what each missing variable
    turns on (Slack, Resend newsletter, Stripe, cron secrets, Turnstile,
    GitHub token). PR and staging environments don't inherit `ADMIN_*`
@@ -212,6 +215,81 @@ Each row links to that town's admin, which still asks for its own login.
 PR environments copy the hq service (with production's variables) when a PR
 changes HQ's code. Outside `production` it starts in preview mode: `/health`
 answers, the login is off and no town is asked.
+
+## Backups and data exports
+
+Railway's scheduled Postgres backups (AGENTS.md "Backups") live with the
+Postgres service: deleting the service or project, or losing the Railway
+account, takes them too. Keep a second copy somewhere else.
+
+- **Subscriber list:** admin → Email tab → "Back up the list, or delete
+  someone's data" → **Download subscribers (CSV)** (`GET
+  /api/admin/subscribers.csv`: email, status, source and dates). Store the
+  file somewhere private (not in this repo).
+- **Whole database, encrypted:** from a machine with `pg_dump` and
+  [`age`](https://github.com/FiloSottile/age), using the Postgres service's
+  public URL (Railway → Postgres → Variables → `DATABASE_PUBLIC_URL`):
+
+  ```bash
+  age-keygen -o ~/vic361-backup.key        # once; keep the key OFF the machine that holds the dumps
+  pg_dump --no-owner --format=custom "$DATABASE_PUBLIC_URL" \
+    | age -r "$(age-keygen -y ~/vic361-backup.key)" > vic361-$(date +%F).dump.age
+  # restore: age -d -i ~/vic361-backup.key vic361-YYYY-MM-DD.dump.age | pg_restore --no-owner -d "$TARGET_URL"
+  ```
+
+  Put the `.age` file in private storage you control (R2, B2, S3, a
+  personal drive). Restore one into a scratch database now and then to know
+  it works.
+- **Never use GitHub Actions artifacts or the repo for backups.** This repo
+  is public: anyone signed in to GitHub can download its workflow
+  artifacts, and anything committed is public forever.
+
+Personal data is kept only as long as the privacy page says: a daily job
+(`privacy-purge`, `server/privacy.js`) clears the IP address and user agent
+on submissions older than 12 months and deletes contact-form messages older
+than 24 months. To delete everything about one person on request, use
+**Delete their data** in the same admin section (`POST
+/api/admin/privacy/forget`): it removes their subscription, contact
+messages and the contact details on their submissions, and masks their
+address on sponsor orders and gift-card rewards (kept for the books). The
+action is logged and posted to Slack with the masked address.
+
+## Operations checklist
+
+Things the code can't do for you. Check them when setting up a town and
+again every few months.
+
+- **External uptime monitor.** Set one up (UptimeRobot, Better Stack or
+  similar) on `https://www.thevic361.com/api/health?deep=1` every 1 to 5
+  minutes, plus a keyword check that `/events.json` contains `"events"`.
+  Send it to the Slack alerts webhook and a phone push. The in-process
+  checks and `uptime.yml` can't see a dead process or a DNS/TLS break, and
+  GitHub's cron runs hours late.
+- **Two-factor sign-in** on every account that can change the site or take
+  money: GitHub, Railway, Stripe, Resend, Cloudflare, Squarespace (DNS),
+  Slack and Meta. Account takeover is the most likely way in.
+- **`GITHUB_TOKEN` scope.** Use a fine-grained token on this repo only,
+  with an expiry date and a calendar reminder to renew it. It needs
+  Actions: write for the scheduler; Contents: write only lets Save &
+  Publish commit `docs/events.json`, and also lets anyone holding the token
+  push code to `main`, which deploys to production. Drop Contents: write if
+  you can live without that commit. Add a ruleset on `main` (no
+  force-push, no deletion) and keep PR environments from receiving
+  production secrets.
+- **Key rotation.** Keep a list of every secret, where it's set (Railway,
+  GitHub) and when it was last changed: `GITHUB_TOKEN`, `STRIPE_SECRET_KEY`
+  / `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY` / `RESEND_WEBHOOK_SECRET`,
+  `TREMENDOUS_API_KEY`, `OPENAI_API_KEY` / `APIFY_TOKEN` / `GEMINI_API_KEY`,
+  the `META_*` tokens, the SMTP app password, `PREVIEWS_DEPLOY_KEY`, the
+  three cron secrets, `HQ_API_KEY` and the `ADMIN_*` values. Rotate after
+  anyone with access leaves or a secret may have leaked, and at least
+  yearly. Changing `ADMIN_PASSWORD` or `ADMIN_SESSION_SECRET` signs every
+  admin out (and the session secret also salts the day's visitor counts).
+- **Backups.** Railway's daily backups on (7+ days kept), a test restore
+  done once, and an encrypted copy off Railway (above).
+- **`DATABASE_URL`** references Postgres's private URL
+  (`*.railway.internal`), not the public proxy: the app doesn't verify the
+  database's TLS certificate.
 
 ## Local development
 

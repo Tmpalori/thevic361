@@ -18,6 +18,7 @@
 import crypto from 'node:crypto';
 import { localDateStr, addDays, HUB_PAGES } from './seo.js';
 import { SEASONS } from './guides.js';
+import { createRateLimiter, ipKey } from './rateLimit.js';
 
 // Known crawlers, checked in order. Anything else bot-like is "Other bot".
 // The third field sorts AI bots by what the visit means:
@@ -139,12 +140,28 @@ function cleanPath(p) {
 // read (/events.json, /llms.txt). Runs after the response is sent; failures
 // are logged and never affect the request. `now` is the app's clock, so a
 // crawl lands on the same day the summary is anchored on.
-export function crawlerMiddleware(store, now = () => new Date()) {
+//
+// The user agent is whatever the client says, so anyone can claim to be
+// Googlebot: without a cap, a loop of `curl -A Googlebot` wrote one row per
+// request and could fill the database. Each client address (IPv6 on its
+// /64) records at most CRAWL_PER_IP_MIN crawls a minute and everyone
+// together CRAWL_ALL_MIN; past that the page is still served, just not
+// counted. Real crawlers on a site this size stay far below both.
+export const CRAWL_PER_IP_MIN = 30;
+export const CRAWL_ALL_MIN = 300;
+export function crawlerMiddleware(store, now = () => new Date(), {
+  perIp = createRateLimiter({ windowMs: 60 * 1000, max: CRAWL_PER_IP_MIN }),
+  overall = createRateLimiter({ windowMs: 60 * 1000, max: CRAWL_ALL_MIN })
+} = {}) {
   return (req, res, next) => {
     if (req.method !== 'GET' || req.path.startsWith('/api/') || req.path.startsWith('/admin') ||
       req.path === '/robots.txt') return next();
     const bot = botName(req.get('user-agent'));
     if (!bot || bot === 'Other bot') return next();
+    const ip = ipKey(req.ip || (req.socket && req.socket.remoteAddress) || '');
+    // The overall budget is only spent by requests the per-client cap let
+    // through, so one flooding address can't use it up for everyone.
+    if (!perIp.check(ip).ok || !overall.check('all').ok) return next();
     res.on('finish', () => {
       const type = String(res.get('content-type') || '');
       if (res.statusCode !== 200 || !/text\/html|application\/json|text\/plain/.test(type)) return;
