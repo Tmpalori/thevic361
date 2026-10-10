@@ -333,19 +333,28 @@ describe('subscriber CSV export (backups)', () => {
 });
 
 describe('admin secret minimums (finding 7)', () => {
-  it('short secrets fail a required setup check and alert in production, but login still works', async () => {
+  it('a short secret or token fails a required setup check and alerts in production, but login still works', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { base, slack } = await startApp({ adminPassword: 'pw7', adminSessionSecret: 'tiny', adminToken: 'tok', railwayEnvironment: 'production' });
     const weak = slack.alerts.filter(a => a.key === 'admin-weak-secrets');
     expect(weak).toHaveLength(1);
-    expect(weak[0].text).toMatch(/ADMIN_PASSWORD is shorter than 12.*ADMIN_SESSION_SECRET is shorter than 32.*ADMIN_TOKEN is shorter than 32/);
+    expect(weak[0].text).toMatch(/ADMIN_SESSION_SECRET is shorter than 32.*ADMIN_TOKEN is shorter than 32/);
     // Lengths only, never the values.
     expect(weak[0].text).not.toMatch(/pw7|tiny|tok\b/);
     const headers = await login(base, 'admin', 'pw7');
     const setup = await (await fetch(base + '/api/admin/setup', { headers })).json();
-    const check = setup.checks.find(c => c.key === 'admin_secrets');
-    expect(check).toMatchObject({ ok: false, level: 'required' });
-    expect(check.fix).toContain('ADMIN_PASSWORD is shorter than 12 characters');
+    expect(setup.checks.find(c => c.key === 'admin_secrets')).toMatchObject({ ok: false, level: 'required' });
+    expect(setup.checks.find(c => c.key === 'admin_password')).toMatchObject({ ok: false, level: 'recommended' });
+  });
+
+  it('a short password alone is the owner\'s call: a recommended setup item, no alert, no log line', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { base, slack } = await startApp({ adminPassword: 'shortpw9', railwayEnvironment: 'production' });
+    expect(slack.alerts.filter(a => a.key === 'admin-weak-secrets')).toHaveLength(0);
+    expect(warn.mock.calls.flat().join(' ')).not.toContain('ADMIN_PASSWORD');
+    const setup = await (await fetch(base + '/api/admin/setup', { headers: await login(base, 'admin', 'shortpw9') })).json();
+    expect(setup.checks.find(c => c.key === 'admin_secrets').ok).toBe(true);
+    expect(setup.checks.find(c => c.key === 'admin_password')).toMatchObject({ ok: false, level: 'recommended' });
   });
 
   it('long enough: the check passes and nothing alerts; a PR environment never alerts', async () => {
