@@ -25,6 +25,7 @@ export function sponsorCounts(orders, today) {
   const booked = weeks.filter(w => live.some(o => o.kind === 'weekly' && o.week_start === w)).length;
   const month = today.slice(0, 7);
   return {
+    weeks: weeks.map(w => ({ week_start: w, booked: live.some(o => o.kind === 'weekly' && o.week_start === w) })),
     weeks_booked_next_4: booked,
     weeks_open_next_4: weeks.length - booked,
     picks_sold_this_month: live.filter(o => o.kind === 'featured' && String(o.paid_at || '').slice(0, 7) === month).length
@@ -47,8 +48,11 @@ export async function buildSummary({ store, nowFn, town, siteUrl, commit, getEve
   const safe = async (fn, dflt = null) => { try { return await fn(); } catch { return dflt; } };
   const subs = await safe(() => store.listSubscriberStats(), []);
   const orders = await safe(getOrders, []);
-  const daily = dailyGrowth(subs, [], { today, days: 31 });
+  const spend = typeof store.listAdSpend === 'function' ? await safe(() => store.listAdSpend(addDays(today, -31)), []) : [];
+  const daily = dailyGrowth(subs, spend, { today, days: 31 });
   const done = daily.filter(d => d.day < today);
+  const month30 = sumDays(done.slice(-30));
+  const active = subs.filter(x => x.status === 'active').length;
   const sends = await safe(() => store.listNewsletterSends(4), []);
   const weekKeys = sends.map(s => s.week_key);
   const opens = weekKeys.length ? await safe(() => store.countEmailOpens(weekKeys), {}) : {};
@@ -60,15 +64,32 @@ export async function buildSummary({ store, nowFn, town, siteUrl, commit, getEve
   for (const o of orders) if (o && !o.test) byStatus[o.status] = (byStatus[o.status] || 0) + 1;
   const s = await safe(setup, { checks: [], status: {} });
   const missing = level => s.checks.filter(c => c.level === level && c.ok === false).map(c => c.key);
+  // Active subscribers at the end of each day, worked back from today's count.
+  let after = 0;
+  const history = [];
+  for (let i = daily.length - 1; i >= 0; i--) {
+    history.unshift({ day: daily[i].day, active: active - after, joined: daily[i].joined, left: daily[i].unsubscribed });
+    after += daily[i].net;
+  }
+  // The last six months' revenue, oldest first (this month so far last).
+  const months = [];
+  for (let m = today.slice(0, 7) + '-01', i = 0; i < 6; i++, m = addDays(m, -1).slice(0, 7) + '-01') {
+    const r = monthRevenue(orders, m);
+    months.unshift({ month: r.month, cents: r.cents });
+  }
   return {
     ok: true,
     generated_at: now.toISOString(),
     town: { id: town.id, name: town.siteName, site_url: siteUrl, admin_url: `${siteUrl}/admin.html`, commit: commit || null },
     subscribers: {
-      active: subs.filter(x => x.status === 'active').length,
+      active,
       pending: subs.filter(x => x.status === 'pending').length,
       net_7_days: sumDays(done.slice(-7)).net,
-      net_30_days: sumDays(done.slice(-30)).net,
+      net_30_days: month30.net,
+      joined_30_days: month30.joined,
+      left_30_days: month30.unsubscribed,
+      sources_30_days: month30.by_source,
+      daily: history,
       goals: goals(subs, daily, monthRevenue(orders, today), today)
     },
     issues: issueReport(sends, opens, subs, rows, events).slice(0, 4)
@@ -78,8 +99,10 @@ export async function buildSummary({ store, nowFn, town, siteUrl, commit, getEve
       month_to_date: monthRevenue(orders, today),
       last_month: monthRevenue(orders, lastMonthDay),
       orders_by_status: byStatus,
-      live_orders: orders.filter(o => o && !o.test && KEPT.has(o.status)).length
+      live_orders: orders.filter(o => o && !o.test && KEPT.has(o.status)).length,
+      months
     },
+    ads: { spend_30_days: month30.spend, cost_per_sub_30_days: month30.cost_per_sub },
     sponsors: sponsorCounts(orders, today),
     submissions_waiting: s.status.pending_submissions ?? null,
     events: { upcoming: s.status.upcoming_events ?? null, last_collect: s.status.collected_at ?? null, published_at: s.status.published_at ?? null },

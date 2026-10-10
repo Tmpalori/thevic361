@@ -68,6 +68,16 @@ describe('/api/hq/summary', () => {
       health: { database: false, scheduler_blocked: false, slack_refused: false }
     });
     expect(body.setup.required_missing).toContain('database');
+    // The trends the HQ charts draw: 31 days of active counts ending today,
+    // six months of revenue ending this month, the next four sponsor weeks.
+    expect(body.subscribers.daily).toHaveLength(31);
+    expect(body.subscribers.daily.at(-1)).toMatchObject({ day: '2026-10-09', active: 0 });
+    expect(body.revenue.months.map(m => m.month)).toEqual(['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10']);
+    expect(body.revenue.months.at(-1).cents).toBe(30000);
+    expect(body.sponsors.weeks).toEqual([
+      { week_start: '2026-10-12', booked: true }, { week_start: '2026-10-19', booked: false },
+      { week_start: '2026-10-26', booked: false }, { week_start: '2026-11-02', booked: false }]);
+    expect(body.ads).toEqual({ spend_30_days: null, cost_per_sub_30_days: null });
     const text = JSON.stringify(body);
     for (const personal of ['@', 'reader', 'Acme', 'owner']) expect(text).not.toContain(personal);
   });

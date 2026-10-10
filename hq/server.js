@@ -21,6 +21,9 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { createRateLimiter } from '../server/rateLimit.js';
+import { rowOf, totalsOf, renderDashboard, renderLogin } from './render.js';
+
+export { rowOf, totalsOf, renderDashboard, renderLogin };
 
 const SESSION_HOURS = 12;
 const FETCH_TIMEOUT_MS = 8000;
@@ -51,7 +54,6 @@ export function hqConfig(env = process.env) {
   return { towns, username, password, secret };
 }
 
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const same = (a, b) => {
   const x = crypto.createHash('sha256').update(String(a)).digest();
   const y = crypto.createHash('sha256').update(String(b)).digest();
@@ -96,94 +98,6 @@ export async function fetchTown(town, fetchImpl = globalThis.fetch) {
   }
 }
 
-// The numbers each row and the totals show.
-export function rowOf(t) {
-  const s = t.summary;
-  if (!s) return { slug: t.slug, siteUrl: t.siteUrl, error: t.error };
-  const issue = (s.issues || [])[0] || null;
-  const health = s.health || {};
-  const problems = [
-    health.database === false && 'database',
-    health.scheduler_blocked && 'scheduler',
-    health.slack_refused && 'Slack',
-    ...((s.setup && s.setup.required_missing) || []).map(k => `setup: ${k}`)
-  ].filter(Boolean);
-  return {
-    slug: t.slug, siteUrl: t.siteUrl, name: s.town && s.town.name, adminUrl: (s.town && s.town.admin_url) || `${t.siteUrl}/admin.html`,
-    subscribers: s.subscribers ? s.subscribers.active : null,
-    net7: s.subscribers ? s.subscribers.net_7_days : null,
-    openRate: issue ? issue.open_rate : null,
-    revenueCents: s.revenue && s.revenue.month_to_date ? s.revenue.month_to_date.cents : null,
-    openWeeks: s.sponsors ? s.sponsors.weeks_open_next_4 : null,
-    picks: s.sponsors ? s.sponsors.picks_sold_this_month : null,
-    waiting: s.submissions_waiting,
-    upcoming: s.events ? s.events.upcoming : null,
-    problems
-  };
-}
-
-export function totalsOf(rows) {
-  const sum = k => rows.reduce((a, r) => a + (Number.isFinite(r[k]) ? r[k] : 0), 0);
-  const rates = rows.filter(r => Number.isFinite(r.openRate) && Number.isFinite(r.subscribers) && r.subscribers > 0);
-  const weight = rates.reduce((a, r) => a + r.subscribers, 0);
-  return {
-    towns: rows.length, down: rows.filter(r => r.error).length,
-    subscribers: sum('subscribers'), net7: sum('net7'), revenueCents: sum('revenueCents'),
-    openWeeks: sum('openWeeks'), picks: sum('picks'), waiting: sum('waiting'),
-    openRate: weight ? Math.round(rates.reduce((a, r) => a + r.openRate * r.subscribers, 0) / weight * 10) / 10 : null
-  };
-}
-
-const money = c => (Number.isFinite(c) ? `$${(c / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—');
-const num = n => (Number.isFinite(n) ? n.toLocaleString('en-US') : '—');
-const pct = n => (Number.isFinite(n) ? `${n}%` : '—');
-const signed = n => (Number.isFinite(n) ? `${n > 0 ? '+' : ''}${n}` : '—');
-
-const STYLE = `:root{--bg:#f7f6fb;--card:#fff;--ink:#1f1a3d;--muted:#5b5675;--line:#e4e1ef;--bad:#b42318;--good:#1a7f37;--accent:#4b3fd1}
-@media (prefers-color-scheme:dark){:root{--bg:#14121f;--card:#1e1b2e;--ink:#eceaf6;--muted:#a9a4c2;--line:#2e2a45;--bad:#ff7b72;--good:#56d364;--accent:#a49bff}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-main{max-width:1100px;margin:0 auto;padding:24px 16px}h1{font-size:22px;margin:0 0 4px}.sub{color:var(--muted);margin:0 0 20px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}.card b{display:block;font-size:22px}.card span{color:var(--muted);font-size:13px}
-.wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:10px}table{border-collapse:collapse;width:100%;min-width:760px}
-th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}
-th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}tr:last-child td{border-bottom:0}
-a{color:var(--accent)}.bad{color:var(--bad)}.good{color:var(--good)}form{display:grid;gap:10px;max-width:320px}
-input{font:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
-button{font:inherit;padding:10px;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer}`;
-
-function page(title, body) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
-    `<meta name="robots" content="noindex"><title>${esc(title)}</title><style>${STYLE}</style></head><body><main>${body}</main></body></html>`;
-}
-
-export function renderLogin(error = '') {
-  return page('HQ login', `<h1>HQ</h1><p class="sub">Every town on one screen.</p>` +
-    (error ? `<p class="bad">${esc(error)}</p>` : '') +
-    `<form method="post" action="/login"><input name="username" autocomplete="username" placeholder="Username" required>` +
-    `<input name="password" type="password" autocomplete="current-password" placeholder="Password" required><button>Log in</button></form>`);
-}
-
-export function renderDashboard(rows, now) {
-  const t = totalsOf(rows);
-  const cards = [
-    [num(t.subscribers), 'subscribers'], [signed(t.net7), 'net, last 7 days'], [pct(t.openRate), 'latest open rate'],
-    [money(t.revenueCents), 'revenue this month'], [num(t.openWeeks), 'open sponsor weeks (next 4)'],
-    [num(t.picks), 'picks sold this month'], [num(t.waiting), 'submissions waiting']
-  ].map(([v, l]) => `<div class="card"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join('');
-  const body = rows.map(r => r.error
-    ? `<tr><td><a href="${esc(r.siteUrl)}/admin.html">${esc(r.slug)}</a></td><td colspan="9" class="bad">${esc(r.error)}</td></tr>`
-    : `<tr><td><a href="${esc(r.adminUrl)}">${esc(r.name || r.slug)}</a></td><td>${num(r.subscribers)}</td><td>${signed(r.net7)}</td>` +
-      `<td>${pct(r.openRate)}</td><td>${money(r.revenueCents)}</td><td>${num(r.openWeeks)}</td><td>${num(r.picks)}</td>` +
-      `<td>${num(r.waiting)}</td><td>${num(r.upcoming)}</td>` +
-      `<td class="${r.problems.length ? 'bad' : 'good'}">${r.problems.length ? esc(r.problems.join(', ')) : 'OK'}</td></tr>`).join('');
-  return page('HQ', `<h1>HQ</h1><p class="sub">${t.towns} town${t.towns === 1 ? '' : 's'}` +
-    `${t.down ? `, <span class="bad">${t.down} not answering</span>` : ''} · ${esc(now.toISOString().slice(0, 16).replace('T', ' '))} UTC · ` +
-    `<a href="/">Refresh</a> · <a href="/logout">Log out</a></p><div class="cards">${cards}</div>` +
-    `<div class="wrap"><table><thead><tr><th>Town</th><th>Subscribers</th><th>7-day net</th><th>Open rate</th><th>Revenue (month)</th>` +
-    `<th>Open weeks</th><th>Picks</th><th>Waiting</th><th>Upcoming events</th><th>Health</th></tr></thead><tbody>${body}</tbody></table></div>`);
-}
-
 export function createHqApp(config, { fetchImpl = globalThis.fetch, nowFn = () => new Date(), loginLimiter } = {}) {
   const app = express();
   app.disable('x-powered-by');
@@ -218,14 +132,14 @@ export function createHqApp(config, { fetchImpl = globalThis.fetch, nowFn = () =
 
   app.get('/', async (req, res) => {
     if (!signedIn(req)) return res.type('html').send(renderLogin());
-    const rows = (await Promise.all(config.towns.map(t => fetchTown(t, fetchImpl)))).map(rowOf);
+    const rows = (await Promise.all(config.towns.map(t => fetchTown(t, fetchImpl)))).map((t, i) => rowOf(t, i));
     res.type('html').send(renderDashboard(rows, nowFn()));
   });
 
   // The same rows as JSON, for scripts (logged in only).
   app.get('/api/towns', async (req, res) => {
     if (!signedIn(req)) return res.status(401).json({ ok: false, error: 'unauthorized' });
-    const rows = (await Promise.all(config.towns.map(t => fetchTown(t, fetchImpl)))).map(rowOf);
+    const rows = (await Promise.all(config.towns.map(t => fetchTown(t, fetchImpl)))).map((t, i) => rowOf(t, i));
     res.json({ ok: true, totals: totalsOf(rows), towns: rows });
   });
 
