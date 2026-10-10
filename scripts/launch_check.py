@@ -30,7 +30,10 @@ import urllib.parse
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_saved_town = os.environ.pop("TOWN", None)   # the town comes from --town, not the env
 import town as town_mod  # noqa: E402
+if _saved_town is not None:
+    os.environ["TOWN"] = _saved_town
 from live_check import fetch  # noqa: E402
 
 PAGES = ["/", "/about", "/privacy", "/advertise", "/subscribe", "/contact", "/submit", "/venues", "/llms.txt"]
@@ -108,11 +111,13 @@ def main(argv=None, get=fetch):
     ap.add_argument("--site", help="the live site (default: the town's site_url)")
     ap.add_argument("--towns-dir", default=None)
     args = ap.parse_args(argv)
+    args.town = args.town.strip().lower()
     if args.town == "victoria":
         print("Victoria isn't a launch: use scripts/live_check.py.", file=sys.stderr)
         return 2
     try:
-        town = town_mod.town_config({"TOWN": args.town, **({"TOWNS_DIR": args.towns_dir} if args.towns_dir else {})})
+        towns_dir = args.towns_dir or os.environ.get("TOWNS_DIR")
+        town = town_mod.town_config({"TOWN": args.town, **({"TOWNS_DIR": towns_dir} if towns_dir else {})})
     except ValueError as e:
         print(f"Can't read the town: {e}", file=sys.stderr)
         return 2

@@ -35,7 +35,7 @@
  * (401/403) gets one Slack alert a week and a setup-checklist warning.
  */
 
-import { town, townInputs } from './town.js';
+import { town, townInputs, townWorkflowsReady } from './town.js';
 
 const MIN = 60 * 1000;
 
@@ -195,7 +195,7 @@ export function createScheduler({ store, github, slack = null, nowFn = () => new
   // Whether a job can run at all here; otherwise it isn't claimed, so a
   // fallback (GitHub's cron) still does it.
   function available(job) {
-    if (job.workflow) return Boolean(github && github.isConfigured());
+    if (job.workflow) return Boolean(github && github.isConfigured()) && townWorkflowsReady();
     if (job.name === 'newsletter') return typeof handlers.newsletter === 'function' && (!handlers.newsletterReady || handlers.newsletterReady());
     if (job.name === 'newsletter-weekend') return typeof handlers.newsletterWeekend === 'function' && (!handlers.newsletterWeekendReady || handlers.newsletterWeekendReady());
     if (job.name === 'sponsor-reports') return typeof handlers.sponsorReports === 'function';

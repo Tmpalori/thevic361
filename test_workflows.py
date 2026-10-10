@@ -344,3 +344,32 @@ def test_town_groups_and_cache_keys_keep_victorias_names():
         # prefix can never pick up another town's state.
         assert text.count(f"key: {VIC_EMPTY_PREFIX}{stem}${{{{ github.run_id }}}}") == 2
         assert text.count(f"restore-keys: {VIC_EMPTY_PREFIX}{stem}\n") == 1
+
+
+def _changes(tmp_path, files, tracked):
+    """weekly-collect's 'Check for changes' step in a repo holding `files`."""
+    tmp_path.mkdir(parents=True)
+    _git(tmp_path, "init", "-q", "-b", "main")
+    for name in tracked:
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text("old\n")
+    if tracked:
+        _git(tmp_path, "add", ".")
+        _git(tmp_path, "commit", "-qm", "base")
+    for name, text in files.items():
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text(text)
+    out = tmp_path / "out"
+    env = dict(os.environ, GITHUB_OUTPUT=str(out), TOWN_CANDIDATES="towns/bay/candidates.json",
+               TOWN_COLLECTION_METADATA="towns/bay/collection_metadata.json", TOWN_ENRICHMENT_CACHE="towns/bay/enrichment_cache.json")
+    script = step(load("weekly-collect.yml")["jobs"]["collect"], "Check for changes")["run"]
+    subprocess.run(["bash", "-e", "-o", "pipefail", "-c", script], cwd=tmp_path, env=env, check=True)
+    return out.read_text().strip()
+
+
+def test_collect_commits_a_new_towns_first_files(tmp_path):
+    # git diff calls untracked files unchanged, so a new town's first
+    # collect was thrown away every time.
+    assert _changes(tmp_path / "a", {"towns/bay/candidates.json": "{}"}, tracked=[]) == "changed=true"
+    assert _changes(tmp_path / "b", {}, tracked=["towns/bay/candidates.json"]) == "changed=false"
+    assert _changes(tmp_path / "c", {"towns/bay/candidates.json": "new\n"}, tracked=["towns/bay/candidates.json"]) == "changed=true"

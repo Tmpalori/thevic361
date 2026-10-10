@@ -152,6 +152,12 @@ describe('createScheduler', () => {
     const bay = townConfig({}, { town: { id: 'bay', siteName: 'The Bay 979', domain: 'thebay979.com', city: 'Bay City', state: 'TX', stateName: 'Texas', timezone: 'America/Chicago' } });
     useTown(bay);
     try {
+      // Until its GitHub Environment exists (TOWN_WORKFLOWS unset), another
+      // town starts no workflows: they'd run on Victoria's repo settings.
+      const off = fakeGithub();
+      await createScheduler({ store: await freshStore(), github: off, log: quiet }).tick(new Date('2026-10-07T13:48:00Z'));
+      expect(off.calls).toEqual([]);
+      process.env.TOWN_WORKFLOWS = '1';
       const store = await freshStore();
       const github = fakeGithub();
       const s = createScheduler({ store, github, log: quiet });
@@ -162,6 +168,7 @@ describe('createScheduler', () => {
       ]);
       expect(github.calls.find(c => c.file === 'submission-review.yml').inputs).toEqual({ town: 'bay' });
     } finally {
+      delete process.env.TOWN_WORKFLOWS;
       useTown(VICTORIA);
     }
   });

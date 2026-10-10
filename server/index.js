@@ -13,7 +13,7 @@
  *   - Submitter email + IP never leave the admin scope.
  */
 
-import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths, townBootProblems, townInputs } from './town.js';
+import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths, townBootProblems, townInputs, townWorkflowsReady } from './town.js';
 import { localizeHtml } from './localize.js';
 import express from 'express';
 import compression from 'compression';
@@ -1268,6 +1268,15 @@ export async function createApp(opts = {}) {
   // and a `save_publish_unaffected: true` flag so the UI never implies that the
   // public site failed to publish — Save & Publish does not depend on this token.
   app.post('/api/admin/trigger-collect', requireAdmin, async (req, res) => {
+    if (!townWorkflowsReady()) {
+      return res.status(409).json({
+        ok: false,
+        error: 'town-workflows-not-ready',
+        message: "This town's GitHub workflows aren't set up yet (its GitHub Environment, then TOWN_WORKFLOWS=1 in Railway), so Pull Now is off. Save & Publish is unaffected.",
+        actions_url: actionsUrl(),
+        save_publish_unaffected: true
+      });
+    }
     if (!github.isConfigured()) {
       return res.status(503).json({
         ok: false,

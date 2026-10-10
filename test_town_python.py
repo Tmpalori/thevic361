@@ -222,3 +222,76 @@ def test_town_limits_override_the_defaults_and_are_checked():
     for bad in ({"EVENTBRITE_MAX": 0}, {"EVENTBRITE_MAX": "20"}, {"EVENTBRITE_MAX": True}, ["x"]):
         with pytest.raises(ValueError, match="limits"):
             town_mod.town_config(town={**BAY, "limits": bad})
+
+
+def test_another_town_refuses_victorias_site_url():
+    bay = town_mod.town_config(town=BAY)
+    with pytest.raises(ValueError, match="SITE_URL is Victoria's"):
+        town_mod.site_url(bay, {"SITE_URL": "https://www.thevic361.com"})
+    assert town_mod.site_url(bay, {}) == "https://www.thebay979.com"
+    assert town_mod.site_url(town_mod.VICTORIA, {"SITE_URL": "https://www.thevic361.com/"}) == "https://www.thevic361.com"
+
+
+def test_paths_refuses_a_slug_typed_in_the_wrong_case():
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "TOWNS_DIR"}
+    r = subprocess.run([sys.executable, os.path.join(HERE, "town.py"), "paths"], env={**env, "TOWN": "Victoria"},
+                       capture_output=True, text=True)
+    assert r.returncode != 0 and 'use the lowercase slug, e.g. "victoria"' in r.stderr
+    r = subprocess.run([sys.executable, os.path.join(HERE, "town.py"), "paths"], env={**env, "TOWN": "victoria"},
+                       capture_output=True, text=True)
+    assert r.returncode == 0 and "TOWN_CANDIDATES=candidates.json" in r.stdout
+
+
+@pytest.fixture
+def town_as(tmp_path, monkeypatch):
+    """Reload town.py and the collector as a town.json of the test's choosing."""
+    def load(raw, slug="t"):
+        (tmp_path / slug).mkdir(exist_ok=True)
+        (tmp_path / slug / "town.json").write_text(json.dumps(raw))
+        monkeypatch.setenv("TOWN", slug)
+        monkeypatch.setenv("TOWNS_DIR", str(tmp_path))
+        importlib.reload(town_mod)
+        return importlib.reload(importlib.import_module("collect_events"))
+    yield load
+    monkeypatch.delenv("TOWN", raising=False)
+    monkeypatch.delenv("TOWNS_DIR", raising=False)
+    importlib.reload(town_mod)
+    importlib.reload(importlib.import_module("collect_events"))
+
+
+DENVER = {"siteName": "Mile High Now", "domain": "milehighnow.com", "city": "Denver", "state": "CO", "stateName": "Colorado",
+          "timezone": "America/Denver"}
+
+
+def test_a_town_without_other_towns_or_zips_keeps_its_events(town_as):
+    # A new town's default (new_town.py makes both optional): an empty
+    # town list used to match every event, and the Texas ZIP check flagged
+    # its own ZIPs.
+    ce = town_as({**BAY, "otherTowns": [], "areaZips": []})
+    assert ce.out_of_area_reason({"venue": "Bay City Civic Center", "address": "201 7th St, Bay City, TX 77414"}) is None
+    assert ce.out_of_area_reason({"venue": "Coors Field", "address": ""}) is None
+    assert ce.out_of_area_reason({"venue": "Hall", "address": "", "description": "Fun in Bay City, TX"}) is None
+
+
+def test_another_state_checks_its_own_zips_and_state(town_as):
+    ce = town_as({**DENVER, "areaZips": ["80202", "80203"], "otherTowns": ["boulder"]})
+    assert ce.out_of_area_reason({"venue": "Hall", "address": "1 Pearl St, Boulder, CO 80301"}) == "zip 80301"
+    assert ce.out_of_area_reason({"venue": "Hall", "address": "1 Main St, Denver, CO 80202"}) is None
+    assert ce.out_of_area_reason({"venue": "Hall", "address": "", "description": "Concert, Boulder, Colorado"}) == "town boulder"
+    assert ce.out_of_area_reason({"venue": "Hall", "address": "1 Main St, Denver, CO 77901"}) is None   # not this state's range
+    assert ce._street_key("101 N Main St 80202") == "101 main"
+
+
+def test_fb_location_zip_prefix_when_zips_differ_in_the_second_digit(town_as):
+    ce = town_as({**DENVER, "areaZips": ["80202", "81001"]})
+    assert ce._ZIP_AREA_PREFIX == r"8\d"
+    assert ce._fb_location_is_victoria_tx({}, "Hall", "Denver 80202", "Denver") is True
+    assert ce._fb_location_is_victoria_tx({}, "Hall", "8123 Main, Denver", "Denver") is False
+
+
+def test_fb_posts_cap_with_no_default_of_its_own(town_as, monkeypatch):
+    # _FB_POSTS_MAX_VENUES is None (no cap) by default: min(None, cap) crashed.
+    ce = town_as(BAY)
+    monkeypatch.delenv("FB_POSTS_MAX_VENUES", raising=False)
+    assert ce._resolve_int_env("FB_POSTS_MAX_VENUES", None) == 10
