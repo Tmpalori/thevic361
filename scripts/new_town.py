@@ -137,8 +137,11 @@ Accounts and settings (owner; MULTI_CITY_PLAN.md 5.2):
     checkout, receipts and card statements show {settings['site_name']}, not
     The Vic 361. Set its public business name, logo and statement
     descriptor, then its STRIPE_SECRET_KEY, and a webhook endpoint at
-    {site}/api/stripe/webhook with its STRIPE_WEBHOOK_SECRET. Products and
-    prices are created on the first checkout.
+    {site}/api/stripe/webhook with its STRIPE_WEBHOOK_SECRET, subscribed to
+    the events in RAILWAY.md step 5 (including charge.dispute.closed and
+    invoice.paid). Switch to the live key and live endpoint secret after the
+    launch test checkout (a test key in production is a Setup warning).
+    Products and prices are created on the first checkout.
   - Facebook page, Instagram, ad account (the town's GitHub Environment).
   - GA data stream (gaId in town.json), Turnstile hostname, Tremendous campaign.
 

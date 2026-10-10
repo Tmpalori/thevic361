@@ -56,12 +56,15 @@ import { normalizeUrl, validateSubmission } from './validate.js';
 import { normalizePayload, newId, nowIso, eventKeyOf } from './db.js';
 import { normalizeEmail } from './newsletter.js';
 import { venueFor } from './guides.js';
-import { renderSponsorConfirmed, renderSponsorReport, renderPickReport, renderSponsorTooLate, newsletterCovers, weekendCovers, weekendIssueOn, pickWhere } from './notify.js';
+import { renderSponsorConfirmed, renderSponsorReport, renderPickReport, renderSponsorTooLate, renderSponsorPaymentFailed, renderSponsorConflict, newsletterCovers, weekendCovers, weekendIssueOn, pickWhere } from './notify.js';
 import { botName, visitorHash, pageType, PAGE_TYPES, rowCount, SHARED_LINK } from './analytics.js';
 
 export { newsletterCovers, pickWhere };
 
 const STRIPE_API = 'https://api.stripe.com/v1';
+// A hung Stripe call would hold the buyer's hold (and the request) for
+// undici's ~300 s default; the callers' catch releases it and says "try again".
+const STRIPE_TIMEOUT_MS = 20 * 1000;
 // Stripe's shortest Checkout expiry is 30 minutes; hold a week a little
 // longer so it can't be resold while the first buyer is still paying.
 const CHECKOUT_TTL_S = 31 * 60;
@@ -96,6 +99,13 @@ export function stripeConfig(env = process.env, overrides = {}) {
   };
   // Taking money without the webhook would mean nothing gets fulfilled.
   c.enabled = Boolean(c.secretKey && c.webhookSecret);
+  // Which Stripe mode the key is in (secret sk_ or restricted rk_), and
+  // whether this is the production service: a test-mode payment there is
+  // never fulfilled while the key is live (the webhook), and a test key
+  // there is flagged in the Setup checklist.
+  c.liveKey = /^(sk|rk)_live_/.test(c.secretKey);
+  c.testKey = /^(sk|rk)_test_/.test(c.secretKey);
+  c.production = (overrides.railwayEnvironment ?? env.RAILWAY_ENVIRONMENT_NAME) === 'production';
   return c;
 }
 
@@ -227,7 +237,13 @@ export function createStripe(secretKey, fetchImpl = globalThis.fetch) {
         ...(method === 'GET' ? {} : { 'Content-Type': 'application/x-www-form-urlencoded' }),
         ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {})
       },
-      body: method === 'GET' ? undefined : formEncode(params || {}).toString()
+      body: method === 'GET' ? undefined : formEncode(params || {}).toString(),
+      signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS)
+    }).catch(err => {
+      if (err && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+        throw Object.assign(new Error(`Stripe didn't answer within ${STRIPE_TIMEOUT_MS / 1000} s`), { code: 'timeout' });
+      }
+      throw err;
     });
     let body = null;
     try { body = await res.json(); } catch (_) { body = null; }
@@ -951,6 +967,10 @@ export function renderThanksPage(order, { siteUrl, now = new Date() }) {
       : 'Your payment went through, but someone else booked that week moments before you. Sorry about that.';
     next = [`We’ll get in touch within 1 business day to move you to another open ${unit} or refund you in full, whichever you prefer.`,
       'Nothing else is needed from you. If you already know which you’d like, contact us below.'];
+  } else if (order && order.status === 'failed') {
+    // A bank debit that bounced (we email them too), or a refused test payment.
+    msg = 'Your payment didn’t go through, so nothing was charged and you’re not booked.';
+    next = [`If you still want it, <a href="/advertise/checkout?package=${order.kind === 'weekly' ? 'weekly' : 'featured'}">book again</a> (a card settles at once).`];
   } else if (order && order.status === 'late') {
     // A bank payment that cleared after the date it paid for (webhook).
     msg = 'Your bank payment cleared only after that date had passed, so we couldn’t run it. Sorry about that.';
@@ -1507,6 +1527,73 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
 
   const findBy = (list, key, val) => (val ? list.find(o => o[key] === val) : null);
 
+  // When Stripe says the event happened (event.created), never later than
+  // now (a clock ahead of ours), or now when it has no time.
+  function eventTime(event) {
+    const now = nowFn();
+    const t = Number(event && event.created) * 1000;
+    return Number.isFinite(t) && t > 0 && t < now.getTime() ? new Date(t) : now;
+  }
+
+  // A Stripe test-mode payment on the production site while its key is
+  // live: never fulfilled (anyone could book with Stripe's public test card).
+  // A test key in production is the Setup checklist's warning instead, so a
+  // new town's launch test-mode checkout still works.
+  const testModeRefused = event => Boolean(config.production && config.liveKey && event && event.livemode === false);
+
+  // Buyer emails a webhook sends (late, failed, double-booked); never for
+  // a test-mode payment on the production site.
+  const mayEmail = event => Boolean(mailer && mailer.enabled) && !(config.production && event && event.livemode === false);
+
+  // The live orders in a slot paid for after `order`'s buyer finished
+  // checkout (`finishedAt`), latest first, when there are `need` of them
+  // and the slot hasn't started yet (a running week or day stays with
+  // whoever is running it); null otherwise (then `order` is the one
+  // double-booked).
+  function paidAfter(order, rivals, finishedAt, need) {
+    const d = orderDates(order);
+    if (!d || d[0] <= localDateStr(nowFn())) return null;
+    const later = rivals.filter(r => Date.parse(r.paid_at) > finishedAt.getTime())
+      .sort((a, b) => Date.parse(b.paid_at) - Date.parse(a.paid_at));
+    return later.length >= need ? later.slice(0, need) : null;
+  }
+
+  // The order a charge, refund or dispute is for: by its payment intent,
+  // or for a venue partner's renewal by its invoice (older API versions)
+  // or, from a charge, its Stripe customer.
+  function chargeOrder(list, obj, isCharge) {
+    const pi = typeof obj.payment_intent === 'string' ? obj.payment_intent : null;
+    const byPi = findBy(list, 'payment_intent', pi);
+    if (byPi) return byPi;
+    const inv = typeof obj.invoice === 'string' ? obj.invoice : null;
+    const byInvoice = findBy(list, 'latest_invoice', inv);
+    if (byInvoice) return byInvoice;
+    const customer = isCharge && typeof obj.customer === 'string' ? obj.customer : null;
+    return customer ? list.find(o => o.kind === 'partner' && o.customer_id === customer) || null : null;
+  }
+
+  // A paid order that can't run because its slot is taken ('conflict'):
+  // the owner moves or refunds it, and the buyer is told (they may have
+  // closed the thank-you page that explains it).
+  async function doubleBooked(order, event, title, text, mail) {
+    order.status = 'conflict';
+    await save(order);
+    if (slack) slack.alert(`sponsor-conflict:${order.id}`, title, text, `${siteUrl}/admin.html`);
+    if (mayEmail(event)) {
+      mail.push(() => mailer.send(order.email, renderSponsorConflict(order, { siteUrl, address: mailAddress }), `${town.keyPrefix}-sponsor-conflict-${order.id}`));
+    }
+  }
+
+  // `rival` went live in a slot that `winner` had already paid for inside
+  // its checkout hold (winner's webhook only arrived after the hold had
+  // lapsed): the slot goes back to the buyer who paid first.
+  async function bumpedBy(rival, winner, finishedAt, event, mail) {
+    const what = winner.kind === 'weekly' ? `the week of ${winner.week_start}` : `a ${town.pickName} on ${winner.event.date}`;
+    await doubleBooked({ ...rival }, event, `${winner.business} paid first for ${what}`,
+      `${winner.business} (${winner.email}, order ${winner.id}) paid for ${what} at ${finishedAt.toISOString()}, inside their checkout hold, but Stripe's webhook only reached us later. ` +
+      `Meanwhile ${rival.business} (${rival.email}, order ${rival.id}) bought it at ${rival.paid_at}. ${winner.business} keeps it; ${rival.business} is off the site and has been told you'll be in touch within 1 business day: move them to an open ${winner.kind === 'weekly' ? 'week (Sponsors tab, Edit)' : 'day'} or refund them in Stripe.`, mail);
+  }
+
   // One webhook at a time, under the same lock as checkout bookings: Stripe
   // can deliver an event twice at once (both would fulfil a pending order),
   // and two weekly orders settling together must not both pass the
@@ -1533,7 +1620,41 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
       case 'checkout.session.completed':
       case 'checkout.session.async_payment_succeeded': {
         const order = findBy(list, 'id', obj.client_reference_id) || findBy(list, 'session_id', obj.id);
-        if (!order) return;
+        if (!order) {
+          // Our own session (it carries our order_id, and the town filter
+          // above passed), paid, with no order here: Stripe has the money
+          // and nothing will run. Typically a restored or recreated
+          // database, or DATABASE_URL pointing at another one. Still a 200:
+          // a retry can't find it either.
+          if (obj.payment_status === 'paid' && obj.metadata && obj.metadata.order_id) {
+            const email = (obj.customer_details && obj.customer_details.email) || obj.customer_email || 'unknown email';
+            const pi = typeof obj.payment_intent === 'string' ? obj.payment_intent : '';
+            console.error('[sponsors] paid checkout with no order:', obj.id, obj.metadata.order_id);
+            if (slack) {
+              slack.alert(`stripe-orphan:${obj.id}`, 'Paid Stripe checkout with no order',
+                `${email} paid $${Math.round((Number(obj.amount_total) || 0) / 100)} (order ${obj.metadata.order_id}, ${obj.metadata.package || 'unknown package'}; session ${obj.id}${pi ? `, payment ${pi}` : ''}${event.livemode === false ? ', test mode' : ''}), but this site has no such order, so nothing was booked. ` +
+                'Check that DATABASE_URL is this town\'s database (or restore the latest backup), then book them by hand or refund them in Stripe.',
+                'https://dashboard.stripe.com/payments');
+            }
+          }
+          return;
+        }
+        // Stripe's test card on the live site: a test-mode event can only
+        // reach production with a live key through a test endpoint's secret.
+        // Nothing is fulfilled or held; the owner hears about it.
+        if (testModeRefused(event)) {
+          if (!LIVE.has(order.status) && order.status !== 'failed') {
+            await save({ ...order, status: 'failed', test: true, test_mode_refused: nowIso() });
+            await dropLogo(order);
+          }
+          if (slack) {
+            slack.alert(`stripe-test-mode:${order.id}`, 'Test-mode Stripe payment refused in production',
+              `A Stripe test-mode payment for ${order.business} (${order.email}, order ${order.id}) reached the live site, which uses a live key, so nothing was booked. ` +
+              'STRIPE_WEBHOOK_SECRET may be the test endpoint\'s: use the live endpoint\'s signing secret.',
+              'https://dashboard.stripe.com/webhooks');
+          }
+          return;
+        }
         // A retry after a failed fulfil (e.g. the submission insert threw):
         // the order is already paid, so finish the job instead of stopping.
         if (LIVE.has(order.status)) {
@@ -1545,6 +1666,10 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         // (another tab) before the session could be expired.
         if (!['pending', 'expired', 'failed', 'processing', 'cancelled'].includes(order.status) ||
             (order.status === 'cancelled' && order.paid_at)) return;
+        // When it happened at Stripe, not when the event got here: Stripe
+        // retries for days after a 500 (database down, a deploy), and an
+        // on-time payment mustn't turn "late" or lose its slot meanwhile.
+        const paidAt = eventTime(event);
         // Delayed payment methods complete the session before the money
         // arrives; async_payment_succeeded (or _failed) follows. Hold the
         // week meanwhile so nobody else can buy it. Only an open checkout
@@ -1553,13 +1678,20 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         // hold the slot forever, with no further event to release it.
         if (obj.payment_status !== 'paid' && obj.payment_status !== 'no_payment_required') {
           if (event.type === 'checkout.session.completed' && (order.status === 'pending' || order.status === 'cancelled')) {
-            await save({ ...order, status: 'processing', session_id: order.session_id || obj.id });
+            await save({ ...order, status: 'processing', session_id: order.session_id || obj.id, processing_at: paidAt.toISOString() });
           }
           return;
         }
+        // Whether the buyer finished checkout while their hold still kept
+        // the slot for them (a bank debit finished at processing_at). Then
+        // the slot is theirs even if their webhook arrived after the hold
+        // lapsed and someone else bought it meanwhile.
+        const finishedAt = new Date(Date.parse(order.processing_at) || paidAt.getTime());
+        const held = (order.status === 'pending' || order.status === 'processing') &&
+          finishedAt.getTime() - Date.parse(order.created_at) < HOLD_MS;
         Object.assign(order, {
           status: order.kind === 'partner' ? 'active' : 'paid',
-          paid_at: nowIso(),
+          paid_at: paidAt.toISOString(),
           amount: Number.isFinite(obj.amount_total) ? obj.amount_total : order.amount,
           subscription_id: typeof obj.subscription === 'string' ? obj.subscription : null,
           customer_id: typeof obj.customer === 'string' ? obj.customer : null,
@@ -1570,7 +1702,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         // Settled after the date it paid for: nothing left to run, so no
         // submission and no "you're booked". The owner refunds in Stripe
         // (the restricted key can't); the buyer is told so.
-        if (paidTooLate(order, nowFn())) {
+        if (paidTooLate(order, paidAt)) {
           order.status = 'late';
           await save(order);
           await dropLogo(order);
@@ -1579,41 +1711,52 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
               `${order.business} (${order.email}) paid $${Math.round((order.amount || 0) / 100)} by bank for ${order.kind === 'weekly' ? `the week of ${order.week_start}` : `${order.event.name} (${order.event.date})`}, but it only cleared now. Nothing went live; they've been told they'll be refunded in full. Refund it in Stripe${order.payment_intent ? ` (${order.payment_intent})` : ''}.`,
               'https://dashboard.stripe.com/payments');
           }
-          if (mailer && mailer.enabled) {
+          if (mayEmail(event)) {
             mail.push(() => mailer.send(order.email, renderSponsorTooLate(order, { siteUrl, address: mailAddress }), `${town.keyPrefix}-sponsor-late-${order.id}`));
           }
           return;
         }
         // Someone else already paid for this week (e.g. this hold lapsed
         // first). Keep the money traceable and ask for a refund, but don't
-        // put two sponsors in one slot.
-        if (order.kind === 'weekly' && list.some(o => o.id !== order.id && o.kind === 'weekly' &&
-            o.week_start === order.week_start && LIVE.has(o.status))) {
-          order.status = 'conflict';
-          await save(order);
-          if (slack) {
-            slack.alert(`sponsor-conflict:${order.id}`, `Week of ${order.week_start} was paid for twice`,
-              `${order.business} (${order.email}) paid for a week that's already sold. They've been told you'll be in touch within 1 business day: move them to an open week (Sponsors tab, Edit) or refund them in Stripe.`,
-              `${siteUrl}/admin.html`);
+        // put two sponsors in one slot. If this buyer paid first, inside
+        // their hold, and only the webhook was late, the later buyer gives
+        // the week back instead (while it hasn't started).
+        if (order.kind === 'weekly') {
+          const rivals = list.filter(o => o.id !== order.id && o.kind === 'weekly' && o.week_start === order.week_start && LIVE.has(o.status));
+          if (rivals.length) {
+            const bump = held ? paidAfter(order, rivals, finishedAt, rivals.length) : null;
+            if (!bump) {
+              await doubleBooked(order, event, `Week of ${order.week_start} was paid for twice`,
+                `${order.business} (${order.email}) paid for a week that's already sold. They've been told you'll be in touch within 1 business day: move them to an open week (Sponsors tab, Edit) or refund them in Stripe.`, mail);
+              return;
+            }
+            for (const r of bump) await bumpedBy(r, order, finishedAt, event, mail);
           }
-          return;
         }
         // The same for a Vic's Pick day: a hold the buyer backed out of
         // (cancelled, or expired) stopped counting, so others may have filled
         // the day before this payment arrived from a still-open tab. Count
-        // the day without this order; at the cap, it's a conflict too.
+        // the day without this order; at the cap, it's a conflict too
+        // (unless this one paid first inside its hold: see above).
         if (order.kind === 'featured' && order.event && order.event.date) {
           const others = list.filter(o => o.id !== order.id);
           const a = pickAvailability(order.event.date, others, nowFn());
           if (a.taken >= a.cap) {
-            order.status = 'conflict';
-            await save(order);
-            if (slack) {
-              slack.alert(`sponsor-conflict:${order.id}`, `${town.pickName} day ${order.event.date} is over its cap`,
-                `${order.business} (${order.email}) paid for a ${town.pickName} on ${order.event.date} (${order.event.name}), but its ${a.cap} spots were already taken. Nothing went live: move them to an open day or refund them in Stripe.`,
-                `${siteUrl}/admin.html`);
+            let bump = null;
+            if (held) {
+              // Holds open right now are left alone: they turn into
+              // conflicts themselves if they pay into a full day.
+              const settled = others.filter(o => o.kind === 'featured' && o.event && o.event.date === order.event.date &&
+                (LIVE.has(o.status) || o.status === 'processing'));
+              const need = settled.length - a.cap + 1;
+              bump = need <= 0 ? [] : paidAfter(order, settled.filter(o => LIVE.has(o.status)), finishedAt, need);
             }
-            return;
+            if (!bump) {
+              await doubleBooked(order, event, `${town.pickName} day ${order.event.date} is over its cap`,
+                `${order.business} (${order.email}) paid for a ${town.pickName} on ${order.event.date} (${order.event.name}), but its ${a.cap} spots were already taken. Nothing went live: move them to an open day or refund them in Stripe.`, mail);
+              return;
+            }
+            for (const r of bump) await bumpedBy(r, order, finishedAt, event, mail);
           }
         }
         // A bank debit that cleared after its week's Monday issue went out:
@@ -1647,6 +1790,11 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
             fields: [['Package', order.kind], ['Contact', order.email]],
             text: order.kind === 'weekly' ? `Week of ${order.week_start} is open again.` : 'Nothing went live.'
           });
+        }
+        // The thank-you page said the spot was held until the debit cleared,
+        // and Stripe doesn't email about a failed one-time debit.
+        if (mayEmail(event)) {
+          mail.push(() => mailer.send(order.email, renderSponsorPaymentFailed(order, { siteUrl, address: mailAddress }), `${town.keyPrefix}-sponsor-failed-${order.id}`));
         }
         return;
       }
@@ -1708,13 +1856,89 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         }
         return;
       }
+      case 'invoice.paid': {
+        // A venue partner's renewal: remember its payment (and invoice), so
+        // a refund or dispute on a later month matches the order too. Older
+        // API versions put the payment intent on the invoice; newer ones
+        // under payments.
+        const subId = (typeof obj.subscription === 'string' && obj.subscription) ||
+          (obj.parent && obj.parent.subscription_details && obj.parent.subscription_details.subscription) || null;
+        const order = findBy(list, 'subscription_id', subId);
+        if (!order) return;
+        const paid = obj.payments && Array.isArray(obj.payments.data) &&
+          obj.payments.data.map(x => x && x.payment).find(x => x && typeof x.payment_intent === 'string');
+        const pi = (typeof obj.payment_intent === 'string' && obj.payment_intent) || (paid && paid.payment_intent) || null;
+        const next = { ...order, latest_invoice: obj.id || order.latest_invoice || null, payment_intent: pi || order.payment_intent };
+        if (next.latest_invoice !== order.latest_invoice || next.payment_intent !== order.payment_intent) await save(next);
+        return;
+      }
       case 'charge.refunded':
-      case 'charge.dispute.created': {
-        const pi = typeof obj.payment_intent === 'string' ? obj.payment_intent : null;
-        const order = findBy(list, 'payment_intent', pi);
-        if (!order || order.status === 'refunded') return;
-        if (event.type === 'charge.refunded' && obj.refunded === false) return; // partial refund: leave it live
-        await save({ ...order, status: 'refunded', hidden_from: null });
+      case 'charge.dispute.created':
+      case 'charge.dispute.closed': {
+        const order = chargeOrder(list, obj, event.type === 'charge.refunded');
+        if (!order) return;
+        if (event.type === 'charge.dispute.closed') {
+          // Won (or an inquiry closed without a chargeback): the money is
+          // back, so the order is again what it was before the dispute. Its
+          // slot may have been sold meanwhile: then it stays off the site
+          // (hidden; the money still counts) for the owner to sort out.
+          if (order.status !== 'disputed') return;
+          const d = order.dispute || {};
+          if (obj.status === 'won' || obj.status === 'warning_closed') {
+            const prev = d.prev_status || (order.kind === 'partner' ? 'active' : 'paid');
+            const clash = LIVE.has(prev) ? restoreConflict(order, list, nowFn()) : '';
+            const d1 = orderDates(order);
+            const over = Boolean(d1) && d1[1] < localDateStr(nowFn());
+            const status = clash && !over ? 'hidden' : prev;
+            // A hidden order goes back to hidden, remembering what it was.
+            const hiddenFrom = prev === 'hidden' ? (d.prev_hidden_from || null) : status === 'hidden' ? prev : null;
+            await save({ ...order, status, hidden_from: hiddenFrom,
+              dispute: { ...d, status: obj.status, closed_at: nowIso() } });
+            if (slack) {
+              slack.notify({ channel: 'sales',
+                title: `✅ Sponsor dispute won: ${order.business}`,
+                fields: [['Contact', order.email], ['Order', order.id]],
+                text: status === 'hidden' ? `The money is back, but ${clash} It's hidden until you restore it.` : 'The money is back and the order is restored.'
+              });
+            }
+          } else {
+            await save({ ...order, dispute: { ...d, status: obj.status || 'lost', closed_at: nowIso() } });
+            if (slack) {
+              slack.notify({ channel: 'sales',
+                title: `⚠️ Sponsor dispute lost: ${order.business}`,
+                fields: [['Contact', order.email], ['Order', order.id]],
+                text: 'Stripe kept the money for the cardholder. The placement stays off the site.'
+              });
+            }
+          }
+          return;
+        }
+        if (order.status === 'refunded') return;
+        if (event.type === 'charge.refunded') {
+          const refunded = Number(obj.amount_refunded);
+          // Partial refund: the placement stays live, and revenue counts
+          // only what was kept (monthRevenue subtracts refunded_cents).
+          if (obj.refunded === false) {
+            if (!Number.isFinite(refunded) || refunded <= 0 || refunded === order.refunded_cents) return;
+            await save({ ...order, refunded_cents: refunded });
+            if (slack) {
+              slack.notify({ channel: 'sales',
+                title: `↩️ Sponsor partly refunded: ${order.business}`,
+                fields: [['Refunded', `$${(refunded / 100).toFixed(2)} of $${((order.amount || 0) / 100).toFixed(2)}`], ['Contact', order.email], ['Order', order.id]],
+                text: 'Their placement stays on the site.'
+              });
+            }
+            return;
+          }
+          await save({ ...order, status: 'refunded', hidden_from: null, ...(Number.isFinite(refunded) && refunded > 0 ? { refunded_cents: refunded } : {}) });
+        } else {
+          // An open dispute isn't a refund: the money is held until Stripe
+          // decides (charge.dispute.closed). Off the site and out of revenue
+          // meanwhile.
+          if (order.status === 'disputed') return;
+          await save({ ...order, status: 'disputed', hidden_from: null,
+            dispute: { id: obj.id || null, status: 'open', prev_status: order.status, prev_hidden_from: order.hidden_from || null, opened_at: nowIso() } });
+        }
         if (slack) {
           slack.notify({ channel: 'sales',
             title: event.type === 'charge.refunded' ? `↩️ Sponsor refunded: ${order.business}` : `⚠️ Sponsor disputed a charge: ${order.business}`,
