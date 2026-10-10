@@ -322,58 +322,63 @@
 
     <!-- ─── NEWSLETTER TAB ─── -->
     <section id="tab-newsletter" class="tab-panel" role="tabpanel" hidden>
-
       <div class="email-nl" id="email-nl">
-        <p class="tab-intro">Two issues go out on their own once set up: the week on Mondays at 7:43 AM and the weekend (Friday to Sunday) on Thursdays at 7:00 AM Central. Readers can skip the Thursday one from the link in its footer. Preview either or send yourself a test here.</p>
-        <h3 class="traffic-h">Email newsletter</h3>
+        <header class="page-head">
+          <h1 class="page-title">Newsletter</h1>
+          <p class="page-sub">Goes out on its own: the week on Mondays at 7:43 AM, the weekend on Thursdays at 7:00 AM Central.</p>
+        </header>
         <div id="email-nl-status" class="sources-summary"></div>
         <p id="email-nl-warning" class="email-nl-warning" hidden></p>
-        <div class="newsletter-actions">
-          <label for="email-nl-edition" class="visually-hidden">Issue</label>
-          <select id="email-nl-edition">
-            <option value="weekly">Monday: the week</option>
-            <option value="weekend">Thursday: the weekend</option>
-          </select>
-          <button id="email-nl-preview" type="button" class="btn btn--outline">Preview</button>
-          <input id="email-nl-test-to" type="email" placeholder="Test address" aria-label="Test address">
-          <button id="email-nl-test" type="button" class="btn btn--outline">Send test</button>
-          <button id="email-nl-send" type="button" class="btn btn--primary">Send to subscribers</button>
+        <div class="card card--gap">
+          <h2 class="card__title">Send an issue</h2>
+          <p class="card__meta">Preview either issue or send yourself a test. Readers can skip Thursdays from the link in its footer.</p>
+          <div class="newsletter-actions">
+            <label for="email-nl-edition" class="visually-hidden">Issue</label>
+            <select id="email-nl-edition">
+              <option value="weekly">Monday: the week</option>
+              <option value="weekend">Thursday: the weekend</option>
+            </select>
+            <button id="email-nl-preview" type="button" class="btn btn--outline">Preview</button>
+            <input id="email-nl-test-to" type="email" placeholder="Test address" aria-label="Test address">
+            <button id="email-nl-test" type="button" class="btn btn--outline">Send test</button>
+            <button id="email-nl-send" type="button" class="btn btn--primary">Send to subscribers</button>
+          </div>
+          <p id="email-nl-msg" class="sources-message" role="status" aria-live="polite"></p>
+          <iframe id="email-nl-frame" class="email-nl-frame" title="Newsletter preview" hidden></iframe>
         </div>
-        <p id="email-nl-msg" class="sources-message" role="status" aria-live="polite"></p>
-        <iframe id="email-nl-frame" class="email-nl-frame" title="Newsletter preview" hidden></iframe>
-        <details class="email-nl-import">
-          <summary>Import subscribers (paste a list of emails)</summary>
-          <textarea id="email-nl-import-text" rows="5" placeholder="Paste email addresses, one per line or comma-separated"></textarea>
-          <button id="email-nl-import" type="button" class="btn btn--outline">Import</button>
-        </details>
-        <details class="email-nl-import">
-          <summary>Back up the list, or delete someone's data</summary>
-          <p class="email-nl-note">Download every subscriber (email, status, source, dates) and keep the file somewhere other than Railway.</p>
-          <button id="email-nl-export" type="button" class="btn btn--outline">Download subscribers (CSV)</button>
-          <p class="email-nl-note">When someone asks us to delete what we have about them: removes their subscription, contact messages and the contact details on their submissions. Sponsor orders and gift cards keep a masked address for the books. This can't be undone.</p>
-          <input id="email-forget-to" type="email" placeholder="Their email address" aria-label="Email address to delete">
-          <button id="email-forget" type="button" class="btn btn--outline">Delete their data</button>
-        </details>
-        <h3 class="traffic-h">Recent sends</h3>
-        <table class="traffic-table" id="email-nl-sends"></table>
-        <h3 class="traffic-h">Top referrers</h3>
-        <table class="traffic-table" id="email-nl-referrers"></table>
-        <h3 class="traffic-h">Referral rewards</h3>
-        <table class="traffic-table" id="email-nl-rewards"></table>
-        <details class="email-nl-import">
-          <summary>Copy the list as HTML (for another email tool)</summary>
+        <div class="card card--gap">
+          <h2 class="card__title">Recent sends</h2>
+          <table class="traffic-table" id="email-nl-sends"></table>
+        </div>
+        <div class="grid-2">
+          <div class="card"><h2 class="card__title">Top referrers</h2><table class="traffic-table" id="email-nl-referrers"></table></div>
+          <div class="card"><h2 class="card__title">Referral rewards</h2><table class="traffic-table" id="email-nl-rewards"></table></div>
+        </div>
+        <div class="card card--gap">
+          <h2 class="card__title">List tools</h2>
+          <details class="more email-nl-import">
+            <summary>Import subscribers</summary>
+            <textarea id="email-nl-import-text" rows="5" placeholder="Paste email addresses, one per line or comma-separated"></textarea>
+            <button id="email-nl-import" type="button" class="btn btn--outline">Import</button>
+          </details>
+          <details class="more email-nl-import">
+            <summary>Back up the list, or delete someone's data</summary>
+            <p class="email-nl-note">Download every subscriber (email, status, source, dates) and keep the file somewhere other than Railway.</p>
+            <button id="email-nl-export" type="button" class="btn btn--outline">Download subscribers (CSV)</button>
+            <p class="email-nl-note">When someone asks us to delete what we have about them: removes their subscription, contact messages and the contact details on their submissions. Sponsor orders and gift cards keep a masked address for the books. This can't be undone.</p>
+            <input id="email-forget-to" type="email" placeholder="Their email address" aria-label="Email address to delete">
+            <button id="email-forget" type="button" class="btn btn--outline">Delete their data</button>
+          </details>
+          <details class="more email-nl-import">
+            <summary>Copy the list as HTML (for another email tool)</summary>
             <div class="newsletter-actions">
-        <button id="newsletter-refresh" type="button" class="btn btn--outline">
-          Regenerate
-        </button>
-        <button id="newsletter-copy" type="button" class="btn btn--primary">
-          Copy to clipboard
-        </button>
-        <span id="newsletter-copied" class="newsletter-copied" hidden>Copied!</span>
-      </div>
-      <textarea id="newsletter-html" class="newsletter-textarea"
-                spellcheck="false" readonly></textarea>
-        </details>
+              <button id="newsletter-refresh" type="button" class="btn btn--outline">Regenerate</button>
+              <button id="newsletter-copy" type="button" class="btn btn--primary">Copy to clipboard</button>
+              <span id="newsletter-copied" class="newsletter-copied" hidden>Copied!</span>
+            </div>
+            <textarea id="newsletter-html" class="newsletter-textarea" spellcheck="false" readonly></textarea>
+          </details>
+        </div>
       </div>
     </section>
 
@@ -429,19 +434,29 @@
     </section>
 
     <section id="tab-sponsors" class="tab-panel" role="tabpanel" hidden>
-      <div class="traffic-head">
-        <button id="sponsors-refresh" type="button" class="btn btn--outline">Refresh</button>
-        <a class="btn btn--outline" href="https://dashboard.stripe.com/payments" target="_blank" rel="noopener">Stripe dashboard</a>
-      </div>
+      <header class="page-head page-head--row">
+        <div><h1 class="page-title">Sponsors</h1><p class="page-sub" id="sponsors-status"></p></div>
+        <div class="range">
+          <button id="sponsors-refresh" type="button" class="btn btn--outline">Refresh</button>
+          <a class="btn btn--outline" href="https://dashboard.stripe.com/payments" target="_blank" rel="noopener">Stripe ↗</a>
+        </div>
+      </header>
       <div id="sponsors-error" class="empty-state empty-state--error" hidden></div>
       <div id="sponsors-body" hidden>
-        <p id="sponsors-status" class="traffic-note"></p>
-        <h3 class="traffic-h">Sponsorship calendar</h3>
-        <p class="traffic-note">Every slot for the next 8 weeks: the weekly sponsor, and each day's Vic’s Picks (3 a day Mon–Thu, 4 Fri–Sun). <span class="cal-key"><span class="cal-dot cal-dot--booked"></span> paid <span class="cal-dot cal-dot--held"></span> being paid for <span class="cal-dot"></span> open</span></p>
-        <div id="sponsors-calendar" class="sponsor-cal"></div>
-        <h3 class="traffic-h">Orders</h3>
-        <table class="traffic-table sponsors-table" id="sponsors-orders"></table>
-        <p class="traffic-note">Paid placements go live on their own. Hide pulls one off the site (for a refund or bad copy; refund it in Stripe). Older venue partner subscriptions end automatically when they cancel in Stripe.</p>
+        <div class="sources-summary" id="sponsors-kpis"></div>
+        <div class="card card--gap">
+          <div class="card__head">
+            <h2 class="card__title">Next 8 weeks</h2>
+            <span class="cal-key"><span class="cal-dot cal-dot--booked"></span> paid <span class="cal-dot cal-dot--held"></span> being paid for <span class="cal-dot"></span> open</span>
+          </div>
+          <p class="card__meta">The weekly sponsor, and each day's Vic’s Picks (3 a day Mon–Thu, 4 Fri–Sun).</p>
+          <div id="sponsors-calendar" class="sponsor-cal"></div>
+        </div>
+        <div class="card card--gap">
+          <h2 class="card__title">Orders</h2>
+          <p class="card__meta">Paid placements go live on their own. Hide pulls one off the site (for a refund or bad copy; refund it in Stripe).</p>
+          <div class="table-scroll"><table class="traffic-table sponsors-table" id="sponsors-orders"></table></div>
+        </div>
       </div>
     </section>
 
