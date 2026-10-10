@@ -103,11 +103,11 @@ body{{font-family:Nunito,'Helvetica Neue',Arial,sans-serif;color:{INK}}}
 
 
 SPONSORED_TAG = ('<span style="display:inline-block;background:#fff;border:3px solid {ink};border-radius:999px;'
-                 'padding:0 12px;font-family:Fredoka;font-weight:700;font-size:{px}px;vertical-align:middle">Sponsored</span> ')
+                 'padding:0 12px;font-family:Fredoka;font-weight:700;font-size:{px}px;vertical-align:middle">#ad</span> ')
 
 
 def _sponsored(e, px):
-    """The "Sponsored" tag on a paid pick (the site's and newsletter's label)."""
+    """The "#ad" tag on a paid pick (the site and newsletter end its description with #ad)."""
     from social_kit import is_paid_pick
     return SPONSORED_TAG.format(ink=INK, px=px) if is_paid_pick(e) else ""
 

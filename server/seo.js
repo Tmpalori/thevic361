@@ -762,16 +762,15 @@ export function adAttr(id) {
 }
 
 // A paid pick (featured, not an editor's pick: a Vic's Pick order, a venue
-// partner's event, or one the admin marked paid) carries a "Sponsored" tag
-// next to the pick badge, so readers can tell it from the editors' unpaid
-// picks before they tap it (FTC: label paid placements). docs/app.js
-// pickBadges and the newsletter's eventRow render the same.
+// partner's event, or one the admin marked paid) ends its description with
+// a small "#ad" (the owner's choice of label; the legal pages say the same).
+// docs/app.js renderEvent and the newsletter's eventRow render the same.
 export const isPaidPick = ev => Boolean(ev && ev.featured && !ev.editor_pick);
-export const SPONSORED_LABEL = 'Sponsored';
+export const AD_LABEL = '#ad';
+export const adTag = ev => (isPaidPick(ev) ? ` <span class="event-ad">${AD_LABEL}</span>` : '');
 export function pickBadges(ev) {
   if (!ev.featured) return '';
-  return `<span class="badge badge--featured">${town.pickName}</span> ` +
-    (isPaidPick(ev) ? `<span class="badge badge--sponsored">${SPONSORED_LABEL}</span> ` : '');
+  return `<span class="badge badge--featured">${town.pickName}</span> `;
 }
 
 export function renderEventItem(ev) {
@@ -785,7 +784,7 @@ export function renderEventItem(ev) {
       (ev.time ? `<span class="event-time">${escHtml(formatTime(ev.time))}</span> ` : '') +
       `<span class="event-name"><a href="${escHtml(ev.page)}">${escHtml(ev.name)}</a></span>` +
       (place ? `<span class="event-venue">${escHtml(place)}</span>` : '') +
-      (ev.description ? `<div class="event-desc">${escHtml(ev.description)}</div>` : '') +
+      (ev.description || isPaidPick(ev) ? `<div class="event-desc">${escHtml(ev.description || '')}${adTag(ev)}</div>` : '') +
     '</div>' +
     shareButton(ev) +
   '</li>';
@@ -1114,7 +1113,7 @@ export function renderEventPage(ev, events, { siteUrl, now, sponsor, extras = ''
       ${where ? `<dt>Where</dt><dd>${escHtml(where)}</dd>` : ''}
       <dt>Cost</dt><dd>${cost}</dd>
     </dl>
-    ${ev.description ? `<p class="event-about">${escHtml(ev.description)}</p>` : ''}
+    ${ev.description || isPaidPick(ev) ? `<p class="event-about">${escHtml(ev.description || '')}${adTag(ev)}</p>` : ''}
     ${src ? `<p class="page-actions"><a class="btn btn--primary" href="${escHtml(src)}" target="_blank" rel="noopener noreferrer">${linkLabel(src)}</a></p>` : ''}
     ${extras}
     ${venuePath ? `<p class="venue-more"><a href="${escHtml(venuePath)}">More events at ${escHtml(ev.venue)} →</a></p>` : ''}
@@ -1410,9 +1409,8 @@ export function renderComingUp(events, today) {
     const ad = ev.featured && !ev.editor_pick ? adAttr(ev.sponsor_order) : '';
     return `<li class="coming-item"${ad}><a href="${escHtml(ev.page)}">` +
       `<span class="coming-date">${escHtml(formatDay(ev.date, { weekday: 'short', month: 'short', day: 'numeric' }))}</span>` +
-      (isPaidPick(ev) ? `<span class="badge badge--sponsored coming-sponsored">${SPONSORED_LABEL}</span>` : '') +
       `<span class="coming-name">${escHtml(ev.name)}</span>` +
-      (where ? `<span class="coming-where">${escHtml(where)}</span>` : '') +
+      (where || isPaidPick(ev) ? `<span class="coming-where">${escHtml(where)}${adTag(ev)}</span>` : '') +
       '</a></li>';
   };
   const first = list.slice(0, COMING_UP_SHOWN), rest = list.slice(COMING_UP_SHOWN);
@@ -1522,12 +1520,12 @@ export function renderLlmsTxt(events, { siteUrl, now, extraLinks = [], sponsor =
   if (picks.length) {
     lines.push(`## ${town.pickNamePlain}s`, '',
       `Featured events, highlighted on their day on ${town.siteName}. Some are our editors' can't-miss picks; some are paid placements by the venue or organizer.`, '',
-      ...picks.map(ev => line(ev) + (isPaidPick(ev) ? ' (sponsored)' : " (editors' pick)")), '');
+      ...picks.map(ev => line(ev) + (isPaidPick(ev) ? ` ${AD_LABEL}` : " (editors' pick)")), '');
   }
   lines.push(`## Upcoming events (as of ${formatDay(today, { month: 'long', day: 'numeric', year: 'numeric' })})`, '');
   if (!upcoming.length) lines.push('- No events listed yet this week.');
   for (const ev of upcoming) {
-    lines.push(line(ev) + (ev.featured ? ` (${town.pickNamePlain}${isPaidPick(ev) ? ', sponsored' : ''})` : '') + (ev.description ? ` - ${ev.description}` : ''));
+    lines.push(line(ev) + (ev.featured ? ` (${town.pickNamePlain})` : '') + (ev.description ? ` - ${ev.description}` : '') + (isPaidPick(ev) ? ` ${AD_LABEL}` : ''));
   }
   return lines.join('\n') + '\n';
 }

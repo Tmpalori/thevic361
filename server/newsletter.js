@@ -60,7 +60,7 @@ export { referralTiers, referralFlags };
 import { inboundConfig } from './inbound.js';
 import {
   escHtml, safeUrl, localDateStr, currentWeek, formatDay, sortEvents, layout, addDays, renderEventItem, pickRank, parseTimes,
-  sponsorLinkUrl, formatTime, placeText, iconKeys, isSponsorLogo, SAMPLE_LOGO, isPaidPick, SPONSORED_LABEL
+  sponsorLinkUrl, formatTime, placeText, iconKeys, isSponsorLogo, SAMPLE_LOGO, isPaidPick, AD_LABEL
 } from './seo.js';
 import { operatorHtml, operatorName, mailingAddress, emailLink, versionDate, REFERRAL_RULES_VERSION } from './legal.js';
 
@@ -330,12 +330,12 @@ export function eventRow(ev, siteUrl, next) {
     : `<tr><td style="${rowStyle}">`;
   const close = ev.featured ? '</td></tr></table></td></tr>' : '</td></tr>';
   return `${open}
-${ev.featured ? `<span style="display:inline-block;background:${C.sunset};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">★ ${escHtml(town.pickName.toUpperCase())}</span>` : ''}${paidPick(ev) ? `<span style="display:inline-block;background:#fff;color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">${SPONSORED_LABEL.toUpperCase()}</span>` : ''}
+${ev.featured ? `<span style="display:inline-block;background:${C.sunset};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">★ ${escHtml(town.pickName.toUpperCase())}</span>` : ''}
 ${ev.town ? `<span style="display:inline-block;background:${C.sky};color:${C.ink};font-family:${DISPLAY};font-size:11px;font-weight:bold;padding:1px 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">Nearby · ${escHtml(ev.town)}</span>` : ''}
 ${iconImgs(ev, siteUrl)}
 ${ev.time ? `<span style="display:inline-block;font-family:${DISPLAY};font-weight:bold;font-size:12px;padding:0 8px;border:2px solid ${C.ink};border-radius:999px;margin-right:4px;">${escHtml(formatTime(ev.time))}</span>` : ''}
 <a href="${escHtml(link)}" style="color:${C.ink};font-weight:800;text-decoration:none;">${escHtml(ev.name)}</a>${where ? ` <span style="color:${C.muted};">· ${escHtml(where)}</span>` : ''}${ev.also ? ` <span style="color:${C.muted};font-size:13px;font-weight:bold;">· also ${escHtml(ev.also)}</span>` : ''}
-${ev.description ? `<div style="color:${C.muted};font-size:13px;margin-top:2px;">${escHtml(ev.description)}</div>` : ''}
+${ev.description || paidPick(ev) ? `<div style="color:${C.muted};font-size:13px;margin-top:2px;">${escHtml(ev.description || '')}${paidPick(ev) ? ` <span style="font-size:11px;">${AD_LABEL}</span>` : ''}</div>` : ''}
 ${close}`;
 }
 
@@ -405,8 +405,8 @@ export function sampleEmailPreviews(siteUrl = '') {
 // weekend around (FILLER), never a paid pick.
 const FILLER = /\b(training|course|certification|seminar|webinar|orientation|meeting|support group|info(?:rmation)? session|hiring event|job fair|career fair|tutoring|open house|chair yoga)\b/i;
 const paidPick = isPaidPick;
-// The plain-text part labels a paid pick too (FTC: in every format).
-const paidTag = e => (paidPick(e) ? ` (${town.pickNamePlain}, ${SPONSORED_LABEL.toLowerCase()})` : '');
+// The plain-text part labels a paid pick too: "#ad" at the end of its line.
+const paidTag = e => (paidPick(e) ? ` ${AD_LABEL}` : '');
 export function isFiller(ev) {
   if (paidPick(ev)) return false;
   return FILLER.test(String(ev.name || '')) || (ev.appeal != null && Number(ev.appeal) <= 2);
@@ -486,7 +486,7 @@ export function renderWeekly(events, { siteUrl, now, sponsor, unsubscribeUrl, ad
   const topHtml = topShown.length ? `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;background:#fff;border:3px solid ${C.ink};border-radius:16px;"><tr><td style="padding:12px 16px;">
 <div style="font-family:${DISPLAY};font-size:19px;font-weight:bold;margin-bottom:4px;">Don’t miss ${weekend ? 'this weekend' : 'this week'}</div>
-${topShown.map((e, i) => `<div style="margin-top:6px;font-size:15px;"><strong>${i + 1}.</strong> <a href="${escHtml(e.page ? siteUrl + e.page : (safeUrl(e.url) || siteUrl))}" style="color:${C.ink};font-weight:800;">${escHtml(e.name)}</a> <span style="color:${C.muted};">· ${escHtml([when(e), e.venue || placeText(e)].filter(Boolean).join(' · '))}${paidPick(e) ? ` · ${SPONSORED_LABEL}` : ''}</span></div>`).join('')}
+${topShown.map((e, i) => `<div style="margin-top:6px;font-size:15px;"><strong>${i + 1}.</strong> <a href="${escHtml(e.page ? siteUrl + e.page : (safeUrl(e.url) || siteUrl))}" style="color:${C.ink};font-weight:800;">${escHtml(e.name)}</a> <span style="color:${C.muted};">· ${escHtml([when(e), e.venue || placeText(e)].filter(Boolean).join(' · '))}${paidPick(e) ? ` · ${AD_LABEL}` : ''}</span></div>`).join('')}
 </td></tr></table>` : '';
 
   // Day colors follow the weekday (Monday yellow ... Sunday coral), like the site.
