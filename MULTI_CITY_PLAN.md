@@ -253,8 +253,12 @@ These matter the moment a second town exists. All keep Victoria's values.
   - Railway project with its own Postgres (backups on); `TOWN`,
     `SITE_URL`, admin login and session secret, cron secrets,
     `HQ_API_KEY`.
-  - Resend domain (SPF, DKIM, MX for replies), `NEWSLETTER_FROM`,
-    inbound webhook and `RESEND_WEBHOOK_SECRET`.
+  - Resend domain (SPF, DKIM, MX for replies), `RESEND_API_KEY`,
+    `NEWSLETTER_FROM`, `NEWSLETTER_ADDRESS` (a street address or PO box
+    with ZIP; no issue goes out without it), `NEWSLETTER_REPLY_TO`,
+    `NEWSLETTER_CRON_SECRET` (Railway and the town's GitHub Environment),
+    the webhook to `/api/email/inbound` (events `email.received`,
+    `email.bounced`, `email.complained`) and `RESEND_WEBHOOK_SECRET`.
   - Stripe: the town's own Stripe account (same login, LLC, EIN and payout
     bank account as Victoria), so checkout, receipts and card statements
     carry the town's name and logo; its business name, logo and statement
@@ -265,7 +269,9 @@ These matter the moment a second town exists. All keep Victoria's values.
     stays as a second guard.
   - Slack: same webhooks, `SLACK_TOWN_TAG`.
   - Facebook page, Instagram, ad account (GitHub Environment).
-  - GA data stream; Turnstile hostname (or its own widget).
+  - GA data stream; Turnstile hostname (or its own widget) with
+    `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` (required: without
+    them every newsletter signup has to confirm by email).
   - Tremendous campaign and sender name.
 - [ ] **5.3 Launch checks**: boot guards pass, the town's goldens (its own
       fixture) pass, a test newsletter to `delivered@resend.dev`, a Stripe

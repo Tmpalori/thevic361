@@ -1148,9 +1148,13 @@
     const w = d.weekend || {};
     const failed = wk ? w.failed : d.this_week_failed;
     const sent = wk ? w.sent : d.this_week_sent;
+    // Possibly sent, and too long ago for Resend to dedupe: resent only on
+    // purpose (the click asks first).
+    const unknown = (wk ? w.unknown : d.this_week_unknown) || 0;
     const n = wk ? Math.max(0, d.counts.active - (w.opted_out || 0)) : d.counts.active;
-    send.disabled = !d.configured || !n || Boolean(sent) || (wk && !w.enabled);
-    send.textContent = failed ? ('Retry ' + failed + ' failed') : sent ? (wk ? 'Weekend issue already sent' : 'Already sent this week')
+    send.disabled = !d.configured || !n || (Boolean(sent) && !unknown) || (wk && !w.enabled);
+    send.textContent = failed ? ('Retry ' + failed + ' failed') : (sent && unknown) ? ('Resend unconfirmed (' + unknown + ')')
+      : sent ? (wk ? 'Weekend issue already sent' : 'Already sent this week')
       : ('Send to ' + n + ' subscribers');
   }
 
@@ -2783,6 +2787,14 @@
       const wk = nlEdition() === 'weekend';
       const w = nl.weekend || {};
       const retry = (wk ? w.failed : nl.this_week_failed) || 0;
+      const unknown = (wk ? w.unknown : nl.this_week_unknown) || 0;
+      const which = wk ? 'this weekend\'s issue' : 'this week\'s newsletter';
+      if (!retry && unknown) {
+        if (!window.confirm('Resend ' + which + ' to the ' + unknown + ' subscribers Resend never confirmed?\n\n' +
+          'Warning: Resend may already have delivered it to some or all of them, and it can no longer tell us, so they may get it twice.')) return;
+        emailNlPost('/api/admin/newsletter/send', { edition: nlEdition(), resend_unknown: true }, j => 'Sent to ' + j.recipients + ' subscribers.');
+        return;
+      }
       const n = nl.counts ? (wk ? nl.counts.active - (w.opted_out || 0) : nl.counts.active) : 0;
       const what = wk ? 'this weekend\'s issue' : 'this week\'s newsletter';
       if (!window.confirm(retry ? 'Retry ' + what + ' for the ' + retry + ' subscribers who didn\'t get it?'
@@ -2801,7 +2813,8 @@
     if (nlImport) nlImport.addEventListener('click', () => emailNlPost('/api/admin/newsletter/import',
       { emails: (document.getElementById('email-nl-import-text') || {}).value },
       j => 'Imported ' + j.added + ' new, ' + j.already + ' already subscribed' +
-        (j.skipped_unsubscribed ? ', ' + j.skipped_unsubscribed + ' skipped (unsubscribed)' : '') + '.'));
+        (j.skipped_unsubscribed ? ', ' + j.skipped_unsubscribed + ' skipped (unsubscribed)' : '') +
+        (j.skipped_bounced ? ', ' + j.skipped_bounced + ' skipped (bounced)' : '') + '.'));
 
     const evStats = document.getElementById('event-stats');
     if (evStats) evStats.addEventListener('click', async (e) => {

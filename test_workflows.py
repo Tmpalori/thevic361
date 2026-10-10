@@ -374,3 +374,24 @@ def test_collect_commits_a_new_towns_first_files(tmp_path):
     assert _changes(tmp_path / "a", {"towns/bay/candidates.json": "{}"}, tracked=[]) == "changed=true"
     assert _changes(tmp_path / "b", {}, tracked=["towns/bay/candidates.json"]) == "changed=false"
     assert _changes(tmp_path / "c", {"towns/bay/candidates.json": "new\n"}, tracked=["towns/bay/candidates.json"]) == "changed=true"
+
+
+def _newsletter_town_guard(town):
+    g = step(load("newsletter.yml")["jobs"]["gate"], "Only Victoria until per-town Environments")
+    env = dict(os.environ, RUN_TOWN=town)
+    return subprocess.run(["bash", "-e", "-o", "pipefail", "-c", g["run"]], env=env,
+                          capture_output=True, text=True, timeout=30)
+
+
+def test_newsletter_refuses_another_towns_dispatch():
+    # The send reaches the repo-level SITE_URL and NEWSLETTER_CRON_SECRET
+    # (Victoria's): a dispatch for another town would send Victoria's issue.
+    # Until that town has its GitHub Environment (plan 3.3) it fails fast.
+    g = step(load("newsletter.yml")["jobs"]["gate"], "Only Victoria until per-town Environments")
+    assert g["env"]["RUN_TOWN"] == "${{ inputs.town || 'victoria' }}"
+    assert _newsletter_town_guard("victoria").returncode == 0
+    r = _newsletter_town_guard("bay")
+    assert r.returncode == 1
+    assert "needs its GitHub Environment (MULTI_CITY_PLAN.md 3.3)" in r.stdout
+    # The send job waits on the gate, so nothing is sent.
+    assert load("newsletter.yml")["jobs"]["send"]["needs"] == "gate"

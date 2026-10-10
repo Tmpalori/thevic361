@@ -10,6 +10,11 @@
  * check: they go to the inbox channel (💰 marks ones about orders).
  * Resend keeps every message in its dashboard either way.
  *
+ * The same webhook also takes `email.bounced` and `email.complained`
+ * (subscribe it to both in Resend): a hard bounce marks the subscriber
+ * bounced and a spam complaint unsubscribes them, so neither gets another
+ * issue nor counts toward referral rewards or a sponsor's copies sent.
+ *
  * Setup (Railway): RESEND_WEBHOOK_SECRET, the webhook's signing secret.
  * Unset, the endpoint answers 503 and the reply ask stays off (newsletter.js).
  */
@@ -124,7 +129,22 @@ export function isForTown(recipients, t = town, others = []) {
   return !domains.length || !domains.every(d => others.some(o => on(d, o)));
 }
 
-export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl = globalThis.fetch, nowFn = () => Date.now(), otherDomains }) {
+// The bare, lowercased addresses of a webhook's `to` (a string or a list,
+// with or without a display name), as subscribers are stored.
+export function recipientAddresses(to) {
+  return (Array.isArray(to) ? to : [to]).map(r => String(r || '').trim())
+    .map(r => (/<([^>]+)>/.exec(r) || [, r])[1].trim().toLowerCase()).filter(r => /^[^\s@]+@[^\s@]+$/.test(r));
+}
+
+// A bounce Resend reports as temporary (a full mailbox, a greylist) isn't a
+// dead address. Resend sends email.bounced for permanent bounces; when the
+// payload names the kind, anything but Permanent is left alone.
+export function isHardBounce(data) {
+  const type = String((data && data.bounce && data.bounce.type) || '').trim().toLowerCase();
+  return !type || type === 'permanent' || type === 'hard';
+}
+
+export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl = globalThis.fetch, nowFn = () => Date.now(), otherDomains, store = null }) {
   const seen = new Set();
   const others = otherDomains || otherTownDomains();
 
@@ -136,7 +156,32 @@ export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl =
     return r.json();
   }
 
+  // A hard bounce or a spam complaint about one of our emails. The `from`
+  // is ours, so it says which town sent it (one Resend account can send for
+  // several towns, and each town's webhook sees every event).
+  async function handleDeliveryEvent(event) {
+    const d = event.data || {};
+    if (!isForTown([d.from].filter(Boolean), town, others)) return 'other-town';
+    const to = recipientAddresses(d.to);
+    if (!to.length || !store) return 'ignored';
+    if (event.type === 'email.bounced') {
+      if (!isHardBounce(d)) return 'soft-bounce';
+      if (typeof store.markSubscribersBounced !== 'function') return 'ignored';
+      const n = await store.markSubscribersBounced(to);
+      if (n) console.log(`[inbound] marked ${n} subscriber(s) bounced (hard bounce)`);
+      return 'bounced';
+    }
+    if (typeof store.unsubscribeByEmail !== 'function') return 'ignored';
+    const n = await store.unsubscribeByEmail(to);
+    if (n && slack) {
+      slack.notify({ title: '🚫 Spam complaint: unsubscribed', fields: [['Email', to.join(', ')], ['Subject', String(d.subject || '')]],
+        text: 'They marked one of our emails as spam, so they get no more issues.' });
+    }
+    return 'complained';
+  }
+
   async function handle(event) {
+    if (event && (event.type === 'email.bounced' || event.type === 'email.complained') && event.data) return handleDeliveryEvent(event);
     if (!event || event.type !== 'email.received' || !event.data || !event.data.email_id) return 'ignored';
     const id = event.data.email_id;
     if (!isForTown([...(event.data.to || []), ...(event.data.cc || [])], town, others)) return 'other-town';
@@ -176,8 +221,9 @@ export function createInbound({ config, apiKey, slack, siteUrl = '', fetchImpl =
       try {
         res.json({ ok: true, result: await handle(event) });
       } catch (err) {
-        // A 500 makes Resend retry; the email itself is kept in Resend.
-        console.error('[inbound] handling a received email failed:', err.message);
+        // A 500 makes Resend retry; the email itself is kept in Resend (and
+        // a bounce or complaint is tried again the same way).
+        console.error('[inbound] handling a Resend webhook failed:', err.message);
         if (slack) slack.alert('inbound-email-failed', 'Email replies aren’t reaching Slack', err.message);
         res.status(500).json({ ok: false });
       }

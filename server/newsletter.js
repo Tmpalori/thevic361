@@ -120,6 +120,31 @@ export function maskEmail(email) {
   return `${user[0]}•••@${domain}`;
 }
 
+// Resend keeps an idempotency key for 24 hours. A batch that may have gone
+// out (asked, no definite answer) is only sent again under its key inside
+// this window, with an hour's margin for clock skew and a slow request.
+export const KEY_WINDOW_MS = 23 * 3600e3;
+
+// What a failed weekly batch means, from Resend's error:
+//   'sent'    the key was already used within its 24 hours: an earlier try
+//             went out. Resend answers 409 invalid_idempotent_request when
+//             the payload differs (someone left the chunk, or the issue was
+//             re-rendered on a later day), so that counts as delivered;
+//             never a new key, which would mail the chunk twice.
+//   'unknown' still in flight under the key (409
+//             concurrent_idempotent_requests: another container is sending
+//             it, and that request may yet fail), a timeout or a network
+//             error: possibly sent, so it's retried later under the same key
+//             (like notify.js deliver).
+//   'failed'  any other HTTP error: Resend didn't send it.
+export function batchErrorOutcome(err) {
+  const code = String((err && err.code) || '');
+  const msg = String((err && err.message) || '');
+  if (code === 'concurrent_idempotent_requests' || /concurrent_idempotent_requests/.test(msg)) return 'unknown';
+  if ((err && err.status === 409) || code === 'invalid_idempotent_request') return 'sent';
+  return err && err.status ? 'failed' : 'unknown';
+}
+
 export function newToken() {
   return crypto.randomBytes(24).toString('base64url');
 }
@@ -739,7 +764,7 @@ export function renderSubscribePage(events, { siteUrl, now, subscriberCount = 0,
 
 // ─── Routes ──────────────────────────────────────────────────────────────
 
-export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, getSendPayload = getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true, withNav = async html => html, onCron = null, tremendous = null }) {
+export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, getPublicPayload, getSendPayload = getPublicPayload, createRateLimiter, config, resend, slack = null, verifyHuman = async () => true, turnstileConfigured = true, withNav = async html => html, onCron = null, tremendous = null }) {
   const rewards = createReferralRewards({ store, slack, tremendous, nowFn, localDate: localDateStr });
   const subscribeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10 });
   const confirmLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 3 });
@@ -816,7 +841,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
 
   const prefsLink = s => `${siteUrl}/email-prefs?token=${encodeURIComponent(s.token)}`;
 
-  async function sendWeeklyNow({ force = false, edition = 'weekly' } = {}) {
+  async function sendWeeklyNow({ force = false, edition = 'weekly', resendUnknown = false } = {}) {
     if (!EDITIONS[edition]) return { ok: false, error: 'unknown-edition' };
     if (!config.enabled) return { ok: false, error: 'not-configured' };
     // CAN-SPAM: every marketing email needs a physical postal address.
@@ -827,20 +852,76 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     const key = EDITIONS[edition].key(localDateStr(now));
     const prior = await store.getNewsletterSend(key);
     const priorFailed = prior && Array.isArray(prior.failed_emails) ? prior.failed_emails : [];
+    const priorChunks = prior && Array.isArray(prior.chunks) ? prior.chunks : [];
+    // Chunks recorded as possibly sent (asked, no definite answer) whose key
+    // has expired: only the admin's explicit "resend unconfirmed" mails them.
+    const unknownChunks = priorChunks.filter(c => c && c.state === 'sent-unknown');
     // Fully sent: done. Partly sent: a retry (cron or admin) only goes to
     // the people who didn't get it. Force resends to everyone.
-    if (prior && !force && !priorFailed.length) return { ok: false, error: 'already-sent', sent: prior };
-    const resume = Boolean(prior && !force && priorFailed.length);
+    if (prior && !force && !priorFailed.length && !(resendUnknown && unknownChunks.length)) return { ok: false, error: 'already-sent', sent: prior };
+    const resume = Boolean(prior && !force);
     const payload = await getSendPayload();
     let subs = await store.listSubscribers({ status: 'active' });
     if (weekend) subs = subs.filter(s => !s.weekend_optout);
+    // Only people still on the list (and still taking this issue): someone
+    // who unsubscribed, bounced or complained since the first try drops out
+    // of their chunk's message list.
+    const active = new Map(subs.map(s => [s.email, s]));
+    // Only a forced resend (to everyone, on purpose) gets a fresh key. A
+    // resume reuses the first try's key, so a chunk Resend queued but
+    // answered after our 15 s timeout gets a 409 (counted as sent) instead
+    // of going to those people twice.
+    const attempt = force ? `-f${Date.now()}` : '';
+    // The send's plan: each chunk's idempotency key and members, saved
+    // before it is first sent. A resume sends a chunk again under its
+    // ORIGINAL key with its original members (less anyone who left), so a
+    // chunk Resend took but answered after our timeout gets the same key and
+    // Resend's 409 (counted as sent), whoever unsubscribed meanwhile. Keys
+    // built from the current members (as before) changed when anyone left,
+    // and the whole chunk, and every later one, went out twice.
+    // state: queued (not tried), pending (asked, no answer yet: the process
+    // died mid-request), unknown (timed out, or still in flight at Resend:
+    // possibly sent), failed (a definite error: not sent), sent,
+    // sent-unknown (possibly sent and past Resend's key window).
+    // The key is the week plus a hash of the chunk's addresses, as before,
+    // so a first send's keys are unchanged.
+    const chunkKey = emails => {
+      const who = crypto.createHash('sha256').update(emails.join(',')).digest('hex').slice(0, 16);
+      return `${town.keyPrefix}-${key}-${who}${attempt}`;
+    };
+    const planOf = list => {
+      const out = [];
+      for (let i = 0; i < list.length; i += BATCH_SIZE) {
+        const emails = list.slice(i, i + BATCH_SIZE);
+        out.push({ key: chunkKey(emails), emails, state: 'queued', first_at: null });
+      }
+      return out;
+    };
+    let plan;
     if (resume) {
-      const retry = new Set(priorFailed);
-      subs = subs.filter(s => retry.has(s.email));
+      plan = priorChunks.map(c => ({ ...c, emails: [...(c.emails || [])] }));
+      if (resendUnknown) {
+        // The admin asked, after a warning: these may already have it, and
+        // Resend no longer remembers the key, so a new key it is.
+        const stamp = Date.now();
+        for (const c of plan) if (c.state === 'sent-unknown') Object.assign(c, { state: 'queued', first_at: null, key: `${c.key}-u${stamp}` });
+      }
+      // People owed the issue whom no saved chunk covers: a record from
+      // before chunks were saved. Their keys hash the current chunk, as then.
+      const planned = new Set(plan.flatMap(c => c.emails));
+      const owedBefore = new Set(priorFailed);
+      const loose = subs.map(s => s.email).filter(e => !planned.has(e) && owedBefore.has(e));
+      plan.push(...planOf(loose));
+    } else {
+      plan = planOf(subs.map(s => s.email));
     }
+    const DONE = new Set(['sent', 'sent-unknown']);
+    const todo = plan.filter(c => !DONE.has(c.state));
+    subs = [...new Set(todo.flatMap(c => c.emails))].map(e => active.get(e)).filter(Boolean);
     if (!subs.length) {
       if (resume) {
-        await store.recordNewsletterSend({ ...prior, failed: 0, failed_emails: [] });
+        for (const c of todo) c.state = 'sent';
+        await store.recordNewsletterSend({ ...prior, failed: 0, failed_emails: [], chunks: plan });
         return { ok: false, error: 'already-sent', sent: prior };
       }
       return { ok: false, error: 'no-subscribers' };
@@ -850,37 +931,53 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
 
     let sent = 0;
     const failures = [];
-    const failedEmails = [];
     // Addresses Resend's permissive validation refused. Retrying them can't
     // help (same address, same answer), so they don't count as failed:
     // otherwise the week never reads "sent" and every Monday retries and
     // alerts again. They're marked bounced (no future sends) and listed in
     // one Slack note.
     const refusedEmails = [];
-    // Only a forced resend (to everyone, on purpose) gets a fresh key. A
-    // resume reuses the first try's key, so a chunk Resend queued but
-    // answered after our 15 s timeout gets a 409 (counted as sent) instead
-    // of going to those people twice.
-    const attempt = force ? `-f${Date.now()}` : '';
-    const base = resume ? (prior.recipients || 0) : 0;
-    let waiting = subs.map(s => s.email);
+    // Chunks this run found possibly sent and past the key window.
+    const expiredUnknown = [];
+    const base = resume ? (Number(prior.recipients) || 0) : 0;
     // A resumed send renders from the resume day onward, so a pick starred
     // in Monday's issue may be missing from probe.picks by Tuesday. The
     // record keeps every pick any part of the week's send starred (the
     // Vic's Pick report reads it).
     const picks = resume && Array.isArray(prior.picks) ? [...new Set([...prior.picks, ...probe.picks])] : probe.picks;
-    // Written before each chunk, with everyone not yet sent counted as
-    // failed: if the process dies mid-send, the week reads "partly sent"
-    // and Retry (or the next cron) goes only to the people still waiting.
-    const progress = () => store.recordNewsletterSend({
-      week_key: key, subject: probe.subject, recipients: base + sent, picks,
-      failed: failedEmails.length + waiting.length, failed_emails: [...failedEmails, ...waiting]
-    });
+    // Everyone in a chunk that isn't done is owed the issue (failed_emails,
+    // which the admin and the scheduler read as "partly sent").
+    const owed = () => [...new Set(plan.filter(c => !DONE.has(c.state)).flatMap(c => c.emails))];
+    // Written before each chunk, with that chunk marked pending (asked,
+    // answer not yet in): if the process dies mid-send, the week reads
+    // "partly sent" and Retry (or the next cron) goes only to the people
+    // still waiting, each under the key their chunk was first sent with.
+    const progress = () => {
+      const failedEmails = owed();
+      return store.recordNewsletterSend({
+        week_key: key, subject: probe.subject, recipients: base + sent, picks,
+        failed: failedEmails.length, failed_emails: failedEmails, chunks: plan
+      });
+    };
     const refs = await referralsForSend(subs);
-    for (let i = 0; i < subs.length; i += BATCH_SIZE) {
+    const nowMs = now.getTime();
+    for (const chunk of todo) {
+      // Possibly sent already (no definite answer) and too old for Resend to
+      // still hold its key: sending it again could mail every one of them
+      // twice, so the cron never does. It's recorded as sent-unknown, which
+      // the admin can resend on purpose after a warning.
+      const possiblySent = chunk.state === 'pending' || chunk.state === 'unknown';
+      if (possiblySent && chunk.first_at && nowMs - Date.parse(chunk.first_at) > KEY_WINDOW_MS) {
+        chunk.state = 'sent-unknown';
+        expiredUnknown.push(chunk);
+        continue;
+      }
+      const members = chunk.emails.map(e => active.get(e)).filter(Boolean);
+      if (!members.length) { chunk.state = 'sent'; continue; }
+      if (!chunk.first_at) chunk.first_at = now.toISOString();
+      chunk.state = 'pending';
       await progress();
-      const chunk = subs.slice(i, i + BATCH_SIZE);
-      const msgs = chunk.map(s => {
+      const msgs = members.map(s => {
         const unsubscribeUrl = `${siteUrl}/unsubscribe?token=${encodeURIComponent(s.token)}`;
         // Open tracking: a 1x1 image per copy, keyed by week and subscriber
         // id (not the token, which unsubscribes). See /email/o below.
@@ -895,35 +992,44 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
           headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
         };
       });
-      // Idempotency key per week + who's in the chunk (not its position: a
-      // resume puts the same people at chunk 0): a retried request can't
-      // double-send, and a 409 (key already used, by an earlier send of
-      // these same people within Resend's 24 hours) means they got it.
-      const who = crypto.createHash('sha256').update(chunk.map(s => s.email).join(',')).digest('hex').slice(0, 16);
       try {
-        const out = await resend.batch(msgs, `${town.keyPrefix}-${key}-${who}${attempt}`);
+        const out = await resend.batch(msgs, chunk.key);
         // Permissive validation: refused addresses come back by index; the
         // rest of the chunk went out.
         const refused = new Map((out && Array.isArray(out.errors) ? out.errors : []).map(e => [Number(e.index), e.message]));
-        chunk.forEach((s, j) => {
+        members.forEach((s, j) => {
           if (refused.has(j)) refusedEmails.push({ email: s.email, reason: String(refused.get(j) || '').slice(0, 200) });
           else sent++;
         });
+        chunk.state = 'sent';
       } catch (err) {
-        if (err.status === 409) sent += chunk.length;
-        else {
+        const outcome = batchErrorOutcome(err);
+        if (outcome === 'sent') {
+          // The key was already used within Resend's 24 hours: the first
+          // try went out (the payload differs now that someone left, or the
+          // issue was re-rendered on a later day). They got it.
+          sent += members.length;
+          chunk.state = 'sent';
+        } else {
           failures.push(err.message);
-          failedEmails.push(...chunk.map(s => s.email));
+          chunk.state = outcome;
         }
       }
-      waiting = waiting.slice(chunk.length);
     }
+    const failedEmails = owed();
     const record = {
       week_key: key, subject: probe.subject, picks,
       recipients: base + sent,
-      failed: failedEmails.length, failed_emails: failedEmails
+      failed: failedEmails.length, failed_emails: failedEmails, chunks: plan
     };
     await store.recordNewsletterSend(record);
+    const unknownCount = plan.filter(c => c.state === 'sent-unknown').reduce((n, c) => n + c.emails.filter(e => active.has(e)).length, 0);
+    if (slack && expiredUnknown.length) {
+      const n = expiredUnknown.reduce((m, c) => m + c.emails.length, 0);
+      slack.alert(`newsletter-unknown-${key}`, `Newsletter: ${n} may or may not have gotten it`,
+        `Resend never answered for ${n} subscriber(s), and it's been over a day, so the retry key has expired. They weren't sent it again, ` +
+        'since that could mail them twice. To send it anyway, use "Resend unconfirmed" in the Newsletter tab.', `${siteUrl}/admin.html`);
+    }
     if (refusedEmails.length) {
       const emails = refusedEmails.map(r => r.email);
       let marked = false;
@@ -933,7 +1039,7 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       if (slack) {
         slack.alert(`newsletter-refused-${key}`, `Newsletter: Resend refused ${emails.length} address(es)`,
           `${refusedEmails.slice(0, 20).map(r => `${r.email}: ${r.reason}`).join('\n')}${emails.length > 20 ? `\n…and ${emails.length - 20} more` : ''}\n` +
-          (marked ? 'They are marked bounced and get no more issues; re-import one to try it again.' : 'They could not be marked bounced, so the next send will try them again.'),
+          (marked ? 'They are marked bounced and get no more issues; one who signs up again on the site gets a confirmation email first.' : 'They could not be marked bounced, so the next send will try them again.'),
           `${siteUrl}/admin.html`);
       }
     }
@@ -944,7 +1050,8 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     }
     // Referral rewards, once Monday's issue is out (never throws).
     if (!weekend) await rewards.run(refs.counts);
-    return { ok: failures.length === 0, ...record, refused: refusedEmails.map(r => r.email), errors: failures.slice(0, 3) };
+    const { chunks: _chunks, ...summary } = record;
+    return { ok: failures.length === 0, ...summary, unknown: unknownCount, refused: refusedEmails.map(r => r.email), errors: failures.slice(0, 3) };
   }
 
   app.post('/api/subscribe', async (req, res) => {
@@ -967,11 +1074,16 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     // that signup isn't refused: it gets a confirmation email instead, the
     // same as a comeback. A real reader taps it; an address a bot typed in
     // never gets on the list.
-    const human = await verifyHuman(req);
+    // Without TURNSTILE_SECRET_KEY nothing is checked (verifyTurnstile
+    // answers ok), so that signup isn't a verified person either: it gets the
+    // confirmation email too, or anyone could put strangers' addresses on
+    // the list.
+    const human = turnstileConfigured && await verifyHuman(req);
     const hasToken = Boolean(body['cf-turnstile-response'] || body.turnstile_token);
-    if (!human && hasToken) return res.status(400).json({ ok: false, error: 'turnstile-failed', message: "We couldn't confirm you're not a bot. Please try again." });
+    if (!human && hasToken && turnstileConfigured) return res.status(400).json({ ok: false, error: 'turnstile-failed', message: "We couldn't confirm you're not a bot. Please try again." });
     const unverified = !human;
-    if (unverified) console.warn('[newsletter] signup without a bot-check token: sending a confirmation email instead');
+    if (unverified) console.warn(turnstileConfigured ? '[newsletter] signup without a bot-check token: sending a confirmation email instead'
+      : '[newsletter] Turnstile is not configured: sending a confirmation email instead');
     // Every outcome (new, waiting to confirm, already subscribed) gets the
     // same answer, so the form can't be used to find out who's on the list.
     // Whether it was a first signup is the browser's to know (docs/track.js
@@ -1014,12 +1126,18 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       // friend from a referral link: a made-up address can't tap Confirm, so
       // it never counts toward a reward.
       const comeback = (sub.old_tokens || []).length > 0;
-      if ((!comeback && !needsConfirm) || !config.enabled) {
+      if (!comeback && !needsConfirm) {
         const confirmed = await store.confirmSubscriber(sub.token);
         // Not awaited: the welcome email shouldn't hold up the form.
         if (confirmed && confirmed.newly_confirmed) welcome(confirmed);
         return res.json(done);
       }
+      // Email is off (no RESEND_API_KEY yet, or mid key rotation), so no
+      // confirmation email can go out. The signup stays pending rather than
+      // being confirmed for them: a comeback, a referred friend or an
+      // unchecked signup only joins by tapping Confirm in their own inbox
+      // (the reminder job asks them once email is on).
+      if (!config.enabled) return res.json(done);
       // A few confirmation emails per inbox a day, whoever asks (a +tag or
       // Gmail dots don't make a new inbox), so the form can't be used to
       // flood someone's inbox.
@@ -1252,6 +1370,8 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     ]);
     const failed = failedCount(record);
     const wkFailed = failedCount(wkRecord);
+    // Possibly sent, past Resend's key window: only resent on purpose.
+    const unknownCount = r => (r && Array.isArray(r.chunks) ? r.chunks.filter(c => c && c.state === 'sent-unknown').reduce((n, c) => n + (c.emails || []).length, 0) : 0);
     const wkIssue = renderWeekly(payload.events, { siteUrl, now, sponsor: payload.sponsor, unsubscribeUrl: '#', address: config.address, edition: 'weekend' });
     res.json({
       ok: true, configured: config.enabled, from: config.from, address_set: Boolean(config.address),
@@ -1261,11 +1381,14 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
       this_week_sent: Boolean(record) && !failed,
       this_week_failed: failed,
       this_week_recipients: record ? Number(record.recipients) || 0 : 0,
+      this_week_unknown: unknownCount(record),
       weekend: {
         enabled: config.weekend, opted_out: optedOut, next: { subject: wkIssue.subject, events: wkIssue.total },
-        sent: Boolean(wkRecord) && !wkFailed, failed: wkFailed, recipients: wkRecord ? Number(wkRecord.recipients) || 0 : 0
+        sent: Boolean(wkRecord) && !wkFailed, failed: wkFailed, recipients: wkRecord ? Number(wkRecord.recipients) || 0 : 0,
+        unknown: unknownCount(wkRecord)
       },
-      sends: sends.map(x => ({ ...x, edition: editionOf(x.week_key) }))
+      // The chunk plan (every address) stays on the server.
+      sends: sends.map(({ chunks: _c, ...x }) => ({ ...x, edition: editionOf(x.week_key) }))
     });
   });
 
@@ -1307,8 +1430,12 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
 
   app.post('/api/admin/newsletter/send', requireAdmin, async (req, res) => {
     try {
-      const out = await sendWeekly({ force: Boolean((req.body || {}).force), edition: editionParam((req.body || {}).edition) });
+      const b = req.body || {};
+      // resend_unknown: the admin's explicit "Resend unconfirmed", after the
+      // warning that some of them may get it twice (see sendWeeklyNow).
+      const out = await sendWeekly({ force: Boolean(b.force), resendUnknown: b.resend_unknown === true, edition: editionParam(b.edition) });
       if (!out.ok && out.failed) out.message = `Sent to ${out.recipients}, but ${out.failed} failed (${(out.errors || [])[0] || 'email service error'}). Press Retry to send to the rest.`;
+      else if (out.unknown) out.message = `Sent to ${out.recipients}. ${out.unknown} may or may not have gotten it (Resend never answered, over a day ago); they weren't sent it again.`;
       res.status(out.ok ? 200 : (out.error === 'not-configured' ? 503 : 409)).json(out);
     } catch (err) {
       res.status(500).json({ ok: false, error: 'send-failed', message: err.message });
@@ -1319,6 +1446,8 @@ export function registerNewsletter(app, { store, requireAdmin, siteUrl, nowFn, g
     const raw = String((req.body || {}).emails || '');
     const emails = [...new Set(raw.split(/[\s,;]+/).map(normalizeEmail).filter(Boolean))];
     if (!emails.length) return res.status(400).json({ ok: false, message: 'No valid email addresses found.' });
+    // Anyone who unsubscribed, complained or bounced here is skipped and
+    // counted (skipped_unsubscribed, skipped_bounced), never made active.
     const result = await store.importSubscribers(emails, 'import');
     res.json({ ok: true, ...result });
   });
