@@ -1,0 +1,54 @@
+# Market scan — manual only. Counts each candidate town's event venues with a
+# Facebook or Instagram page (scripts/market_scan.py), with Victoria as the
+# baseline, to compare towns before launching one. Prints a table and the
+# Apify cost, uploads a JSON report, commits nothing and touches no site data.
+# Refuses to start when the worst-case cost is over max_usd.
+
+name: Market Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      locations:
+        description: 'Locations, "City, ST; City, ST" (Victoria, TX is always added)'
+        required: true
+      per_search:
+        description: 'Places per category search'
+        required: false
+        default: '40'
+      max_usd:
+        description: 'Refuse to run if the worst-case Apify cost is above this'
+        required: false
+        default: '40'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: market-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - name: Scan
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          MARKET_LOCATIONS: ${{ inputs.locations }}
+          MARKET_PER_SEARCH: ${{ inputs.per_search }}
+          MARKET_MAX_USD: ${{ inputs.max_usd }}
+          PYTHONUNBUFFERED: 1
+        run: python scripts/market_scan.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: market-scan-report
+          path: market_scan_report.json
+          if-no-files-found: ignore
