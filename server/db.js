@@ -982,7 +982,89 @@ class FileStore {
     const data = await this._read();
     return (data.contact_messages || []).slice().sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).slice(0, limit);
   }
+
+  // ─── Personal data (server/privacy.js) ───
+  // Retention: submissions created before `submissionsBefore` lose the
+  // submitter's IP address and user agent; contact messages created before
+  // `contactBefore` are deleted. Both ISO timestamps.
+  async purgePersonalData({ submissionsBefore, contactBefore }) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      let submissions = 0;
+      for (const r of data.submissions) {
+        if (String(r.created_at || '') < submissionsBefore && (r.submitter_ip || r.user_agent)) {
+          r.submitter_ip = null; r.user_agent = null; submissions++;
+        }
+      }
+      const msgs = Array.isArray(data.contact_messages) ? data.contact_messages : [];
+      const keep = msgs.filter(m => !(String(m.created_at || '') < contactBefore));
+      const contact = msgs.length - keep.length;
+      if (contact) data.contact_messages = keep;
+      if (submissions || contact) await this._write(data);
+      return { submissions, contact_messages: contact };
+    });
+  }
+
+  // Everything stored about one address, on request: the subscriber (and
+  // their opens), contact messages, the submitter fields of their
+  // submissions (the event itself stays), and a failed-send entry. Sponsor
+  // orders and referral rewards are money, kept for the books with the
+  // address replaced by `masked`; a reward not sent yet is skipped.
+  async forgetEmail(email, masked) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const same = v => String(v || '').toLowerCase() === email;
+      const out = { subscribers: 0, email_opens: 0, submissions: 0, contact_messages: 0, sponsor_orders: 0, referral_rewards: 0, newsletter_sends: 0 };
+      const gone = new Set(data.subscribers.filter(x => same(x.email)).map(x => x.id));
+      out.subscribers = gone.size;
+      data.subscribers = data.subscribers.filter(x => !gone.has(x.id));
+      const opens = data.email_opens.length;
+      data.email_opens = data.email_opens.filter(x => !gone.has(x.subscriber_id));
+      out.email_opens = opens - data.email_opens.length;
+      for (const r of data.submissions) {
+        if (!same(r.submitter_email)) continue;
+        Object.assign(r, { submitter_email: null, submitter_name: null, submitter_ip: null, user_agent: null,
+          payload: { ...(r.payload || {}), ...BLANK_SUBMITTER }, updated_at: nowIso() });
+        out.submissions++;
+      }
+      if (Array.isArray(data.contact_messages)) {
+        const before = data.contact_messages.length;
+        data.contact_messages = data.contact_messages.filter(m => !same(m.email));
+        out.contact_messages = before - data.contact_messages.length;
+      }
+      for (const o of data.sponsor_orders) if (same(o.email)) { o.email = masked; out.sponsor_orders++; }
+      for (const r of data.referral_rewards) {
+        if (!same(r.email)) continue;
+        r.email = masked;
+        if (OPEN_REWARD.has(r.status)) Object.assign(r, { status: 'skipped', reason: FORGOTTEN });
+        r.updated_at = nowIso();
+        out.referral_rewards++;
+      }
+      for (const n of data.newsletter_sends) {
+        if (!Array.isArray(n.failed_emails) || !n.failed_emails.some(same)) continue;
+        n.failed_emails = n.failed_emails.filter(e => !same(e));
+        n.failed = n.failed_emails.length;
+        out.newsletter_sends++;
+      }
+      if (Object.values(out).some(Boolean)) await this._write(data);
+      return out;
+    });
+  }
+
+  // Every subscriber for the admin's CSV export (no tokens).
+  async exportSubscribers() {
+    const data = await this._read();
+    return data.subscribers.slice().sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+      .map(x => ({ email: x.email, status: x.status, source: x.source || null, created_at: x.created_at || null,
+        confirmed_at: x.confirmed_at || null, unsubscribed_at: x.unsubscribed_at || null }));
+  }
 }
+
+// forgetEmail: what a forgotten submitter's payload fields become (the
+// shape normalizePayload gives), and the rewards that hadn't gone out.
+const BLANK_SUBMITTER = { submitter_first_name: '', submitter_last_name: '', submitter_phone: '' };
+const OPEN_REWARD = new Set(['pending', 'held', 'failed', 'manual']);
+const FORGOTTEN = 'Skipped: the person asked us to delete their data.';
 
 // A claimed slot can be taken again when its run asked for a retry and the
 // time has come, or when it has said "running" for 30 minutes (the process
@@ -1981,6 +2063,64 @@ class PgStore {
     await this.ready();
     const r = await this.pool.query('SELECT payload FROM contact_messages ORDER BY created_at DESC LIMIT $1', [limit]);
     return r.rows.map(row => row.payload);
+  }
+
+  // See FileStore.purgePersonalData.
+  async purgePersonalData({ submissionsBefore, contactBefore }) {
+    await this.ready();
+    const subs = await this.pool.query(
+      `UPDATE event_submissions SET submitter_ip = NULL, user_agent = NULL
+       WHERE created_at < $1::timestamptz AND (submitter_ip IS NOT NULL OR user_agent IS NOT NULL)`, [submissionsBefore]);
+    const msgs = await this.pool.query('DELETE FROM contact_messages WHERE created_at < $1::timestamptz', [contactBefore]);
+    return { submissions: subs.rowCount || 0, contact_messages: msgs.rowCount || 0 };
+  }
+
+  // See FileStore.forgetEmail. One transaction on a pool client (the
+  // breaker wraps only pool.query), so a failure part way leaves nothing
+  // half-forgotten; each statement is safe to repeat anyway.
+  async forgetEmail(email, masked) {
+    await this.ready();
+    const client = this.rawPool && typeof this.rawPool.connect === 'function' ? await this.rawPool.connect() : null;
+    const db = client || this.pool;
+    const n = r => (r && r.rowCount) || 0;
+    try {
+      if (client) await db.query('BEGIN');
+      const out = {};
+      out.email_opens = n(await db.query(
+        'DELETE FROM email_opens WHERE subscriber_id IN (SELECT id FROM subscribers WHERE lower(email) = $1)', [email]));
+      out.subscribers = n(await db.query('DELETE FROM subscribers WHERE lower(email) = $1', [email]));
+      out.submissions = n(await db.query(
+        `UPDATE event_submissions SET submitter_email = NULL, submitter_name = NULL, submitter_ip = NULL, user_agent = NULL,
+           payload = payload || $2::jsonb, updated_at = NOW() WHERE lower(submitter_email) = $1`, [email, toJsonb(BLANK_SUBMITTER)]));
+      out.contact_messages = n(await db.query("DELETE FROM contact_messages WHERE lower(payload->>'email') = $1", [email]));
+      out.sponsor_orders = n(await db.query(
+        `UPDATE sponsor_orders SET payload = jsonb_set(payload, '{email}', to_jsonb($2::text)), updated_at = NOW()
+         WHERE lower(payload->>'email') = $1`, [email, masked]));
+      out.referral_rewards = n(await db.query(
+        `UPDATE referral_rewards SET email = $2,
+           status = CASE WHEN status = ANY($3::text[]) THEN 'skipped' ELSE status END,
+           reason = CASE WHEN status = ANY($3::text[]) THEN $4 ELSE reason END, updated_at = NOW()
+         WHERE lower(email) = $1`, [email, masked, [...OPEN_REWARD], FORGOTTEN]));
+      out.newsletter_sends = n(await db.query(
+        `UPDATE newsletter_sends SET failed_emails = failed_emails - $1, failed = jsonb_array_length(failed_emails - $1)
+         WHERE failed_emails ? $1`, [email]));
+      if (client) await db.query('COMMIT');
+      return out;
+    } catch (err) {
+      if (client) await db.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  async exportSubscribers() {
+    await this.ready();
+    const r = await this.pool.query(
+      'SELECT email, status, source, created_at, confirmed_at, unsubscribed_at FROM subscribers ORDER BY created_at');
+    const iso = v => (v instanceof Date ? v.toISOString() : v || null);
+    return r.rows.map(x => ({ email: x.email, status: x.status, source: x.source || null,
+      created_at: iso(x.created_at), confirmed_at: iso(x.confirmed_at), unsubscribed_at: iso(x.unsubscribed_at) }));
   }
 }
 

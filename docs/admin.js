@@ -1183,6 +1183,29 @@
     }
   }
 
+  // The CSV needs the session header, so it's fetched and saved from a blob
+  // rather than opened as a plain link.
+  async function downloadSubscribersCsv() {
+    try {
+      const headers = {};
+      if (state.session) headers['Authorization'] = 'Bearer ' + state.session;
+      const res = await fetch(apiBaseUrl() + '/api/admin/subscribers.csv', { headers: headers });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      const m = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = m ? m[1] : 'subscribers.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      emailNlMsg('Downloaded ' + a.download + '.', 'success');
+    } catch (err) {
+      emailNlMsg('Export failed: ' + (err.message || String(err)), 'error');
+    }
+  }
+
   async function emailNlPost(path, body, okText) {
     try {
       const { res, json } = await adminFetch(path, { method: 'POST', body: JSON.stringify(body || {}), headers: { 'Content-Type': 'application/json' } });
@@ -2817,6 +2840,20 @@
       j => 'Imported ' + j.added + ' new, ' + j.already + ' already subscribed' +
         (j.skipped_unsubscribed ? ', ' + j.skipped_unsubscribed + ' skipped (unsubscribed)' : '') +
         (j.skipped_bounced ? ', ' + j.skipped_bounced + ' skipped (bounced)' : '') + '.'));
+
+    const nlExport = document.getElementById('email-nl-export');
+    if (nlExport) nlExport.addEventListener('click', downloadSubscribersCsv);
+    const forgetBtn = document.getElementById('email-forget');
+    if (forgetBtn) forgetBtn.addEventListener('click', () => {
+      const email = ((document.getElementById('email-forget-to') || {}).value || '').trim();
+      if (!email) { emailNlMsg('Enter the email address to delete.', 'error'); return; }
+      if (!window.confirm('Delete everything stored about ' + email + '? This can\'t be undone.')) return;
+      emailNlPost('/api/admin/privacy/forget', { email: email }, j => {
+        const r = j.removed || {};
+        const parts = Object.keys(r).filter(k => r[k]).map(k => k.replace(/_/g, ' ') + ': ' + r[k]);
+        return parts.length ? 'Deleted for ' + j.masked + ' (' + parts.join(', ') + ').' : 'Nothing was stored for ' + j.masked + '.';
+      });
+    });
 
     const evStats = document.getElementById('event-stats');
     if (evStats) evStats.addEventListener('click', async (e) => {

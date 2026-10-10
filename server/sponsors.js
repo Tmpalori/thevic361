@@ -47,6 +47,7 @@
 
 import { town, dollars, VICTORIA } from './town.js';
 import crypto from 'node:crypto';
+import { ipKey } from './rateLimit.js';
 import express from 'express';
 import {
   AD_PACKAGES, escHtml, safeUrl, localDateStr, currentWeek, addDays, formatDay, layout,
@@ -141,6 +142,16 @@ export function pickPackage(dateStr) {
 // count against them.
 function isHold(o, nowMs, email = '') {
   return o.status === 'pending' && nowMs - Date.parse(o.created_at) < HOLD_MS && !(email && o.email === email);
+}
+
+// Who started a checkout, for "one open hold per client": the client's
+// address (ipKey, IPv6 on its /64), hashed with a server secret so no IP is
+// stored on the order.
+// Open (unpaid) checkouts one network address may hold at once.
+export const MAX_HOLDS_PER_CLIENT = 3;
+
+export function holdClient(ip, secret = '') {
+  return crypto.createHash('sha256').update(`hold|${secret}|${ipKey(ip)}`).digest('hex').slice(0, 16);
 }
 
 // Spots used on a date: paid or settling orders, plus checkouts still being
@@ -2099,6 +2110,7 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
         const ip = req.ip || req.socket.remoteAddress;
         if (!limiter.check(ip).ok) return fail({ _form: 'Too many attempts. Try again in an hour.' }, 429);
         if (!(await verifyHuman(req))) return fail({ _form: "We couldn't confirm you're not a bot. Please try again." });
+        const client = holdClient(ip, analyticsSecret);
 
         // Re-read and save the hold under one lock, so a week booked seconds
         // ago (or right now, by someone else) is caught.
@@ -2109,20 +2121,35 @@ export function createSponsors({ store, siteUrl, nowFn, config, stripe, getVenue
             console.warn('[sponsors] order list failed while booking:', err.message);
             return { errors: { _form: 'We couldn’t check what’s still available just now. Please try again in a minute.' }, status: 503 };
           }
-          const v = validateOrder(pkg.key, body, ctx);
+          // One open checkout per client (address or email): a stranger
+          // could otherwise hold every week and pick slot, 35 minutes at a
+          // time with a new email each. This client's own open holds are
+          // replaced below, so they don't block the slot it asks for now.
+          // A network address is shared by everyone behind it (a mobile
+          // carrier, an office), so it may hold a few checkouts at once; past
+          // that its oldest are released. An email holds one.
+          const nowMs = nowFn().getTime();
+          const clientHolds = ctx.orders.filter(x => x.client === client && isHold(x, nowMs))
+            .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+          const dropping = new Set(clientHolds.slice(0, Math.max(0, clientHolds.length - (MAX_HOLDS_PER_CLIENT - 1))).map(x => x.id));
+          const mine = x => dropping.has(x.id);
+          const v = validateOrder(pkg.key, body, { ...ctx, orders: ctx.orders.filter(x => !mine(x)) });
           if (!v.ok) return { errors: v.errors };
           // Same clock as bookableWeeks, so the hold window lines up.
           const priced = pkg.key === 'featured' ? pickPackage(v.order.event.date) : pkg;
           const { logo, ...fields } = v.order;
-          const o = { ...fields, id: newId(), status: 'pending', amount: priced.amount, created_at: nowFn().toISOString() };
+          const o = { ...fields, id: newId(), status: 'pending', amount: priced.amount, created_at: nowFn().toISOString(), client };
           if (logo && typeof store.saveSponsorLogo === 'function') {
             await store.saveSponsorLogo(o.id, logo);
             o.sponsor = { ...o.sponsor, logo: `/sponsor-logo/${o.id}` };
           }
           // The buyer's own earlier hold on this slot didn't count against
           // them (validateOrder); it's replaced, so one buyer can't hold two.
-          const replaced = ctx.orders.filter(x => x.email === o.email && x.kind === o.kind && x.status === 'pending' &&
-            (o.kind === 'weekly' ? x.week_start === o.week_start : x.event && x.event.date === o.event.date));
+          // Any other open hold from this client or email goes too.
+          const replaced = ctx.orders.filter(x => x.status === 'pending' && (
+            (x.email === o.email && x.kind === o.kind &&
+              (o.kind === 'weekly' ? x.week_start === o.week_start : x.event && x.event.date === o.event.date)) ||
+            ((mine(x) || x.email === o.email) && isHold(x, nowMs))));
           for (const x of replaced) await save({ ...x, status: 'cancelled' });
           await save(o);
           return { order: o, replaced };

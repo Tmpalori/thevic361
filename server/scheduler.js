@@ -11,6 +11,7 @@
  *   newsletter-weekend Thu 7:00 AM   the weekend issue (Friday–Sunday), same way
  *   meta-ads           daily 8:37 AM dispatch meta-ads.yml (scheduled=true)
  *   social-kit         daily 8:47 AM dispatch social-kit.yml (scheduled=true)
+ *   privacy-purge      daily 3:17 AM drop old submitter IPs and contact messages (server/privacy.js)
  *   sponsor-reports    daily 9:00 AM sponsors.sendSponsorReports(now), if it exists
  *   submission-review  every 15 min  dispatch submission-review.yml
  *   health             hourly        retry a missed boot auto-publish, then check the
@@ -76,6 +77,9 @@ export const JOBS = [
   { name: 'meta-ads', at: '08:37', until: '18:00', workflow: 'meta-ads.yml', inputs: { scheduled: 'true' } },
   { name: 'social-kit', at: '08:47', until: '18:00', workflow: 'social-kit.yml', inputs: { scheduled: 'true' } },
   { name: 'sponsor-reports', at: '09:00', until: '23:59' },
+  // Personal-data retention (server/privacy.js): old submitter IPs and
+  // contact messages. Early morning, out of everyone's way.
+  { name: 'privacy-purge', at: '03:17', until: '23:59' },
   { name: 'submission-review', every: 15, workflow: 'submission-review.yml' },
   { name: 'health', every: 60 }
 ];
@@ -136,7 +140,7 @@ export function schedulerEnabled(env = process.env) {
 }
 
 /**
- * handlers: { newsletter(), sponsorReports(now), health(now) }, each async.
+ * handlers: { newsletter(), sponsorReports(now), privacyPurge(now), health(now) }, each async.
  *   newsletter() → { ok, error?, retry?, message? } (see index.js)
  *   sponsorReports / health may be missing: the job is then skipped.
  */
@@ -183,7 +187,8 @@ export function createScheduler({ store, github, slack = null, nowFn = () => new
   // Run one job's body. → { ok, final?, message? }
   async function runJob(job, now) {
     if (job.workflow) return dispatch(job, now);
-    const fn = { newsletter: handlers.newsletter, 'newsletter-weekend': handlers.newsletterWeekend, 'sponsor-reports': handlers.sponsorReports, health: handlers.health }[job.name];
+    const fn = { newsletter: handlers.newsletter, 'newsletter-weekend': handlers.newsletterWeekend, 'sponsor-reports': handlers.sponsorReports,
+      'privacy-purge': handlers.privacyPurge, health: handlers.health }[job.name];
     try {
       const out = await fn(now);
       return out && typeof out === 'object' && 'ok' in out ? out : { ok: true };
@@ -199,6 +204,7 @@ export function createScheduler({ store, github, slack = null, nowFn = () => new
     if (job.name === 'newsletter') return typeof handlers.newsletter === 'function' && (!handlers.newsletterReady || handlers.newsletterReady());
     if (job.name === 'newsletter-weekend') return typeof handlers.newsletterWeekend === 'function' && (!handlers.newsletterWeekendReady || handlers.newsletterWeekendReady());
     if (job.name === 'sponsor-reports') return typeof handlers.sponsorReports === 'function';
+    if (job.name === 'privacy-purge') return typeof handlers.privacyPurge === 'function';
     if (job.name === 'health') return typeof handlers.health === 'function';
     return false;
   }
