@@ -43,13 +43,13 @@ FIXED = ["/", "/about", "/privacy", "/advertise", "/advertise/checkout?package=w
          "/sitemap.xml", "/llms.txt", "/robots.txt", "/pixel.js", "/api/config", "/api/health?deep=1"]
 
 
-def fetch(url, timeout=TIMEOUT):
+def fetch(url, timeout=TIMEOUT, headers=None):
     """(status, content type, redirect location, text). Status 0 when there's no answer."""
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, *a, **k):
             return None
     opener = urllib.request.build_opener(NoRedirect)
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Cache-Control": "no-cache"})
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Cache-Control": "no-cache", **(headers or {})})
     try:
         with opener.open(req, timeout=timeout) as r:
             return r.status, r.headers.get("Content-Type", ""), "", r.read().decode("utf-8", "replace")

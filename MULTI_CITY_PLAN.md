@@ -256,6 +256,7 @@ These matter the moment a second town exists. All keep Victoria's values.
       fixture) pass, a test newsletter to `delivered@resend.dev`, a Stripe
       test-mode checkout, a reply lands in #inbox tagged with the town, HQ
       shows the town, and Victoria's live check is unchanged.
+      (Automatic part: `scripts/launch_check.py --town <slug>`.)
 
 ## Phase 6 (optional, last): move Victoria's files
 
