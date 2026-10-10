@@ -572,3 +572,43 @@ describe('auto-publish retires only reliable misses', () => {
     expect(await names()).toContain('Comedy Night');
   });
 });
+
+describe('auto-publish keeps the week so far', () => {
+  it('keeps events from earlier this week, never ones from before Monday, and never takes a past one down', async () => {
+    const now = new Date('2026-10-10T15:00:00Z'); // Sat Oct 10
+    const published = {
+      last_updated: '2026-10-08T00:00:00Z',
+      events: [
+        { date: '2026-10-04', name: 'Last Sunday', time: '1 PM', venue: 'A' },
+        { date: '2026-10-05', name: 'Monday Trivia', time: '7 PM', venue: 'B' },
+        { date: '2026-10-08', name: 'Thursday Show', time: '8 PM', venue: 'C' },
+        { date: '2026-10-11', name: 'Sunday Brunch', time: '11 AM', venue: 'D' }
+      ],
+      auto_publish: { from: 'old', rules: AUTO_PUBLISH_RULES, keys: [], missing: { '2026-10-08|thursday show|c': 1 }, sources: { '2026-10-08|thursday show|c': ['apify_facebook'] } }
+    };
+    published.auto_publish.keys = published.events.map(e => `${e.date}|${e.name.toLowerCase()}|${e.venue.toLowerCase()}`);
+    // The collector no longer lists any of them; Sunday Brunch is upcoming.
+    // The admin took a Tuesday event down earlier in the week.
+    published.auto_publish.rejected = ['2026-10-06|removed tuesday|f'];
+    // The collector lists the week from Monday: a Tuesday event the site
+    // dropped before fills back in; the removed one stays out. It no
+    // longer lists the published ones; Sunday Brunch is upcoming.
+    await start({ candidates: { last_updated: '2026-10-10T05:00:00Z', events: [
+      { date: '2026-10-03', name: 'Before Monday', time: '1 PM', venue: 'G' },
+      { date: '2026-10-06', name: 'Tuesday Talk', time: '6 PM', venue: 'H' },
+      { date: '2026-10-06', name: 'Removed Tuesday', time: '6 PM', venue: 'F' },
+      { date: '2026-10-12', name: 'Next Week', time: '6 PM', venue: 'E' }
+    ] }, published, extra: { now: () => now } });
+    const r = await runNow();
+    expect(r.ok).toBe(true);
+    const names = (await live()).events.map(e => e.name);
+    expect(names).toContain('Monday Trivia');
+    expect(names).toContain('Thursday Show');   // past: not retired even after a second miss
+    expect(names).toContain('Tuesday Talk');    // earlier this week, from the collector
+    expect(names).not.toContain('Removed Tuesday');
+    expect(names).not.toContain('Last Sunday');  // before this Monday: dropped as before
+    expect(names).not.toContain('Before Monday');
+    expect(names).toContain('Next Week');
+    expect(names).toContain('Sunday Brunch');
+  });
+});
