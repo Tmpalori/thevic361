@@ -211,8 +211,11 @@ var TOWN = Object.assign({ timezone: 'America/Chicago', city: 'Victoria', pickNa
              addr.toLowerCase().indexOf(venue.toLowerCase()) !== -1) venuePart = venue;
     else venuePart = venue + ' · ' + addr;
 
-    var descHtml = ev.description
-      ? '<div class="event-desc">' + escHtml(ev.description) + '</div>'
+    // A paid pick ends its description with a small "#ad" (adTag in
+    // server/seo.js); editors' picks carry only the pick badge.
+    var paid = ev.featured && !ev.editor_pick;
+    var descHtml = ev.description || paid
+      ? '<div class="event-desc">' + escHtml(ev.description || '') + (paid ? ' <span class="event-ad">#ad</span>' : '') + '</div>'
       : '';
 
     // Share button, same markup as shareButton in server/seo.js. Admin
@@ -227,10 +230,7 @@ var TOWN = Object.assign({ timezone: 'America/Chicago', city: 'Victoria', pickNa
     return '<li class="event-entry' + (ev.featured ? ' event-entry--featured' : '') + '"' + ad + ' data-icons="' + escHtml(iconAttr) + '">' +
       '<span class="event-icons"' + iconAttrs + '>' + iconHtml + '</span>' +
       '<div class="event-details">' +
-        // A paid pick also says "Sponsored" (same as pickBadges in
-        // server/seo.js); editors' picks carry only the pick badge.
         (ev.featured ? '<span class="badge badge--featured">' + escHtml(TOWN.pickName) + '</span> ' : '') +
-        (ev.featured && !ev.editor_pick ? '<span class="badge badge--sponsored">Sponsored</span> ' : '') +
         // Nearby-town events (ev.town), same as nearbyBadge in server/seo.js.
         (ev.town ? '<span class="badge badge--nearby">Nearby · ' + escHtml(ev.town) + '</span> ' : '') +
         (ev.time ? '<span class="event-time">' + escHtml(formatTime(timeText(ev))) + '</span> ' : '') +

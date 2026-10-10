@@ -214,7 +214,7 @@ describe('the advertising terms match the booking code', () => {
     expect(html).toContain('Double-booked:');
     expect(html).toContain('Payment arrived too late:</strong> if a bank payment clears only after your date has passed, we refund you in full');
     expect(html).toContain('mailto:news@thevic361.com?subject=Cancellation%20or%20refund');
-    expect(html).toContain('a paid Vic’s Pick as "Sponsored"');
+    expect(html).toContain('a paid Vic’s Pick with "#ad" at the end of its description');
   });
 });
 
