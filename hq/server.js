@@ -148,12 +148,42 @@ export function createHqApp(config, { fetchImpl = globalThis.fetch, nowFn = () =
   return app;
 }
 
+// Railway copies the service into every PR environment that touches HQ's
+// code, with production's variables. Such a copy must not be a second door
+// to the real login and every town's numbers: outside production HQ only
+// answers /health (so the deploy is healthy) and says login is off.
+export function isPreview(env = process.env) {
+  const name = String(env.RAILWAY_ENVIRONMENT_NAME || '');
+  return Boolean(name) && name !== 'production';
+}
+
+export function createPreviewApp() {
+  const app = express();
+  app.disable('x-powered-by');
+  app.use((req, res, next) => {
+    res.set({ 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'" });
+    next();
+  });
+  app.get('/health', (req, res) => res.json({ ok: true, preview: true }));
+  app.use((req, res) => res.status(404).type('text').send('HQ preview: login is off outside production.'));
+  return app;
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const port = Number(process.env.PORT) || 8080;
+  if (isPreview()) {
+    createPreviewApp().listen(port, () => console.log(`[hq] preview (${process.env.RAILWAY_ENVIRONMENT_NAME}): login off, no towns asked`));
+  } else {
+    startHq(port);
+  }
+}
+
+function startHq(port) {
   let config;
   try { config = hqConfig(); } catch (err) {
     console.error(`[hq] won't start: ${err.message}`);
     process.exit(1);
   }
-  const port = Number(process.env.PORT) || 8080;
   createHqApp(config).listen(port, () => console.log(`[hq] listening on :${port} (${config.towns.length} towns)`));
 }

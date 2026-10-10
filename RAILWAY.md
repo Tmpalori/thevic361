@@ -86,6 +86,10 @@ service in the same project; it never touches a town's database.
 
 Each row links to that town's admin, which still asks for its own login.
 
+PR environments copy the hq service (with production's variables) when a PR
+changes HQ's code. Outside `production` it starts in preview mode: `/health`
+answers, the login is off and no town is asked.
+
 ## Local development
 
 ```bash
