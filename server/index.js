@@ -49,6 +49,7 @@ import { createAutoPublish, unpublishEvent, replacePublishedEvent, forgetRemoved
 import { createScheduler, schedulerEnabled, startLabel, checkTownSchedule } from './scheduler.js';
 import * as sponsorsModule from './sponsors.js';
 import crypto from 'node:crypto';
+import { verifyPass, MIN_SSO_SECRET } from './sso.js';
 import {
   HUB_PAGES, localDateStr, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderAdvertisePage, advertiseStats, renderNotFoundPage, renderSitemap, renderLlmsTxt
@@ -470,6 +471,49 @@ export async function createApp(opts = {}) {
     const token = auth.signToken();
     const expiresAt = new Date(Date.now() + auth.ttlMs).toISOString();
     res.json({ ok: true, token, expires_at: expiresAt });
+  });
+
+  // ─── Admin: sign-in from HQ (server/sso.js) ────────────────────────────
+  // HQ posts a one-time pass here (a form POST from the owner's browser).
+  // A good pass for this town, inside its minute and never used before,
+  // gets the same session token a password login gets, stored by a tiny
+  // page that then opens the admin. Anything else is refused the same way.
+  // Off (404) until HQ_SSO_SECRET is set; it needs the admin login set up
+  // too, since the session is that login's.
+  const ssoSecret = opts.ssoSecret ?? process.env.HQ_SSO_SECRET ?? '';
+  const ssoOn = String(ssoSecret).length >= MIN_SSO_SECRET;
+  app.post('/api/admin/sso', express.urlencoded({ extended: false, limit: '4kb' }), async (req, res) => {
+    if (!ssoOn) return res.status(404).json({ ok: false, error: 'not-found' });
+    const burst = loginLimiter.check(clientKey(req));
+    if (!burst.ok) {
+      res.set('Retry-After', String(burst.retryAfter || 60));
+      return res.status(429).type('text').send('Too many tries. Wait a minute and open the admin from HQ again.');
+    }
+    const refuse = reason => {
+      recordAuthFailure();
+      console.warn('[admin] HQ sign-in refused:', reason);
+      return res.status(401).type('text').send('That sign-in link didn\'t work (it may have expired). Open the admin from HQ again.');
+    };
+    if (!auth.configured) return res.status(503).type('text').send('Admin login isn\'t set up on this town yet.');
+    const v = verifyPass(ssoSecret, (req.body || {}).pass, { slug: town.id, siteUrl });
+    if (!v.ok) return refuse(v.reason);
+    // One use, across every container: the nonce is claimed in the database.
+    // No database, no sign-in (never fail open).
+    let claimed = false;
+    try { claimed = (await store.claimJobRun('hq-sso', v.payload.n)).claimed; } catch (err) { return refuse('nonce store unavailable'); }
+    if (!claimed) return refuse('pass already used');
+    const token = auth.signToken({ sub: auth.username });
+    console.info(`[admin] signed in from HQ as ${v.payload.sub}`);
+    const nonce = crypto.randomBytes(16).toString('base64');
+    res.set({
+      'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
+      'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`
+    });
+    // The token is base64url and a dot; JSON.stringify plus escaping "<"
+    // keeps it a string literal whatever it holds.
+    const literal = JSON.stringify(token).replace(/</g, '\\u003c');
+    res.type('html').send(`<!doctype html><meta charset="utf-8"><title>Signing in…</title><p>Signing in…</p>` +
+      `<script nonce="${nonce}">try{localStorage.setItem('vic361_admin_session',${literal})}catch(e){}location.replace('/admin.html')</script>`);
   });
 
   // ─── Admin: who am I ──────────────────────────────────────────────────

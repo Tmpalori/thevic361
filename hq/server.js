@@ -3,11 +3,16 @@
  * A separate Railway service from the towns (start command: node
  * hq/server.js). It has its own login and holds no town data: on each page
  * load it asks every town's GET /api/hq/summary (server/hq.js) with that
- * town's HQ_API_KEY and shows totals plus one row per town, each linking to
- * the town's own admin (which still asks for its own login).
+ * town's HQ_API_KEY and shows totals plus one row per town. A town with an
+ * "sso" secret opens its admin already signed in (POST /go/<slug> mints a
+ * one-time pass, server/sso.js); one without asks for its own login.
  *
  * Env:
- *   HQ_TOWNS            JSON list: [{"slug":"victoria","site_url":"https://www.thevic361.com","key":"…"}]
+ *   HQ_TOWNS            JSON list: [{"slug":"victoria","site_url":"https://www.thevic361.com","key":"…","sso":"…"}]
+ *                       "sso" (optional) is the town's HQ_SSO_SECRET: with it,
+ *                       the town's Admin → signs straight in (server/sso.js)
+ *   HQ_TOWN_<SLUG>      (optional) one more town, {"site_url","key","sso"}
+ *   HQ_SSO_<SLUG>       (optional) a town's HQ_SSO_SECRET, instead of "sso"
  *   HQ_USERNAME         login
  *   HQ_PASSWORD         login (12+ characters)
  *   HQ_SESSION_SECRET   signs the login cookie (32+ characters); the
@@ -23,6 +28,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { createRateLimiter, ipKey, railwayRealIp } from '../server/rateLimit.js';
+import { mintPass, MIN_SSO_SECRET } from '../server/sso.js';
 import { rowOf, totalsOf, renderDashboard, renderLogin, renderLogout } from './render.js';
 
 export { rowOf, totalsOf, renderDashboard, renderLogin };
@@ -32,10 +38,23 @@ const FETCH_TIMEOUT_MS = 8000;
 const COOKIE = 'hq_session';
 
 // The HQ settings from env, or an error naming what's wrong.
+// A town's name in a variable name: "victoria" → VICTORIA, "st-joe" → ST_JOE.
+const envName = slug => slug.toUpperCase().replace(/-/g, '_');
+
 export function hqConfig(env = process.env) {
   let towns;
   try { towns = JSON.parse(env.HQ_TOWNS || '[]'); } catch (_) { throw new Error('HQ_TOWNS must be JSON: [{"slug","site_url","key"}, …]'); }
-  if (!Array.isArray(towns) || !towns.length) throw new Error('HQ_TOWNS lists no towns');
+  if (!Array.isArray(towns)) throw new Error('HQ_TOWNS must be JSON: [{"slug","site_url","key"}, …]');
+  // A town can also be its own variable, HQ_TOWN_<SLUG> = {"site_url","key"},
+  // so adding one never means rewriting (or reading) the others' keys.
+  for (const [name, value] of Object.entries(env)) {
+    const m = /^HQ_TOWN_([A-Z0-9_]+)$/.exec(name);
+    if (!m) continue;
+    let t;
+    try { t = JSON.parse(value); } catch (_) { throw new Error(`${name} must be JSON: {"site_url","key"}`); }
+    towns.push({ ...t, slug: m[1].toLowerCase().replace(/_/g, '-') });
+  }
+  if (!towns.length) throw new Error('HQ_TOWNS lists no towns');
   const seen = new Set();
   towns = towns.map((t, i) => {
     const slug = String((t && t.slug) || '').trim();
@@ -46,7 +65,11 @@ export function hqConfig(env = process.env) {
     seen.add(slug);
     if (!/^https:\/\/[a-z0-9.-]+$/.test(siteUrl)) throw new Error(`HQ_TOWNS ${slug}: site_url must be https://host`);
     if (key.length < 16) throw new Error(`HQ_TOWNS ${slug}: key must be the town's HQ_API_KEY (16+ characters)`);
-    return { slug, siteUrl, key };
+    // The sign-in secret: "sso" in the town's entry, or HQ_SSO_<SLUG>.
+    const sso = String((t && t.sso) || env[`HQ_SSO_${envName(slug)}`] || '').trim();
+    if (sso && sso.length < MIN_SSO_SECRET) throw new Error(`HQ_TOWNS ${slug}: sso must be the town's HQ_SSO_SECRET (${MIN_SSO_SECRET}+ characters)`);
+    if (sso && sso === key) throw new Error(`HQ_TOWNS ${slug}: sso must differ from key (HQ_SSO_SECRET is not HQ_API_KEY)`);
+    return { slug, siteUrl, key, ...(sso ? { sso } : {}) };
   });
   const username = String(env.HQ_USERNAME || '').trim();
   const password = String(env.HQ_PASSWORD || '');
@@ -84,6 +107,7 @@ function verify(secret, token, now) {
     return p && p.exp > now ? p : null;
   } catch (_) { return null; }
 }
+const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cookieOf = (req, name) => {
   for (const part of String(req.headers.cookie || '').split(';')) {
     const [k, ...v] = part.trim().split('=');
@@ -154,15 +178,36 @@ export function createHqApp(config, {
 
   app.get('/', async (req, res) => {
     if (!signedIn(req)) return res.type('html').send(renderLogin());
-    const rows = (await Promise.all(config.towns.map(t => fetchTown(t, fetchImpl)))).map((t, i) => rowOf(t, i));
+    const rows = (await Promise.all(config.towns.map(t => fetchTown(t, fetchImpl)))).map((t, i) => rowOf({ ...t, sso: Boolean(config.towns[i].sso) }, i));
     res.type('html').send(renderDashboard(rows, nowFn()));
   });
 
   // The same rows as JSON, for scripts (logged in only).
   app.get('/api/towns', async (req, res) => {
     if (!signedIn(req)) return res.status(401).json({ ok: false, error: 'unauthorized' });
-    const rows = (await Promise.all(config.towns.map(t => fetchTown(t, fetchImpl)))).map((t, i) => rowOf(t, i));
+    const rows = (await Promise.all(config.towns.map(t => fetchTown(t, fetchImpl)))).map((t, i) => rowOf({ ...t, sso: Boolean(config.towns[i].sso) }, i));
     res.json({ ok: true, totals: totalsOf(rows), towns: rows });
+  });
+
+  // A town's Admin →: a one-time pass for that town, posted from the
+  // owner's browser by a page that submits itself (the pass never sits in
+  // a URL). Signed in only; the cookie is SameSite=Strict, and the Origin
+  // must be HQ's own, so another site can't start this.
+  app.post('/go/:slug', (req, res) => {
+    if (!signedIn(req)) return res.status(401).type('html').send(renderLogin());
+    const origin = req.get('origin');
+    if (origin && origin !== `${req.protocol}://${req.get('host')}`) return res.status(403).type('text').send('Forbidden');
+    const t = config.towns.find(x => x.slug === req.params.slug);
+    if (!t || !t.sso) return res.status(404).type('text').send('Not found');
+    const pass = mintPass(t.sso, { slug: t.slug, siteUrl: t.siteUrl, sub: config.username, now: nowFn().getTime() });
+    const nonce = crypto.randomBytes(16).toString('base64');
+    const action = `${t.siteUrl}/api/admin/sso`;
+    res.set('Content-Security-Policy',
+      `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; form-action ${t.siteUrl}; frame-ancestors 'none'; base-uri 'none'`);
+    res.type('html').send(`<!doctype html><meta charset="utf-8"><title>Opening ${esc(t.slug)}…</title>` +
+      `<form id="go" method="post" action="${esc(action)}"><input type="hidden" name="pass" value="${esc(pass)}">` +
+      `<noscript><button>Open ${esc(t.slug)} admin</button></noscript></form>` +
+      `<script nonce="${nonce}">document.getElementById('go').submit()</script>`);
   });
 
   app.get('/health', (req, res) => res.json({ ok: true }));
