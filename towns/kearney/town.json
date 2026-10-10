@@ -1,0 +1,42 @@
+{
+  "siteName": "The Crane 308",
+  "domain": "thecrane308.com",
+  "city": "Kearney",
+  "state": "NE",
+  "stateName": "Nebraska",
+  "timezone": "America/Chicago",
+  "county": "Buffalo County",
+  "areaCode": "308",
+  "pickName": "Featured",
+  "areaZips": [
+    "68812",
+    "68836",
+    "68840",
+    "68844",
+    "68845",
+    "68847",
+    "68849",
+    "68858",
+    "68861",
+    "68866",
+    "68869",
+    "68870",
+    "68876"
+  ],
+  "otherTowns": [
+    "grand island",
+    "hastings",
+    "lexington",
+    "holdrege",
+    "north platte",
+    "minden",
+    "broken bow",
+    "cozad",
+    "st. paul",
+    "aurora",
+    "axtell",
+    "york",
+    "lincoln",
+    "omaha"
+  ]
+}

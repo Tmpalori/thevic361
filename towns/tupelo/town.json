@@ -1,0 +1,43 @@
+{
+  "siteName": "Tupelo Current",
+  "domain": "tupelocurrent.com",
+  "city": "Tupelo",
+  "state": "MS",
+  "stateName": "Mississippi",
+  "timezone": "America/Chicago",
+  "county": "Lee County",
+  "areaCode": "662",
+  "pickName": "Spotlight",
+  "areaZips": [
+    "38801",
+    "38804",
+    "38824",
+    "38826",
+    "38849",
+    "38857",
+    "38862",
+    "38866",
+    "38868",
+    "38879"
+  ],
+  "otherTowns": [
+    "oxford",
+    "starkville",
+    "columbus",
+    "west point",
+    "corinth",
+    "booneville",
+    "new albany",
+    "pontotoc",
+    "houston",
+    "okolona",
+    "amory",
+    "aberdeen",
+    "fulton",
+    "iuka",
+    "ripley",
+    "memphis",
+    "birmingham",
+    "jackson"
+  ]
+}
