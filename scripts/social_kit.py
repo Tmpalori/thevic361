@@ -70,6 +70,9 @@ def pick_rank(e):
     return 0 if e.get("featured") and not e.get("editor_pick") else 1 if e.get("featured") else 2
 
 
+AD_TAG = "#ad"  # opens a caption with paid content (captions)
+
+
 def is_paid_pick(e):
     return bool(e.get("featured")) and not e.get("editor_pick")
 
@@ -165,9 +168,9 @@ def _line(ev, limit=None):
     t = _short_time(ev.get("time"))
     v = clean_venue(ev.get("venue"))
     venue = f" @ {_clip(v, limit)}" if v else ""
-    free = " (free)" if ev.get("free") else ""
+    notes = ", ".join(n for n, on in (("free", ev.get("free")), ("sponsored", is_paid_pick(ev))) if on)
     mark = "⭐ " if ev.get("featured") else "• "  # Vic's Picks / sponsored stand out
-    return f"{mark}{t + ' ' if t else ''}{_clip(ev['name'], limit)}{venue}{free}"
+    return f"{mark}{t + ' ' if t else ''}{_clip(ev['name'], limit)}{venue}{f' ({notes})' if notes else ''}"
 
 
 def _range_label(start, end):
@@ -284,6 +287,13 @@ def captions(groups, start, end, kind, handles=None, sponsor=None):
     title, _, path = TITLES[kind]
     total = sum(len(v) for v in groups.values())
     head = f"{title} ({_range_label(start, end)})" + (f": {total} event{'s' if total != 1 else ''}" if total else "")
+    # A caption with paid content (a paid pick, which is never cut, or the
+    # weekly sponsor's shout-out) opens with #ad: the FTC wants the
+    # disclosure where people see it before "more", not among the hashtags.
+    paid = any(is_paid_pick(e) for evs in groups.values() for e in _shown(evs)) or \
+        bool(sponsor_lines(sponsor, start, "facebook"))
+    if paid:
+        head = f"{AD_TAG} {head}"
     tags = venue_tags(groups, handles or {})
     # Same call to action as the ad, the slides and the site: the newsletter.
     see_all = "👉 Full list: " if not total else "👉 Details: " if total == 1 else f"👉 See all {total}: "
@@ -424,7 +434,7 @@ def render_plain_slides(groups, start, end, kind, out_dir):
     y = 600
     for e in sorted([e for evs in groups.values() for e in evs if e.get("featured")], key=pick_rank)[:3] or \
              [e for evs in groups.values() for e in evs][:3]:
-        for line in _wrap(d, f"• {e['name']}", _font(True, 40), W - 144)[:2]:
+        for line in _wrap(d, f"• {e['name']}" + (" (Sponsored)" if is_paid_pick(e) else ""), _font(True, 40), W - 144)[:2]:
             d.text((72, y), line, font=_font(True, 40), fill=INK)
             y += 54
         y += 10
