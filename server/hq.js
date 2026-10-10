@@ -53,7 +53,12 @@ export async function buildSummary({ store, nowFn, town, siteUrl, commit, getEve
   const today = localDateStr(now);
   const failed = [];
   const safe = async (fn, dflt = null, part = null) => {
-    try { return await fn(); } catch { if (part && !failed.includes(part)) failed.push(part); return dflt; }
+    try { return await fn(); } catch (err) {
+      // HQ only shows "<part> unavailable"; the reason goes to the town's log.
+      console.warn(`[hq] summary part ${part || 'extra'} failed:`, (err && err.message) || err);
+      if (part && !failed.includes(part)) failed.push(part);
+      return dflt;
+    }
   };
   const subs = await safe(() => store.listSubscriberStats(), [], 'subscribers');
   const orders = await safe(getOrders, [], 'revenue');
