@@ -165,8 +165,9 @@ copy a value from Victoria's project, or from another town's: a copied
 11. **HQ.** `HQ_API_KEY` and `HQ_SSO_SECRET` (both fresh, different per
     town and from each other). Then on the HQ service add
     `HQ_TOWN_<SLUG>` = `{"site_url":"https://www.<domain>","key":"<its HQ_API_KEY>"}`
-    and `HQ_SSO_<SLUG>` = its `HQ_SSO_SECRET`, and check its row and its
-    Admin → (it should open the admin signed in). HQ lives in Victoria's project on purpose: it holds
+    and `HQ_SSO_<SLUG>` = its `HQ_SSO_SECRET` (or add both to the town's
+    entry in `HQ_TOWNS`), and check its row and its Admin → (it should
+    open the admin signed in). HQ lives in Victoria's project on purpose: it holds
     no town data and reads each town through its key.
 12. **`TOWN_WORKFLOWS=1` only after** the town's GitHub Environment exists
     (MULTI_CITY_PLAN.md 3.3: its `SITE_URL`, Meta page and Instagram,
