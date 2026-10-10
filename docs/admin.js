@@ -1710,8 +1710,11 @@
       '<strong>' + escapeHtml(h.name || h.page) + '</strong> <span class="home-check__state">' +
       escapeHtml([h.date, h.venue].filter(Boolean).join(' · ')) + '</span>' +
       '<p class="home-check__fix">' + escapeHtml(h.reason || 'Hidden by the event check') +
-      ' <button type="button" class="btn btn--outline" data-restore="' + escapeHtml(h.key) + '">Restore</button></p>' +
+      ' <button type="button" class="btn btn--outline" data-restore="' + escapeHtml(h.key) + '">Restore</button>' +
+      ' <button type="button" class="btn btn--outline" data-dismiss-hidden="' + escapeHtml(h.key) + '" title="Keep it off the site and clear it from this list">Keep hidden</button></p>' +
       '</div></li>').join('');
+    list.querySelectorAll('[data-dismiss-hidden]').forEach(b => b.addEventListener('click', () =>
+      dismissRow(b, '/api/admin/hidden/dismiss', { key: b.dataset.dismissHidden }, renderHiddenOnHome)));
     list.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', async () => {
       b.disabled = true;
       b.textContent = 'Restoring…';
@@ -1745,7 +1748,25 @@
       escapeHtml([m.topic, m.business, ago(m.created_at)].filter(Boolean).join(' · ')) + '</span>' +
       '<p class="home-check__fix">' + escapeHtml(m.message || '') + '</p>' +
       '<p class="home-check__fix"><a href="mailto:' + escapeHtml(encodeURIComponent(m.email || '')).replace(/%40/g, '@') + '">' +
-      escapeHtml(m.email || '') + '</a></p></div></li>').join('');
+      escapeHtml(m.email || '') + '</a>' +
+      (m.id ? ' <button type="button" class="btn btn--outline" data-dismiss-message="' + escapeHtml(m.id) + '">Dismiss</button>' : '') +
+      '</p></div></li>').join('');
+    list.querySelectorAll('[data-dismiss-message]').forEach(b => b.addEventListener('click', () =>
+      dismissRow(b, '/api/admin/messages/' + encodeURIComponent(b.dataset.dismissMessage) + '/dismiss', {}, renderMessagesOnHome)));
+  }
+
+  // Clears one item off a Home list (the server remembers it), then redraws.
+  async function dismissRow(b, url, body, rerender) {
+    b.disabled = true;
+    b.textContent = 'Clearing…';
+    try {
+      const { res, json } = await adminFetch(url, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+      if (!res.ok || !json || !json.ok) throw new Error((json && json.error) || ('HTTP ' + res.status));
+      rerender();
+    } catch (e) {
+      b.disabled = false;
+      b.textContent = 'Failed, try again';
+    }
   }
 
   async function loadHome() {

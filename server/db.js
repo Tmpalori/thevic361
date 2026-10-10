@@ -983,6 +983,18 @@ class FileStore {
     return (data.contact_messages || []).slice().sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).slice(0, limit);
   }
 
+  // The admin dealt with it: off the Home list, kept until the retention purge.
+  async dismissContactMessage(id, at = nowIso()) {
+    return this._withWrite(async () => {
+      const data = await this._read();
+      const msg = (data.contact_messages || []).find(m => m.id === id);
+      if (!msg) return false;
+      msg.dismissed_at = at;
+      await this._write(data);
+      return true;
+    });
+  }
+
   // ─── Personal data (server/privacy.js) ───
   // Retention: submissions created before `submissionsBefore` lose the
   // submitter's IP address and user agent; contact messages created before
@@ -2063,6 +2075,15 @@ class PgStore {
     await this.ready();
     const r = await this.pool.query('SELECT payload FROM contact_messages ORDER BY created_at DESC LIMIT $1', [limit]);
     return r.rows.map(row => row.payload);
+  }
+
+  // See FileStore.dismissContactMessage.
+  async dismissContactMessage(id, at = nowIso()) {
+    await this.ready();
+    const r = await this.pool.query(
+      "UPDATE contact_messages SET payload = payload || jsonb_build_object('dismissed_at', $2::text) WHERE id = $1",
+      [id, at]);
+    return r.rowCount > 0;
   }
 
   // See FileStore.purgePersonalData.

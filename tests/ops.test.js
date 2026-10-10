@@ -123,6 +123,15 @@ describe('contact messages', () => {
     const r = await (await fetch(base + '/api/admin/messages', { headers: await auth() })).json();
     expect(r.messages.map(m => m.name)).toEqual(expect.arrayContaining(['Ann', 'Bob']));
     expect(r.messages.find(m => m.name === 'Ann')).toMatchObject({ email: 'ann@shop.example', topic: 'advertising', delivered: true });
+
+    // Dismiss takes one off the list; the other stays.
+    const ann = r.messages.find(m => m.name === 'Ann');
+    const dismiss = (id, headers = {}) => fetch(`${base}/api/admin/messages/${id}/dismiss`, { method: 'POST', headers });
+    expect((await dismiss(ann.id)).status).toBe(401);
+    expect((await dismiss(ann.id, await auth())).status).toBe(200);
+    const after = await (await fetch(base + '/api/admin/messages', { headers: await auth() })).json();
+    expect(after.messages.map(m => m.name)).toEqual(['Bob']);
+    expect((await dismiss('nope', await auth())).status).toBe(404);
   });
 
   it('are kept when Slack is down', async () => {

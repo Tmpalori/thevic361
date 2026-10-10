@@ -181,6 +181,18 @@ describe('event check: restoring', () => {
     expect(await names()).toContain('Parish Fall Festival');
   });
 
+  it('Keep hidden clears it from the admin list but leaves it off the site', async () => {
+    await startApp();
+    await hide([{ page: CHURCH, reason: 'church event' }]);
+    const h = await auth();
+    const key = (await (await fetch(baseUrl + '/api/admin/hidden', { headers: h })).json()).hidden[0].key;
+    expect((await post('/api/admin/hidden/dismiss', { key }, {})).status).toBe(401);
+    expect((await post('/api/admin/hidden/dismiss', { key }, h)).status).toBe(200);
+    expect((await (await fetch(baseUrl + '/api/admin/hidden', { headers: h })).json()).hidden).toEqual([]);
+    expect(await names()).not.toContain('Parish Fall Festival');
+    expect((await post('/api/admin/hidden/dismiss', { key: '2026-10-07|Nope|X' }, h)).status).toBe(404);
+  });
+
   it('restoring something that is not hidden is a 404', async () => {
     await startApp();
     const r = await post('/api/admin/hidden/restore', { key: "2026-10-07|Parish Fall Festival|St. Mary's Church" }, await auth());
