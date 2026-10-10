@@ -60,6 +60,19 @@ export function createRateLimiter({ windowMs, max } = {}) {
   return { check, peek, reset, size };
 }
 
+// On Railway the edge sets X-Real-IP to the visitor's address
+// (docs.railway.com: Public Networking > Specs & Limits). With trust proxy
+// on, prefer it, so rate limits key on the real client however many hops
+// sit in between, not on the edge (one shared bucket for everyone). The
+// town server and HQ both use this.
+export function railwayRealIp() {
+  return (req, res, next) => {
+    const real = String(req.headers['x-real-ip'] || '').trim();
+    if (isIP(real)) Object.defineProperty(req, 'ip', { value: real, configurable: true });
+    next();
+  };
+}
+
 // The rate-limit key for a client address. One IPv6 subscriber usually gets
 // a whole /64, so keying on the full address would hand an attacker
 // billions of fresh budgets; key on the /64 instead. IPv4 (including the

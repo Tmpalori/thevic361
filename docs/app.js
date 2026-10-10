@@ -10,6 +10,11 @@ var TOWN = Object.assign({ timezone: 'America/Chicago', city: 'Victoria', pickNa
   // ─── ICONS ───
   // Cartoon category icons live in icons.svg (one <symbol> per key).
   const ICON_KEYS = ['food', 'music', 'family', 'drinks', 'arts', 'shopping', 'outdoors', 'community', 'free'];
+  // Read out for screen readers (ICON_LABELS in server/seo.js matches).
+  const ICON_LABELS = {
+    food: 'Food', music: 'Music', family: 'Kids & Family', drinks: 'Drinks', arts: 'Arts',
+    shopping: 'Shopping', outdoors: 'Outdoors', community: 'Community', free: 'Free'
+  };
   function iconSvg(key) {
     return '<svg class="ico" aria-hidden="true" focusable="false"><use href="icons.svg#i-' + key + '"></use></svg>';
   }
@@ -178,7 +183,13 @@ var TOWN = Object.assign({ timezone: 'America/Chicago', city: 'Victoria', pickNa
   // ─── RENDER SINGLE EVENT ───
   function renderEvent(ev) {
     // free: true shows the Free icon too (iconKeys in server/seo.js).
-    var iconHtml = renderIcons((ev.icons || []).concat(ev.free === true && (ev.icons || []).indexOf('free') === -1 ? ['free'] : []));
+    var iconList = (ev.icons || []).concat(ev.free === true && (ev.icons || []).indexOf('free') === -1 ? ['free'] : []);
+    var iconHtml = renderIcons(iconList);
+    // The icons' meaning for screen readers, same as iconsHtml in
+    // server/seo.js: one labelled image, or a hidden empty column.
+    var iconLabel = iconList.filter(function (k) { return ICON_KEYS.indexOf(k) !== -1; })
+      .map(function (k) { return ICON_LABELS[k]; }).join(', ');
+    var iconAttrs = iconLabel ? ' role="img" aria-label="' + escHtml(iconLabel) + '"' : ' aria-hidden="true"';
     var href = safeHref(ev.url);
     // ev.page is the server-rendered event page (/events/<slug>), added by
     // /events.json. Admin preview data doesn't carry it, so fall back to the
@@ -214,7 +225,7 @@ var TOWN = Object.assign({ timezone: 'America/Chicago', city: 'Victoria', pickNa
     var iconAttr = (ev.icons || []).join(' ') + (ev.free === true ? ' free' : '');
     var ad = ev.featured && !ev.editor_pick ? adAttr(ev.sponsor_order) : '';
     return '<li class="event-entry' + (ev.featured ? ' event-entry--featured' : '') + '"' + ad + ' data-icons="' + escHtml(iconAttr) + '">' +
-      '<span class="event-icons" aria-hidden="true">' + iconHtml + '</span>' +
+      '<span class="event-icons"' + iconAttrs + '>' + iconHtml + '</span>' +
       '<div class="event-details">' +
         // A paid pick also says "Sponsored" (same as pickBadges in
         // server/seo.js); editors' picks carry only the pick badge.
@@ -298,7 +309,7 @@ var TOWN = Object.assign({ timezone: 'America/Chicago', city: 'Victoria', pickNa
       '<form class="signup-form js-subscribe" novalidate data-turnstile="fetch">' +
         '<label class="visually-hidden" for="nl-card-email">Email address</label>' +
         '<input id="nl-card-email" name="email" type="email" required autocomplete="email" placeholder="you@example.com">' +
-        '<input type="text" name="company" tabindex="-1" autocomplete="off" class="hp-field" aria-hidden="true">' +
+        '<input type="text" name="hp_field" tabindex="-1" autocomplete="off" class="hp-field" aria-hidden="true">' +
         '<button type="submit" class="btn btn--primary">Subscribe</button>' +
         '<p class="signup-msg" role="status" aria-live="polite"></p>' +
       '</form>';
@@ -313,7 +324,7 @@ var TOWN = Object.assign({ timezone: 'America/Chicago', city: 'Victoria', pickNa
       tokenP.then(function (t) {
         return fetch('/api/subscribe', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: form.email.value, company: form.company.value, turnstile_token: t,
+          body: JSON.stringify({ email: form.email.value, hp_field: form.hp_field.value, turnstile_token: t,
             source: window.vic361Source ? window.vic361Source('list-card') : 'list-card',
             ref: window.vic361Ref ? window.vic361Ref() : '' })
         });

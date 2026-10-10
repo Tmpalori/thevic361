@@ -10,7 +10,9 @@
  *   HQ_TOWNS            JSON list: [{"slug":"victoria","site_url":"https://www.thevic361.com","key":"…"}]
  *   HQ_USERNAME         login
  *   HQ_PASSWORD         login (12+ characters)
- *   HQ_SESSION_SECRET   signs the login cookie (32+ characters)
+ *   HQ_SESSION_SECRET   signs the login cookie (32+ characters); the
+ *                       signing key also mixes in a hash of the login, so
+ *                       changing HQ_PASSWORD signs every session out
  *   PORT                (Railway sets it)
  *
  * Keys never reach the browser. A town that's down or refuses the key shows
@@ -20,8 +22,8 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { fileURLToPath } from 'node:url';
-import { createRateLimiter } from '../server/rateLimit.js';
-import { rowOf, totalsOf, renderDashboard, renderLogin } from './render.js';
+import { createRateLimiter, ipKey, railwayRealIp } from '../server/rateLimit.js';
+import { rowOf, totalsOf, renderDashboard, renderLogin, renderLogout } from './render.js';
 
 export { rowOf, totalsOf, renderDashboard, renderLogin };
 
@@ -59,6 +61,14 @@ const same = (a, b) => {
   const y = crypto.createHash('sha256').update(String(b)).digest();
   return crypto.timingSafeEqual(x, y);
 };
+
+// The cookie's signing key: the secret plus a hash of the username and
+// password (as server/auth.js does for town admins), so a new HQ_PASSWORD
+// invalidates every session signed with the old one.
+export function sessionKey(config) {
+  const login = crypto.createHash('sha256').update(`${config.username}\0${config.password}`).digest('hex');
+  return crypto.createHmac('sha256', config.secret).update(`hq-session:${login}`).digest();
+}
 
 function sign(secret, payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -98,37 +108,49 @@ export async function fetchTown(town, fetchImpl = globalThis.fetch) {
   }
 }
 
-export function createHqApp(config, { fetchImpl = globalThis.fetch, nowFn = () => new Date(), loginLimiter } = {}) {
+export function createHqApp(config, {
+  fetchImpl = globalThis.fetch, nowFn = () => new Date(), loginLimiter,
+  railway = Boolean(process.env.RAILWAY_ENVIRONMENT_NAME)
+} = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
+  // The client's own address behind Railway's edge, as the town server
+  // does: else every visitor may share the edge's bucket, and ten bad tries
+  // by anyone lock the owner out.
+  if (railway) app.use(railwayRealIp());
   const limiter = loginLimiter || createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
+  const key = sessionKey(config);
   app.use((req, res, next) => {
     res.set({
       'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+      'Strict-Transport-Security': 'max-age=31536000',
       'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
     });
     next();
   });
-  const signedIn = req => Boolean(verify(config.secret, cookieOf(req, COOKIE), nowFn().getTime()));
+  const signedIn = req => Boolean(verify(key, cookieOf(req, COOKIE), nowFn().getTime()));
   const secure = req => req.secure || req.get('x-forwarded-proto') === 'https';
 
   app.post('/login', express.urlencoded({ extended: false, limit: '4kb' }), (req, res) => {
-    if (!limiter.check(req.ip).ok) return res.status(429).type('html').send(renderLogin('Too many tries. Wait a few minutes.'));
+    if (!limiter.check(ipKey(req.ip)).ok) return res.status(429).type('html').send(renderLogin('Too many tries. Wait a few minutes.'));
     const b = req.body || {};
     // `|`, not `||`: both compare every time, so timing says nothing about which was wrong.
     if (!same(b.username || '', config.username) | !same(b.password || '', config.password)) {
       return res.status(401).type('html').send(renderLogin('Wrong username or password.'));
     }
-    const token = sign(config.secret, { u: config.username, exp: nowFn().getTime() + SESSION_HOURS * 3600 * 1000 });
+    const token = sign(key, { u: config.username, exp: nowFn().getTime() + SESSION_HOURS * 3600 * 1000 });
     res.cookie(COOKIE, token, { httpOnly: true, sameSite: 'strict', secure: secure(req), maxAge: SESSION_HOURS * 3600 * 1000, path: '/' });
     res.redirect(303, '/');
   });
 
-  app.get('/logout', (req, res) => {
+  // Logout is a POST (the cookie is SameSite=Strict, so another site can't
+  // send it). GET, from an old link or bookmark, asks first.
+  app.post('/logout', (req, res) => {
     res.clearCookie(COOKIE, { path: '/' });
     res.redirect(303, '/');
   });
+  app.get('/logout', (req, res) => res.type('html').send(renderLogout()));
 
   app.get('/', async (req, res) => {
     if (!signedIn(req)) return res.type('html').send(renderLogin());
@@ -162,6 +184,7 @@ export function createPreviewApp() {
   app.disable('x-powered-by');
   app.use((req, res, next) => {
     res.set({ 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff',
+      'Strict-Transport-Security': 'max-age=31536000',
       'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'" });
     next();
   });

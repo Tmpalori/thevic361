@@ -194,7 +194,10 @@ describe('Event JSON-LD', () => {
     const ld = eventJsonLd(paid, SITE);
     expect(ld.endDate).toBe(ld.startDate);
     expect(ld.organizer).toEqual({ '@type': 'Organization', name: 'The Hall', url: 'https://hall.example/show' });
-    expect(ld.performer).toEqual(ld.organizer);
+    // No claims the data can't back: the venue isn't the performer, and we
+    // can't know whether anything is still available.
+    expect(ld).not.toHaveProperty('performer');
+    expect(ld.offers).not.toHaveProperty('availability');
     expect(ld.offers.url).toBe('https://hall.example/show');
     expect(ld.offers.price).toBeUndefined();
     expect(ld.offers.validFrom < ld.startDate).toBe(true);

@@ -30,7 +30,8 @@ import { editionOf } from './newsletter.js';
 export const SUBSCRIBER_GOAL = 10000;
 export const REVENUE_GOAL_CENTS = 1000000;
 const ISSUE_WINDOW_DAYS = 7;
-// Orders whose money stays with us (sponsors.js statuses).
+// Orders whose money stays with us (sponsors.js statuses). Not 'disputed':
+// Stripe holds that money until the dispute closes (won restores the order).
 const KEPT = new Set(['paid', 'active', 'hidden', 'cancelled']);
 
 const weight = r => (Number(r.n) > 0 ? Number(r.n) : 1);
@@ -189,7 +190,9 @@ export function monthRevenue(orders, today) {
     // A test order (marked in Admin → Sponsors, or paid in Stripe test mode) isn't revenue.
     if (!o || o.test || !KEPT.has(o.status) || !o.paid_at) continue;
     const paid = dayOf(o.paid_at);
-    if (paid && paid.slice(0, 7) === month) { cents += Number(o.amount) || 0; count++; }
+    // A partial refund (charge.refunded with some money kept) counts only
+    // what was kept. A partner's later months count the plan price.
+    if (paid && paid.slice(0, 7) === month) { cents += Math.max(0, (Number(o.amount) || 0) - (Number(o.refunded_cents) || 0)); count++; }
     else if (o.kind === 'partner' && o.status === 'active' && paid < month) { recurring += Number(o.amount) || 0; count++; }
   }
   return { month, cents: cents + recurring, orders: count, recurring_cents: recurring };

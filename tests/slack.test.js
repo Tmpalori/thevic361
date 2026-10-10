@@ -198,8 +198,12 @@ describe('contact form', () => {
     expect(sent[0].title).toBe('✉️ Website message: Advertising or sponsorship');
     expect(sent[0].fields).toContainEqual(['Email', 'ann@shop.example']);
 
-    await post({ name: 'Bot', email: 'b@b.example', message: 'spam spam', company: 'x' });
-    expect(sent).toHaveLength(1);
+    // A trap hit never delivers the message; Slack only gets a note that
+    // the trap caught something (server/honeypot.js).
+    await post({ name: 'Bot', email: 'b@b.example', message: 'spam spam', hp_field: 'x' });
+    expect(sent).toHaveLength(2);
+    expect(sent[1].title).toBe('🪤 Spam trap caught a contact form');
+    expect(JSON.stringify(sent[1])).not.toContain('spam spam');
   });
 });
 

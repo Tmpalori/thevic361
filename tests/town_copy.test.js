@@ -15,6 +15,7 @@ import { town, townConfig, useTown, VICTORIA } from '../server/town.js';
 import { HUB_PAGES, renderHubPage, withPages } from '../server/seo.js';
 import { SEASONS, townSeasons, activeSeasons, renderSeasonPage } from '../server/guides.js';
 import { createApp } from '../server/index.js';
+import { eventCardSvg } from '../server/ogImage.js';
 import { createInbound } from '../server/inbound.js';
 import { FileStore } from '../server/db.js';
 import { renderWeekly, renderWelcomeEmail, renderConfirmEmail, renderReferralRules } from '../server/newsletter.js';
@@ -23,6 +24,20 @@ import {
 } from '../server/notify.js';
 
 const FIXTURE = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'golden', 'fixture.json'), 'utf8'));
+
+// What another town's copy must never say. Case-insensitive: an uppercase
+// "VIC’S PICK" pill or "SHARE THE VIC 361" heading is the same leak.
+const LEAK = /.{0,50}(Victoria|Vic 361|Vic[’']s Pick|The Vic\b).{0,30}/gi;
+// Uppercase strings still hard-coded in server/newsletter.js (the email
+// "★ VIC’S PICK" badge and the plain-text "SHARE THE VIC 361" heading). A
+// separate change fixes that file; until it lands they are known and
+// tolerated here, and only these exact strings are. Delete this once
+// newsletter.js uses the town's names.
+const KNOWN_NEWSLETTER_LEAKS = /★ VIC’S PICK|SHARE THE VIC 361/;
+const leaksIn = (text, { known = null } = {}) => {
+  const found = (String(text).match(LEAK) || []).filter(m => !(known && known.test(m)));
+  return found.length ? found : null;
+};
 
 const SITE = 'https://www.thebay979.com';
 const NOW = new Date('2026-10-07T17:00:00Z');
@@ -122,7 +137,8 @@ describe('a whole second-town site', () => {
       ...pages, ...pages.map(p => p + '.ics'), ...HUB_PAGES.map(p => p.path), ...townSeasons().map(s => s.path)];
     for (const p of paths) {
       const text = await (await fetch(base + p)).text();
-      expect(text.match(/.{0,50}(Victoria|Vic[’']s Pick|The Vic\b).{0,30}/g), p).toBe(null);
+      // /advertise shows a sample newsletter pick, with newsletter.js's badge.
+      expect(leaksIn(text, { known: KNOWN_NEWSLETTER_LEAKS }), p).toBe(null);
     }
     expect((await fetch(base + '/tejas-fest')).status).toBe(404);
     expect((await fetch(base + '/bach-festival')).status).toBe(404);
@@ -154,7 +170,7 @@ describe('a whole second-town site', () => {
     ];
     for (const m of mails) {
       const all = `${m.subject}\n${m.preheader || ''}\n${m.text}\n${m.html}`;
-      expect(all.match(/.{0,50}(Victoria|Vic 361|Vic[’']s Pick|The Vic\b).{0,30}/g), m.subject).toBe(null);
+      expect(leaksIn(all, { known: KNOWN_NEWSLETTER_LEAKS }), m.subject).toBe(null);
     }
     expect(mails[4].subject).toBe('Confirm your Bay 979 subscription');
     // The header wordmark: the town's name and its badge.
@@ -164,6 +180,25 @@ describe('a whole second-town site', () => {
     expect(mails[9].html).toContain('Bay’s Best');
     expect(mails[9].text).toContain("Bay's Best");
     expect(renderReferralRules({ siteUrl: site })).not.toMatch(/Victoria/);
+  });
+
+  it('the case-insensitive check catches an uppercase leak', () => {
+    expect(leaksIn('<text>VIC’S PICK</text>')).not.toBe(null);
+    expect(leaksIn('SHARE THE VIC 361')).not.toBe(null);
+    expect(leaksIn('SHARE THE VIC 361', { known: KNOWN_NEWSLETTER_LEAKS })).toBe(null);
+    expect(leaksIn('BAY’S BEST')).toBe(null);
+  });
+
+  it("a featured event's share card shows the town's pick name", () => {
+    useTown(townConfig({}, { town: BAY }));
+    try {
+      const svg = eventCardSvg({ date: '2026-10-09', name: 'Fall Fest', venue: 'Hall', time: '6:00 PM', featured: true });
+      expect(svg).toContain('BAY’S BEST');
+      expect(leaksIn(svg)).toBe(null);
+    } finally {
+      useTown(VICTORIA);
+    }
+    expect(eventCardSvg({ date: '2026-10-09', name: 'Fall Fest', venue: 'Hall', featured: true })).toContain('VIC’S PICK');
   });
 });
 

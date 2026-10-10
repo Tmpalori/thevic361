@@ -13,7 +13,7 @@
  *   - Submitter email + IP never leave the admin scope.
  */
 
-import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths, townBootProblems, townInputs, townWorkflowsReady } from './town.js';
+import { town, townConfig, useTown, VICTORIA, townAssetPath, townPaths, townBootProblems, townInputs, townWorkflowsReady, victoriaBootProblem } from './town.js';
 import { localizeHtml } from './localize.js';
 import express from 'express';
 import compression from 'compression';
@@ -23,15 +23,17 @@ import { fileURLToPath } from 'node:url';
 
 import { createStore, isOutage, normalizePayload, newId, nowIso, applyEventEdits, eventKeyOf, parseEventKey, withoutSubmitter, resolveEditKey, withPublishedLock } from './db.js';
 import { validateSubmission, validateEventEdit, checkBotSignals } from './validate.js';
-import { verifyTurnstile } from './turnstile.js';
-import { createRateLimiter, ipKey } from './rateLimit.js';
-import { createAuth } from './auth.js';
+import { reportHoneypot } from './honeypot.js';
+import { verifyTurnstile, turnstileHostnames } from './turnstile.js';
+import { createRateLimiter, ipKey, railwayRealIp } from './rateLimit.js';
+import { createAuth, MIN_SECRET } from './auth.js';
 import { createGithub } from './github.js';
 import { readMetadataFile, buildSourcesPayload } from './sources.js';
 import { crawlerMiddleware, beaconRow, summarize } from './analytics.js';
 import { pixelId, metaPixelJs } from './metaPixel.js';
 import { registerEventCheck, withoutHidden, visibleKeyed, stripKeys, keyedEvents } from './eventcheck.js';
 import { registerGrowth } from './growth.js';
+import { registerPrivacy, purgePersonalData } from './privacy.js';
 import { registerHq, buildSummary } from './hq.js';
 import { newsletterConfig, createResend, registerNewsletter, signupFormHtml, normalizeEmail, sampleEmailPreviews } from './newsletter.js';
 import { createTremendous, tremendousConfig } from './referralRewards.js';
@@ -47,7 +49,6 @@ import { createAutoPublish, unpublishEvent, replacePublishedEvent, forgetRemoved
 import { createScheduler, schedulerEnabled, startLabel, checkTownSchedule } from './scheduler.js';
 import * as sponsorsModule from './sponsors.js';
 import crypto from 'node:crypto';
-import net from 'node:net';
 import {
   HUB_PAGES, localDateStr, renderHome, renderHubPage, renderEventPage,
   renderAboutPage, renderAdvertisePage, advertiseStats, renderNotFoundPage, renderSitemap, renderLlmsTxt
@@ -138,11 +139,7 @@ export async function createApp(opts = {}) {
   // (docs.railway.com: Public Networking > Specs & Limits); prefer it so the
   // rate limits key on the real client however many hops sit in between.
   if (trustProxy && (opts.railway ?? Boolean(process.env.RAILWAY_ENVIRONMENT_NAME))) {
-    app.use((req, res, next) => {
-      const real = String(req.headers['x-real-ip'] || '').trim();
-      if (net.isIP(real)) Object.defineProperty(req, 'ip', { value: real, configurable: true });
-      next();
-    });
+    app.use(railwayRealIp());
   }
 
   // Canonical host. www.thevic361.com is where Google already indexes the
@@ -150,6 +147,11 @@ export async function createApp(opts = {}) {
   // search engines see one site instead of two copies.
   // The town (server/town.js): TOWN in Railway, unset = Victoria; opts.town for tests.
   useTown(townConfig(process.env, opts));
+  // A service with TOWN forgotten but another town's SITE_URL would be a
+  // silent clone of Victoria: stop before anything starts. Reads the
+  // service's own SITE_URL (opts.envSiteUrl for tests), never opts.siteUrl.
+  const victoriaProblem = victoriaBootProblem(town, opts.envSiteUrl ?? process.env.SITE_URL ?? '');
+  if (victoriaProblem) throw new Error(victoriaProblem);
   // Who runs the site, for the legal pages (server/legal.js): Railway's
   // BUSINESS_LEGAL_NAME, BUSINESS_CONTACT_EMAIL and NEWSLETTER_ADDRESS.
   useBusiness(businessConfig(process.env, opts));
@@ -161,6 +163,8 @@ export async function createApp(opts = {}) {
   const VENUES_FILE = path.join(REPO_ROOT, PATHS.venues);
   checkTownSchedule();
   const siteUrl = (opts.siteUrl ?? process.env.SITE_URL ?? town.siteUrl).replace(/\/+$/, '');
+  // Where a Turnstile token may have been solved (server/turnstile.js).
+  const turnstileHosts = opts.turnstileHostnames ?? [...new Set([...turnstileHostnames(siteUrl, process.env.RAILWAY_PUBLIC_DOMAIN), ...turnstileHostnames(town.siteUrl)])];
   // Owner pings in Slack (server/slack.js); a no-op until SLACK_WEBHOOK_URL is set.
   const slack = opts.slack || createSlack(slackConfig(process.env, opts));
   const canonicalHost = new URL(siteUrl).host;
@@ -295,6 +299,22 @@ export async function createApp(opts = {}) {
     slack.alert('db-missing', 'Production has no database', NO_DATABASE);
   }
 
+  // Admin secrets too short to resist distributed guessing (auth.weak, plus
+  // the legacy token here). Not a boot failure: the live site may run on
+  // them today, and refusing to start would take it down. The setup
+  // checklist marks it required, and production alerts on every boot.
+  const weakAdminSecrets = [...(auth.weak || []),
+    ...(adminToken && String(adminToken).length < MIN_SECRET ? [`ADMIN_TOKEN is shorter than ${MIN_SECRET} characters`] : [])];
+  const WEAK_ADMIN_FIX = 'Set a longer ADMIN_PASSWORD (12+ characters; a passphrase is fine) and ADMIN_SESSION_SECRET ' +
+    '(`openssl rand -hex 32`) in Railway; replace ADMIN_TOKEN the same way or remove it if no script uses it. ' +
+    'Changing the password or secret signs out every admin session.';
+  if (weakAdminSecrets.length) {
+    console.warn('[auth] weak admin secrets:', weakAdminSecrets.join('; '));
+    if (railwayEnv === 'production') {
+      slack.alert('admin-weak-secrets', 'Admin login secrets are too short', `${weakAdminSecrets.join('; ')}. ${WEAK_ADMIN_FIX}`);
+    }
+  }
+
   // Note crawler hits on public pages for the admin Traffic tab. Registered
   // before every route so it sees the server-rendered pages too.
   if (typeof store.recordTraffic === 'function') app.use(crawlerMiddleware(store, () => (opts.now || (() => new Date()))()));
@@ -360,7 +380,7 @@ export async function createApp(opts = {}) {
   // (server/inbound.js). Raw body too, so also before the JSON parser.
   const inbound = createInbound({ config: inboundConfig(process.env, opts), apiKey: newsletter.apiKey, slack, siteUrl,
     fetchImpl: opts.inboundFetch || globalThis.fetch, nowFn: () => (opts.now ? opts.now().getTime() : Date.now()),
-    otherDomains: opts.inboundOtherDomains });
+    otherDomains: opts.inboundOtherDomains, store });
   inbound.register(app);
 
   // The admin's sponsor edit can carry a new logo (a data URL, shrunk in
@@ -408,7 +428,11 @@ export async function createApp(opts = {}) {
       // tab links to this as a manual fallback when one-click Pull Now isn't
       // available (no token, invalid token, etc.).
       sources_actions_url: `https://github.com/${github.owner}/${github.repo}` +
-        `/actions/workflows/${WEEKLY_COLLECT_WORKFLOW}`
+        `/actions/workflows/${WEEKLY_COLLECT_WORKFLOW}`,
+      // Another town only: whether it may start workflows yet (TOWN_WORKFLOWS=1
+      // once its GitHub Environment exists), for scripts/launch_check.py. A
+      // flag, no secret. Victoria's config stays exactly as it was.
+      ...(town.id !== VICTORIA.id ? { town_workflows: townWorkflowsReady() } : {})
     });
   });
 
@@ -456,22 +480,29 @@ export async function createApp(opts = {}) {
   // ?deep=1 also asks the database (for the uptime check), so "the page
   // loads but nothing can be saved or published" counts as down. Plain
   // /api/health stays process-only, so a database blip can't fail a deploy.
+  // SELECT 1 with a deadline: rejects on an error or after ms (a hung
+  // database accepts the connection and never answers).
+  async function pingDatabase(ms) {
+    let timer;
+    try {
+      await Promise.race([
+        storeBundle.pool.query('SELECT 1'),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('database timeout')), ms); })
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   app.get('/api/health', async (req, res) => {
     if (req.query.deep && missingDatabase) {
       return res.status(503).json({ ok: false, storage: storeBundle.kind, error: 'no-database' });
     }
     if (req.query.deep && storeBundle.pool) {
-      let timer;
       try {
-        await Promise.race([
-          storeBundle.pool.query('SELECT 1'),
-          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('database timeout')), 5000); })
-        ]);
+        await pingDatabase(5000);
       } catch (err) {
         console.error('[health] database check failed:', err?.message || err);
         return res.status(503).json({ ok: false, storage: storeBundle.kind, error: 'database' });
-      } finally {
-        clearTimeout(timer);
       }
     }
     res.json({ ok: true, storage: storeBundle.kind });
@@ -503,7 +534,10 @@ export async function createApp(opts = {}) {
     const bot = checkBotSignals(req.body || {});
     if (!bot.ok) {
       // Return 200 to bots so they don't retry/iterate; log for visibility.
+      // A trap hit also reaches Slack (once a day), so autofill filling the
+      // hidden field for a real organizer can be noticed.
       console.warn('[submissions] bot-signal-block:', bot.reason, ip);
+      if (bot.reason === 'honeypot') reportHoneypot('submit', bot.field, { slack });
       return res.json({ ok: true, queued: false });
     }
 
@@ -514,7 +548,8 @@ export async function createApp(opts = {}) {
     const ts = await verifyTurnstile(req.body && req.body.turnstile_token, {
       secret: turnstileSecret,
       remoteip: ip,
-      fetch: opts.fetch
+      fetch: opts.fetch,
+      hostnames: turnstileHosts
     });
     if (!ts.ok) {
       return res.status(400).json({ ok: false, error: 'turnstile-failed' });
@@ -1355,6 +1390,26 @@ export async function createApp(opts = {}) {
   // visitor counts reset on restart.
   const analyticsSecret = opts.analyticsSecret ?? process.env.ADMIN_SESSION_SECRET ?? crypto.randomBytes(16).toString('hex');
   const trackLimiter = opts.trackLimiter || createRateLimiter({ windowMs: 60 * 1000, max: 120 });
+  // Sponsor and Vic's Pick reports count impressions and clicks on an
+  // order's ad (and taps on its link), and the order id is public
+  // (data-ad), so a script could post beacons all day to pad a report. Each
+  // client address (ipKey) counts at most this many of each per ad (or
+  // link) per day; a real reader browsing page after page stays under it.
+  const AD_BEACON_DAILY = { impression: 20, click: 5 };
+  const adBeacons = { day: '', counts: new Map() };
+  function adBeaconAllowed(row, req) {
+    const target = row.ad || (row.kind === 'click' && /^(sponsor|event)_click$/.test(row.click_type) ? row.click_url : '');
+    if (!target || !AD_BEACON_DAILY[row.kind]) return true;
+    if (adBeacons.day !== row.day) { adBeacons.day = row.day; adBeacons.counts.clear(); }
+    const key = `${clientKey(req)}|${target}|${row.kind}`;
+    const n = adBeacons.counts.get(key) || 0;
+    if (n >= AD_BEACON_DAILY[row.kind]) return false;
+    // Bounded memory: a flood of made-up ad ids from many addresses stops
+    // being counted for the rest of the day instead of growing the map.
+    if (!n && adBeacons.counts.size >= 100000) return false;
+    adBeacons.counts.set(key, n + 1);
+    return true;
+  }
 
   app.post('/api/track', async (req, res) => {
     // Always 204: the beacon never waits on or reacts to the answer.
@@ -1368,7 +1423,7 @@ export async function createApp(opts = {}) {
       ip, ua: req.get('user-agent') || '', secret: analyticsSecret,
       siteHost: new URL(siteUrl).host, now: nowFn()
     });
-    if (!row) return;
+    if (!row || !adBeaconAllowed(row, req)) return;
     try { await store.recordTraffic(row); } catch (err) {
       console.warn('[traffic] record failed:', err.message);
     }
@@ -1650,7 +1705,7 @@ export async function createApp(opts = {}) {
     const b = req.body || {};
     const token = b['cf-turnstile-response'] || b.turnstile_token;
     const r = await verifyTurnstile(typeof token === 'string' ? token : '', {
-      secret: turnstileSecret, remoteip: req.ip, fetch: opts.fetch
+      secret: turnstileSecret, remoteip: req.ip, fetch: opts.fetch, hostnames: turnstileHosts
     });
     // The visitor only sees "try again", so the reason is logged here: a
     // pattern of failures from the Facebook/Instagram in-app browser (where
@@ -1698,6 +1753,8 @@ export async function createApp(opts = {}) {
     store, requireAdmin, siteUrl, nowFn: () => (opts.now || (() => new Date()))(),
     // The newsletter is a day-by-day list: only events that made their day.
     getPublicPayload: shownPayload, createRateLimiter, config: newsletter, resend: nlResend, slack, verifyHuman, tremendous,
+    // No secret, no check: signups then confirm by email (newsletter.js).
+    turnstileConfigured: Boolean(turnstileSecret),
     // The send itself must carry the paid placements (see sponsors.apply).
     getSendPayload: () => shownPayload({ strict: true }),
     // Monday's run also sends last week's sponsor reports (and any Vic's
@@ -1939,6 +1996,8 @@ export async function createApp(opts = {}) {
 
   // Contact form → Slack; replaces publishing an email address.
   registerContact(app, { siteUrl, slack, store, requireAdmin, createRateLimiter, sendHtml, verifyHuman });
+  // Personal data: delete one address on request, export subscribers (server/privacy.js).
+  registerPrivacy(app, { store, requireAdmin, slack, nowFn: () => nowFn() });
   inbound.registerReply(app, { requireAdmin, resend: nlResend, from: newsletter.from, normalizeEmail });
 
   sponsors.registerRoutes(app, { requireAdmin, createRateLimiter, sendHtml, verifyHuman, analyticsSecret });
@@ -2166,6 +2225,8 @@ export async function createApp(opts = {}) {
         : typeof sponsorsModule.sendSponsorReports === 'function'
           ? now => sponsorsModule.sendSponsorReports(now)
           : undefined,
+      // Daily: personal-data retention (server/privacy.js).
+      privacyPurge: now => purgePersonalData(store, now),
       health: async now => {
         await retryAutoPublish();
         // Hourly: the one "tap to confirm" reminder to yesterday's
@@ -2272,6 +2333,8 @@ export async function createApp(opts = {}) {
         fix: 'Add a Postgres database in Railway so events and subscribers survive deploys.' },
       { key: 'login', label: 'Admin login', ok: auth.configured, level: 'required',
         fix: 'Set ADMIN_USERNAME, ADMIN_PASSWORD and ADMIN_SESSION_SECRET in Railway.' },
+      { key: 'admin_secrets', label: 'Admin password and secrets are long enough', ok: !weakAdminSecrets.length, level: 'required',
+        fix: weakAdminSecrets.length ? `${weakAdminSecrets.join('; ')}. ${WEAK_ADMIN_FIX}` : WEAK_ADMIN_FIX },
       { key: 'auto_publish', label: 'Auto-publish events', ok: env.AUTO_PUBLISH !== '0', level: 'required',
         fix: 'Remove AUTO_PUBLISH=0 from Railway.' },
       { key: 'slack', label: 'Slack alerts', ok: slack.enabled && !slackRefusedText(), level: 'recommended',
@@ -2307,13 +2370,20 @@ export async function createApp(opts = {}) {
       { key: 'stripe', label: 'Sponsor payments (Stripe)', ok: stripeCfg.enabled, level: 'recommended',
         fix: 'In Stripe: create a restricted key (Checkout Sessions, Products and Prices: write) and a webhook to ' + siteUrl +
           '/api/stripe/webhook on API version 2026-09-30.endive. Put them in Railway as STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.' },
+      // Production with Stripe's test keys: anyone can book with Stripe's
+      // public test card. Fine for a new town's launch test, never after.
+      ...(stripeCfg.production && stripeCfg.testKey ? [{ key: 'stripe_test_key', label: 'Stripe is in test mode', ok: false, level: 'recommended',
+        fix: 'STRIPE_SECRET_KEY in Railway is a test key (sk_test_ or rk_test_), so sponsors can book with Stripe\'s test card and nothing is charged. ' +
+          'Once the launch test checkout is done, switch to the live restricted key and the live webhook endpoint\'s STRIPE_WEBHOOK_SECRET.' }] : []),
       { key: 'event_check', label: 'Event check hides church events, non-events and duplicates',
         ok: Boolean(eventCheckSecret), level: 'recommended', link: ghSecrets,
         fix: 'Set EVENT_CHECK_SECRET in Railway and as a GitHub secret (any long random string, the same in both). Until then the check only reports to Slack.' },
       { key: 'separate_secrets', label: 'Each automation has its own secret', ok: new Set(cronSecrets).size === cronSecrets.length, level: 'optional', link: ghSecrets,
         fix: 'NEWSLETTER_CRON_SECRET, EVENT_CHECK_SECRET and SUBMISSION_REVIEW_SECRET share a value (or one is unset and borrows another), so one leak could send the newsletter, hide events and publish submissions. Give each its own long random string, the same in Railway and GitHub.' },
-      { key: 'spam', label: 'Spam protection on forms (Turnstile)', ok: Boolean(turnstileSecret && turnstileSiteKey), level: 'optional',
-        fix: `In Cloudflare Turnstile, add a widget (or add www.${town.domain} to an existing one) in Managed mode, then set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY in Railway. Protects Submit, Contact, newsletter signup and sponsor checkout.` },
+      // Required: without it every newsletter signup must confirm by email
+      // (newsletter.js), and the forms have no bot check at all.
+      { key: 'spam', label: 'Spam protection on forms (Turnstile)', ok: Boolean(turnstileSecret && turnstileSiteKey), level: 'required',
+        fix: `In Cloudflare Turnstile, add a widget (or add www.${town.domain} to an existing one) in Managed mode, then set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY in Railway. Protects Submit, Contact, newsletter signup and sponsor checkout; until then every newsletter signup has to confirm by email.` },
       { key: 'social', label: 'Auto-post to Facebook + Instagram', ok: null, level: 'recommended', link: ghSecrets,
         fix: 'In GitHub: secrets META_PAGE_ID, META_PAGE_TOKEN and the repo variable SOCIAL_AUTOPOST = 1.' },
       { key: 'collector_keys', label: 'Event collector keys (OpenAI, Apify, Gemini)', ok: null, level: 'recommended', link: ghSecrets,
@@ -2358,8 +2428,14 @@ export async function createApp(opts = {}) {
       getEvents: async () => [...(((await getPublicPayload()) || {}).events || []), ...(await listArchived().catch(() => []))],
       getOrders: async () => (typeof store.listSponsorOrders === 'function' ? store.listSponsorOrders() : []),
       setup: setupReport,
-      health: async () => ({ database: storeBundle.kind === 'postgres', scheduler_blocked: Boolean(scheduler.state.dispatchBlocked),
-        slack_refused: Boolean(slackRefusedText()) })
+      // database: Postgres configured and answering a ping now (3 s), not
+      // just configured: a town whose database is down must not read healthy.
+      health: async () => {
+        const configured = storeBundle.kind === 'postgres';
+        const database = configured && storeBundle.pool ? await pingDatabase(3000).then(() => true, () => false) : configured;
+        return { database, database_configured: configured, scheduler_blocked: Boolean(scheduler.state.dispatchBlocked),
+          slack_refused: Boolean(slackRefusedText()) };
+      }
     })
   });
 

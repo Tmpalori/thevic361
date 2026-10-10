@@ -686,23 +686,25 @@ export function eventJsonLd(ev, siteUrl) {
   obj.endDate = times[1] ? `${endDay}T${times[1]}:00${utcOffset(endDay)}` : startDate;
   if (ev.description) obj.description = ev.description;
   // We don't track organizers or performers; the venue is who hosts it.
-  // Without a venue there's nothing honest to name, so both stay off.
+  // Without a venue there's nothing honest to name, so it stays off. No
+  // performer: the venue isn't the band playing there, and we don't know
+  // who is.
   if (ev.venue) {
     const host = { '@type': 'Organization', name: ev.venue };
     if (safeUrl(ev.url)) host.url = safeUrl(ev.url);
     obj.organizer = host;
-    obj.performer = host;
   }
   // Every event gets an offer pointing at its details link. Price only when
   // we know it (free); validFrom is the listing date, never after the event,
-  // so Google doesn't read it as tickets not yet on sale.
+  // so Google doesn't read it as tickets not yet on sale. No availability:
+  // we can't know whether a show is sold out, so "InStock" was a claim
+  // the data couldn't back.
   const today = localDateStr(new Date());
   const validDay = today < ev.date ? today : ev.date;
   obj.offers = {
     '@type': 'Offer',
     ...(ev.free === true ? { price: 0 } : {}),
     priceCurrency: 'USD',
-    availability: 'https://schema.org/InStock',
     validFrom: `${validDay}T00:00:00${utcOffset(validDay)}`,
     url: safeUrl(ev.url) || `${siteUrl}${ev.page}`
   };
@@ -720,8 +722,21 @@ export function iconKeys(ev) {
   return ev.free === true && !keys.includes('free') ? [...keys, 'free'] : keys;
 }
 
-function icons(ev) {
-  return iconKeys(ev).map(iconSvg).join('');
+// What the icons mean, in words, for screen readers (the filter chips'
+// names: docs/app.js FILTERS). docs/app.js iconLabel matches.
+export const ICON_LABELS = {
+  food: 'Food', music: 'Music', family: 'Kids & Family', drinks: 'Drinks', arts: 'Arts',
+  shopping: 'Shopping', outdoors: 'Outdoors', community: 'Community', free: 'Free'
+};
+
+// The icon column: the same pictures as before, now read out as one image
+// ("Music, Free") instead of being hidden; an event with no icons keeps an
+// empty, hidden column.
+export function iconsHtml(ev) {
+  const keys = iconKeys(ev);
+  if (!keys.length) return '<span class="event-icons" aria-hidden="true"></span>';
+  const label = keys.map(k => ICON_LABELS[k]).join(', ');
+  return `<span class="event-icons" role="img" aria-label="${escHtml(label)}">${keys.map(iconSvg).join('')}</span>`;
 }
 
 // Mirrors renderEvent() in docs/app.js so the server markup and the
@@ -763,7 +778,7 @@ export function renderEventItem(ev) {
   const place = placeText(ev);
   const ad = ev.featured && !ev.editor_pick ? adAttr(ev.sponsor_order) : '';
   return `<li class="event-entry${ev.featured ? ' event-entry--featured' : ''}"${ad} data-icons="${escHtml((ev.icons || []).join(' ') + (ev.free === true ? ' free' : ''))}">` +
-    `<span class="event-icons" aria-hidden="true">${icons(ev)}</span>` +
+    iconsHtml(ev) +
     '<div class="event-details">' +
       pickBadges(ev) +
       nearbyBadge(ev) +

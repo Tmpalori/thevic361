@@ -218,19 +218,21 @@ describe('Victoria outbound requests', () => {
     const eventsFile = path.join(tmpDir, 'events.json');
     await fs.writeFile(eventsFile, JSON.stringify({ events: FIXTURE.events }));
     const { app } = await createApp({
-      storeBundle: { kind: 'file', store: new FileStore(path.join(tmpDir, 's.json')) }, eventsFile, trustProxy: false, now: () => NOW,
+      // Two buyers, two addresses (X-Forwarded-For below): one client gets
+      // one open checkout, so a second from the same address replaces it.
+      storeBundle: { kind: 'file', store: new FileStore(path.join(tmpDir, 's.json')) }, eventsFile, trustProxy: 1, now: () => NOW,
       siteUrl: SITE, stripeSecretKey: 'sk_test_golden', stripeWebhookSecret: 'whsec_golden', stripe: createStripe('sk_test_golden', rec.fetchImpl),
       resendApiKey: '', slack: { enabled: false, notify: async () => false, alert: async () => false }
     });
     const server = http.createServer(app);
     await new Promise(r => server.listen(0, r));
     const base = `http://127.0.0.1:${server.address().port}`;
-    const post = fields => fetch(base + '/advertise/checkout', { method: 'POST', redirect: 'manual',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(fields).toString() });
+    const post = (fields, ip) => fetch(base + '/advertise/checkout', { method: 'POST', redirect: 'manual',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Forwarded-For': ip }, body: new URLSearchParams(fields).toString() });
     try {
-      const w = await post({ package: 'weekly', week: '2026-10-12', business: 'Acme Tacos', text: 'Best tacos in town.', url: 'acme.example', cta: 'Order', email: 'owner@acme.example', agree: '1' });
+      const w = await post({ package: 'weekly', week: '2026-10-12', business: 'Acme Tacos', text: 'Best tacos in town.', url: 'acme.example', cta: 'Order', email: 'owner@acme.example', agree: '1' }, '10.0.0.1');
       const f = await post({ package: 'featured', event_name: 'Fall Festival', date: '2026-10-10', time: '10 AM', venue: 'De Leon Plaza',
-        address: '101 N Main St', description: 'Food, music, rides.', business: 'Main Street', email: 'ms@example.com', agree: '1' });
+        address: '101 N Main St', description: 'Food, music, rides.', business: 'Main Street', email: 'ms@example.com', agree: '1' }, '10.0.0.2');
       expect([w.status, f.status]).toEqual([303, 303]);
       await expect(json(rec.shown())).toMatchFileSnapshot(golden('outbound/stripe.json'));
     } finally {
@@ -249,6 +251,9 @@ describe('Victoria outbound requests', () => {
       storeBundle: { kind: 'file', store: new FileStore(path.join(tmpDir, 's.json')) }, eventsFile, trustProxy: false, now: () => MON,
       siteUrl: SITE, adminUsername: 'a', adminPassword: 'b', adminSessionSecret: 'c',
       resendApiKey: 're_golden', newsletterAddress: ADDRESS, resend: createResend('re_golden', rec.fetchImpl),
+      // Turnstile on, as in production (a stand-in Cloudflare that passes
+      // the token): without it the signup gets a confirmation email instead.
+      turnstileSecret: 'ts_golden', fetch: async () => ({ ok: true, json: async () => ({ success: true }) }),
       slack: { enabled: false, notify: async () => false, alert: async () => false }
     });
     const server = http.createServer(app);
@@ -256,7 +261,7 @@ describe('Victoria outbound requests', () => {
     const base = `http://127.0.0.1:${server.address().port}`;
     const post = (p, body, headers = {}) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
     try {
-      await post('/api/subscribe', { email: 'reader@example.com' });
+      await post('/api/subscribe', { email: 'reader@example.com', turnstile_token: 'golden' });
       for (let i = 0; i < 100 && !rec.calls.length; i++) await new Promise(r => setTimeout(r, 10));
       const login = await (await post('/api/admin/login', { username: 'a', password: 'b' })).json();
       const sent = await post('/api/admin/newsletter/send', {}, { Authorization: `Bearer ${login.token}` });

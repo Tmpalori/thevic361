@@ -278,3 +278,59 @@ class TestAiKeep(unittest.TestCase):
 
         self.assertEqual([e["name"] for e in result], ["Baby Hour: Pages to Play", "Victoria Farmers' Market"])
         self.assertTrue(all("_ai_drop" not in e for e in result))
+
+
+class TestAiReviewKeepsHandEnteredFacts(unittest.TestCase):
+    """local_events.yaml / Google Sheet events: the owner's price and words win."""
+
+    def _run(self, events, answers):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "x"}):
+            with patch.object(ce, "_ai_review_batch", side_effect=lambda k, b: answers[:len(b)]):
+                return ce.ai_review(events, batch_size=8)
+
+    def test_never_flips_free_on_a_curated_event(self):
+        # Cuero Turkeyfest is `free: false` in the YAML; the model said free.
+        turkey = {"date": "2026-10-09", "name": "Cuero Turkeyfest", "venue": "Downtown Cuero",
+                  "description": "Details on the Turkeyfest page.", "icons": ["family"], "free": False,
+                  "curated": True, "_source": "local_events"}
+        out = self._run([turkey], [{"description": "Plan for parades and live entertainment.",
+                                    "icons": ["family", "free", "music"], "free": True, "appeal": 5}])
+        self.assertIs(out[0]["free"], False)
+        self.assertNotIn("free", out[0]["icons"])
+        # The owner's description stays; the invented details don't appear.
+        self.assertEqual(out[0]["description"], "Details on the Turkeyfest page.")
+        # Icons and appeal are still the model's to set.
+        self.assertEqual(out[0]["icons"], ["family", "music"])
+        self.assertEqual(out[0]["appeal"], 5)
+
+    def test_never_demotes_a_curated_free_event(self):
+        ev = {"date": "2026-10-10", "name": "Trunk or Treat", "venue": "Mercy House",
+              "description": "Trunk or treat at Mercy House.", "icons": ["family"], "free": True, "curated": True}
+        out = self._run([ev], [{"icons": ["family", "community"], "free": False}])
+        self.assertIs(out[0]["free"], True)
+        self.assertIn("free", out[0]["icons"])
+
+    def test_merged_copy_with_a_hand_source_is_protected(self):
+        ev = {"date": "2026-10-10", "name": "Fall Fest", "venue": "Riverside Park", "description": "A fall festival in the park.",
+              "icons": [], "free": False, "_source": "allevents", "_sources": ["allevents", "google_sheet"]}
+        out = self._run([ev], [{"description": "Free fun for all!", "free": True}])
+        self.assertIs(out[0]["free"], False)
+        self.assertEqual(out[0]["description"], "A fall festival in the park.")
+
+    def test_writes_a_curated_description_only_when_empty_or_nearly(self):
+        empty = {"date": "2026-10-10", "name": "Pumpkin Fest", "venue": "Farm", "description": "", "icons": [], "free": False, "curated": True}
+        tiny = {"date": "2026-10-10", "name": "Fall Fest", "venue": "Farm", "description": "Fall fest.", "icons": [], "free": False, "curated": True}
+        short = {"date": "2026-10-10", "name": "Trick or Treat", "venue": "Mall", "description": "Trick or treating at the mall.",
+                 "icons": [], "free": False, "curated": True}
+        out = self._run([empty, tiny, short], [{"description": "Pumpkins and hayrides."},
+                                               {"description": "Games and food trucks."},
+                                               {"description": "Costumed kids visit every store."}])
+        self.assertEqual([e["description"] for e in out],
+                         ["Pumpkins and hayrides.", "Games and food trucks.", "Trick or treating at the mall."])
+
+    def test_scraped_events_are_still_reviewed(self):
+        ev = {"date": "2026-10-10", "name": "Fall Fest", "venue": "Park", "description": "Long scraped text " * 5,
+              "icons": [], "free": False, "_source": "allevents"}
+        out = self._run([ev], [{"description": "A tidy line.", "free": True, "icons": ["family"]}])
+        self.assertIs(out[0]["free"], True)
+        self.assertEqual(out[0]["description"], "A tidy line.")

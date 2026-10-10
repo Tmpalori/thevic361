@@ -295,3 +295,51 @@ def test_fb_posts_cap_with_no_default_of_its_own(town_as, monkeypatch):
     ce = town_as(BAY)
     monkeypatch.delenv("FB_POSTS_MAX_VENUES", raising=False)
     assert ce._resolve_int_env("FB_POSTS_MAX_VENUES", None) == 10
+
+
+def test_another_town_never_reads_victorias_venue_list(town_as, tmp_path, monkeypatch):
+    # The repo root's venues.json is Victoria's: another town without its
+    # own list has none (and says so), whatever --local-dir points at.
+    ce = town_as(DENVER, slug="denver")
+    root = os.path.dirname(os.path.abspath(ce.__file__))
+    assert os.path.exists(os.path.join(root, "venues.json"))   # Victoria's is there
+    monkeypatch.setattr(ce, "_NO_VENUES_WARNED", False)
+    del ce._WARNINGS[:]
+    for local_dir in (None, root, str(tmp_path / "empty")):
+        monkeypatch.setattr(ce, "_VENUE_DIR", local_dir)
+        assert ce._load_venue_list() == ([], None)
+    assert len([w for w in ce._WARNINGS if "no venue list for denver" in w]) == 1   # warned once
+    assert ce.merge_events([]) == []   # merge runs with no venues, not Victoria's
+    (tmp_path / "denver" / "venues.json").write_text(json.dumps([{"name": "Red Rocks"}]))
+    monkeypatch.setattr(ce, "_VENUE_DIR", str(tmp_path / "denver"))
+    assert ce._load_venue_list() == ([{"name": "Red Rocks"}], str(tmp_path / "denver" / "venues.json"))
+
+
+def test_victoria_still_falls_back_to_the_root_venue_list(tmp_path, monkeypatch):
+    import collect_events as ce
+    monkeypatch.setattr(ce, "_VENUE_DIR", str(tmp_path))   # empty dir: Victoria's root list, as before
+    venues, path = ce._load_venue_list()
+    assert venues and path == os.path.join(os.path.dirname(ce.__file__) or ".", "venues.json")
+
+
+def test_enrich_prompt_names_the_towns_city_and_state(town_as):
+    ev = {"date": "2026-10-09", "name": "Jazz Night", "venue": "Hall"}
+    ce = town_as(DENVER, slug="denver")
+    p = ce._enrich_prompt([dict(ev)])
+    assert "Jazz Night on Friday October 09, 2026 in Denver, Colorado." in p
+    assert "Victoria" not in p and "Texas" not in p
+    assert "in Golden, Colorado." in ce._enrich_prompt([{**ev, "town": "Golden"}])
+
+
+def test_enrich_prompt_victoria_unchanged():
+    import collect_events as ce
+    p = ce._enrich_prompt([{"date": "2026-10-09", "name": "Jazz Night", "venue": "Hall"}])
+    assert "Jazz Night on Friday October 09, 2026 in Victoria, Texas." in p
+
+
+def test_victorias_venue_links_stay_in_victoria(town_as):
+    ev = {"date": "2026-10-09", "name": "Concert", "venue": "Riverside Park", "description": "x" * 40}
+    import collect_events as vic
+    assert vic.fill_gaps([dict(ev)], templates=False)[0]["url"] == "https://www.victoriatx.gov/1330/Parks-Recreation"
+    ce = town_as(DENVER, slug="denver")
+    assert ce.fill_gaps([dict(ev)], templates=False)[0].get("url", "") == ""

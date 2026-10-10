@@ -211,7 +211,7 @@
       submitter_name: combinedName,
       submitter_email: get('submitter_email'),
       submitter_phone: get('submitter_phone'),
-      company: get('company'),
+      hp_field: get('hp_field'),
       elapsed_ms: Date.now() - formLoadTs,
       turnstile_token: turnstileToken
     };

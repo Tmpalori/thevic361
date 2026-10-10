@@ -375,7 +375,7 @@ describe('report outcomes don’t overwrite a refund that landed meanwhile', () 
     const out = await sp.sendPickReports(NOW);
     expect(out.failed).toBe(1);
     const [saved] = await store.listSponsorOrders();
-    expect(saved.status).toBe('refunded');
+    expect(saved.status).toBe('disputed');
     expect(saved.report_failed).toBeTruthy();
   });
 });

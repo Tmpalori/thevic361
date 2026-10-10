@@ -127,7 +127,8 @@ export function eventCardSvg(ev) {
 
   let y = 170;
   if (ev.featured) {
-    parts.push(pill(left, y, 'VIC’S PICK', 30, SUN, { padX: 20 }).svg);
+    // The town's own pick name (Victoria: "VIC’S PICK", as before).
+    parts.push(pill(left, y, town.pickName.toUpperCase(), 30, SUN, { padX: 20 }).svg);
     y += 68;
   }
 

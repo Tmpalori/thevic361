@@ -368,3 +368,55 @@ def _run_main_with_post(monkeypatch, post):
     monkeypatch.setattr(rs.requests, "post", post)
     with patch.object(rs.ce, "_openai_chat", return_value=json.dumps([answer()])):
         return rs.main([])
+
+
+# ─── A submission the AI can't answer stops being retried ─────────────────
+
+def test_a_submission_the_ai_cant_answer_is_flagged_after_max_attempts():
+    attempts = {}
+    s = sub(1, ev("Fall Craft Fair"))
+    for n in range(1, rs.MAX_AI_ATTEMPTS):
+        with patch.object(rs.ce, "_openai_chat", return_value="I can't help with that."):
+            reviews, log = rs.decide([s], [], "key", attempts=attempts)
+        assert reviews == [] and attempts == {"s1": n}
+        assert "next run" in log[0]
+    status = {}
+    with patch.object(rs.ce, "_openai_chat", return_value=json.dumps(answer(verdict="maybe"))):
+        reviews, log = rs.decide([s], [], "key", attempts=attempts, status=status)
+    assert reviews == [{"id": "s1", "decision": "flag",
+                        "reason": f"AI couldn't review this after {rs.MAX_AI_ATTEMPTS} tries; needs a manual look"}]
+    assert status["gave_up"] == ["s1"] and "flagged for the owner" in log[0]
+
+
+def test_a_refusal_counts_even_as_the_runs_only_call():
+    # A 400 content-filter refusal on the only pending submission makes
+    # "every call failed"; it's still that submission's attempt.
+    attempts = {}
+    for _ in range(rs.MAX_AI_ATTEMPTS):
+        with patch.object(rs.ce, "_openai_chat", side_effect=_http_error(400, '{"error":{"code":"content_filter"}}')):
+            reviews, _ = rs.decide([sub(1, ev("Fall Craft Fair"))], [], "key", attempts=attempts)
+    assert [r["decision"] for r in reviews] == ["flag"]
+
+
+def test_a_dead_account_or_no_key_never_counts_against_a_submission():
+    attempts = {}
+    for _ in range(rs.MAX_AI_ATTEMPTS + 2):
+        with patch.object(rs.ce, "_openai_chat", side_effect=_http_error(401, "bad key")):
+            assert rs.decide([sub(1, ev("Fall Craft Fair"))], [], "key", attempts=attempts)[0] == []
+        assert rs.decide([sub(1, ev("Fall Craft Fair"))], [], "", attempts=attempts)[0] == []
+    assert attempts == {}
+
+
+def test_main_keeps_attempt_counts_between_runs_and_flags_on_the_fourth(monkeypatch, tmp_path, capsys):
+    path = tmp_path / "state" / "attempts.json"
+    monkeypatch.setenv("REVIEW_ATTEMPTS_STATE", str(path))
+    for n in range(1, rs.MAX_AI_ATTEMPTS):
+        rc, posts = _run_main(monkeypatch, ["not json"] * 2, pending=[sub(1, ev("Fall Craft Fair"))])
+        assert rc == 0 and posts == []
+        assert json.loads(path.read_text()) == {"s1": n}
+    rc, posts = _run_main(monkeypatch, ["not json"], pending=[sub(1, ev("Fall Craft Fair"))])
+    assert rc == 0 and posts[0]["reviews"][0]["decision"] == "flag"
+    assert "flagged for a manual look: s1" in capsys.readouterr().out
+    # Once the submission is no longer pending its count is forgotten.
+    _run_main(monkeypatch, [], pending=[sub(2, ev("Pumpkin Patch"))])
+    assert "s1" not in json.loads(path.read_text())

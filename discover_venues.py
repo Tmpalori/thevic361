@@ -379,13 +379,34 @@ def _build_actor_input(search_terms: list[str]) -> dict:
     }
 
 
+# A dropped connection after the request was sent: Apify may already be
+# running (and billing) the actor.
+_MID_REQUEST = re.compile(r"aborted|RemoteDisconnected|reset by peer|BrokenPipe|IncompleteRead", re.I)
+
+
+def _before_run(exc) -> bool:
+    """True when the request certainly never started an Apify run: it
+    couldn't connect (DNS, refused, connect timeout). A read timeout or a
+    connection dropped mid-request may have started a paid run."""
+    if isinstance(exc, requests.ConnectTimeout):
+        return True
+    if isinstance(exc, (requests.ReadTimeout, TimeoutError)):
+        return False
+    if isinstance(exc, (requests.ConnectionError, ConnectionError)):
+        return not _MID_REQUEST.search(f"{type(exc).__name__}: {exc}")
+    return False
+
+
 def _run_actor_once(post, url: str, payload: dict, *, timeout: int,
                     headers: dict | None = None):
     """Single Apify run-sync call. Returns (items, error_kind, status_or_msg).
 
     error_kind is one of:
       None       — success, items is a list (possibly empty)
-      "exc"      — request raised (network, read timeout). status_or_msg = str(exc)
+      "conn"     — the request never reached Apify (DNS, refused, connect
+                   timeout), so no run was started. status_or_msg = str(exc)
+      "exc"      — request raised after it may have reached Apify (read
+                   timeout, connection dropped mid-run). status_or_msg = str(exc)
       "http"     — HTTP 4xx/5xx.            status_or_msg = (status_code, body)
       "parse"    — JSON parse failed.       status_or_msg = str(exc)
       "shape"    — non-list payload.        status_or_msg = type name
@@ -398,7 +419,8 @@ def _run_actor_once(post, url: str, payload: dict, *, timeout: int,
             headers=headers or {"Content-Type": "application/json"},
         )
     except Exception as e:
-        return [], "exc", f"{type(e).__name__}: {e}"
+        kind = "conn" if _before_run(e) else "exc"
+        return [], kind, f"{type(e).__name__}: {e}"
 
     status = getattr(resp, "status_code", 0)
     if status >= 400:
@@ -429,10 +451,14 @@ def _run_actor_with_retries(
 ) -> list[dict]:
     if sleep is None:
         sleep = time.sleep
-    """Call the Apify actor, retrying transient failures (network, 5xx).
+    """Call the Apify actor, retrying only failures that can't have been
+    billed: a connection that never reached Apify, a 429, or a 5xx.
 
-    HTTP 4xx (other than 408/429) is permanent — no retries. The label is
-    only used for logging tags so per-category failures are
+    Never retried: a 200 whose body didn't parse (Apify already ran and
+    billed the actor; a retry pays for a second run), a read timeout or a
+    connection dropped mid-request (the run may be going), a 408 (run-sync
+    ran past its limit: the run exists), and any other 4xx (permanent). The
+    label is only used for logging tags so per-category failures are
     attributable.
     """
     attempts = max_retries + 1
@@ -444,11 +470,10 @@ def _run_actor_with_retries(
 
         last_kind = kind
         transient = (
-            kind == "exc"
-            or kind == "parse"
-            or (kind == "http" and (info[0] >= 500 or info[0] in (408, 429)))
+            kind == "conn"
+            or (kind == "http" and (info[0] >= 500 or info[0] == 429))
         )
-        if kind == "exc":
+        if kind in ("conn", "exc"):
             print(f"  [discover] {label}: request failed ({info})")
             _report_exception(
                 "apify_request", error=info, actor=APIFY_GMAPS_ACTOR, search=label,
