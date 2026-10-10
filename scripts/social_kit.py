@@ -168,9 +168,10 @@ def _line(ev, limit=None):
     t = _short_time(ev.get("time"))
     v = clean_venue(ev.get("venue"))
     venue = f" @ {_clip(v, limit)}" if v else ""
-    notes = ", ".join(n for n, on in (("free", ev.get("free")), ("sponsored", is_paid_pick(ev))) if on)
+    free = " (free)" if ev.get("free") else ""
+    ad = f" {AD_TAG}" if is_paid_pick(ev) else ""  # a paid pick's line ends with #ad
     mark = "⭐ " if ev.get("featured") else "• "  # Vic's Picks / sponsored stand out
-    return f"{mark}{t + ' ' if t else ''}{_clip(ev['name'], limit)}{venue}{f' ({notes})' if notes else ''}"
+    return f"{mark}{t + ' ' if t else ''}{_clip(ev['name'], limit)}{venue}{free}{ad}"
 
 
 def _range_label(start, end):
@@ -434,7 +435,7 @@ def render_plain_slides(groups, start, end, kind, out_dir):
     y = 600
     for e in sorted([e for evs in groups.values() for e in evs if e.get("featured")], key=pick_rank)[:3] or \
              [e for evs in groups.values() for e in evs][:3]:
-        for line in _wrap(d, f"• {e['name']}" + (" (Sponsored)" if is_paid_pick(e) else ""), _font(True, 40), W - 144)[:2]:
+        for line in _wrap(d, f"• {e['name']}" + (f" {AD_TAG}" if is_paid_pick(e) else ""), _font(True, 40), W - 144)[:2]:
             d.text((72, y), line, font=_font(True, 40), fill=INK)
             y += 54
         y += 10

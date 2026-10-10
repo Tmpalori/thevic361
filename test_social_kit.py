@@ -41,7 +41,7 @@ def test_captions():
     caps = sk.captions(sk.select_events(EVENTS, start, end), start, end, "weekend")
     fb = caps["facebook"]
     assert fb.startswith("#ad This weekend in Victoria, TX (Oct 9–11): 3 events")
-    assert "⭐ 9 PM Paid Show @ B (sponsored)" in fb   # paid picks are starred and labeled
+    assert "⭐ 9 PM Paid Show @ B #ad" in fb   # paid picks are starred and marked #ad
     assert "• 8 AM Market @ Square (free)" in fb
     assert "https://www.thevic361.com/this-weekend" in fb
     assert "link in bio" in caps["instagram"]
@@ -290,7 +290,7 @@ def test_every_vics_pick_is_in_the_caption_and_leads_today():
     evs += [{"date": "2026-10-08", "name": f"Pick {i}", "time": "9 PM", "featured": True} for i in range(3)]
     caps = sk.captions(sk.select_events(evs, d, d), d, d, "today")
     lines = caps["facebook"].splitlines()
-    assert lines[2:5] == [f"⭐ 9 PM Pick {i} (sponsored)" for i in range(3)]  # all three, first
+    assert lines[2:5] == [f"⭐ 9 PM Pick {i} #ad" for i in range(3)]  # all three, first
     assert "+ 4 more" in caps["facebook"]
 
 
@@ -399,8 +399,8 @@ def test_paid_content_opens_with_ad_and_paid_picks_say_sponsored():
     caps = sk.captions(sk.select_events([paid, editor, plain], d, d), d, d, "today")
     for c in caps.values():
         assert c.startswith("#ad ")                          # first thing seen, before "more"
-        assert "⭐ 7 PM Paid Pick @ Hall (sponsored)" in c
-        assert "Editor Pick (sponsored)" not in c
+        assert "⭐ 7 PM Paid Pick @ Hall #ad" in c
+        assert "Editor Pick #ad" not in c and "ponsored" not in c
     # No paid content: no #ad, no label.
     caps = sk.captions(sk.select_events([editor, plain], d, d), d, d, "today")
     assert not any("#ad" in c or "(sponsored)" in c for c in caps.values())
@@ -416,9 +416,9 @@ def test_slides_tag_paid_picks_sponsored():
     g = sk.select_events([{"date": "2026-10-10", "name": "Paid Pick", "time": "7 PM", "featured": True},
                           {"date": "2026-10-10", "name": "Editor Pick", "time": "1 PM", "featured": True, "editor_pick": True}], d, d)
     for page in (ss.cover_html(g, d, d, "today"), ss.digest_html(g, d, d, "today")):
-        assert page.count(">Sponsored</span>") == 1
+        assert page.count(">#ad</span>") == 1 and "Sponsored" not in page
 
 
-def test_free_paid_pick_notes_share_one_parenthesis():
+def test_free_paid_pick_line_ends_with_ad():
     ev = {"name": "Wags", "time": "4 PM", "venue": "Park", "free": True, "featured": True}
-    assert sk._line(ev) == "⭐ 4 PM Wags @ Park (free, sponsored)"
+    assert sk._line(ev) == "⭐ 4 PM Wags @ Park (free) #ad"
