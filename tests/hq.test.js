@@ -140,6 +140,19 @@ describe('a town whose database is down', () => {
     expect(body.subscribers.active).toBe(0);
   });
 
+  it('reads issue dates the way Postgres returns them (Date objects)', async () => {
+    const store = new FileStore(path.join(os.tmpdir(), `vic361-hq-${process.pid}-${Date.now()}-d.json`));
+    let since = null;
+    store.listNewsletterSends = async () => [{ week_key: '2026-10-08', edition: 'weekend', sent_at: new Date('2026-10-09T13:00:00Z'), recipients: 200, failed: 0 }];
+    // Postgres rejects anything but a date here ("Fri Oct 09" was the bug).
+    store.listTraffic = async (day) => { since = day; if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error(`invalid input syntax for type date: "${day}"`); return []; };
+    const body = await buildSummary({ store, nowFn: () => NOW, town: VICTORIA, siteUrl: 'https://www.thevic361.com',
+      getEvents: async () => [], getOrders: async () => [], setup: async () => ({ checks: [], status: {} }), health: async () => null });
+    expect(body).not.toHaveProperty('failed');
+    expect(since).toBe('2026-10-09');
+    expect(body.issues).toHaveLength(1);
+  });
+
   it("caches a failed summary for seconds, not a minute", async () => {
     let t = NOW.getTime(), calls = 0, fail = true;
     const routes = {};
