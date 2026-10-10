@@ -255,15 +255,21 @@ These matter the moment a second town exists. All keep Victoria's values.
     `HQ_API_KEY`.
   - Resend domain (SPF, DKIM, MX for replies), `NEWSLETTER_FROM`,
     inbound webhook and `RESEND_WEBHOOK_SECRET`.
-  - Stripe webhook endpoint and `STRIPE_WEBHOOK_SECRET` (shared account
-    and key).
+  - Stripe: the town's own Stripe account (same login, LLC, EIN and payout
+    bank account as Victoria), so checkout, receipts and card statements
+    carry the town's name and logo; its business name, logo and statement
+    descriptor, `STRIPE_SECRET_KEY`, webhook endpoint and
+    `STRIPE_WEBHOOK_SECRET`. Products and prices are created on the first
+    checkout. (Checkout branding is per Stripe account, so a shared account
+    would show The Vic 361 to another town's sponsors.) `metadata.town`
+    stays as a second guard.
   - Slack: same webhooks, `SLACK_TOWN_TAG`.
   - Facebook page, Instagram, ad account (GitHub Environment).
   - GA data stream; Turnstile hostname (or its own widget).
   - Tremendous campaign and sender name.
 - [ ] **5.3 Launch checks**: boot guards pass, the town's goldens (its own
       fixture) pass, a test newsletter to `delivered@resend.dev`, a Stripe
-      test-mode checkout, a reply lands in #inbox tagged with the town, HQ
+      test-mode checkout that shows the town's name and logo, a reply lands in #inbox tagged with the town, HQ
       shows the town, and Victoria's live check is unchanged.
       (Automatic part: `scripts/launch_check.py --town <slug>`.)
 
