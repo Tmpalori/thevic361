@@ -2,7 +2,7 @@ bounds: 2026-10-05 .. 2026-10-11
 picked: {"2026-10-05": ["Monday Trivia"], "2026-10-06": ["Story Time at the Library"], "2026-10-07": ["Wednesday Farmers Market", "Open Mic Night"], "2026-10-08": ["Paint & Sip"], "2026-10-09": ["Friday Live Music", "Cuero Turkeyfest Parade"], "2026-10-10": ["Fall Festival at De Leon Plaza", "Haunted Hayride"], "2026-10-11": ["Riverside Park Run", "Sunday Jazz Brunch"]}
 
 ===== Facebook =====
-This week in Victoria, TX (Oct 5–11): 11 events
+#ad This week in Victoria, TX (Oct 5–11): 11 events
 
 🙌 This week is brought to you by Acme Tacos: Best tacos in town.
 👉 https://www.thevic361.com/go/s/2026-10-05?src=social
@@ -21,7 +21,7 @@ THURSDAY
 • 6:30 PM Paint & Sip @ Victoria Fine Arts Association
 
 FRIDAY
-⭐ 8 PM Friday Live Music @ Aero Crafters
+⭐ 8 PM Friday Live Music @ Aero Crafters (sponsored)
 • 6 PM Cuero Turkeyfest Parade @ Downtown Cuero (free)
 
 SATURDAY
@@ -38,7 +38,7 @@ Don't miss a thing: get every event free in your inbox every Monday and Thursday
 #VictoriaTX #ThingsToDoVictoria #VictoriaTexas #361 #TheVic361
 
 ===== Instagram =====
-This week in Victoria, TX (Oct 5–11): 11 events
+#ad This week in Victoria, TX (Oct 5–11): 11 events
 
 🙌 This week is brought to you by Acme Tacos: Best tacos in town.
 
@@ -56,7 +56,7 @@ THURSDAY
 • 6:30 PM Paint & Sip @ Victoria Fine Arts Association
 
 FRIDAY
-⭐ 8 PM Friday Live Music @ Aero Crafters
+⭐ 8 PM Friday Live Music @ Aero Crafters (sponsored)
 • 6 PM Cuero Turkeyfest Parade @ Downtown Cuero (free)
 
 SATURDAY
