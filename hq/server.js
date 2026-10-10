@@ -192,11 +192,11 @@ export function createHqApp(config, {
   // A town's Admin →: a one-time pass for that town, posted from the
   // owner's browser by a page that submits itself (the pass never sits in
   // a URL). Signed in only; the cookie is SameSite=Strict, and the Origin
-  // must be HQ's own, so another site can't start this.
+  // must be present and HQ's own, so another site can't start this.
   app.post('/go/:slug', (req, res) => {
     if (!signedIn(req)) return res.status(401).type('html').send(renderLogin());
-    const origin = req.get('origin');
-    if (origin && origin !== `${req.protocol}://${req.get('host')}`) return res.status(403).type('text').send('Forbidden');
+    // HQ's own button always sends its Origin; anything else is refused.
+    if (req.get('origin') !== `${req.protocol}://${req.get('host')}`) return res.status(403).type('text').send('Forbidden');
     const t = config.towns.find(x => x.slug === req.params.slug);
     if (!t || !t.sso) return res.status(404).type('text').send('Not found');
     const pass = mintPass(t.sso, { slug: t.slug, siteUrl: t.siteUrl, sub: config.username, now: nowFn().getTime() });

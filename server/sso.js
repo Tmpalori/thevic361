@@ -10,7 +10,7 @@
  * and HQ holds each town's copy in HQ_TOWNS ("sso"). It is a different
  * secret from HQ_API_KEY, which only reads numbers. A pass is good for:
  *   - one town: `aud` is "<slug>@<host>" and must be this town's
- *   - 60 seconds (the town allows 10 s of clock difference, never a pass
+ *   - 30 seconds (the town allows 10 s of clock difference, never a pass
  *     that claims to live longer than TTL_MAX_S)
  *   - one use: the town claims its nonce `n` in the database first, so a
  *     copied pass, or one replayed into a second container during a
@@ -20,7 +20,7 @@
 
 import crypto from 'node:crypto';
 
-export const TTL_S = 60;
+export const TTL_S = 30;
 export const TTL_MAX_S = 120;
 export const SKEW_S = 10;
 export const MIN_SSO_SECRET = 32;

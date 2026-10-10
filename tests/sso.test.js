@@ -60,6 +60,11 @@ describe('passes', () => {
     expect(verifyPass(SECRET, pass({ now: NOW + (SKEW_S + 5) * 1000 }), { ...VIC, now: NOW }).reason).toBe('not-yet-valid');
   });
 
+  it('holds the exact clock edges', () => {
+    expect(verifyPass(SECRET, pass({ now: NOW + SKEW_S * 1000 }), { ...VIC, now: NOW }).ok).toBe(true);
+    expect(verifyPass(SECRET, pass({ now: NOW + (SKEW_S + 1) * 1000 }), { ...VIC, now: NOW }).reason).toBe('not-yet-valid');
+  });
+
   it('refuses a pass that claims a long life, even one signed with the right secret', () => {
     const key = crypto.createHmac('sha256', SECRET).update('hq-sso-v1\0key').digest();
     const body = Buffer.from(JSON.stringify({ v: 1, aud: 'victoria@www.thevic361.com', sub: 'x', iat: NOW / 1000, exp: NOW / 1000 + 86400,
@@ -122,6 +127,58 @@ describe('the town signs in with a pass', () => {
     expect((await post(mintPass('z'.repeat(48), { ...VIC, sub: 'x' }))).status).toBe(401);
   });
 
+  it('one pass, many tabs at once: exactly one session', async () => {
+    await start();
+    const pass = fresh();
+    const codes = await Promise.all(Array.from({ length: 12 }, () => post(pass).then(r => r.status)));
+    expect(codes.filter(c => c === 200)).toHaveLength(1);
+    expect(codes.filter(c => c === 401)).toHaveLength(11);
+  });
+
+  it('fails closed when the nonce can\'t be recorded', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-sso-'));
+    const store = new FileStore(path.join(tmpDir, 's.json'));
+    for (const broken of [async () => { throw new Error('db down'); }, async () => undefined]) {
+      store.claimJobRun = broken;
+      const { app } = await createApp({ storeBundle: { kind: 'file', store, file: path.join(tmpDir, 's.json') }, trustProxy: false,
+        adminUsername: 'tristen', adminPassword: 'correct horse battery staple', adminSessionSecret: 'a'.repeat(40),
+        ssoSecret: SECRET, siteUrl: VIC.siteUrl, slack: { enabled: false, notify: async () => false, alert: async () => false } });
+      server = http.createServer(app);
+      await new Promise(r => server.listen(0, r));
+      base = `http://127.0.0.1:${server.address().port}`;
+      const r = await post(fresh());
+      expect(r.status).toBe(401);
+      expect(await r.text()).not.toContain('vic361_admin_session');
+      await new Promise(r2 => server.close(r2)); server = null;
+    }
+  });
+
+  it('opening the admin many times never locks the owner out; ten bad passes do', async () => {
+    await start();
+    for (let i = 0; i < 12; i++) expect((await post(fresh())).status).toBe(200);
+    for (let i = 0; i < 10; i++) expect((await post('junk.pass')).status).toBe(401);
+    expect((await post(fresh())).status).toBe(429);
+  });
+
+  it('the page that stores the session is locked down', async () => {
+    await start();
+    const r = await post(fresh());
+    expect(r.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(r.headers.get('x-frame-options')).toBe('DENY');
+    expect(r.headers.get('content-security-policy')).toContain("form-action 'none'");
+  });
+
+  it('a secret with stray whitespace still works; one shared with another secret turns it off', async () => {
+    await start({ ssoSecret: `  ${SECRET}\n` });
+    expect((await post(fresh())).status).toBe(200);
+    for (const clash of [{ hqApiKey: SECRET }, { adminSessionSecret: SECRET }]) {
+      await new Promise(r => server.close(r)); server = null;
+      await fs.rm(tmpDir, { recursive: true, force: true }); tmpDir = null;
+      await start(clash);
+      expect((await post(fresh())).status).toBe(404);
+    }
+  });
+
   it('is off (404) without HQ_SSO_SECRET, and needs the admin login set up', async () => {
     await start({ ssoSecret: '' });
     expect((await post(fresh())).status).toBe(404);
@@ -174,6 +231,8 @@ describe('HQ opens a town signed in', () => {
     expect((await go('victoria')).status).toBe(401);
     const c = await cookie();
     expect((await go('victoria', { Cookie: c, Origin: 'https://evil.example' })).status).toBe(403);
+    expect((await go('victoria', { Cookie: c, Origin: 'null' })).status).toBe(403);
+    expect((await go('victoria', { Cookie: c })).status).toBe(403);
     expect((await go('bay', { Cookie: c, Origin: base })).status).toBe(404);
     expect((await go('nope', { Cookie: c, Origin: base })).status).toBe(404);
   });

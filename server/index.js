@@ -480,16 +480,30 @@ export async function createApp(opts = {}) {
   // page that then opens the admin. Anything else is refused the same way.
   // Off (404) until HQ_SSO_SECRET is set; it needs the admin login set up
   // too, since the session is that login's.
-  const ssoSecret = opts.ssoSecret ?? process.env.HQ_SSO_SECRET ?? '';
-  const ssoOn = String(ssoSecret).length >= MIN_SSO_SECRET;
+  // Trimmed (a stray newline in Railway shouldn't break it), at least
+  // MIN_SSO_SECRET long, and never the same as another secret: equal to the
+  // read-only HQ_API_KEY it would let anyone holding that key mint admin
+  // passes. Anything else leaves it off and says why at boot.
+  const ssoSecret = String(opts.ssoSecret ?? process.env.HQ_SSO_SECRET ?? '').trim();
+  const ssoClash = [['HQ_API_KEY', opts.hqApiKey ?? process.env.HQ_API_KEY], ['ADMIN_SESSION_SECRET', opts.adminSessionSecret ?? process.env.ADMIN_SESSION_SECRET],
+    ['ADMIN_PASSWORD', opts.adminPassword ?? process.env.ADMIN_PASSWORD], ['ADMIN_TOKEN', adminToken]]
+    .filter(([, v]) => ssoSecret && v && String(v).trim() === ssoSecret).map(([k]) => k);
+  const ssoOn = ssoSecret.length >= MIN_SSO_SECRET && !ssoClash.length;
+  if (ssoSecret && !ssoOn) {
+    console.warn(`[admin] HQ sign-in is off: HQ_SSO_SECRET ${ssoClash.length ? `is the same as ${ssoClash.join(', ')}` : `is shorter than ${MIN_SSO_SECRET} characters`}; give it its own value`);
+  }
+  // Its own budget, counting refusals only: opening the admin from HQ a
+  // dozen times a day must not lock the owner out of either sign-in.
+  const ssoFailures = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
   app.post('/api/admin/sso', express.urlencoded({ extended: false, limit: '4kb' }), async (req, res) => {
     if (!ssoOn) return res.status(404).json({ ok: false, error: 'not-found' });
-    const burst = loginLimiter.check(clientKey(req));
-    if (!burst.ok) {
-      res.set('Retry-After', String(burst.retryAfter || 60));
-      return res.status(429).type('text').send('Too many tries. Wait a minute and open the admin from HQ again.');
+    const who = clientKey(req);
+    if (!ssoFailures.peek(who).ok) {
+      res.set('Retry-After', '900');
+      return res.status(429).type('text').send('Too many failed tries. Wait a few minutes and open the admin from HQ again.');
     }
     const refuse = reason => {
+      ssoFailures.check(who);
       recordAuthFailure();
       console.warn('[admin] HQ sign-in refused:', reason);
       return res.status(401).type('text').send('That sign-in link didn\'t work (it may have expired). Open the admin from HQ again.');

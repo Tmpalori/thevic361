@@ -231,7 +231,7 @@ fresh `HQ_SSO_SECRET` (`openssl rand -hex 32`, different per town and
 different from its `HQ_API_KEY`), and give HQ the same value as
 `HQ_SSO_<SLUG>` (e.g. `HQ_SSO_KEARNEY`) or as `"sso"` in its `HQ_TOWNS`
 entry. That town's **Admin →** on HQ then opens its admin already signed
-in: HQ posts a one-time pass (one town, 60 seconds, one use, never in a
+in: HQ posts a one-time pass (one town, 30 seconds, one use, never in a
 URL; `server/sso.js`) to the town's `POST /api/admin/sso`, which answers
 with an ordinary admin session. Without the pair the button is a plain link
 to the town's own login, which always keeps working. Anyone who can sign in
