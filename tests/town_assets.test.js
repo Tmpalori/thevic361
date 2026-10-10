@@ -96,3 +96,36 @@ describe('a town’s site serves its own files', () => {
     await fs.rm(path.join(towns, 'bay', 'public', 'robots.txt'));
   });
 });
+
+
+describe('a new town never serves Victoria’s data from docs/', () => {
+  let tmpDir, server, base, saved;
+  beforeAll(async () => {
+    saved = process.env.TOWN;
+    process.env.TOWN = 'bay';
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vic361-isolation-'));
+    // No eventsFile and nothing published: the town has no list of its own yet.
+    const { app } = await createApp({ townsDir: towns, storeBundle: { kind: 'file', store: new FileStore(path.join(tmpDir, 's.json')) },
+      trustProxy: false, slack: { enabled: false, notify: async () => false, alert: async () => false } });
+    server = http.createServer(app);
+    await new Promise(r => server.listen(0, r));
+    base = `http://127.0.0.1:${server.address().port}`;
+  });
+  afterAll(async () => {
+    if (saved === undefined) delete process.env.TOWN; else process.env.TOWN = saved;
+    useTown(VICTORIA);
+    if (server) await new Promise(r => server.close(r));
+    if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('events.json is empty, not Victoria’s bundled list', async () => {
+    const res = await fetch(base + '/events.json');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ last_updated: null, events: [] });
+  });
+
+  it('Victoria’s social kit is not served', async () => {
+    const res = await fetch(base + '/social/latest/kit.json');
+    expect(res.status).toBe(404);
+  });
+});
