@@ -56,9 +56,10 @@ function bootDom({ pat = null, apiBase = '', token = '' } = {}) {
 describe('admin Submissions tab — DOM', () => {
   beforeEach(() => bootDom());
 
-  it('renders a Submissions tab button', () => {
-    const tabs = Array.from(document.querySelectorAll('.tab-btn')).map(t => t.dataset.tab);
-    expect(tabs).toContain('submissions');
+  it('renders a Submissions sub-tab under Events', () => {
+    const sub = document.querySelector('.subtab-btn[data-goto="submissions"]');
+    expect(sub).not.toBeNull();
+    expect(sub.dataset.in).toBe('picker');
   });
 
   it('exposes the submissions panel and its config inputs', () => {

@@ -89,13 +89,30 @@ describe('admin.html static structure', () => {
     }
   });
 
-  it('exposes the nine admin tab buttons, Home first', () => {
+  it('has seven sidebar pages (Overview first) and sub-pages for Events and Analytics', () => {
     bootDom();
-    const tabs = document.querySelectorAll('.tab-btn');
-    expect(tabs.length).toBe(9);
-    expect(tabs[0].dataset.tab).toBe('home');
-    expect(Array.from(tabs).map(t => t.dataset.tab).sort())
-      .toEqual(['growth', 'home', 'newsletter', 'picker', 'preview', 'sources', 'sponsors', 'submissions', 'traffic']);
+    const tabs = Array.from(document.querySelectorAll('.tab-btn'));
+    expect(tabs.map(t => t.dataset.tab)).toEqual(['home', 'attention', 'picker', 'newsletter', 'sponsors', 'growth', 'settings']);
+    const subs = Array.from(document.querySelectorAll('.subtab-btn')).map(b => b.dataset.in + ':' + b.dataset.goto);
+    expect(subs).toEqual(['picker:picker', 'picker:submissions', 'picker:sources', 'picker:preview', 'growth:growth', 'growth:traffic']);
+    // Every page and sub-page has its panel.
+    for (const name of ['home', 'attention', 'picker', 'submissions', 'sources', 'preview', 'newsletter', 'sponsors', 'growth', 'traffic', 'settings']) {
+      expect(document.getElementById('tab-' + name), name).not.toBeNull();
+    }
+  });
+
+  it('a sub-page keeps its sidebar page lit and shows only its own sub-tabs', () => {
+    const api = bootDom();
+    window.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) }));
+    api.activateTab('submissions');
+    expect(document.querySelector('.tab-btn.is-active').dataset.tab).toBe('picker');
+    expect(document.getElementById('tab-submissions').hidden).toBe(false);
+    expect(document.getElementById('subtabs').hidden).toBe(false);
+    const visible = Array.from(document.querySelectorAll('.subtab-btn')).filter(b => !b.hidden).map(b => b.dataset.goto);
+    expect(visible).toEqual(['picker', 'submissions', 'sources', 'preview']);
+    expect(document.querySelector('.subtab-btn.is-active').dataset.goto).toBe('submissions');
+    api.activateTab('settings');
+    expect(document.getElementById('subtabs').hidden).toBe(true);
   });
 
   it('exposes the Sources tab structure', () => {
@@ -669,12 +686,13 @@ describe('Events tab starts from the live site', () => {
   });
 });
 
-describe('Home tab', () => {
+describe('Settings, Overview and Needs attention', () => {
   afterEach(() => { delete window.__vic361Admin; });
+  const json = body => ({ ok: true, status: 200, json: async () => body });
 
-  it('renders the setup checklist with unfinished items first', async () => {
+  it('Settings lists unfinished setup items first and folds the finished ones', async () => {
     const api = bootDom();
-    window.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({
+    window.fetch = vi.fn(async () => json({
       ok: true,
       status: { upcoming_events: 42, pending_submissions: 3, subscribers: 10, collected_at: null },
       checks: [
@@ -682,38 +700,75 @@ describe('Home tab', () => {
         { key: 'slack', label: 'Slack alerts', ok: false, level: 'recommended', fix: 'Set SLACK_WEBHOOK_URL' },
         { key: 'social', label: 'Auto-post', ok: null, level: 'recommended', fix: 'In GitHub', link: 'https://github.com/x' }
       ]
-    }) }));
+    }));
     api._state.session = 'tok';
-    await api.loadHome();
-    expect(document.getElementById('home-tiles').textContent).toContain('42');
+    await api.loadSettings();
     expect(document.getElementById('home-setup-count').textContent).toBe('1 of 3 set up');
-    const items = Array.from(document.querySelectorAll('.home-check strong')).map(n => n.textContent);
-    expect(items[items.length - 1]).toBe('Database');
+    const todo = Array.from(document.querySelectorAll('#home-checks .home-check strong')).map(n => n.textContent);
+    expect(todo).toEqual(['Slack alerts', 'Auto-post']);
     expect(document.getElementById('home-checks').textContent).toContain('Set SLACK_WEBHOOK_URL');
+    expect(document.getElementById('home-checks-done').textContent).toContain('Database');
+    expect(document.getElementById('settings-done').hidden).toBe(false);
   });
 
-  it('flags a stale collect, shows when the site last changed, and lists contact messages', async () => {
+  it('Needs attention gathers submissions, messages, a stale collect and setup gaps, escaped, with a count', async () => {
     const api = bootDom();
     const old = new Date(Date.now() - 6 * 86400000).toISOString();
     window.fetch = vi.fn(async (url) => {
-      if (String(url).includes('/api/admin/messages')) {
-        return { ok: true, status: 200, json: async () => ({ ok: true, messages: [
-          { id: 'm1', created_at: new Date().toISOString(), topic: 'advertising', name: 'Ann <b>', email: 'ann@shop.example', message: 'Sponsor week?' }
-        ] }) };
-      }
-      return { ok: true, status: 200, json: async () => ({ ok: true, checks: [],
-        status: { upcoming_events: 5, collected_at: old, published_at: new Date().toISOString() } }) };
+      const u = String(url);
+      if (u.includes('/api/admin/messages')) return json({ ok: true, messages: [{ id: 'm1', created_at: new Date().toISOString(), name: 'Ann <b>', email: 'ann@shop.example', message: 'Sponsor week?' }] });
+      if (u.includes('/api/admin/submissions')) return json({ ok: true, submissions: [{ id: 's1', submitter_kind: 'organizer', payload: { name: 'Chili Cookoff', date: '2099-10-17' }, ai_review: { decision: 'flag', reason: 'venue unclear' } }] });
+      if (u.includes('/api/admin/hidden')) return json({ ok: true, hidden: [] });
+      if (u.includes('/api/admin/setup')) return json({ ok: true, status: { collected_at: old }, checks: [
+        { key: 'slack', label: 'Slack alerts', ok: false, level: 'recommended', fix: 'Set SLACK_WEBHOOK_URL' },
+        { key: 'extra', label: 'Optional thing', ok: false, level: 'optional', fix: 'x' },
+        { key: 'db', label: 'Database', ok: true, level: 'required', fix: '' }] });
+      return json({ ok: true });
+    });
+    api._state.session = 'tok';
+    await api.loadAttention();
+    const list = document.getElementById('attention-list');
+    expect(list.textContent).toContain('Chili Cookoff');
+    expect(list.textContent).toContain('needs your look (venue unclear)');
+    expect(list.textContent).toContain('Sponsor week?');
+    expect(list.innerHTML).not.toContain('<b>');
+    expect(list.textContent).toContain('haven’t been collected');
+    expect(list.textContent).toContain('Slack alerts');
+    expect(list.textContent).not.toContain('Optional thing');   // optional items stay in Settings
+    expect(list.textContent).not.toContain('Database');         // done
+    expect(document.getElementById('attention-badge').textContent).toBe('4');
+    // The filter chips narrow it to one group.
+    document.querySelector('#attention-filters [data-filter="Messages"]').click();
+    expect(list.textContent).toContain('Sponsor week?');
+    expect(list.textContent).not.toContain('Chili Cookoff');
+  });
+
+  it('Overview shows the headline numbers, both charts and the attention banner', async () => {
+    const api = bootDom();
+    const days = n => Array.from({ length: n }, (_, i) => new Date(Date.UTC(2099, 0, i + 1)).toISOString().slice(0, 10));
+    window.fetch = vi.fn(async (url) => {
+      const u = String(url);
+      if (u.includes('/api/admin/setup')) return json({ ok: true, checks: [], status: { upcoming_events: 42, subscribers: 30, collected_at: new Date().toISOString(), published_at: new Date().toISOString() } });
+      if (u.includes('/api/admin/growth')) return json({ ok: true, goals: { subscribers: { active: 30, goal: 10000 }, revenue: { cents: 30000, goal_cents: 1000000, month: '2099-01', orders: 1 } },
+        totals: { net: 20 }, daily: days(30).map(d => ({ day: d, net: 1 })), issues: [{ sent: 25, open_rate: 48, edition: 'weekend' }] });
+      if (u.includes('/api/admin/traffic')) return json({ ok: true, daily: days(14).map((d, i) => ({ day: d, visitors: 10 + i })), sources: [{ key: 'facebook', count: 9 }], top_pages: [{ key: '/', count: 50 }] });
+      if (u.includes('/api/admin/messages')) return json({ ok: true, messages: [{ id: 'm1', created_at: new Date().toISOString(), name: 'Ann', message: 'Hi' }] });
+      return json({ ok: true });
     });
     api._state.session = 'tok';
     await api.loadHome();
     await new Promise(r => setTimeout(r, 0));
-    const tiles = document.getElementById('home-tiles');
-    expect(tiles.querySelector('.home-tile--warn').textContent).toContain('check the collector');
-    expect(tiles.textContent).toContain('Site last updated');
-    const msgs = document.getElementById('home-messages');
-    expect(msgs.hidden).toBe(false);
-    expect(msgs.textContent).toContain('Sponsor week?');
-    expect(msgs.innerHTML).not.toContain('<b>');
+    const kpis = document.getElementById('home-kpis').textContent;
+    expect(kpis).toContain('30');
+    expect(kpis).toContain('$300');
+    expect(kpis).toContain('48%');
+    expect(document.querySelectorAll('#home-subs-chart .chart-line').length).toBe(1);
+    expect(document.querySelectorAll('#home-visits-chart .chart-bar').length).toBe(14);
+    expect(document.getElementById('home-visits-meta').textContent).toContain('facebook');
+    expect(document.getElementById('home-site').textContent).toContain('Home 50');
+    const banner = document.getElementById('home-attention');
+    expect(banner.hidden).toBe(false);
+    expect(banner.textContent).toContain('1 thing needs you: 1 message');
   });
 });
 

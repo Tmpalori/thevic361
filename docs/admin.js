@@ -161,6 +161,8 @@
     document.title = 'Admin — ' + t.siteName;
     const h1 = document.querySelector('.auth-card h1, body > header h1, h1');
     if (h1 && /— Admin$/.test(h1.textContent)) h1.textContent = t.siteName + ' — Admin';
+    const brand = document.getElementById('admin-brand');
+    if (brand) brand.textContent = t.siteName;
     const reply = document.getElementById('reply-title');
     if (reply) reply.textContent = 'Reply as news@' + t.domain;
     const hint = document.querySelector('#reply-modal .event-edit-form__hint');
@@ -249,6 +251,9 @@
     el.classList.remove('is-error', 'is-success');
     if (kind === 'error') el.classList.add('is-error');
     if (kind === 'success') el.classList.add('is-success');
+    // Good news fades; errors stay until the next message.
+    clearTimeout(setStatus.timer);
+    if (msg && kind !== 'error') setStatus.timer = setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 5000);
   }
 
   // ─── SESSION + PAT STORAGE ───
@@ -1699,125 +1704,441 @@
     }
   }
 
-  async function renderHiddenOnHome() {
-    const box = document.getElementById('home-hidden');
-    const list = document.getElementById('home-hidden-list');
-    if (!box || !list) return;
-    const hidden = await loadHidden();
-    box.hidden = !hidden.length;
-    list.innerHTML = hidden.map(h =>
-      '<li class="home-check home-check--no"><span class="home-check__mark" aria-hidden="true">🙈</span><div>' +
-      '<strong>' + escapeHtml(h.name || h.page) + '</strong> <span class="home-check__state">' +
-      escapeHtml([h.date, h.venue].filter(Boolean).join(' · ')) + '</span>' +
-      '<p class="home-check__fix">' + escapeHtml(h.reason || 'Hidden by the event check') +
-      ' <button type="button" class="btn btn--outline" data-restore="' + escapeHtml(h.key) + '">Restore</button>' +
-      ' <button type="button" class="btn btn--outline" data-dismiss-hidden="' + escapeHtml(h.key) + '" title="Keep it off the site and clear it from this list">Keep hidden</button></p>' +
-      '</div></li>').join('');
-    list.querySelectorAll('[data-dismiss-hidden]').forEach(b => b.addEventListener('click', () =>
-      dismissRow(b, '/api/admin/hidden/dismiss', { key: b.dataset.dismissHidden }, renderHiddenOnHome)));
-    list.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', async () => {
-      b.disabled = true;
-      b.textContent = 'Restoring…';
-      try {
-        const { res, json } = await adminFetch('/api/admin/hidden/restore', {
-          method: 'POST', body: JSON.stringify({ key: b.dataset.restore }), headers: { 'Content-Type': 'application/json' }
-        });
-        if (!res.ok || !json || !json.ok) throw new Error((json && json.error) || ('HTTP ' + res.status));
-        renderHiddenOnHome();
-      } catch (e) {
-        b.disabled = false;
-        b.textContent = 'Restore failed, try again';
-      }
-    }));
+  // GET that never throws: the parsed body when it's ok, else null.
+  async function getJson(url) {
+    try {
+      const { res, json } = await adminFetch(url);
+      return res.ok && json && json.ok !== false ? json : null;
+    } catch (_) { return null; }
   }
 
-  // Contact-form messages (also sent to Slack); kept here so none is lost.
-  async function renderMessagesOnHome() {
-    const box = document.getElementById('home-messages');
-    const list = document.getElementById('home-messages-list');
-    if (!box || !list) return;
-    let messages = [];
-    try {
-      const { res, json } = await adminFetch('/api/admin/messages');
-      if (res.ok && json && json.ok && Array.isArray(json.messages)) messages = json.messages;
-    } catch (e) { /* best effort */ }
-    box.hidden = !messages.length;
-    list.innerHTML = messages.slice(0, 20).map(m =>
-      '<li class="home-check"><span class="home-check__mark" aria-hidden="true">✉️</span><div>' +
-      '<strong>' + escapeHtml(m.name || '') + '</strong> <span class="home-check__state">' +
-      escapeHtml([m.topic, m.business, ago(m.created_at)].filter(Boolean).join(' · ')) + '</span>' +
-      '<p class="home-check__fix">' + escapeHtml(m.message || '') + '</p>' +
-      '<p class="home-check__fix"><a href="mailto:' + escapeHtml(encodeURIComponent(m.email || '')).replace(/%40/g, '@') + '">' +
-      escapeHtml(m.email || '') + '</a>' +
-      (m.id ? ' <button type="button" class="btn btn--outline" data-dismiss-message="' + escapeHtml(m.id) + '">Dismiss</button>' : '') +
-      '</p></div></li>').join('');
-    list.querySelectorAll('[data-dismiss-message]').forEach(b => b.addEventListener('click', () =>
-      dismissRow(b, '/api/admin/messages/' + encodeURIComponent(b.dataset.dismissMessage) + '/dismiss', {}, renderMessagesOnHome)));
+  // ─── CHARTS ───
+  // Small inline-SVG charts: one series, thin marks, recessive grid, a
+  // tooltip on hover/tap. Colors come from CSS (.chart-*), so dark mode
+  // follows the theme.
+  const fmtNum = n => (Number.isFinite(n) ? Math.round(n).toLocaleString('en-US') : '—');
+  function niceMax(v) {
+    if (!(v > 0)) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(v)));
+    const m = [1, 2, 2.5, 5, 10].find(x => x * p >= v);
+    return m * p;
+  }
+  function chartTip(box) {
+    let tip = box.querySelector('.chart-tip');
+    if (!tip) { tip = document.createElement('div'); tip.className = 'chart-tip'; tip.hidden = true; box.appendChild(tip); }
+    return tip;
+  }
+  function wireTips(box) {
+    const tip = chartTip(box);
+    const show = t => {
+      const r = t.getBoundingClientRect(), b = box.getBoundingClientRect();
+      tip.textContent = t.getAttribute('data-tip');
+      tip.hidden = false;
+      const x = Math.min(Math.max(r.left - b.left + r.width / 2, 60), b.width - 60);
+      tip.style.left = x + 'px';
+      tip.style.top = Math.max(r.top - b.top - 8, 0) + 'px';
+      box.querySelectorAll('.is-hot').forEach(e => e.classList.remove('is-hot'));
+      const mark = box.querySelector('[data-mark="' + t.getAttribute('data-i') + '"]');
+      if (mark) mark.classList.add('is-hot');
+    };
+    box.querySelectorAll('[data-tip]').forEach(t => {
+      t.addEventListener('mouseenter', () => show(t));
+      t.addEventListener('click', () => show(t));
+    });
+    box.addEventListener('mouseleave', () => { tip.hidden = true; box.querySelectorAll('.is-hot').forEach(e => e.classList.remove('is-hot')); });
+  }
+  // points: [{ label, value }] oldest first.
+  function lineChart(box, points, { unit = '' } = {}) {
+    if (!box) return;
+    if (!points.length) { box.innerHTML = '<p class="chart-empty">No data yet.</p>'; return; }
+    const W = 560, H = 170, L = 34, R = 14, T = 14, B = 22;
+    const max = niceMax(Math.max(...points.map(p => p.value)));
+    const x = i => L + (points.length === 1 ? 0 : i * (W - L - R) / (points.length - 1));
+    const y = v => T + (H - T - B) * (1 - v / max);
+    const d = points.map((p, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(p.value).toFixed(1)).join(' ');
+    const area = d + ' L' + x(points.length - 1).toFixed(1) + ',' + y(0) + ' L' + x(0).toFixed(1) + ',' + y(0) + ' Z';
+    const grid = [0, max / 2, max].map(g => '<line class="chart-grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(g).toFixed(1) + '" y2="' + y(g).toFixed(1) + '"/>' +
+      '<text class="chart-axis" x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" text-anchor="end">' + fmtNum(g) + '</text>').join('');
+    const last = points[points.length - 1];
+    const colW = (W - L - R) / Math.max(points.length - 1, 1);
+    const hits = points.map((p, i) => '<rect class="chart-hit" x="' + (x(i) - colW / 2).toFixed(1) + '" y="0" width="' + colW.toFixed(1) + '" height="' + H +
+      '" data-i="' + i + '" data-tip="' + escapeHtml(p.label + ': ' + fmtNum(p.value) + unit) + '"/>').join('');
+    const dots = points.map((p, i) => '<circle class="chart-dot" data-mark="' + i + '" cx="' + x(i).toFixed(1) + '" cy="' + y(p.value).toFixed(1) + '" r="4"/>').join('');
+    box.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + escapeHtml(points.map(p => p.label + ' ' + fmtNum(p.value)).slice(-7).join(', ')) + '">' +
+      grid + '<path class="chart-area" d="' + area + '"/><path class="chart-line" d="' + d + '"/>' + dots +
+      '<circle class="chart-end" cx="' + x(points.length - 1).toFixed(1) + '" cy="' + y(last.value).toFixed(1) + '" r="4.5"/>' +
+      '<text class="chart-axis" x="' + L + '" y="' + (H - 4) + '">' + escapeHtml(points[0].label) + '</text>' +
+      '<text class="chart-axis" x="' + (W - R) + '" y="' + (H - 4) + '" text-anchor="end">' + escapeHtml(last.label) + '</text>' + hits + '</svg>';
+    wireTips(box);
+  }
+  function barChart(box, points, { unit = '' } = {}) {
+    if (!box) return;
+    if (!points.length) { box.innerHTML = '<p class="chart-empty">No data yet.</p>'; return; }
+    const W = 560, H = 170, L = 34, R = 6, T = 14, B = 22;
+    const max = niceMax(Math.max(...points.map(p => p.value)));
+    const bw = (W - L - R) / points.length;
+    const y = v => T + (H - T - B) * (1 - v / max);
+    const grid = [0, max / 2, max].map(g => '<line class="chart-grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(g).toFixed(1) + '" y2="' + y(g).toFixed(1) + '"/>' +
+      '<text class="chart-axis" x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" text-anchor="end">' + fmtNum(g) + '</text>').join('');
+    const bars = points.map((p, i) => {
+      const h = Math.max((H - T - B) * p.value / max, p.value > 0 ? 2 : 0);
+      return '<rect class="chart-bar' + (i === points.length - 1 ? ' chart-bar--now' : '') + '" data-mark="' + i + '" x="' + (L + i * bw + 1).toFixed(1) + '" y="' + (y(0) - h).toFixed(1) +
+        '" width="' + Math.max(bw - 2, 1).toFixed(1) + '" height="' + h.toFixed(1) + '" rx="3"/>' +
+        '<rect class="chart-hit" x="' + (L + i * bw).toFixed(1) + '" y="0" width="' + bw.toFixed(1) + '" height="' + H + '" data-i="' + i +
+        '" data-tip="' + escapeHtml(p.label + ': ' + fmtNum(p.value) + unit) + '"/>';
+    }).join('');
+    box.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + escapeHtml(points.map(p => p.label + ' ' + fmtNum(p.value)).slice(-7).join(', ')) + '">' +
+      grid + bars + '<text class="chart-axis" x="' + L + '" y="' + (H - 4) + '">' + escapeHtml(points[0].label) + '</text>' +
+      '<text class="chart-axis" x="' + (W - R) + '" y="' + (H - 4) + '" text-anchor="end">' + escapeHtml(points[points.length - 1].label) + '</text></svg>';
+    wireTips(box);
+  }
+  function sparkline(values) {
+    if (!values || values.length < 2) return '';
+    const W = 110, H = 34, max = Math.max(...values, 1);
+    const d = values.map((v, i) => (i ? 'L' : 'M') + (2 + i * (W - 4) / (values.length - 1)).toFixed(1) + ',' + (H - 3 - (H - 6) * v / max).toFixed(1)).join(' ');
+    return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true"><path d="' + d + '"/></svg>';
   }
 
-  // Clears one item off a Home list (the server remembers it), then redraws.
-  async function dismissRow(b, url, body, rerender) {
-    b.disabled = true;
-    b.textContent = 'Clearing…';
-    try {
-      const { res, json } = await adminFetch(url, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
-      if (!res.ok || !json || !json.ok) throw new Error((json && json.error) || ('HTTP ' + res.status));
-      rerender();
-    } catch (e) {
-      b.disabled = false;
-      b.textContent = 'Failed, try again';
-    }
+  // ─── OVERVIEW ───
+  // The big picture: four numbers, two charts, what's coming up, and one
+  // banner pointing at Needs attention. Each part is best effort.
+  const shortDayLabel = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const pctText = n => (Number.isFinite(n) ? (Math.round(n * 10) / 10) + '%' : '—');
+  function kpi(label, value, delta, extra, good) {
+    return '<div class="card kpi"><div class="kpi__label">' + escapeHtml(label) + '</div><div class="kpi__row"><div>' +
+      '<div class="kpi__value">' + escapeHtml(value) + '</div>' +
+      (delta ? '<div class="kpi__delta' + (good === false ? ' kpi__delta--flat' : '') + '">' + escapeHtml(delta) + '</div>' : '') +
+      '</div>' + (extra && extra.spark ? extra.spark : '') + '</div>' + (extra && extra.goal ? extra.goal : '') + '</div>';
+  }
+  function goalBar(value, goal, note) {
+    if (!(goal > 0)) return '';
+    const p = Math.max(Math.min(value / goal * 100, 100), value > 0 ? 1 : 0);
+    return '<div class="goal__bar"><span class="goal__fill" style="width:' + p.toFixed(1) + '%"></span></div><p class="kpi__note">' + escapeHtml(note) + '</p>';
   }
 
   async function loadHome() {
     const el = document.getElementById('home-body');
     const err = document.getElementById('home-error');
     if (!el || publishMode() !== 'server') return;
-    try {
-      const { res, json } = await adminFetch('/api/admin/setup');
-      if (!res.ok || !json || !json.ok) throw new Error((json && json.message) || 'Could not load status.');
-      err.hidden = true;
-      const st = json.status || {};
-      // Collect runs Sunday and Wednesday: more than 4 days means a run was
-      // missed or failed.
-      const collectedMs = Date.parse(st.collected_at || '');
-      const staleCollect = !Number.isFinite(collectedMs) || Date.now() - collectedMs > 4 * 86400000;
-      const tiles = [
-        ['Upcoming events on the site', st.upcoming_events ?? '—', 'picker'],
-        ['Submissions waiting', st.pending_submissions ?? '—', 'submissions'],
-        ['Newsletter subscribers', st.subscribers ?? '—', 'newsletter'],
-        ['Events last collected', ago(st.collected_at), 'sources', staleCollect],
-        ['Site last updated', ago(st.published_at), 'picker']
-      ];
-      document.getElementById('home-tiles').innerHTML = tiles.map(([label, val, tab, warn]) =>
-        '<button type="button" class="home-tile' + (warn ? ' home-tile--warn' : '') + '" data-goto="' + tab + '"><span class="home-tile__val">' +
-        escapeHtml(String(val)) + '</span><span class="home-tile__label">' + escapeHtml(label) +
-        (warn ? ' (check the collector)' : '') + '</span></button>').join('');
-      const order = { required: 0, recommended: 1, optional: 2 };
-      const checks = (json.checks || []).slice().sort((a, b) =>
-        (a.ok === true) - (b.ok === true) || order[a.level] - order[b.level]);
-      const done = checks.filter(c => c.ok === true).length;
-      document.getElementById('home-setup-count').textContent = done + ' of ' + checks.length + ' set up';
-      document.getElementById('home-checks').innerHTML = checks.map(c => {
-        const mark = c.ok === true ? '✅' : c.ok === false ? (c.level === 'optional' ? '⚪' : '⚠️') : '🔎';
-        const state = c.ok === true ? 'Set up' : c.ok === false ? 'Not set up' : 'Check in GitHub';
-        return '<li class="home-check home-check--' + (c.ok === true ? 'ok' : c.ok === false ? 'no' : 'unknown') + '">' +
-          '<span class="home-check__mark" aria-hidden="true">' + mark + '</span>' +
-          '<div><strong>' + escapeHtml(c.label) + '</strong> <span class="home-check__state">' + state +
-          (c.ok === true ? '' : ' · ' + escapeHtml(c.level)) + '</span>' +
-          (c.ok === true ? '' : '<p class="home-check__fix">' + escapeHtml(c.fix) +
-            (c.link ? ' <a href="' + escapeHtml(c.link) + '" target="_blank" rel="noopener">Open GitHub settings</a>' : '') + '</p>') +
-          '</div></li>';
-      }).join('');
-      el.hidden = false;
-      el.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => activateTab(b.dataset.goto)));
-      renderHiddenOnHome();
-      renderMessagesOnHome();
-      loadHomeGoals();
-    } catch (e) {
+    const [setup, growth, traffic, nl, sp, src] = await Promise.all([
+      getJson('/api/admin/setup'), getJson('/api/admin/growth?days=30'), getJson('/api/admin/traffic?days=14'),
+      getJson('/api/admin/newsletter'), getJson('/api/admin/sponsors'), getJson('/api/admin/sources')
+    ]);
+    if (!setup) {
       err.hidden = false;
-      err.textContent = e.message || String(e);
+      err.textContent = 'Could not load the overview. Reload the page to try again.';
+      return;
     }
+    err.hidden = true;
+    el.hidden = false;
+    state.setup = setup;
+    const t = town();
+    const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: t.timezone, hour: 'numeric', hour12: false }).format(new Date()));
+    document.getElementById('home-greeting').textContent = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    const today = new Intl.DateTimeFormat('en-US', { timeZone: t.timezone, weekday: 'long', month: 'short', day: 'numeric' }).format(new Date());
+    document.getElementById('home-sub').textContent = today + ' · ' + t.siteName;
+
+    // KPIs
+    const st = setup.status || {};
+    const g = growth || {};
+    const gs = (g.goals && g.goals.subscribers) || {};
+    const gr = (g.goals && g.goals.revenue) || {};
+    const daily = Array.isArray(g.daily) ? g.daily : [];
+    const active = Number.isFinite(gs.active) ? gs.active : st.subscribers;
+    // Active subscribers at the end of each day, worked back from today.
+    let after = 0;
+    const history = [];
+    for (let i = daily.length - 1; i >= 0; i--) { history.unshift({ day: daily[i].day, value: (active || 0) - after }); after += daily[i].net || 0; }
+    const week = daily.slice(-7).reduce((n, d) => n + (d.net || 0), 0);
+    const tDaily = (traffic && Array.isArray(traffic.daily)) ? traffic.daily : [];
+    const vis7 = tDaily.slice(-7).reduce((n, d) => n + (d.visitors || 0), 0);
+    const visPrev = tDaily.slice(-14, -7).reduce((n, d) => n + (d.visitors || 0), 0);
+    const visDelta = visPrev ? Math.round((vis7 - visPrev) / visPrev * 100) : null;
+    const issues = Array.isArray(g.issues) ? g.issues : [];
+    const lastIssue = issues.find(i => i.sent > 0);
+    const monthName = gr.month ? new Date(gr.month + '-01T12:00:00').toLocaleDateString('en-US', { month: 'long' }) : 'This month';
+    document.getElementById('home-kpis').innerHTML = [
+      kpi('Subscribers', fmtNum(active), (week >= 0 ? '▲ ' : '▼ ') + fmtNum(Math.abs(week)) + ' this week', {
+        spark: sparkline(history.map(h => h.value)),
+        goal: gs.goal ? goalBar(active, gs.goal, 'Goal ' + fmtNum(gs.goal) + (gs.eta ? ' · ' + monthYear(gs.eta) + ' at this pace' : '')) : ''
+      }, week >= 0),
+      kpi('Visitors, 7 days', fmtNum(vis7), visDelta == null ? '' : (visDelta >= 0 ? '▲ ' : '▼ ') + Math.abs(visDelta) + '% vs the week before',
+        { spark: sparkline(tDaily.map(d => d.visitors || 0)) }, visDelta == null || visDelta >= 0),
+      kpi('Revenue, ' + monthName, Number.isFinite(gr.cents) ? '$' + fmtNum(gr.cents / 100) : '—',
+        gr.orders ? gr.orders + ' paid placement' + (gr.orders === 1 ? '' : 's') : 'No sales yet this month',
+        { goal: gr.goal_cents ? goalBar(gr.cents || 0, gr.goal_cents, 'Goal $' + fmtNum(gr.goal_cents / 100) + ' / month') : '' }, false),
+      kpi('Last issue opened', lastIssue ? pctText(lastIssue.open_rate) : '—',
+        lastIssue ? (lastIssue.edition === 'weekend' ? 'Weekend' : 'Weekly') + ' issue · ' + fmtNum(lastIssue.sent) + ' sent' : 'No issues sent yet', null, false)
+    ].join('');
+
+    // Charts
+    const totals = g.totals || {};
+    document.getElementById('home-subs-meta').textContent = 'Last 30 days · ' + (totals.net >= 0 ? '+' : '') + fmtNum(totals.net || 0) + ' net' +
+      (Number.isFinite(totals.cost_per_sub) ? ' · $' + totals.cost_per_sub.toFixed(2) + ' per subscriber from ads' : '');
+    lineChart(document.getElementById('home-subs-chart'), history.map(h => ({ label: shortDayLabel(h.day), value: h.value })), { unit: ' subscribers' });
+    const topSource = traffic && Array.isArray(traffic.sources) && traffic.sources[0];
+    document.getElementById('home-visits-meta').textContent = 'Last 14 days' + (topSource ? ' · most from ' + topSource.key : '');
+    barChart(document.getElementById('home-visits-chart'), tDaily.map(d => ({ label: shortDayLabel(d.day), value: d.visitors || 0 })), { unit: ' visitors' });
+
+    // Coming up
+    const rows = [];
+    const when = iso => {
+      const d = new Date(iso);
+      return Number.isFinite(d.getTime()) ? d.toLocaleString('en-US', { timeZone: t.timezone, weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+    };
+    if (nl) {
+      const ready = nl.next && Array.isArray(nl.next.events) ? nl.next.events.length : null;
+      rows.push(['Mon 7:43 AM', 'Weekly newsletter', (ready != null ? ready + ' events ready · ' : '') + fmtNum((nl.counts || {}).active) + ' readers',
+        nl.autosend ? ['Scheduled', 'ok'] : ['Auto-send off', 'warn']]);
+    }
+    if (src && src.next_run_at) rows.push([when(src.next_run_at), 'Event collection', src.last_run_at ? 'Last run ' + ago(src.last_run_at) : '', ['Scheduled', 'ok']]);
+    const orders = sp && Array.isArray(sp.orders) ? sp.orders : [];
+    const todayKey = toLocalDateStr(townToday());
+    orders.filter(o => o.kind === 'weekly' && (o.status === 'paid' || o.status === 'active') && o.week_start && o.week_start >= addDaysStr(todayKey, -6))
+      .sort((a, b) => (a.week_start < b.week_start ? -1 : 1)).slice(0, 3)
+      .forEach(o => rows.push([shortDayLabel(o.week_start), (o.business || 'Sponsor') + ' sponsor week', '$' + fmtNum((o.amount || 0) / 100) + ' paid', ['Booked', 'ok']]));
+    const weeks = sp && Array.isArray(sp.weeks) ? sp.weeks.slice(0, 4) : [];
+    const open = weeks.filter(w => w.available).length;
+    if (weeks.length) rows.push(['Next ' + weeks.length + ' weeks', 'Sponsor weeks', open + ' of ' + weeks.length + ' unsold', open ? ['Open', 'warn'] : ['Sold out', 'ok']]);
+    document.getElementById('home-upcoming').innerHTML = rows.length ? rows.map(([w, what, sub, pill]) =>
+      '<li class="row"><span class="row__when">' + escapeHtml(w) + '</span><span class="row__what"><strong>' + escapeHtml(what) + '</strong>' +
+      (sub ? '<span>' + escapeHtml(sub) + '</span>' : '') + '</span><span class="pill pill--' + pill[1] + '">' + escapeHtml(pill[0]) + '</span></li>').join('')
+      : '<li class="row"><span class="row__what">Nothing scheduled.</span></li>';
+
+    // On the site
+    const srcs = src && Array.isArray(src.sources) ? src.sources : [];
+    const okSources = srcs.filter(s => s.status === 'ok').length;
+    const minis = [[fmtNum(st.upcoming_events), 'Events coming up'], [ago(st.published_at), 'Site last updated'],
+      [srcs.length ? okSources + ' / ' + srcs.length : '—', 'Event sources OK']];
+    const pages = traffic && Array.isArray(traffic.top_pages) ? traffic.top_pages.slice(0, 3) : [];
+    document.getElementById('home-site').innerHTML = minis.map(([v, l]) => '<div class="mini"><div class="mini__value">' + escapeHtml(String(v)) + '</div><div class="mini__label">' + escapeHtml(l) + '</div></div>').join('') +
+      (pages.length ? '<p class="card__meta minis__note">Top pages: ' + pages.map(p => escapeHtml((p.key === '/' ? 'Home' : p.key) + ' ' + fmtNum(p.count))).join(' · ') + '</p>' : '');
+
+    refreshAttentionCount();
+  }
+  // "2028-12-01" -> "Dec 2028" (anything else as is).
+  function monthYear(v) {
+    return /^\d{4}-\d{2}/.test(String(v)) ? new Date(String(v).slice(0, 7) + '-01T12:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : String(v);
+  }
+  function addDaysStr(day, n) {
+    const d = new Date(day + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  // ─── NEEDS ATTENTION ───
+  // One list of everything waiting on the owner, from the endpoints the
+  // other pages use. Each item carries its own actions.
+  const SNOOZE_KEY = 'vic361_admin_snoozed';
+  function snoozed() {
+    try {
+      const m = JSON.parse(localStorage.getItem(SNOOZE_KEY) || '{}');
+      const now = Date.now();
+      return Object.fromEntries(Object.entries(m).filter(([, until]) => until > now));
+    } catch (_) { return {}; }
+  }
+  function snooze(key, days) {
+    const m = snoozed();
+    m[key] = Date.now() + days * 86400000;
+    try { localStorage.setItem(SNOOZE_KEY, JSON.stringify(m)); } catch (_) { /* private mode */ }
+  }
+  const SPONSOR_PROBLEMS = {
+    conflict: 'Double-booked: move it to an open week or refund it',
+    late: 'Paid after its date: refund it',
+    paused: 'Payment issue on a venue partner subscription',
+    disputed: 'The buyer disputed the charge',
+    processing: 'Bank payment still processing'
+  };
+
+  async function collectAttention() {
+    const [setup, subs, hidden, msgs, nl, sp, src] = await Promise.all([
+      state.setup ? Promise.resolve(state.setup) : getJson('/api/admin/setup'),
+      getJson('/api/admin/submissions?status=pending'), loadHidden(), getJson('/api/admin/messages'),
+      getJson('/api/admin/newsletter'), getJson('/api/admin/sponsors'), getJson('/api/admin/sources')
+    ]);
+    const items = [];
+    const add = it => items.push(it);
+    for (const s of (subs && (subs.submissions || subs.items || subs.rows)) || []) {
+      const p = s.payload || {};
+      const ai = s.ai_review || {};
+      add({ group: 'Events', icon: '📝', key: 'sub:' + s.id, title: (p.name || 'Submitted event') + (p.date ? ' · ' + shortDayLabel(p.date) : ''),
+        text: [s.submitter_kind ? 'From a' + (/^[aeiou]/.test(s.submitter_kind) ? 'n ' : ' ') + s.submitter_kind : 'Submitted', ai.decision ? 'AI review: ' + ({ flag: 'needs your look', reject: 'turned away', duplicate: 'already listed', approve: 'approved' }[ai.decision] || ai.decision) + (ai.reason ? ' (' + ai.reason + ')' : '') : s.admin_notes].filter(Boolean).join(' · '),
+        actions: [['Approve', 'primary', () => setSubmission(s.id, 'approved')], ['Open', '', () => activateTab('submissions')], ['Reject', 'quiet', () => setSubmission(s.id, 'rejected')]] });
+    }
+    for (const h of hidden) {
+      add({ group: 'Events', icon: '🙈', key: 'hid:' + h.key, title: (h.name || h.page) + (h.date ? ' · ' + shortDayLabel(h.date) : ''),
+        text: 'Hidden by the event check' + (h.reason ? ': ' + h.reason : ''),
+        actions: [['Restore', '', () => postThen('/api/admin/hidden/restore', { key: h.key })], ['Keep hidden', 'quiet', () => postThen('/api/admin/hidden/dismiss', { key: h.key })]] });
+    }
+    for (const m of (msgs && msgs.messages) || []) {
+      add({ group: 'Messages', icon: '✉️', key: 'msg:' + m.id, title: (m.name || m.email || 'Message') + ' · ' + ago(m.created_at),
+        text: '“' + (m.message || '').slice(0, 280) + '”' + (m.business ? ' — ' + m.business : ''),
+        actions: [['Reply', 'primary', () => { window.location.hash = '#reply?' + new URLSearchParams({ to: m.email || '', subject: 'Re: your message to ' + town().siteName, ref: m.id || '' }).toString(); }],
+          ['Dismiss', 'quiet', () => postThen('/api/admin/messages/' + encodeURIComponent(m.id) + '/dismiss', {})]] });
+    }
+    if (nl) {
+      const failed = (nl.this_week_failed || 0) + ((nl.weekend || {}).failed || 0);
+      const unknown = (nl.this_week_unknown || 0) + ((nl.weekend || {}).unknown || 0);
+      if (failed) add({ group: 'Newsletter', icon: '⚠️', urgent: true, key: 'nl:failed', title: failed + ' newsletter email' + (failed === 1 ? '' : 's') + " didn't send", text: 'Retry them from the Newsletter page.', actions: [['Open Newsletter', 'primary', () => activateTab('newsletter')]] });
+      if (unknown) add({ group: 'Newsletter', icon: '❔', key: 'nl:unknown', title: unknown + ' newsletter email' + (unknown === 1 ? '' : 's') + ' not confirmed', text: 'The email service didn’t confirm a batch. Resend the unconfirmed ones from the Newsletter page.', actions: [['Open Newsletter', 'primary', () => activateTab('newsletter')]] });
+      for (const r of (nl.referral_rewards || []).filter(r => ['held', 'failed', 'manual'].includes(r.status))) {
+        add({ group: 'Newsletter', icon: '🎁', key: 'rew:' + r.id, title: 'Referral reward ' + (r.status === 'held' ? 'held for review' : r.status === 'failed' ? "didn't send" : 'to send by hand') + (r.email ? ' · ' + r.email : ''),
+          text: r.status === 'held' ? (r.flags || '') : (r.reason || ''), actions: [['Open Newsletter', 'primary', () => activateTab('newsletter')]] });
+      }
+    }
+    for (const o of (sp && sp.orders) || []) {
+      if (o.test) continue;
+      const notLive = (o.status === 'paid' || o.status === 'active') && o.on_site === false;
+      const why = notLive ? 'Paid, not on the site yet: approve its event' : SPONSOR_PROBLEMS[o.status];
+      if (!why || (o.status === 'disputed' && o.dispute && o.dispute.status && o.dispute.status !== 'open')) continue;
+      add({ group: 'Sponsors', icon: '💳', urgent: o.status === 'disputed' || o.status === 'conflict' || notLive, key: 'sp:' + o.id,
+        title: (o.business || 'Sponsor order') + ' · $' + fmtNum((o.amount || 0) / 100), text: why, actions: [['Open Sponsors', 'primary', () => activateTab('sponsors')]] });
+    }
+    const st = (setup && setup.status) || {};
+    const collected = Date.parse(st.collected_at || '');
+    if (!Number.isFinite(collected) || Date.now() - collected > 4 * 86400000) {
+      add({ group: 'Collector', icon: '🛰️', urgent: true, key: 'collect:stale', title: 'Events haven’t been collected since ' + ago(st.collected_at), text: 'Collection runs Sunday and Wednesday. Check the last run, or pull now.', actions: [['Open Sources', 'primary', () => activateTab('sources')]] });
+    }
+    for (const s of (src && src.sources) || []) {
+      if (s.status !== 'error' && s.status !== 'failed') continue;
+      add({ group: 'Collector', icon: '🛰️', key: 'src:' + s.name, title: (s.label || s.name) + ' failed on the last run', text: s.message || '', actions: [['Open Sources', 'primary', () => activateTab('sources')]], snooze: 7 });
+    }
+    const hide = snoozed();
+    for (const c of (setup && setup.checks) || []) {
+      if (c.ok !== false || c.level === 'optional') continue;
+      const req = c.level === 'required';
+      add({ group: 'Setup', icon: req ? '🔧' : '⚙️', urgent: req, key: 'setup:' + c.key, title: c.label, text: c.fix, link: c.link,
+        actions: [['How to fix', '', null]], snooze: req ? 0 : 30 });
+    }
+    return items.filter(it => !hide[it.key]);
+  }
+
+  async function refreshAttentionCount() {
+    const items = await collectAttention().catch(() => null);
+    if (!items) return;
+    state.attention = items;
+    const badge = document.getElementById('attention-badge');
+    if (badge) { badge.textContent = String(items.length); badge.hidden = !items.length; }
+    const banner = document.getElementById('home-attention');
+    if (banner) {
+      const by = {};
+      items.forEach(i => { by[i.group] = (by[i.group] || 0) + 1; });
+      banner.hidden = false;
+      banner.classList.toggle('attn-banner--clear', !items.length);
+      banner.innerHTML = items.length
+        ? '<span>⚑ ' + items.length + ' thing' + (items.length === 1 ? ' needs' : 's need') + ' you: ' + escapeHtml(Object.entries(by).map(([k, n]) => n + ' ' + groupNoun(k, n)).join(', ')) + '</span><span class="attn-banner__go">Review →</span>'
+        : '<span>✓ Nothing needs you right now</span>';
+      banner.onclick = e => { e.preventDefault(); if (items.length) activateTab('attention'); };
+    }
+  }
+
+  const GROUP_NOUN = { Events: ['event', 'events'], Messages: ['message', 'messages'], Newsletter: ['newsletter item', 'newsletter items'],
+    Sponsors: ['sponsor order', 'sponsor orders'], Collector: ['collector problem', 'collector problems'], Setup: ['setup item', 'setup items'] };
+  const groupNoun = (g, n) => (GROUP_NOUN[g] || [g.toLowerCase(), g.toLowerCase()])[n === 1 ? 0 : 1];
+
+  async function postThen(url, body) {
+    const { res, json } = await adminFetch(url, { method: 'POST', body: JSON.stringify(body || {}), headers: { 'Content-Type': 'application/json' } });
+    if (!res.ok || !json || !json.ok) throw new Error((json && (json.message || json.error)) || ('HTTP ' + res.status));
+  }
+  async function setSubmission(id, status) {
+    await postThen('/api/admin/submissions/' + encodeURIComponent(id), { status });
+    const sub = window.__vic361Submissions;
+    if (sub && sub._testHooks && typeof sub._testHooks.refreshPendingBadge === 'function') sub._testHooks.refreshPendingBadge();
+  }
+
+  async function loadAttention(filter) {
+    const list = document.getElementById('attention-list');
+    const chips = document.getElementById('attention-filters');
+    const err = document.getElementById('attention-error');
+    if (!list || publishMode() !== 'server') return;
+    if (filter === undefined) {
+      list.innerHTML = '<p class="empty-state">Loading…</p>';
+      try {
+        state.attention = await collectAttention();
+        err.hidden = true;
+      } catch (e) {
+        err.hidden = false;
+        err.textContent = 'Couldn’t load everything: ' + (e.message || e);
+        state.attention = state.attention || [];
+      }
+      state.attentionFilter = state.attentionFilter || 'All';
+    } else state.attentionFilter = filter;
+    const items = state.attention || [];
+    const badge = document.getElementById('attention-badge');
+    if (badge) { badge.textContent = String(items.length); badge.hidden = !items.length; }
+    const groups = ['Events', 'Messages', 'Newsletter', 'Sponsors', 'Collector', 'Setup'];
+    const counts = {};
+    items.forEach(i => { counts[i.group] = (counts[i.group] || 0) + 1; });
+    const f = counts[state.attentionFilter] ? state.attentionFilter : 'All';
+    chips.innerHTML = ['All', ...groups.filter(g => counts[g])].map(g =>
+      '<button type="button" class="chip' + (g === f ? ' is-active' : '') + '" data-filter="' + g + '">' + g + ' ' + (g === 'All' ? items.length : counts[g]) + '</button>').join('');
+    chips.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => loadAttention(b.dataset.filter)));
+    if (!items.length) { list.innerHTML = '<p class="all-clear">✓ Nothing needs you right now. Everything is running on its own.</p>'; return; }
+    const shown = groups.filter(g => counts[g] && (f === 'All' || f === g));
+    list.innerHTML = shown.map(g => '<section class="att-group"><h2 class="att-group__title">' + g + '</h2>' +
+      items.filter(i => i.group === g).map(i => {
+        const idx = items.indexOf(i);
+        return '<article class="att-item" data-idx="' + idx + '"><span class="att-item__icon" aria-hidden="true">' + i.icon + '</span>' +
+          '<div class="att-item__body"><strong>' + escapeHtml(i.title) + (i.urgent ? ' <span class="pill pill--bad">Urgent</span>' : '') + '</strong>' +
+          (i.text ? '<p' + (i.group === 'Setup' ? ' class="att-item__clamp"' : '') + '>' + escapeHtml(i.text) +
+            (i.link ? ' <a href="' + escapeHtml(i.link) + '" target="_blank" rel="noopener">Open settings ↗</a>' : '') + '</p>' : '') + '</div>' +
+          '<div class="att-item__acts">' + i.actions.map(([label, kind], a) => '<button type="button" class="btn ' + (kind === 'primary' ? 'btn--primary' : kind === 'quiet' ? 'btn--ghost' : 'btn--outline') + '" data-act="' + a + '">' + escapeHtml(label) + '</button>').join('') +
+          (i.snooze ? '<button type="button" class="btn btn--ghost" data-snooze="' + i.snooze + '">Snooze ' + i.snooze + 'd</button>' : '') + '</div></article>';
+      }).join('') + '</section>').join('');
+    list.querySelectorAll('.att-item').forEach(row => {
+      const it = items[Number(row.dataset.idx)];
+      row.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', async () => {
+        const [, , fn] = it.actions[Number(b.dataset.act)];
+        if (!fn) {
+          const p = row.querySelector('.att-item__body > p');
+          if (p) { p.classList.toggle('att-item__clamp'); b.textContent = p.classList.contains('att-item__clamp') ? 'How to fix' : 'Less'; }
+          return;
+        }
+        b.disabled = true;
+        try {
+          const before = window.location.hash;
+          await fn();
+          if (window.location.hash !== before || /^Open/.test(b.textContent)) { b.disabled = false; return; }
+          state.attention = items.filter(x => x !== it);
+          loadAttention(state.attentionFilter);
+          refreshAttentionCount();
+        } catch (e) {
+          b.disabled = false;
+          setStatus('Couldn’t do that: ' + (e.message || e), 'error');
+        }
+      }));
+      const sz = row.querySelector('[data-snooze]');
+      if (sz) sz.addEventListener('click', () => { snooze(it.key, Number(sz.dataset.snooze)); state.attention = items.filter(x => x !== it); loadAttention(state.attentionFilter); });
+    });
+  }
+
+  // ─── SETTINGS ───
+  // The setup checklist: what still needs doing first, finished ones folded.
+  async function loadSettings() {
+    const json = await getJson('/api/admin/setup');
+    if (!json) return;
+    state.setup = json;
+    const order = { required: 0, recommended: 1, optional: 2 };
+    const checks = (json.checks || []).slice().sort((a, b) => (a.ok === true) - (b.ok === true) || order[a.level] - order[b.level]);
+    const done = checks.filter(c => c.ok === true);
+    const todo = checks.filter(c => c.ok !== true);
+    document.getElementById('home-setup-count').textContent = done.length + ' of ' + checks.length + ' set up';
+    const item = c => {
+      const mark = c.ok === true ? '✅' : c.ok === false ? (c.level === 'optional' ? '⚪' : '⚠️') : '🔎';
+      const stateText = c.ok === true ? 'Set up' : c.ok === false ? 'Not set up' : 'Check in GitHub';
+      return '<li class="home-check home-check--' + (c.ok === true ? 'ok' : c.ok === false ? 'no' : 'unknown') + '">' +
+        '<span class="home-check__mark" aria-hidden="true">' + mark + '</span>' +
+        '<div><strong>' + escapeHtml(c.label) + '</strong> <span class="home-check__state">' + stateText +
+        (c.ok === true ? '' : ' · ' + escapeHtml(c.level)) + '</span>' +
+        (c.ok === true ? '' : '<p class="home-check__fix">' + escapeHtml(c.fix) +
+          (c.link ? ' <a href="' + escapeHtml(c.link) + '" target="_blank" rel="noopener">Open GitHub settings</a>' : '') + '</p>') +
+        '</div></li>';
+    };
+    document.getElementById('home-checks').innerHTML = todo.map(item).join('');
+    document.getElementById('home-checks-done').innerHTML = done.map(item).join('');
+    const det = document.getElementById('settings-done');
+    det.hidden = !done.length;
+    document.getElementById('settings-done-summary').textContent = done.length + ' set up';
   }
 
   // ─── GROWTH TAB ───
@@ -1939,34 +2260,36 @@
     }
   }
 
-  // The goals on Home; a failure just leaves them off.
-  async function loadHomeGoals() {
-    const el = document.getElementById('home-goals');
-    if (!el || publishMode() !== 'server') return;
-    try {
-      const { res, json } = await adminFetch('/api/admin/growth?goals=1');
-      if (!res.ok || !json || !json.ok) return;
-      el.innerHTML = goalsHtml(json.goals);
-      el.hidden = false;
-    } catch (_) { /* Home works without it */ }
-  }
-
   // ─── TABS ───
+  // Pages in the sidebar; Events and Analytics have sub-pages (data-group on
+  // their sidebar button), switched by the sub-tab bar. A page that's open
+  // keeps its sidebar button lit.
+  const PANELS = ['home', 'attention', 'growth', 'traffic', 'picker', 'submissions', 'preview', 'newsletter', 'sources', 'sponsors', 'settings'];
+  function pageOf(name) {
+    const btn = [...document.querySelectorAll('.tab-btn')].find(t => t.dataset.tab === name ||
+      (t.dataset.group || '').split(' ').includes(name));
+    return btn ? btn.dataset.tab : name;
+  }
   function activateTab(name) {
-    const tabs = document.querySelectorAll('.tab-btn');
-    tabs.forEach(t => t.classList.toggle('is-active', t.dataset.tab === name));
-    const panels = {
-      home: document.getElementById('tab-home'),
-      growth: document.getElementById('tab-growth'),
-      picker: document.getElementById('tab-picker'),
-      submissions: document.getElementById('tab-submissions'),
-      preview: document.getElementById('tab-preview'),
-      newsletter: document.getElementById('tab-newsletter'),
-      sources: document.getElementById('tab-sources'),
-      traffic: document.getElementById('tab-traffic'),
-      sponsors: document.getElementById('tab-sponsors')
-    };
-    Object.entries(panels).forEach(([k, el]) => {
+    const page = pageOf(name);
+    document.querySelectorAll('.tab-btn').forEach(t => {
+      const on = t.dataset.tab === page;
+      t.classList.toggle('is-active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    const sub = document.getElementById('subtabs');
+    if (sub) {
+      let any = false;
+      sub.querySelectorAll('.subtab-btn').forEach(b => {
+        const mine = b.dataset.in === page;
+        b.hidden = !mine;
+        any = any || mine;
+        b.classList.toggle('is-active', b.dataset.goto === name);
+      });
+      sub.hidden = !any;
+    }
+    PANELS.forEach(k => {
+      const el = document.getElementById('tab-' + k);
       if (!el) return;
       el.hidden = (k !== name);
       el.classList.toggle('is-active', k === name);
@@ -1974,12 +2297,17 @@
     const counts = document.getElementById('count-summary');
     if (counts) counts.hidden = name !== 'picker' && name !== 'preview';
     if (name === 'home') loadHome();
+    if (name === 'attention') loadAttention();
+    if (name === 'settings') loadSettings();
     if (name === 'growth') loadGrowth();
     if (name === 'preview') refreshPreview();
     if (name === 'newsletter') { refreshNewsletter(); loadEmailNewsletter(); }
     if (name === 'sources') loadSources();
     if (name === 'traffic') loadTraffic();
     if (name === 'sponsors') loadSponsors();
+    try { document.dispatchEvent(new CustomEvent('vic361:tab', { detail: name })); } catch (_) { /* old browsers */ }
+    const main = document.querySelector('.admin-main');
+    if (main && typeof window.scrollTo === 'function' && !/jsdom/i.test(navigator.userAgent || '')) window.scrollTo(0, 0);
   }
 
   // ─── SPONSORS TAB ────────────────────────────────────────────────────
@@ -2819,6 +3147,12 @@
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => activateTab(btn.dataset.tab));
     });
+    document.querySelectorAll('.subtab-btn').forEach(btn => {
+      btn.addEventListener('click', () => activateTab(btn.dataset.goto));
+    });
+    document.querySelectorAll('[data-proxy]').forEach(btn => {
+      btn.addEventListener('click', () => { const t = document.getElementById(btn.dataset.proxy); if (t) t.click(); });
+    });
 
     const nlPreview = document.getElementById('email-nl-preview');
     const nlTest = document.getElementById('email-nl-test');
@@ -3056,7 +3390,7 @@
     utf8ToBase64,
     buildEventsPayload, buildPreviewSrc, writePreviewToStorage,
     getMondayOfWeek, getWeekRange, inWeekBucket, toLocalDateStr, town, repo, applyTownLabels,
-    pruneStalePastSelections, loadCandidates, loadHome, activateTab, publish,
+    pruneStalePastSelections, loadCandidates, loadHome, loadAttention, collectAttention, loadSettings, lineChart, barChart, activateTab, publish,
     inferSource, sourceLabel, mergeCandidateEvents, stripPrivateFields,
     publishMode,
     getStoredTheme, setStoredTheme, effectiveTheme, applyTheme, toggleTheme,
