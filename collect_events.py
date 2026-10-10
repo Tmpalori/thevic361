@@ -3353,7 +3353,8 @@ _LIBRARY_KID_PATTERNS = re.compile(
 def _is_library_event(ev):
     url = (ev.get("url") or "").lower()
     venue = (ev.get("venue") or "").lower()
-    return "librarycalendar" in url or "victoriapubliclibrary" in url or "victoria public library" in venue
+    return (bool(ev.get("_library")) or "librarycalendar" in url or "victoriapubliclibrary" in url
+            or "victoria public library" in venue)
 
 
 def _is_recurring_kid_program(ev):
@@ -3877,7 +3878,9 @@ def fetch_town_feeds(days_ahead=14):
     events, counts = [], []
     for feed in feeds:
         try:
-            got = town_feeds.fetch_feed(feed, http_get, tz, _WINDOW_START, _WINDOW_END)
+            get = (lambda u, t=feed["timeout"]: http_get(u, timeout=t)) if feed.get("timeout") else http_get
+            got = town_feeds.excluded(town_feeds.fetch_feed(feed, get, tz, _WINDOW_START, _WINDOW_END), feed.get("exclude"))
+            got = town_feeds.place(got, feed.get("venue", ""), feed.get("address", ""))
         except Exception as e:
             _warn(f"[Feeds] {feed['name']} failed: {type(e).__name__}: {e}", feed=feed["name"], url=feed["url"])
             _mark_partial("town_feeds", f"{feed['name']} failed")
@@ -3885,9 +3888,9 @@ def fetch_town_feeds(days_ahead=14):
             continue
         if not got:
             _warn(f"[Feeds] {feed['name']} returned 0 events", feed=feed["name"], url=feed["url"])
-        for ev in got:
-            if not ev.get("name"):
-                continue
+        for ev in town_feeds.collapse_runs([e for e in got if e.get("name")]):
+            if feed.get("library"):
+                ev["_library"] = True       # cap_library_events trims it like Victoria's library
             ev["icons"] = classify_icons(ev["name"], ev.get("description", ""), ev.get("venue", ""))
             ev.setdefault("free", False)
             ev["_feed"] = feed["name"]

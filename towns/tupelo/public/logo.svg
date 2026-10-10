@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Tupelo Current">
+  <defs><clipPath id="c"><circle cx="64" cy="64" r="57"/></clipPath></defs>
+  <circle cx="64" cy="64" r="57" fill="#24306B"/>
+  <g clip-path="url(#c)" stroke="#141A3A" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
+    <g fill="#FFD978" stroke="none"><circle cx="30" cy="34" r="2.5"/><circle cx="100" cy="30" r="2.5"/><circle cx="104" cy="70" r="2"/><circle cx="22" cy="66" r="2"/><circle cx="40" cy="18" r="1.8"/></g>
+    <!-- power line swooping behind the bolt -->
+    <path d="M-4 52Q32 68 64 58T132 52" fill="none" stroke="#FFD978" stroke-width="2" opacity="0.6"/>
+    <!-- black gum hill -->
+    <path d="M-4 104Q64 88 132 104V132H-4Z" fill="#3E9B5F"/>
+    <!-- neon glow, then the bolt -->
+    <path d="M70 12L36 70H59L48 116L94 50H70L86 12Z" fill="#FFB938" stroke-width="5"/>
+    <path d="M74 22L61 45" fill="none" stroke="#FFFFFF" stroke-width="4" opacity="0.8"/>
+  </g>
+  <circle cx="64" cy="64" r="57" fill="none" stroke="#141A3A" stroke-width="6"/>
+</svg>

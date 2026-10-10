@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-label="Shoals Setlist">
+  <defs><clipPath id="f"><circle cx="32" cy="32" r="29"/></clipPath></defs>
+  <circle cx="32" cy="32" r="29" fill="#F6EBD3"/>
+  <g clip-path="url(#f)" stroke="#2A1E17" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+    <circle cx="32" cy="32" r="25" fill="#2E2622" stroke-width="3"/>
+    <circle cx="32" cy="32" r="19" fill="#C4562B" stroke-width="3"/>
+    <circle cx="32" cy="32" r="15.3" fill="none" stroke-width="5.9"/><circle cx="32" cy="32" r="15.3" fill="none" stroke="#E5A82E" stroke-width="1.9"/><path d="M29.8 25.4L29.2 18.1L34.8 18.1L34.2 25.4ZM38.8 33.4L45.5 36.5L42.6 41.4L36.6 37.2ZM27.4 37.2L21.4 41.4L18.5 36.5L25.2 33.4Z" fill="#E5A82E" stroke-width="2.5"/><circle cx="32" cy="32" r="7.3" fill="#E5A82E" stroke-width="2.5"/><circle cx="32" cy="32" r="2.0" fill="#2A1E17" stroke="none"/>
+  </g>
+  <circle cx="32" cy="32" r="29" fill="none" stroke="#2A1E17" stroke-width="4"/>
+</svg>

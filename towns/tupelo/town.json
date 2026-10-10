@@ -39,5 +39,29 @@
     "memphis",
     "birmingham",
     "jackson"
+  ],
+  "siteNameHtml": "Tupelo <span>Current</span>",
+  "feeds": [
+    {
+      "name": "visit_tupelo",
+      "type": "cards",
+      "url": "https://www.tupelo.net/events/"
+    },
+    {
+      "name": "lee_county_library",
+      "type": "squarespace",
+      "url": "https://www.leeitawambalibrary.org/events?format=json",
+      "library": true
+    },
+    {
+      "name": "cdf_chamber",
+      "type": "ics",
+      "url": "https://cdfms.chambermaster.com/Events/CalendarSync/Category.ics?id=6"
+    },
+    {
+      "name": "tupelo_parks_rec",
+      "type": "tribe",
+      "url": "https://tupeloparksandrec.org"
+    }
   ]
 }

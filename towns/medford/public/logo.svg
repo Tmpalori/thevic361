@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="The Rogue 541">
+  <defs><clipPath id="c"><circle cx="64" cy="64" r="57"/></clipPath></defs>
+  <circle cx="64" cy="64" r="57" fill="#C4E8EC"/>
+  <g clip-path="url(#c)" stroke="#1D2633" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
+    <circle cx="96" cy="36" r="11" fill="#EBC74A" stroke-width="4"/>
+    <path d="M6 100L64 24L122 100Z" fill="#7A8DB3"/>
+    <path d="M64 24L50 42L56 39L61 46L67 39L73 45L78 42Z" fill="#FFFFFF" stroke-width="4"/>
+    <path d="M-4 92Q22 80 48 90T100 86T132 88V132H-4Z" fill="#2F6B3F"/>
+    <path d="M22 72L32.08 96H11.92Z" fill="#24563A" stroke-width="3"/><path d="M36 74L43.56 92H28.44Z" fill="#24563A" stroke-width="3"/><path d="M98 70L107.24 92H88.76Z" fill="#24563A" stroke-width="3"/><path d="M112 80L118.72 96H105.28Z" fill="#24563A" stroke-width="3"/>
+    <path d="M-4 106Q30 96 64 106T132 104V132H-4Z" fill="#1E9A96"/>
+    <path d="M30 116q8-6 16 0t16 0M70 114q8-6 16 0t16 0" fill="none" stroke="#FFFFFF" stroke-width="3.5"/>
+  </g>
+  <circle cx="64" cy="64" r="57" fill="none" stroke="#1D2633" stroke-width="6"/>
+</svg>

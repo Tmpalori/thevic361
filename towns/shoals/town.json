@@ -46,5 +46,55 @@
   "hashtags": "#TheShoals #MuscleShoals #FlorenceAL #ShoalsSetlist",
   "cityTokensExtra": [
     "shoals"
+  ],
+  "siteNameHtml": "Shoals <span>Setlist</span>",
+  "feeds": [
+    {
+      "name": "shoals_chamber",
+      "type": "growthzone",
+      "url": "https://business.shoalschamber.com",
+      "exclude": "ribbon cutting|member 101|loretto"
+    },
+    {
+      "name": "msnha",
+      "type": "tribe",
+      "url": "https://msnha.una.edu",
+      "timeout": 200
+    },
+    {
+      "name": "tvaa_ritz",
+      "type": "tribe",
+      "url": "https://tennesseevalleyarts.org"
+    },
+    {
+      "name": "una",
+      "type": "tribe",
+      "url": "https://apps.una.edu",
+      "exclude": "\\b(meetings?|practice|shuttle|snap available|study|sessions?|faculty|staff|workshops?|group|luncheon|lunch & lift|webinar|panel|training|screenings?|applications?|due tonight|senate|club|interest|kickback|tailgate|breakfast|mass and meal|midweek|church|worship|internship|biometric|nursing|research|abroad|post-tenure|pedagogy|conversation partners|table|success|career|bites & insights|i’m fine|wellness|clinic|simulation|connections|professional|online event)\\b|\\bx\\b|^(?!.*(recital|showcase|\\bvs\\.?\\b|concert|festival|parade|walk)).*private location"
+    },
+    {
+      "name": "flpl_teen",
+      "type": "ics",
+      "url": "https://calendar.google.com/calendar/ical/flpl.org_hq01c4p4eaq52jpbd55mo9ti4s%40group.calendar.google.com/public/basic.ics",
+      "library": true,
+      "venue": "Florence-Lauderdale Public Library",
+      "address": "350 N Wood Ave, Florence, AL 35630"
+    },
+    {
+      "name": "flpl_events",
+      "type": "ics",
+      "url": "https://calendar.google.com/calendar/ical/flpl.org_rl8a3a6kbvfl3h5pgi0kf7ack8%40group.calendar.google.com/public/basic.ics",
+      "library": true,
+      "venue": "Florence-Lauderdale Public Library",
+      "address": "350 N Wood Ave, Florence, AL 35630"
+    },
+    {
+      "name": "flpl_kids",
+      "type": "ics",
+      "url": "https://calendar.google.com/calendar/ical/flpl.org_q7rgifhqeuod2uickad315u87c%40group.calendar.google.com/public/basic.ics",
+      "library": true,
+      "venue": "Florence-Lauderdale Public Library",
+      "address": "350 N Wood Ave, Florence, AL 35630"
+    }
   ]
 }

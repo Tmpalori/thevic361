@@ -38,5 +38,18 @@
     "york",
     "lincoln",
     "omaha"
+  ],
+  "siteNameHtml": "The Crane <span>308</span>",
+  "feeds": [
+    {
+      "name": "visit_kearney",
+      "type": "tribe",
+      "url": "https://visitkearney.org"
+    },
+    {
+      "name": "mona",
+      "type": "tribe",
+      "url": "https://mona.unk.edu"
+    }
   ]
 }
