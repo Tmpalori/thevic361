@@ -2488,6 +2488,19 @@ export async function createApp(opts = {}) {
     }
   });
   if (town.publicDir && existsSync(town.publicDir)) app.use(express.static(town.publicDir, staticOptions(town.publicDir)));
+  // docs/ holds Victoria's own data next to the shared site files: its
+  // bundled events.json and its social kit. Another town without its own
+  // copy gets an empty list and a 404, never Victoria's events or posts.
+  if (town.id !== VICTORIA.id) {
+    app.use((req, res, next) => {
+      if (req.path === '/events.json') {
+        res.set('Cache-Control', 'no-store');
+        return res.json({ last_updated: null, events: [] });
+      }
+      if (req.path.startsWith('/social/')) return res.status(404).type('text/plain').send('Not found');
+      next();
+    });
+  }
   app.use(express.static(DOCS_DIR, staticOptions(DOCS_DIR)));
 
   // ─── 404 + error handlers ───
