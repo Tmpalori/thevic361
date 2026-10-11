@@ -266,7 +266,8 @@ These matter the moment a second town exists. All keep Victoria's values.
 - [ ] **5.2 Per-town accounts and settings** (owner):
   - Domain and DNS; brand name, logo set (logo, favicon set, apple-touch,
     og-image, skyline day and night, email skyline).
-  - Railway project with its own Postgres (backups on); `TOWN`,
+  - A service and its own Postgres (backups on) in the Newsletters
+    Railway project (RAILWAY.md, New town on Railway); `TOWN`,
     `SITE_URL`, admin login and session secret, cron secrets,
     `HQ_API_KEY`.
   - Resend domain (SPF, DKIM, MX for replies), `RESEND_API_KEY`,

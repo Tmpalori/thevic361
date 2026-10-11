@@ -101,8 +101,17 @@ approved submissions.
 
 ## New town on Railway
 
-Each town is its own Railway **project**: one service from this repo plus
-its own Postgres. It never shares Victoria's database, secrets or accounts.
+Every town lives in one Railway project, **Newsletters** (Victoria's, once
+named TheVic361), as its own pair: one service from this repo, named after
+the town's domain (`thecrane308`), and its own Postgres (`Postgres-<town>`).
+A town never shares Victoria's database, secrets or accounts; the project is
+only the folder they sit in. Two rules keep it that way:
+
+- **No shared variables for secrets.** Railway's project-wide shared
+  variables would hand one value to every town. Set every secret on the
+  town's own service.
+- **PR environments stay off** for the project: a PR would otherwise copy
+  every town and its database. CI runs the tests.
 `scripts/new_town.py` makes the town's files and prints the short version
 of this list; this is the full one. Run `scripts/launch_check.py --town
 <slug>` at the end: it fails until the town is really collecting.
@@ -111,9 +120,14 @@ of this list; this is the full one. Run `scripts/launch_check.py --town
 copy a value from Victoria's project, or from another town's: a copied
 `ADMIN_SESSION_SECRET` or cron secret opens every town that shares it.
 
-1. **Project and database.** New project → deploy from this repo's `main`
-   (Railpack runs `npm start`; healthcheck path `/api/health`). Add
-   Postgres (Railway injects `DATABASE_URL`) and turn on its backups. On
+1. **Service and database, in the Newsletters project's `production`
+   environment only** (not `staging`, which is Victoria's). Add a
+   Postgres and turn on its backups; add an empty service named after the
+   town, start command `node server/index.js`, healthcheck path
+   `/api/health`, and set its `DATABASE_URL` to
+   `${{<that Postgres>.DATABASE_URL}}`, never to Victoria's `Postgres`.
+   Set every variable below **before** connecting the repo (`main`): a
+   service that boots without `TOWN` runs as Victoria. On
    first boot the town claims the empty database (`town_meta`); a database
    that already holds another town's data, or Victoria's, stops the boot.
 2. **Town identity.**
@@ -186,10 +200,8 @@ copy a value from Victoria's project, or from another town's: a copied
     DNS host's 301 that keeps paths, or the apex on Railway too, where the
     server redirects it). Don't repeat Victoria's Squarespace forwarding,
     which breaks every deep link on the apex.
-15. **PR environments.** Decide per town project: turn them off (simplest;
-    a PR copy would get production's variables), or keep them and know
-    that each copy boots with the town's `TOWN` and its own forked
-    database.
+15. **PR environments** are off for the Newsletters project (see the top
+    of this section); check they still are.
 16. **Watch paths** (MULTI_CITY_PLAN.md 2.6): the service watches
     `/server/**`, `/docs/**`, `/package.json`, `/package-lock.json`,
     `/.nvmrc`, `/railpack.json`, `/town.py`, `/towns/<slug>/**` and
