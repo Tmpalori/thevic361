@@ -145,7 +145,8 @@ Accounts and settings (owner; MULTI_CITY_PLAN.md 5.2). Follow
 RAILWAY.md "New town on Railway" end to end: every variable, fresh secrets
 per town (never copy Victoria's), Stripe webhook events, HQ_TOWNS, domain.
   - Domain {settings['domain']} and DNS.
-  - Railway project with its own Postgres (backups on). Variables: TOWN={slug},
+  - A service and its own Postgres (backups on) in the Newsletters Railway
+    project, production only. Variables: TOWN={slug},
     SITE_URL={site}, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_SESSION_SECRET,
     the cron secrets, HQ_API_KEY, SLACK_TOWN_TAG="{settings['city']}".
   - Resend: verify {settings['domain']} (SPF, DKIM, MX for replies); RESEND_API_KEY;
