@@ -1,6 +1,6 @@
 // @vitest-environment node
 //
-// Sign-in from HQ (server/sso.js): HQ's POST /go/<slug> mints a one-time
+// Sign-in from HQ (server/sso.js): HQ (tmpalori/tristen-hq) mints a one-time
 // pass for one town and posts it from the browser; the town's POST
 // /api/admin/sso checks it and hands back an ordinary admin session. A
 // pass is for one town, lives a minute and works once; anything else is
@@ -15,7 +15,6 @@ import path from 'node:path';
 import { mintPass, verifyPass, TTL_S, SKEW_S } from '../server/sso.js';
 import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
-import { createHqApp, hqConfig } from '../hq/server.js';
 
 const SECRET = 'sso-'.repeat(12);
 const VIC = { slug: 'victoria', siteUrl: 'https://www.thevic361.com' };
@@ -186,76 +185,5 @@ describe('the town signs in with a pass', () => {
     await fs.rm(tmpDir, { recursive: true, force: true }); tmpDir = null;
     await start({ adminPassword: '', adminUsername: '' });
     expect((await post(fresh())).status).toBe(503);
-  });
-});
-
-describe('HQ opens a town signed in', () => {
-  const ENV = {
-    HQ_TOWNS: JSON.stringify([
-      { slug: 'victoria', site_url: 'https://www.thevic361.com', key: 'vic-key-0123456789abcdef', sso: SECRET },
-      { slug: 'bay', site_url: 'https://www.thebay979.com', key: 'bay-key-0123456789abcdef' }
-    ]),
-    HQ_USERNAME: 'tristen', HQ_PASSWORD: 'correct horse battery', HQ_SESSION_SECRET: 's'.repeat(40)
-  };
-  let server, base;
-  afterEach(async () => { if (server) await new Promise(r => server.close(r)); server = null; });
-  async function start() {
-    const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ ok: true, town: { name: 'T' } }) });
-    server = http.createServer(createHqApp(hqConfig(ENV), { fetchImpl, railway: false }));
-    await new Promise(r => server.listen(0, r));
-    base = `http://127.0.0.1:${server.address().port}`;
-  }
-  async function cookie() {
-    const r = await fetch(base + '/login', { method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ username: 'tristen', password: 'correct horse battery' }).toString() });
-    return r.headers.get('set-cookie').split(';')[0];
-  }
-  const go = (slug, headers = {}) => fetch(base + `/go/${slug}`, { method: 'POST', redirect: 'manual', headers });
-
-  it('posts a pass for that town only, from a page that submits itself', async () => {
-    await start();
-    const r = await go('victoria', { Cookie: await cookie(), Origin: base });
-    expect(r.status).toBe(200);
-    const csp = r.headers.get('content-security-policy');
-    expect(csp).toContain('form-action https://www.thevic361.com');
-    expect(csp).toMatch(/script-src 'nonce-[^']+'/);
-    const html = await r.text();
-    expect(html).toContain('action="https://www.thevic361.com/api/admin/sso"');
-    const pass = /name="pass" value="([^"]+)"/.exec(html)[1];
-    expect(verifyPass(SECRET, pass, { ...VIC }).ok).toBe(true);
-    expect(html).not.toContain('vic-key-0123456789abcdef');
-  });
-
-  it('only for a signed-in owner, from HQ itself, to a town with a secret', async () => {
-    await start();
-    expect((await go('victoria')).status).toBe(401);
-    const c = await cookie();
-    expect((await go('victoria', { Cookie: c, Origin: 'https://evil.example' })).status).toBe(403);
-    expect((await go('victoria', { Cookie: c, Origin: 'null' })).status).toBe(403);
-    expect((await go('victoria', { Cookie: c })).status).toBe(403);
-    expect((await go('bay', { Cookie: c, Origin: base })).status).toBe(404);
-    expect((await go('nope', { Cookie: c, Origin: base })).status).toBe(404);
-  });
-
-  it('the dashboard has a sign-in button for a town with a secret, a plain link otherwise', async () => {
-    await start();
-    const html = await (await fetch(base + '/', { headers: { Cookie: await cookie() } })).text();
-    expect(html).toContain('action="/go/victoria"');
-    expect(html).not.toContain('action="/go/bay"');
-    expect(html).not.toContain(SECRET);
-  });
-
-  it('takes a town and its secret from their own variables too', () => {
-    const c = hqConfig({ ...ENV, HQ_SSO_BAY: 'b'.repeat(40),
-      HQ_TOWN_ST_JOE: JSON.stringify({ site_url: 'https://www.stjoe.example', key: 'j'.repeat(40), sso: 'j2'.repeat(20) }) });
-    expect(c.towns.map(t => [t.slug, Boolean(t.sso)])).toEqual([['victoria', true], ['bay', true], ['st-joe', true]]);
-    expect(() => hqConfig({ ...ENV, HQ_TOWN_VICTORIA: JSON.stringify({ site_url: 'https://x.example', key: 'k'.repeat(40) }) })).toThrow(/twice/);
-    expect(() => hqConfig({ ...ENV, HQ_TOWN_X: 'nope' })).toThrow(/HQ_TOWN_X/);
-  });
-
-  it('checks the secrets it is given', () => {
-    const towns = sso => JSON.stringify([{ slug: 'a', site_url: 'https://a.example', key: 'k'.repeat(40), sso }]);
-    expect(() => hqConfig({ ...ENV, HQ_TOWNS: towns('short') })).toThrow(/sso/);
-    expect(() => hqConfig({ ...ENV, HQ_TOWNS: towns('k'.repeat(40)) })).toThrow(/differ/);
   });
 });

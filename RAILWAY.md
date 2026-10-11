@@ -167,8 +167,9 @@ copy a value from Victoria's project, or from another town's: a copied
     `HQ_TOWN_<SLUG>` = `{"site_url":"https://www.<domain>","key":"<its HQ_API_KEY>"}`
     and `HQ_SSO_<SLUG>` = its `HQ_SSO_SECRET` (or add both to the town's
     entry in `HQ_TOWNS`), and check its row and its Admin → (it should
-    open the admin signed in). HQ lives in Victoria's project on purpose: it holds
-    no town data and reads each town through its key.
+    open the admin signed in). HQ is its own repo and Railway project
+    (`tmpalori/tristen-hq`, project Tristen HQ): it holds no town data and
+    reads each town through its key.
 12. **`TOWN_WORKFLOWS=1` only after** the town's GitHub Environment exists
     (MULTI_CITY_PLAN.md 3.3: its `SITE_URL`, Meta page and Instagram,
     `NTFY_TOPIC`, cron secrets, `SLACK_TOWN_TAG`). Before that the town
@@ -197,9 +198,7 @@ copy a value from Victoria's project, or from another town's: a copied
     redeploy it. Victoria's service watches `**` minus the files bots
     write for other towns: `!/towns/*/candidates.json`,
     `!/towns/*/collection_metadata.json`, `!/towns/*/enrichment_cache.json`
-    and `!/towns/*/public/**` (its own data files are at the root). HQ
-    watches `/hq/**`, `/server/rateLimit.js`, `/package.json`,
-    `/package-lock.json`, `/.nvmrc` and `/railpack.json`. A commit that
+    and `!/towns/*/public/**` (its own data files are at the root). A commit that
     matches none of a service's paths shows as a skipped deployment.
     Change a service's watch paths when its code starts reading a new
     folder.
@@ -209,40 +208,29 @@ check passes, including 10+ upcoming events, a collect in the last 8 days
 and workflows on), its manual list, and `python3 scripts/live_check.py`
 for Victoria before and after.
 
-## HQ dashboard (optional, its own service)
+## HQ dashboard (its own repo and project)
 
-`hq/server.js` shows every town on one screen. It is a separate Railway
-service in the same project; it never touches a town's database.
+The dashboard that shows every town on one screen is `tmpalori/tristen-hq`,
+deployed as the Tristen HQ project at https://hq.tristenpalori.com. Its
+README covers its variables. What this repo's towns need:
 
-1. On each town's service, set `HQ_API_KEY` to a long random string (until
-   it's set, that town's `/api/hq/summary` is a 404). Use a different key
-   per town.
-2. Add a service from this repo with start command `node hq/server.js`, no
-   database, and these variables:
-   - `HQ_TOWNS`: `[{"slug":"victoria","site_url":"https://www.thevic361.com","key":"<Victoria's HQ_API_KEY>"}]`
-     (one entry per town)
-   - `HQ_USERNAME`, `HQ_PASSWORD` (12+ characters)
-   - `HQ_SESSION_SECRET` (32+ random characters)
-3. Give it a domain. It refuses to start and logs why when a variable is
-   missing or wrong. `/health` answers `{"ok":true}`.
+- `HQ_API_KEY` on each town's service (a long random string, different per
+  town). Until it's set, that town's `/api/hq/summary` is a 404. HQ holds
+  the same value for the town (`HQ_TOWN_<SLUG>` or `HQ_TOWNS`).
+- **One sign-in (optional, recommended).** A fresh `HQ_SSO_SECRET`
+  (`openssl rand -hex 32`, different per town and from its `HQ_API_KEY`),
+  with HQ holding the same value as `HQ_SSO_<SLUG>`. That town's **Admin →**
+  on HQ then opens its admin already signed in: HQ posts a one-time pass
+  (one town, 30 seconds, one use, never in a URL; `server/sso.js`) to the
+  town's `POST /api/admin/sso`, which answers with an ordinary admin
+  session. Without the pair the button is a plain link to the town's own
+  login. Anyone who can sign in to HQ can open every town that has a
+  secret, so HQ's password is the one that matters.
 
-**One sign-in for every town (optional, recommended).** Give each town a
-fresh `HQ_SSO_SECRET` (`openssl rand -hex 32`, different per town and
-different from its `HQ_API_KEY`), and give HQ the same value as
-`HQ_SSO_<SLUG>` (e.g. `HQ_SSO_KEARNEY`) or as `"sso"` in its `HQ_TOWNS`
-entry. That town's **Admin →** on HQ then opens its admin already signed
-in: HQ posts a one-time pass (one town, 30 seconds, one use, never in a
-URL; `server/sso.js`) to the town's `POST /api/admin/sso`, which answers
-with an ordinary admin session. Without the pair the button is a plain link
-to the town's own login, which always keeps working. Anyone who can sign in
-to HQ can open every town that has a secret, so HQ's password is the one
-that matters: long, unique, never shared. A new town can be added to HQ as
-its own variable, `HQ_TOWN_<SLUG>` = `{"site_url":"https://www.<domain>","key":"<its HQ_API_KEY>"}`,
-without touching `HQ_TOWNS`. HQ's watch paths include `/server/sso.js`.
-
-PR environments copy the hq service (with production's variables) when a PR
-changes HQ's code. Outside `production` it starts in preview mode: `/health`
-answers, the login is off and no town is asked.
+`server/sso.js` here and `src/sso.js` in tristen-hq are the same file:
+change both together. A change to the summary's shape (`server/hq.js`)
+should be followed by refreshing tristen-hq's
+`tests/fixtures/town-summary.json`.
 
 ## Backups and data exports
 

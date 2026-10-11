@@ -7,7 +7,8 @@
  *
  * A pass is base64url(JSON {v, aud, sub, iat, exp, n}) + "." + an
  * HMAC-SHA256 over it, keyed per town by HQ_SSO_SECRET: the town holds it,
- * and HQ holds each town's copy in HQ_TOWNS ("sso"). It is a different
+ * and HQ (tmpalori/tristen-hq, whose src/sso.js is this same file: change
+ * both together) holds each town's copy. It is a different
  * secret from HQ_API_KEY, which only reads numbers. A pass is good for:
  *   - one town: `aud` is "<slug>@<host>" and must be this town's
  *   - 30 seconds (the town allows 10 s of clock difference, never a pass
