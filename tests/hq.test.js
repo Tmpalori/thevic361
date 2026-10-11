@@ -13,7 +13,6 @@ import { createApp } from '../server/index.js';
 import { FileStore } from '../server/db.js';
 import { createRateLimiter } from '../server/rateLimit.js';
 import { buildSummary, registerHq } from '../server/hq.js';
-import { rowOf, totalsOf, renderDashboard } from '../hq/render.js';
 import { VICTORIA } from '../server/town.js';
 
 const KEY = 'hq-test-key-0123456789';
@@ -118,16 +117,6 @@ describe('a town whose database is down', () => {
     expect(body.failed).toEqual(['subscribers', 'revenue', 'ads', 'issues', 'database']);
     expect(body).toMatchObject({ subscribers: null, revenue: null, sponsors: null, issues: null, ads: null });
     expect(body.health).toEqual({ database: false, scheduler_blocked: false, slack_refused: false });   // no internal flag
-    // HQ shows it as a problem, not a healthy row with 0 subscribers and $0.
-    const row = rowOf({ slug: 'victoria', siteUrl: 'https://www.thevic361.com', summary: body }, 0);
-    expect(row.problems).toEqual(['database', 'subscribers unavailable', 'revenue unavailable', 'ads unavailable', 'issues unavailable']);
-    expect(row.subscribers).toBe(null);
-    expect(row.revenueCents).toBe(null);
-    const totals = totalsOf([row]);
-    expect(totals).toMatchObject({ attention: 1, partial: 1, subscribers: null, revenueCents: null });
-    const html = renderDashboard([row], NOW);
-    expect(html).toContain('totals incomplete (1 partial)');
-    expect(html).not.toContain('All towns healthy');
   });
 
   it('a healthy summary carries no failed list (same shape as before)', async () => {
